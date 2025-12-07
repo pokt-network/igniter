@@ -144,6 +144,7 @@ export default function StakePage() {
                 {step === StakeActivitySteps.PickOffer && (
                     <PickOfferStep
                         amount={stakeAmount}
+                        ownerAddress={ownerAddress}
                         defaultOffer={selectedOffer}
                         onOfferSelected={(offer) => {
                             setSelectedOffer(offer);

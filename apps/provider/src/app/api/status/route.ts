@@ -49,10 +49,14 @@ export async function POST(request: Request) {
     }, [] as number[]);
 
     const regions = await getUniqueRegions();
+
+    const allowedStakers = addressGroups.flatMap(group => group.linkedAddresses);
     
     const response: StatusResponse = {
       regions,
+      allowedStakers,
       minimumStake: minimumStake,
+      allowPublicStaking: addressGroups.some(group => !group.private),
       fee: Math.max(...fees),
       feeType: Array.from(new Set(fees)).length === 1 ? ProviderFee.Fixed : ProviderFee.UpTo,
       domains: getUniqueDomains(addressGroups),

@@ -28,6 +28,8 @@ export const providersTable = pgTable('providers', {
   feeType: providerFeeEnum(),
   domains: text().array().default([]),
   regions: text().array().default([]),
+  allowPublicStaking: boolean().default(false),
+  allowedStakers: varchar().array().default([]),
   status: providerStatusEnum().notNull().default(ProviderStatus.Unknown),
   minimumStake: integer().notNull().default(0),
   operationalFunds: integer().notNull().default(5),
