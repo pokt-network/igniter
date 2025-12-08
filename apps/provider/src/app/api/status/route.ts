@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     const regions = await getUniqueRegions();
 
-    const allowedStakers = addressGroups.flatMap(group => group.linkedAddresses);
+    const allowedStakers = Array.from(new Set(addressGroups.flatMap(group => group.linkedAddresses)));
     
     const response: StatusResponse = {
       regions,

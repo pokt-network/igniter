@@ -66,7 +66,10 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
       }
     }
 
-    if (!provider.allowPublicStaking && !provider.allowedStakers?.includes(ownerAddress)) {
+    if (
+        !provider.allowPublicStaking &&
+        !provider.allowedStakers?.map((addr: string) => addr.toLowerCase()).includes(ownerAddress.toLowerCase())
+    ) {
       distribution = []
     }
 
