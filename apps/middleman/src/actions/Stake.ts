@@ -45,7 +45,15 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
   return providers.map(provider => {
     let distribution: StakeDistributionItem[] = []
 
-    if (provider.enabled && provider.operationalFunds && provider.minimumStake) {
+    const ownerCanStakeWithProvider =
+        provider.allowPublicStaking ||
+        provider.allowedStakers?.some((address: string) => address.toLowerCase() === ownerAddress.toLowerCase());
+
+    if (!ownerCanStakeWithProvider) {
+      distribution = [];
+    }
+
+    if (provider.enabled && provider.operationalFunds && provider.minimumStake && ownerCanStakeWithProvider) {
 
       const allowedSizes = availableNodeSizes.filter(amount => amount >= provider.minimumStake)
 
@@ -64,13 +72,6 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
       if (remaining !== 0) {
         distribution = []
       }
-    }
-
-    if (
-        !provider.allowPublicStaking &&
-        !provider.allowedStakers?.some((address: string) => address.toLowerCase() === ownerAddress.toLowerCase())
-    ) {
-      distribution = []
     }
 
     return {
