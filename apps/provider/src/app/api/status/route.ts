@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       regions,
       allowedStakers,
       minimumStake: minimumStake,
-      allowPublicStaking: addressGroups.some(group => !group.private),
+      allowPublicStaking: addressGroups && Array.isArray(addressGroups) && addressGroups.some(group => !group.private),
       fee: fees.length > 0 ? Math.max(...fees) : 0,
       feeType: Array.from(new Set(fees)).length === 1 ? ProviderFee.Fixed : ProviderFee.UpTo,
       domains: getUniqueDomains(addressGroups),
