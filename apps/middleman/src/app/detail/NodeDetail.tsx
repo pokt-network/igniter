@@ -10,12 +10,16 @@ import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt, getShortAddress } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
 import { CaretSmallIcon } from '@igniter/ui/assets'
-import {useAddItemToDetail} from '@igniter/ui/components/QuickDetails/Provider'
+import {useAddItemToDetail, useRemoveLastItemFromDetail} from '@igniter/ui/components/QuickDetails/Provider'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { Provider } from '@igniter/db/middleman/schema'
-import {TransactionDetailBody} from "@/app/detail/TransactionDetail";
+import {TransactionDetailBody} from "@/app/detail/TransactionDetail"
+import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { GetUnstakeDuration } from '@/actions/Unstake'
+import { formatDuration } from '@/lib/utils/time'
 
 export interface NodeDetailBody {
   [key: string]: unknown;
@@ -53,7 +57,7 @@ function ActionButton({children, ...props}: React.PropsWithChildren & Omit<Butto
 
 export default function NodeDetail({
    address,
-  ownerAddress,
+   ownerAddress,
    status,
    transactions,
    provider,
@@ -61,7 +65,17 @@ export default function NodeDetail({
    stakeAmount
 }: NodeDetailBody) {
   const addItem = useAddItemToDetail()
+  const removeLastItem = useRemoveLastItemFromDetail()
+  const router = useRouter()
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
+
+  const {
+    data: unstakeDurationData,
+  } = useQuery({
+    queryKey: ['unstake-duration'],
+    queryFn: GetUnstakeDuration,
+    enabled: status === NodeStatus.Staked,
+  });
 
   const summaryRows: Array<SummaryRow> = [
     {
@@ -187,16 +201,26 @@ export default function NodeDetail({
       {status === NodeStatus.Staked && (
         <div className={'bg-[color:var(--color-slate-2)] h-[109px] rounded-[8px]'}>
           <p className={'px-4 py-[11px] text-[color:var(--color-white-3)]'}>
-            Recoup your tokens by unstaking this node. Process can take up to 21 days. Tokens will be withdrawn to your wallet.
+            Recoup your tokens by unstaking this node. Process can take up to{' '}
+            {unstakeDurationData ? (
+              <span className="font-mono text-[var(--color-white-1)]">{formatDuration(unstakeDurationData.durationSeconds)}</span>
+            ) : (
+              '...'
+            )}. Tokens will be withdrawn to your wallet.
           </p>
           <hr className={'border-[color:var(--divider)]'} />
           <div className={'flex flex-row items-center gap-2 p-2'}>
-            <ActionButton disabled={true}>
+            <ActionButton
+              onClick={() => {
+                removeLastItem()
+                router.push('/app/unstake')
+              }}
+            >
               Unstake
             </ActionButton>
             <QuickInfoPopOverIcon
               title={'Unstake'}
-              description={'This feature will be available soon.'}
+              description={'Navigate to the unstake page to unstake this node.'}
             />
           </div>
         </div>

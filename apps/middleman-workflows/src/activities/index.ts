@@ -14,7 +14,7 @@ import {
   NodeStatus,
   TransactionStatus,
 } from '@igniter/db/middleman/enums'
-import { extractTransactionStakingSuppliers } from '@/workflows/utils'
+import { extractTransactionStakingSuppliers, extractTransactionUnstakingSuppliers } from '@/workflows/utils'
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain } from '@igniter/pocket'
@@ -144,6 +144,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       id: transaction.id,
       hash: transaction.hash,
       status: transaction.status,
+      type: transaction.type,
     }
   },
   /**
@@ -310,6 +311,41 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     }
   },
   /**
+   * Updates nodes to unstaking status based on the data extracted from a provided transaction.
+   * This method also creates relationships between the transaction and the updated nodes.
+   *
+   * This method retrieves a transaction using the given transaction ID, extracts the unstaking nodes information,
+   * updates their status to Unstaking, and creates the transaction-to-node relationships in the database.
+   *
+   * @param {number} transactionId - The ID of the transaction from which to extract node information.
+   * @return {Promise<Array<string>>} A promise containing an array of unstaking node addresses. Returns an empty array if an error occurs.
+   */
+  async updateUnstakingNodesFromTransaction(transactionId: number): Promise<Array<string>> {
+    try {
+      const transaction = await dal.transaction.getTransaction(transactionId)
+
+      if (!transaction) {
+        throw new Error('Transaction not found')
+      }
+
+      const newlyUnstakingNodes = extractTransactionUnstakingSuppliers(transaction)
+
+      const addresses = newlyUnstakingNodes.map(node => node.operatorAddress)
+
+      await dal.node.updateManyNodeAndLinkToTransaction(
+        addresses,
+        { status: NodeStatus.Unstaking },
+        transaction.id
+      )
+
+      return addresses
+    } catch (error) {
+      console.log('Something went wrong while parsing the transaction to extract the unstaking nodes information.')
+      console.error(error)
+      return []
+    }
+  },
+  /**
    * Notifies the provider associated with the given transaction of newly staked addresses.
    * It retrieves the transaction and provider information, extracts staked node addresses,
    * and marks those addresses as staked for the provider.
@@ -346,6 +382,77 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       return {
         success: true,
         message: 'Successfully marked the addresses as staked.',
+        addresses,
+      }
+    } catch (error) {
+      const { message } = error as Error
+      log.error('Error registering namespace', { error })
+      return {
+        success: false,
+        message: message || 'An unknown error occurred while notifying the provider of the staked addresses.',
+      }
+    }
+  },
+  /**
+   * Notifies the provider associated with the given transaction of newly unstaking addresses.
+   * It retrieves the transaction and provider information, extracts unstaking node addresses,
+   * and marks those addresses as unstaking for the provider.
+   *
+   * @param {number} transactionId - The unique identifier of the transaction used to determine the associated provider and addresses.
+   * @return A promise that resolves to an object containing the success status, an informative message, and the associated staked addresses (if applicable).
+   */
+  async notifyProviderOfUntakingAddresses(transactionId: number) {
+    try {
+      const transaction = await dal.transaction.getTransaction(transactionId)
+
+      if (!transaction) {
+        return {
+          success: false,
+          message: 'Transaction not found or transaction is not associated to a provider.',
+        }
+      }
+
+      const unstakingSuppliers = extractTransactionUnstakingSuppliers(transaction)
+
+      const addresses = unstakingSuppliers.map(({ operatorAddress }) => operatorAddress)
+
+      const nodes = await dal.node.loadNodes(addresses)
+
+      if (!nodes || nodes.length === 0 || addresses.length !== nodes.length) {
+        return {
+          success: false,
+          message: 'No nodes found for the given addresses.',
+        }
+      }
+
+      const providerById: Record<string, Provider> = {}
+
+      const nodesByProvider = nodes.reduce((acc, node) => {
+        if (!node.providerId) return acc
+
+        if (!acc[node.providerId]) {
+          acc[node.providerId] = []
+        }
+
+        acc[node.providerId]!.push(node.address)
+        providerById[node.providerId] = node.provider!
+
+        return acc
+      }, {} as Record<string, Array<string>>)
+
+      await Promise.all(
+        Object.entries(nodesByProvider).map(([providerId, nodes]) => {
+          const provider = providerById[providerId]
+
+          if (!provider) throw new Error('Provider not found.')
+
+          return providerService.markOwnerUnstaking(nodes, provider)
+        })
+      )
+
+      return {
+        success: true,
+        message: 'Successfully marked the addresses as unstaking.',
         addresses,
       }
     } catch (error) {

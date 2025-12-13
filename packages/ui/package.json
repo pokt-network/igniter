@@ -80,6 +80,7 @@
     "./postcss.config": "./postcss.config.mjs",
     "./tailwind.config": "./tailwind.config.ts",
     "./lib/*": "./src/lib/*.ts",
+    "./api/*": "./src/api/*.ts",
     "./graphql/server": "./src/lib/graphql/server.ts",
     "./graphql/client": "./src/lib/graphql/client.tsx",
     "./models": "./src/lib/models/index.ts",

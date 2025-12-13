@@ -1,6 +1,6 @@
 import React from 'react'
 import HeightContextProvider from './height'
-import { getLatestBlock, getNumBlocksPerSession } from '../../api/blocks'
+import { getStatusQuery } from '../../api/blocks'
 
 interface InitializeHeightContextProps {
   graphQlUrl: string
@@ -11,16 +11,13 @@ export default async function InitializeHeightContext({
   graphQlUrl,
   children,
 }: InitializeHeightContextProps) {
-  const [latestBlock, blocksPerSession] = await Promise.all([
-    getLatestBlock(graphQlUrl),
-    getNumBlocksPerSession(graphQlUrl)
-  ])
+  const data = await getStatusQuery(graphQlUrl)
 
   return (
     <HeightContextProvider
-      firstHeight={Number(latestBlock?.height?.toString() || 0)}
-      blocksPerSession={blocksPerSession}
-      firstTime={latestBlock?.timestamp}
+      firstHeight={Number(data?.height?.toString() || 0)}
+      firstTime={data?.timestamp}
+      networkHeight={data?.networkHeight}
     >
       {children}
     </HeightContextProvider>

@@ -3,7 +3,7 @@ import {
   WorkflowError,
 } from '@temporalio/workflow'
 import { delegatorActivities } from "@/activities";
-import {TransactionStatus} from "@igniter/db/middleman/enums";
+import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import {SendTransactionResult} from "@/lib/blockchain";
 
 
@@ -23,6 +23,8 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     createNewNodesFromTransaction,
     notifyProviderOfStakedAddresses,
     notifyProviderOfFailedStakes,
+    updateUnstakingNodesFromTransaction,
+    notifyProviderOfUntakingAddresses,
   } = proxyActivities<ReturnType<typeof delegatorActivities>>({
     startToCloseTimeout: "30s",
     retry: {
@@ -94,22 +96,48 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     consumedFee: Number(gasUsed || 0),
   });
 
-  if (success) {
-    const newNodes = await createNewNodesFromTransaction(transaction.id);
-    await notifyProviderOfStakedAddresses(transaction.id);
+    if (transaction.type === TransactionType.Stake) {
+      if (success) {
+        const newNodes = await createNewNodesFromTransaction(transaction.id);
+        await notifyProviderOfStakedAddresses(transaction.id);
 
+        return {
+          ...transaction,
+          status: txStatus,
+          hash: result?.transactionHash || transaction.hash,
+          txHeight,
+          newNodes: newNodes || [],
+          unstakingNodes: [],
+          code,
+        };
+      } else {
+        await notifyProviderOfFailedStakes(transaction.id);
 
-    return {
-      ...transaction,
-      status: txStatus,
-      hash: result?.transactionHash || transaction.hash,
-      txHeight,
-      newNodes: newNodes || [],
-      code,
-    };
-  }
+        return {
+          ...transaction,
+          status: txStatus,
+          hash: result?.transactionHash || transaction.hash,
+          txHeight,
+          newNodes: [],
+          unstakingNodes: [],
+          code,
+        };
+      }
+    } else if (transaction.type === TransactionType.Unstake && success) {
+      const unstakingNodes = await updateUnstakingNodesFromTransaction(transaction.id)
 
-  await notifyProviderOfFailedStakes(transaction.id);
+      await notifyProviderOfUntakingAddresses(transaction.id)
+
+      return {
+        ...transaction,
+        status: txStatus,
+        hash: result?.transactionHash || transaction.hash,
+        txHeight,
+        newNodes: [],
+        unstakingNodes,
+        code,
+      };
+    }
 
   return {
     ...transaction,
@@ -117,6 +145,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     hash: result?.transactionHash || transaction.hash,
     txHeight,
     newNodes: [],
+    unstakingNodes: [],
     code,
   };
 }

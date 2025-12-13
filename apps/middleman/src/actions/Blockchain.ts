@@ -1,9 +1,11 @@
+'use server'
+
 import type { TransactionMessage } from '@igniter/ui/models'
 import { Ripemd160, sha256 } from '@cosmjs/crypto'
 import { toBech32, fromHex } from '@cosmjs/encoding'
 import { EncodeObject, GeneratedType, makeAuthInfoBytes, Registry } from '@cosmjs/proto-signing'
 import { PubKey } from '@igniter/pocket/proto/cosmos/crypto/secp256k1/keys';
-import {MsgStakeSupplier} from "@igniter/pocket/proto/pocket/supplier/tx";
+import {MsgStakeSupplier, MsgUnstakeSupplier} from "@igniter/pocket/proto/pocket/supplier/tx";
 import {MsgSend} from "@igniter/pocket/proto/cosmos/bank/v1beta1/tx";
 import {Coin} from "@igniter/pocket/proto/cosmos/base/v1beta1/coin";
 import { TxRaw } from '@igniter/pocket/proto/cosmos/tx/v1beta1/tx'
@@ -36,7 +38,14 @@ function buildEncodeObjectFromMessage(message: TransactionMessage): EncodeObject
             amount: body.stakeAmount,
           }),
         }
-      }
+      };
+    case "/pocket.supplier.MsgUnstakeSupplier":
+      return {
+        typeUrl: "/pocket.supplier.MsgUnstakeSupplier",
+        value: MsgUnstakeSupplier.fromJSON(body)
+      };
+    default:
+      throw new Error(`Unsupported message type: ${typeUrl}`);
   }
 }
 
@@ -76,6 +85,7 @@ function getRegistry(): Registry {
     registry = new Registry([
       ["/cosmos.bank.v1beta1.MsgSend", MsgSend as unknown as GeneratedType],
       ["/pocket.supplier.MsgStakeSupplier", MsgStakeSupplier as unknown as GeneratedType],
+      ["/pocket.supplier.MsgUnstakeSupplier", MsgUnstakeSupplier as unknown as GeneratedType],
     ]);
   }
 

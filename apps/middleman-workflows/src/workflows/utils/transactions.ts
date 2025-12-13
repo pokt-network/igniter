@@ -1,11 +1,17 @@
 import type {Transaction} from "@igniter/db/middleman/schema";
-import {SEND_TYPE_URL, STAKE_TYPE_URL} from "@/lib/constants";
+import { SEND_TYPE_URL, STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
 
 export interface NewStake {
   address: string;
   ownerAddress: string;
   stakeAmount: string;
   balance: number;
+}
+
+export interface NewUnstake {
+  // owner address
+  signer: string;
+  operatorAddress: string;
 }
 
 export interface SendOperation {
@@ -48,6 +54,14 @@ export interface StakeOperation {
   }
 }
 
+export interface UnstakeOperation {
+  typeUrl: typeof UNSTAKE_TYPE_URL;
+  value: {
+    signer: string
+    operatorAddress: string
+  }
+}
+
 export function extractTransactionStakingSuppliers(tx: Transaction) {
   try {
     const {body} = JSON.parse(tx.unsignedPayload);
@@ -59,6 +73,29 @@ export function extractTransactionStakingSuppliers(tx: Transaction) {
           ownerAddress,
           stakeAmount: stake.amount.toString(),
           balance: nodes[operatorAddress]?.balance || 0,
+        };
+      }
+
+      return nodes;
+    }, {});
+
+    return Object.values(nodes);
+  } catch (err) {
+    console.log("Something went wrong while parsing the transaction to extract the staked nodes information.");
+    console.error(err);
+    return [];
+  }
+}
+
+export function extractTransactionUnstakingSuppliers(tx: Transaction): Array<NewUnstake> {
+  try {
+    const {body} = JSON.parse(tx.unsignedPayload);
+    const nodes: Record<string, NewUnstake> = body.messages.reduce((nodes: Record<string, NewUnstake>, message: UnstakeOperation) => {
+      if (message.typeUrl === UNSTAKE_TYPE_URL) {
+        const {operatorAddress, signer} = message.value;
+        nodes[operatorAddress] = {
+          operatorAddress,
+          signer
         };
       }
 

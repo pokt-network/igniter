@@ -11,16 +11,18 @@ export const latestBlockDocument = graphql(`
   }
 `)
 
-export const blockSubscriptionDocument = graphql(`
-  subscription blocks {
-    blocks {
-      id
-      mutation_type
-      _entity {
+export const statusQuery = graphql(`
+  query status {
+    blocks(orderBy: ID_DESC, first: 1) {
+      nodes {
         id
-        height: id
         timestamp
+        totalRelays
       }
+    }
+    _metadata {
+      targetHeight
+      lastProcessedHeight
     }
   }
 `)

@@ -1,15 +1,16 @@
-import {nodesTable, transactionsToNodesTable} from "@igniter/db/middleman/schema";
+import { nodesTable, transactionsToNodesTable } from '@igniter/db/middleman/schema'
 import type {InsertNode, InsertTransactionsToNodesRelation} from "@igniter/db/middleman/schema";
 import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
-import {Node as NodeModel} from '@igniter/db/middleman/schema'
+import {Node as NodeModel, Provider as ProviderModel} from '@igniter/db/middleman/schema'
 import {
   and,
   eq,
   gt,
   lte,
   ne,
+  inArray
 } from 'drizzle-orm/sql/expressions/conditions'
 import { asc } from 'drizzle-orm/sql/expressions/select'
 import { NodeStatus } from '@igniter/db/middleman/enums'
@@ -46,6 +47,21 @@ export default class Node {
       .where(eq(nodesTable.address, address))
       .limit(1)
       .then(rows => rows.length ? rows[0] : undefined)
+  }
+
+  /**
+   * Loads a key associated with the specified address from the database.
+   *
+   * @param {Array<string>} addresses - The address whose key is to be retrieved.
+   * @return {Promise<Key | undefined>} - A promise that resolves to the key if found, or undefined if no key is associated with the address.
+   */
+  async loadNodes(addresses: Array<string>): Promise<Array<NodeModel & {provider: ProviderModel | null}>> {
+    return this.dbClient.db.query.nodesTable.findMany({
+      where: inArray(nodesTable.address, addresses),
+      with: {
+        provider: true
+      }
+    })
   }
 
   /**
@@ -140,6 +156,50 @@ export default class Node {
       }
 
       return insertedNodes;
+    });
+  }
+
+  /**
+   * Updates multiple nodes by their addresses and creates relationships with a transaction.
+   * This method updates the specified nodes and associates them with the given transaction
+   * in the transactions_to_nodes table.
+   *
+   * @param {string[]} addresses - An array of node addresses to update.
+   * @param {Partial<InsertNode>} update - The partial object containing the node properties to be updated.
+   * @param {number} transactionId - The transaction ID to associate with the updated nodes.
+   * @return {Promise<string[]>} A promise that resolves to an array of updated node addresses.
+   */
+  async updateManyNodeAndLinkToTransaction(
+    addresses: Array<string>,
+    update: Partial<InsertNode>,
+    transactionId: number
+  ): Promise<Array<string>> {
+    return this.dbClient.db.transaction(async (tx) => {
+      // Update the nodes
+      await tx
+        .update(nodesTable)
+        .set(update)
+        .where(inArray(nodesTable.address, addresses));
+
+      // Get the node IDs for the updated nodes
+      const nodes = await tx
+        .select({ id: nodesTable.id, address: nodesTable.address })
+        .from(nodesTable)
+        .where(inArray(nodesTable.address, addresses));
+
+      if (nodes.length > 0) {
+        // Create the relationships
+        const relations: InsertTransactionsToNodesRelation[] = nodes.map(node => ({
+          transactionId: transactionId,
+          nodeId: node.id
+        }));
+
+        await tx
+          .insert(transactionsToNodesTable)
+          .values(relations);
+      }
+
+      return addresses;
     });
   }
 }
