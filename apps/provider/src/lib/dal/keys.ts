@@ -215,7 +215,7 @@ export async function markUnstaking(addresses: string[], delegatorIdentity: stri
       and(
         inArray(keysTable.address, addresses),
         eq(keysTable.deliveredTo, delegatorIdentity),
-        eq(keysTable.state, KeyState.Staked),
+        inArray(keysTable.state, [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]),
       ),
     )
     .returning({ address: keysTable.address })
