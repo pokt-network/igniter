@@ -3,7 +3,14 @@ import {Supplier} from "@igniter/domain/provider/models";
 import {list} from "@/lib/dal/addressGroups";
 import {list as listServices} from '@/lib/dal/services'
 import {createKeys} from "@/lib/services/keys";
-import {insertNewKeys, lockAvailableKeys, markAvailable, markKeysDelivered, markStaked} from "@/lib/dal/keys";
+import {
+  insertNewKeys,
+  lockAvailableKeys,
+  markAvailable,
+  markKeysDelivered,
+  markStaked,
+  markUnstaking,
+} from '@/lib/dal/keys'
 import {getDb} from "@/db";
 import {BuildSupplierServiceConfigHandler} from "@igniter/domain/provider/operations";
 import {InsertKey, Key} from "@igniter/db/provider/schema";
@@ -183,4 +190,8 @@ export async function releaseDeliveredSuppliers(addresses: string[], requestingD
 
 export async function markDeliveredSupplierAsStaked(addresses: string[], requestingDelegator: string) {
     return markStaked(addresses, requestingDelegator);
+}
+
+export async function markStakedSupplierAsUnstaking(addresses: string[], requestingDelegator: string) {
+    return markUnstaking(addresses, requestingDelegator);
 }

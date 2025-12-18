@@ -10,9 +10,9 @@ import {QuickInfoPopOverIcon} from "@igniter/ui/components/QuickInfoPopOverIcon"
 import {CaretSmallIcon, CornerIcon, LoaderIcon} from "@igniter/ui/assets";
 import {useApplicationSettings} from "@/app/context/ApplicationSettings";
 import {StakeDistributionOffer} from "@/lib/models/StakeDistributionOffer";
-import { Operation, SendOperation, StakeOperation } from '@/app/detail/Detail'
 import Amount from '@igniter/ui/components/Amount'
 import { MessageType } from "@/lib/constants";
+import { Operation, SendOperation, StakeOperation } from '@/app/detail/TransactionDetail'
 
 export interface StakeSuccessProps {
     amount: number;

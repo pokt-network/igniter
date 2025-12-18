@@ -1,55 +1,103 @@
 'use client'
 
-import { createContext, useContext, useState } from 'react'
-import { useSubscription } from '@apollo/client'
-import { blockSubscriptionDocument } from '@igniter/graphql'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useQuery } from '@apollo/client'
+import { statusQuery } from '@igniter/graphql'
 
 interface HeightContext {
   currentHeight: number
+  networkHeight: number
+  // first height or the latest height with relays
+  sessionHeight: number
+  updateNetworkHeight: () => void
   firstHeight: number
-  blocksPerSession: number
   currentTime: string
 }
 
 const HeightContext = createContext<HeightContext>({
   currentHeight: 0,
+  networkHeight: 0,
   firstHeight: 0,
-  blocksPerSession: 0,
+  sessionHeight: 0,
   currentTime: '',
+  updateNetworkHeight: () => {}
 });
 
 interface HeightContextProviderProps {
   children: React.ReactNode
   firstHeight: number
+  networkHeight: number
   firstTime: string
-  blocksPerSession: number
 }
 
-export default function HeightContextProvider({children, firstHeight, firstTime, blocksPerSession}: HeightContextProviderProps) {
+export default function HeightContextProvider({
+                                                children,
+                                                networkHeight: initialNetworkHeight,
+                                                firstHeight,
+                                                firstTime,
+                                              }: HeightContextProviderProps) {
+  const [skipQueries, setSkipQueries] = useState(true)
+  const [networkHeight, setNetworkHeight] = useState(initialNetworkHeight)
+  const [sessionHeight, setSessionHeight] = useState(Number(firstHeight))
   const [{currentHeight, currentTime}, setState] = useState({
-    currentHeight: Number(firstHeight),
+    currentHeight: Number(firstHeight || 0),
     currentTime: firstTime,
   })
 
-  useSubscription(blockSubscriptionDocument, {
-    onData: (data) => {
-      const block = data?.data?.data?.blocks
-      if (block && Number(block.id) > currentHeight) {
-        setState({
-          currentHeight: Number(block.id),
-          currentTime: block._entity?.timestamp || currentTime,
-        })
+  const {data, refetch} = useQuery(
+    statusQuery,
+    {
+      fetchPolicy: 'network-only',
+      nextFetchPolicy: 'network-only',
+      pollInterval: 15 * 1000,
+      skip: skipQueries
+    }
+  )
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSkipQueries(false)
+    }, 10000)
+
+    return () => clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    const block = data?.blocks?.nodes[0]
+
+    const newBlockId = Number(block?.id)
+    if (block && newBlockId > currentHeight) {
+      setState({
+        currentHeight: newBlockId,
+        currentTime: block.timestamp || currentTime,
+      })
+
+      if (newBlockId > networkHeight) {
+        setNetworkHeight(newBlockId)
+      }
+
+      if (Number(block.totalRelays) > 0) {
+        setSessionHeight(newBlockId)
+      }
+
+      const targetHeight = data?._metadata?.targetHeight
+
+      if (targetHeight) {
+        setNetworkHeight(Number(targetHeight))
       }
     }
-  })
+    // eslint-disable-next-line
+  }, [data])
 
   return (
     <HeightContext.Provider
       value={{
         currentHeight,
         currentTime,
+        networkHeight,
         firstHeight,
-        blocksPerSession,
+        sessionHeight,
+        updateNetworkHeight: refetch,
       }}
     >
       {children}

@@ -180,7 +180,14 @@ export class KeplrWalletConnection extends WalletConnection {
               amount: body.stakeAmount,
             }),
           }
-        }
+        };
+      case "/pocket.supplier.MsgUnstakeSupplier":
+        return {
+          typeUrl: "/pocket.supplier.MsgUnstakeSupplier",
+          value: MsgUnstakeSupplier.fromJSON(body)
+        };
+      default:
+        throw new Error(`Unsupported message type: ${typeUrl}`);
     }
   }
 

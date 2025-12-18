@@ -36,7 +36,7 @@ export interface CreateSignedMemoRequest {
   settings: ApplicationSettings;
 }
 
-export async function CalculateStakeDistribution(stakeAmount: number): Promise<StakeDistributionOffer[]> {
+export async function CalculateStakeDistribution(stakeAmount: number, ownerAddress: string): Promise<StakeDistributionOffer[]> {
   const applicationSettings = await getApplicationSettings()
   const providers = await ListProviders()
 
@@ -45,7 +45,16 @@ export async function CalculateStakeDistribution(stakeAmount: number): Promise<S
   return providers.map(provider => {
     let distribution: StakeDistributionItem[] = []
 
-    if (provider.enabled && provider.operationalFunds && provider.minimumStake) {
+    const ownerCanStakeWithProvider =
+        provider.allowPublicStaking ||
+        provider.allowedStakers?.some((address: string) => address.toLowerCase() === ownerAddress.toLowerCase());
+
+    if (!ownerCanStakeWithProvider) {
+      distribution = [];
+    }
+
+    if (provider.enabled && provider.operationalFunds && provider.minimumStake && ownerCanStakeWithProvider) {
+
       const allowedSizes = availableNodeSizes.filter(amount => amount >= provider.minimumStake)
 
       let remaining = stakeAmount

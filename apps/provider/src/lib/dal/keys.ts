@@ -205,6 +205,22 @@ export async function markStaked(addresses: string[], delegatorIdentity: string)
     .returning({ address: keysTable.address })
 }
 
+export async function markUnstaking(addresses: string[], delegatorIdentity: string) {
+  const dbClient = getDbClient()
+  return dbClient.db.update(keysTable)
+    .set({
+      state: KeyState.Unstaking,
+    })
+    .where(
+      and(
+        inArray(keysTable.address, addresses),
+        eq(keysTable.deliveredTo, delegatorIdentity),
+        inArray(keysTable.state, [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]),
+      ),
+    )
+    .returning({ address: keysTable.address })
+}
+
 /**
  * INSERT new keys, returning the full rows
  */

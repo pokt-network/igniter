@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     const applicationSettings = await getApplicationSettings();
-    const addressGroups = await list(false);
+    const addressGroups = await list();
 
     const minimumStake = applicationSettings.minimumStake;
 
@@ -49,11 +49,15 @@ export async function POST(request: Request) {
     }, [] as number[]);
 
     const regions = await getUniqueRegions();
+
+    const allowedStakers = Array.from(new Set(addressGroups.flatMap(group => group.linkedAddresses)));
     
     const response: StatusResponse = {
       regions,
+      allowedStakers,
       minimumStake: minimumStake,
-      fee: Math.max(...fees),
+      allowPublicStaking: addressGroups && Array.isArray(addressGroups) && addressGroups.some(group => !group.private),
+      fee: fees.length > 0 ? Math.max(...fees) : 0,
       feeType: Array.from(new Set(fees)).length === 1 ? ProviderFee.Fixed : ProviderFee.UpTo,
       domains: getUniqueDomains(addressGroups),
       healthy: true,

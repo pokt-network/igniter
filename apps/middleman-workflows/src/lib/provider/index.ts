@@ -93,6 +93,35 @@ export class ProviderService {
     }
   }
 
+  /**
+   * Marks a list of addresses as unstaking with the provider
+   * @param addresses List of addresses to mark as unstaking
+   * @param provider
+   */
+  async markOwnerUnstaking(addresses: string[], provider: Provider) {
+    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
+
+    try {
+      const UNSTAKING_URL = `${provider.url}/api/suppliers/unstaking`
+      const operationResponse = await fetch(UNSTAKING_URL, {
+        method: 'POST',
+        body: JSON.stringify({ addresses }),
+        headers: {
+          'Content-Type': 'application/json',
+          [REQUEST_IDENTITY_HEADER]: identity,
+          [REQUEST_SIGNATURE_HEADER]: signature,
+        },
+      })
+
+      if (!operationResponse.ok) {
+        throw new Error(`Error marking the suppliers as staked: ${operationResponse.statusText}`)
+      }
+    } catch (error) {
+      this.logger.error('An error occurred while marking the suppliers as staked.', { error })
+      throw error
+    }
+  }
+
   async releaseSuppliers(addresses: string[], provider: Provider) {
     const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
 

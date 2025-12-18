@@ -14,6 +14,8 @@ interface DetailContextValue<Item extends ItemBase> {
   items: Array<Item | Promise<Item>>
   addItem: (item: Item | Promise<Item>) => void
   updateItem: (item: Item | Promise<Item>, index: number) => void
+  removeLastItem: () => void
+  clearItems: () => void
 }
 
 const DetailContext = createContext<DetailContextValue<any> | null>(null)
@@ -32,13 +34,17 @@ export default function QuickDetailProvider<Item extends ItemBase>({
       return [...prev]
     })
 
+  const removeLastItem = () => setItems(prev => prev.slice(0, prev.length - 1))
+
+  const clearItems = () => setItems([])
+
   return (
-    <DetailContext.Provider value={{items, addItem, updateItem}}>
+    <DetailContext.Provider value={{items, addItem, updateItem, removeLastItem, clearItems}}>
       <DetailResolver<Item>
         items={items}
         renderers={renderers}
-        clearItems={() => setItems([])}
-        back={() => setItems(prev => prev.slice(0, prev.length - 1))}
+        clearItems={clearItems}
+        back={removeLastItem}
       />
       {children}
     </DetailContext.Provider>
@@ -53,6 +59,10 @@ export function useDetailContext<Item extends ItemBase>() {
 
 export function useAddItemToDetail<Item extends ItemBase>() {
   return useDetailContext<Item>().addItem
+}
+
+export function useRemoveLastItemFromDetail<Item extends ItemBase>() {
+  return useDetailContext<Item>().removeLastItem
 }
 
 export * from './types';

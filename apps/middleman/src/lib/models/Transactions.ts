@@ -25,11 +25,21 @@ export interface OperationalFundsTransactionSignaturePayload {
     amount: string;
 }
 
-export type TransactionMessage = StakeMessage | FundsMessage;
+export type TransactionMessage = StakeMessage | FundsMessage | UnstakeMessage;
 
 export interface StakeMessage {
     typeUrl: '/pocket.supplier.MsgStakeSupplier';
     body: StakeTransactionSignaturePayload;
+}
+
+export interface UnstakeMessage {
+    typeUrl: '/pocket.supplier.MsgUnstakeSupplier';
+    body: UnstakeTransactionSignaturePayload;
+}
+
+export interface UnstakeTransactionSignaturePayload {
+    signer: string;
+    operatorAddress: string;
 }
 
 export interface FundsMessage {

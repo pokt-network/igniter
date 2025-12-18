@@ -12,13 +12,14 @@ import {ActivityContentLoading} from "@/app/app/stake/components/ActivityContent
 
 export interface PickOfferStepProps {
     amount: number;
+    ownerAddress: string;
     defaultOffer?: StakeDistributionOffer;
     onOfferSelected: (offer: StakeDistributionOffer) => void;
     onBack: () => void;
     onClose: () => void;
 }
 
-export function PickOfferStep({onOfferSelected, amount, onBack, defaultOffer, onClose}: Readonly<PickOfferStepProps>) {
+export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, defaultOffer, onClose}: Readonly<PickOfferStepProps>) {
     const [selectedOffer, setSelectedOffer] = useState<StakeDistributionOffer | undefined>(defaultOffer);
     const [isShowingUnavailable, setIsShowingUnavailable] = useState<boolean>(false);
     const [offers, setOffers] = useState<StakeDistributionOffer[]>([]);
@@ -53,7 +54,7 @@ export function PickOfferStep({onOfferSelected, amount, onBack, defaultOffer, on
         (async () => {
             setIsLoadingOffers(true);
             try {
-                const calculatedOffers = await CalculateStakeDistribution(amount);
+                const calculatedOffers = await CalculateStakeDistribution(amount, ownerAddress);
                 setOffers(calculatedOffers);
                 if (selectedOffer) {
                     const updatedSelectedOffer = calculatedOffers.find((offer) => offer.id === selectedOffer.id && offer.stakeDistribution.length > 0);;
