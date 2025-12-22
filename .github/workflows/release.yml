@@ -87,7 +87,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/stake-igniter/${{ env.APP_NAME }}
+          images: ghcr.io/pokt-network/${{ env.APP_NAME }}
           tags: |
             # set latest tag for default branch
             type=raw,value=latest,enable={{is_default_branch}}

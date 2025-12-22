@@ -143,21 +143,39 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         servicesHistory: supplier.serviceConfigHistory?.length,
       })
 
+      // --- NEW: cooldown / dedupe ---
+      const existingOwnerInitialStake = (key.remediationHistory ?? []).find(
+          (rh) => rh.reason === RemediationHistoryEntryReason.OwnerInitialStake
+      )
+
+      const now = Date.now()
+      const cooldownMs = 10 * 60 * 1000 // 10 minutes; tune as you like
+      const existingTs = existingOwnerInitialStake?.timestamp ?? 0
+      const isInCooldown = existingOwnerInitialStake ? (now - existingTs) < cooldownMs : false
+
       const isOwnerInitialStakeRemediationNeeded =
         update.state === KeyState.Staked &&
         key.delegatorRewardsAddress && // We can only remediate if the key has a delegator rewards address
         supplier.services.length === 0 && // The supplier is staked without active services
-        supplier.serviceConfigHistory?.length === 0 // There are no pending activations or deactivations, this supplier is pristine
+          (supplier.serviceConfigHistory?.length ?? 0) === 0 // There are no pending activations or deactivations, this supplier is pristine
 
       if (isOwnerInitialStakeRemediationNeeded) {
-        update.remediationHistory = addOrUpdateRemediationHistory(
-          {
-            message: 'The supplier is not configured with any services.',
-            reason: RemediationHistoryEntryReason.OwnerInitialStake,
-            timestamp: Date.now(),
-          },
-          key.remediationHistory ?? []
-        )
+        if (!isInCooldown) {
+          update.remediationHistory = addOrUpdateRemediationHistory(
+              {
+                message: 'The supplier is not configured with any services.',
+                reason: RemediationHistoryEntryReason.OwnerInitialStake,
+                timestamp: Date.now(),
+              },
+              key.remediationHistory ?? []
+          )
+        } else {
+          log.debug('upsertSupplierStatus: OwnerInitialStake detected but in cooldown; not updating remediation history.', {
+            ...loggerContext,
+            cooldownMs,
+            existingTs,
+          })
+        }
       }
 
       log.debug('upsertSupplierStatus: Checking if is operational funds remediation needed', {
@@ -232,7 +250,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
     }
 
-    log.debug('Updating supplier', {params, update}) //NOTE: adding the update could result in an error due to BIGINT
+    log.debug('Updating supplier', { params, update })
     await dal.keys.updateKey(params.address, update, params.height)
     log.info('Update Supplier done!', {params})
     return true
@@ -304,10 +322,66 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         ownerAddress: supplier?.ownerAddress,
         operatorAddress: supplier?.operatorAddress,
         stake: supplier?.stake,
-        services: supplier?.services.length,
+        services: supplier?.services?.length,
         unstakeSessionEndHeight: supplier?.unstakeSessionEndHeight,
+        serviceConfigHistory: supplier?.serviceConfigHistory?.length,
       }
     })
+
+    // --- Determine what we can actually remediate ---
+    const remediationHistory = key.remediationHistory ?? [];
+    const hasOwnerInitialStakeReason = params.reasons.includes(RemediationHistoryEntryReason.OwnerInitialStake);
+
+    const ownerInitialStakeEntry = hasOwnerInitialStakeReason
+        ? remediationHistory.find((rh) => rh.reason === RemediationHistoryEntryReason.OwnerInitialStake) ?? null
+        : null
+
+    // Nothing actionable? DO NOT stake.
+    if (!ownerInitialStakeEntry) {
+      log.info('remediateSupplier: No actionable remediation in reasons. Skipping stake.', {
+        params,
+        reasons: params.reasons,
+      })
+      return {
+        success: true,
+        message: 'No actionable remediation for this supplier.',
+      }
+    }
+
+    // If supplier already has services or has config history, OwnerInitialStake is no longer valid.
+    const supplierAlreadyConfigured =
+        (supplier.services?.length ?? 0) > 0 || (supplier.serviceConfigHistory?.length ?? 0) > 0
+
+    if (supplierAlreadyConfigured) {
+      log.info('remediateSupplier: Supplier already configured; clearing OwnerInitialStake entry without staking.', {
+        params,
+        services: supplier.services?.length ?? 0,
+        servicesHistory: supplier.serviceConfigHistory?.length ?? 0,
+      })
+
+      const update: Partial<InsertKey> = {
+        lastUpdatedHeight: params.height,
+        balanceUpokt: BigInt(balance),
+        // remove only OwnerInitialStake entry; keep other entries if any
+        remediationHistory: remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake),
+      }
+
+      try {
+        await dal.keys.updateKey(params.address, update, params.height)
+      } catch (e) {
+        log.warn('remediateSupplier: Update Supplier failed while clearing OwnerInitialStake!', {
+          params,
+          error: e,
+        })
+        return {
+          success: false,
+          message: 'Failed while updating the supplier status.',
+          keyUpdate: update,
+        }
+      }
+
+      return { success: true, message: 'Supplier already configured; remediation cleared.' }
+    }
 
     const stakeParams: StakeSupplierParams = {
       signerPrivateKey: key.privateKey,
@@ -316,39 +390,37 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       operatorAddress: key.address,
     }
 
-    const remediations: RemediationHistoryEntry[] = [];
+    log.debug('remediateSupplier: Preparing initial owner stake remediation', {
+      entry: ownerInitialStakeEntry,
+    })
 
-    const isRemediatingInitialOwnerStake =
-      params.reasons.includes(RemediationHistoryEntryReason.OwnerInitialStake)
-        ? key.remediationHistory?.find((rh) => rh.reason === RemediationHistoryEntryReason.OwnerInitialStake)
-        : null;
+    const buildSupplierServiceConfigHandler = new BuildSupplierServiceConfigHandler()
+    stakeParams.services = buildSupplierServiceConfigHandler.execute({
+      services: supportedServices,
+      addressGroup: key.addressGroup,
+      ownerAddress: supplier.ownerAddress,
+      operatorAddress: key.address,
+      requestRevShare: [{
+        revSharePercentage: key.delegatorRevSharePercentage ?? 0,
+        address: key.delegatorRewardsAddress ?? '',
+      }]
+    })
 
-    if (isRemediatingInitialOwnerStake) {
-      log.debug('remediateSupplier: Preparing initial owner stake remediation', {
-        entry: isRemediatingInitialOwnerStake,
-      });
-
-      const buildSupplierServiceConfigHandler = new BuildSupplierServiceConfigHandler();
-
-      stakeParams.services = buildSupplierServiceConfigHandler.execute({
-        services: supportedServices,
-        addressGroup: key.addressGroup,
-        ownerAddress: supplier.ownerAddress,
-        operatorAddress: key.address,
-        requestRevShare: [{
-          revSharePercentage: key.delegatorRevSharePercentage ?? 0,
-          address: key.delegatorRewardsAddress ?? '',
-        }]
+    if (!stakeParams.services || stakeParams.services.length === 0) {
+      log.warn('remediateSupplier: Refusing to stake because computed services is empty', {
+        params,
+        supportedServicesCount: supportedServices.length,
+        addressGroup: key.addressGroup?.id ?? 'unknown',
       })
-
-      log.debug('remediateSupplier: Registering initial owner stake remediation entry', {
-        entry: isRemediatingInitialOwnerStake,
-      });
-      remediations.push(isRemediatingInitialOwnerStake);
+      return {
+        success: false,
+        message: 'Refusing to stake with empty services config.',
+      }
     }
 
     log.debug('remediateSupplier: Executing stake transaction', {
       stakeParams: redactStakeSupplierParams(stakeParams),
+      servicesToStakeCount: stakeParams.services.length,
     })
 
     const txResult = await pocketRpcClient.stakeSupplier(stakeParams)
@@ -358,39 +430,59 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const update: Partial<InsertKey> = {
       lastUpdatedHeight: params.height,
       balanceUpokt: BigInt(balance),
-    };
+    }
 
     if (!txResult.success) {
       log.debug(`remediateSupplier: Stake transaction failed for: ${key.address} ${JSON.stringify(txResult)}`)
-      update.state = KeyState.RemediationFailed;
-      update.remediationHistory = remediations.reduce((allRemediationItemsOnSupplier, runRemediationItem) => {
-        return addOrUpdateRemediationHistory(
+      update.state = KeyState.RemediationFailed
+      update.remediationHistory = addOrUpdateRemediationHistory(
           {
-            ...runRemediationItem,
+            ...ownerInitialStakeEntry,
             timestamp: Date.now(),
             txResult: txResult.code,
             txResultDetails: txResult.message,
           },
-          allRemediationItemsOnSupplier
+          remediationHistory
+      )
+    } else {
+      let supplierAfter: Supplier | null = null
+      try {
+        supplierAfter = await pocketRpcClient.getSupplier(params.address)
+      } catch (e) {
+        log.warn('remediateSupplier: Failed to re-fetch supplier after stake; keeping remediation entry for verification.', {
+          params,
+          error: e,
+        })
+      }
+
+      const nowConfigured =
+          supplierAfter
+              ? ((supplierAfter.services?.length ?? 0) > 0 || (supplierAfter.serviceConfigHistory?.length ?? 0) > 0)
+              : false
+
+      update.state = KeyState.Staked
+
+      if (nowConfigured) {
+        update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake)
+      } else {
+        update.remediationHistory = addOrUpdateRemediationHistory(
+            {
+              ...ownerInitialStakeEntry,
+              timestamp: Date.now(),
+              txResult: txResult.code,
+              txResultDetails: txResult.message,
+            },
+            remediationHistory
         )
-      }, (key.remediationHistory ?? []))
+      }
     }
 
-    if (txResult.success) {
-      update.state = KeyState.Staked;
-      update.remediationHistory = [];
-    }
-
-    log.debug('remediateSupplier: Updating supplier', {params, update}) //NOTE: adding the update could result in an error due to BIGINT
+    log.debug('remediateSupplier: Updating supplier', { params, update }) // NOTE: adding the update could result in an error due to BIGINT
     try {
       await dal.keys.updateKey(params.address, update, params.height)
-      log.debug('remediateSupplier: Update Supplier done!', {params})
+      log.debug('remediateSupplier: Update Supplier done!', { params })
     } catch (e) {
-      log.warn('remediateSupplier: Update Supplier failed!', {
-        params,
-        error: e,
-      })
-
+      log.warn('remediateSupplier: Update Supplier failed!', { params, error: e })
       return {
         success: false,
         message: 'Failed while updating the supplier status.',
@@ -399,7 +491,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
     }
 
-    log.info('remediateSupplier: Execution finished', {params})
+    log.info('remediateSupplier: Execution finished', { params })
 
     return {
       success: txResult.success,
