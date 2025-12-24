@@ -1,6 +1,6 @@
 services:
   middleman-migration:
-    image: "ghcr.io/stake-igniter/middleman:0.2.4-rc.0"
+    image: "ghcr.io/pokt-network/middleman:latest"
     container_name: middleman-migration
     restart: on-failure
     command: [ "pnpm", "middleman:migration:migrate" ]
@@ -10,7 +10,7 @@ services:
       - .env
 
   middleman-web:
-    image: "ghcr.io/stake-igniter/middleman:0.2.4-rc.0"
+    image: "ghcr.io/pokt-network/middleman:latest"
     container_name: middleman-web
     networks:
       - igniter
@@ -23,7 +23,7 @@ services:
       - "127.0.0.1:3000:3000"
 
   middleman-workflows:
-    image: "ghcr.io/stake-igniter/middleman-workflows:0.2.4-rc.0"
+    image: "ghcr.io/pokt-network/middleman-workflows:latest"
     container_name: middleman-workflows
     networks:
       - igniter
