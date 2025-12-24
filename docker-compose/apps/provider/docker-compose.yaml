@@ -1,6 +1,6 @@
 services:
   provider-migration:
-    image: "ghcr.io/stake-igniter/provider:latest"
+    image: "ghcr.io/pokt-network/provider:latest"
     container_name: provider-migration
     restart: "no"
     command: [ "pnpm", "provider:migration:migrate" ]
@@ -10,7 +10,7 @@ services:
       - .env
 
   provider-web:
-    image: "ghcr.io/stake-igniter/provider:latest"
+    image: "ghcr.io/pokt-network/provider:latest"
     container_name: provider-web
     networks:
       - igniter
@@ -23,7 +23,7 @@ services:
       - "127.0.0.1:3001:3001"
 
   provider-workflows:
-    image: "ghcr.io/stake-igniter/provider-workflows:latest"
+    image: "ghcr.io/pokt-network/provider-workflows:latest"
     container_name: provider-workflows
     networks:
       - igniter
