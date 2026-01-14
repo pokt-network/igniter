@@ -73,7 +73,7 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
           [ScheduledWorkflowType.SupplierStatus]: [], // no args
           [ScheduledWorkflowType.SupplierRemediation]: [{
             // TODO: Add other default automatic remediation as we progress. Initially, we'll only support stake completion.
-            reasons: [RemediationHistoryEntryReason.OwnerInitialStake]
+            reasons: [RemediationHistoryEntryReason.OwnerInitialStake, RemediationHistoryEntryReason.ServiceMismatch]
           }],
         }
 

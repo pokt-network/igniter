@@ -16,7 +16,7 @@ import {
   RemediationHistoryEntryReason,
   TransactionResult,
 } from './enums'
-import {AddressGroup, addressGroupTable} from './addressGroup'
+import {AddressGroup, AddressGroupWithDetails, addressGroupTable} from './addressGroup'
 import {Delegator, delegatorsTable} from './delegator'
 
 const algorithm = 'aes-256-cbc'
@@ -172,6 +172,14 @@ export type InsertKey = typeof keysTable.$inferInsert;
 export type KeyWithRelations = Omit<Key, 'privateKey'> & {
   addressGroup: AddressGroup | null;
   delegator: Delegator | null;
+};
+
+/**
+ * Represents a Key with its associated AddressGroup details.
+ * Used primarily in workflow activities for supplier operations.
+ */
+export type KeyWithGroup = Key & {
+  addressGroup?: AddressGroupWithDetails | null;
 };
 
 

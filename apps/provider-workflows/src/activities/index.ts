@@ -1,12 +1,14 @@
 import type {PocketBlockchain, StakeSupplierParams, Supplier} from '@igniter/pocket'
-import type {ApplicationSettings, InsertKey, RemediationHistoryEntry, Service} from '@igniter/db/provider/schema'
+import type {ApplicationSettings, InsertKey, KeyWithGroup, Service} from '@igniter/db/provider/schema'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
-import {KeysMinMax, KeyWithGroup} from '@/lib/dal/keys'
+import {KeysMinMax} from '@/lib/dal/keys'
 import {KeyState, RemediationHistoryEntryReason} from '@igniter/db/provider/enums'
-import {BuildSupplierServiceConfigHandler,} from '@igniter/domain/provider/operations';
+import {BuildSupplierServiceConfigHandler, CompareSupplierServiceConfigHandler} from '@igniter/domain/provider/operations';
 import {addOrUpdateRemediationHistory} from "@/lib/utils";
 import {redactStakeSupplierParams} from "@/lib/redactors";
+import {getExpectedServicesFromKey} from '@igniter/domain/provider/utils'
+import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 
 export type Height = number
 
@@ -113,7 +115,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           update.state = key.state
       }
     } else {
-      const {ownerAddress, stake, unstakeSessionEndHeight, services} = supplier;
+      const {ownerAddress, stake, unstakeSessionEndHeight, services, serviceConfigHistory} = supplier;
 
       // Supplier is present, determine state based on unstakeSessionEndHeight
       if (unstakeSessionEndHeight === 0) {
@@ -235,7 +237,35 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         )
       }
 
-      // TODO: Check for the case where the configurations on the addressGroup does not match the configurations on the supplier
+      if (!isOwnerInitialStakeRemediationNeeded && update.state === KeyState.Staked) {
+        const expectedServices = getExpectedServicesFromKey(key)
+
+        // only compare to the active services from the history, so if a service stake change is about to take place, we override it
+        const activeServicesFromHistory = serviceConfigHistory?.filter((sc: ServiceConfigUpdate) => !sc.deactivationHeight && !!sc.service).map((sc: ServiceConfigUpdate) => sc.service) || []
+
+        const compareHandler = new CompareSupplierServiceConfigHandler()
+        const { isEqual: activeServicesEquals } = compareHandler.execute({
+          serviceConfigSetA: activeServicesFromHistory,
+          serviceConfigSetB: expectedServices,
+        })
+
+        if (!activeServicesEquals) {
+          log.debug('upsertSupplierStatus: The key does not have the expected services configured in the service config history. Needs remediation.', {
+            activeServicesFromHistory,
+            expectedServices,
+          })
+          update.remediationHistory = addOrUpdateRemediationHistory(
+            {
+              message: 'The key does not have the expected services configured.',
+              reason: RemediationHistoryEntryReason.ServiceMismatch,
+              timestamp: Date.now(),
+            },
+            key.remediationHistory ?? []
+          )
+        } else {
+          log.debug('upsertSupplierStatus: The key does have the expected services configured in the service config history. No further action needed.')
+        }
+      }
 
       const remediationReasons = update.remediationHistory?.map((rh) => rh.reason);
 
@@ -245,7 +275,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       })
 
       // Only set the state to attention needed if the key is staked and the initial owner stake has been remediated. Otherwise, it will remain staked.
-      if (remediationReasons?.length && !remediationReasons.includes(RemediationHistoryEntryReason.OwnerInitialStake)) {
+      if (remediationReasons?.length && !remediationReasons.includes(RemediationHistoryEntryReason.OwnerInitialStake) && !remediationReasons.includes(RemediationHistoryEntryReason.ServiceMismatch)) {
         update.state = KeyState.AttentionNeeded
       }
     }
@@ -336,8 +366,14 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         ? remediationHistory.find((rh) => rh.reason === RemediationHistoryEntryReason.OwnerInitialStake) ?? null
         : null
 
+    const hasServiceMismatchReason = params.reasons.includes(RemediationHistoryEntryReason.ServiceMismatch);
+
+    const serviceMismatchEntry = hasServiceMismatchReason
+      ? remediationHistory.find((rh) => rh.reason === RemediationHistoryEntryReason.ServiceMismatch) ?? null
+      : null
+
     // Nothing actionable? DO NOT stake.
-    if (!ownerInitialStakeEntry) {
+    if (!ownerInitialStakeEntry && !serviceMismatchEntry) {
       log.info('remediateSupplier: No actionable remediation in reasons. Skipping stake.', {
         params,
         reasons: params.reasons,
@@ -348,39 +384,41 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
     }
 
-    // If supplier already has services or has config history, OwnerInitialStake is no longer valid.
-    const supplierAlreadyConfigured =
+    if (ownerInitialStakeEntry) {
+      // If supplier already has services or has config history, OwnerInitialStake is no longer valid.
+      const supplierAlreadyConfigured =
         (supplier.services?.length ?? 0) > 0 || (supplier.serviceConfigHistory?.length ?? 0) > 0
 
-    if (supplierAlreadyConfigured) {
-      log.info('remediateSupplier: Supplier already configured; clearing OwnerInitialStake entry without staking.', {
-        params,
-        services: supplier.services?.length ?? 0,
-        servicesHistory: supplier.serviceConfigHistory?.length ?? 0,
-      })
-
-      const update: Partial<InsertKey> = {
-        lastUpdatedHeight: params.height,
-        balanceUpokt: BigInt(balance),
-        // remove only OwnerInitialStake entry; keep other entries if any
-        remediationHistory: remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake),
-      }
-
-      try {
-        await dal.keys.updateKey(params.address, update, params.height)
-      } catch (e) {
-        log.warn('remediateSupplier: Update Supplier failed while clearing OwnerInitialStake!', {
+      if (supplierAlreadyConfigured) {
+        log.info('remediateSupplier: Supplier already configured; clearing OwnerInitialStake entry without staking.', {
           params,
-          error: e,
+          services: supplier.services?.length ?? 0,
+          servicesHistory: supplier.serviceConfigHistory?.length ?? 0,
         })
-        return {
-          success: false,
-          message: 'Failed while updating the supplier status.',
-          keyUpdate: update,
-        }
-      }
 
-      return { success: true, message: 'Supplier already configured; remediation cleared.' }
+        const update: Partial<InsertKey> = {
+          lastUpdatedHeight: params.height,
+          balanceUpokt: BigInt(balance),
+          // remove only OwnerInitialStake entry; keep other entries if any
+          remediationHistory: remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake),
+        }
+
+        try {
+          await dal.keys.updateKey(params.address, update, params.height)
+        } catch (e) {
+          log.warn('remediateSupplier: Update Supplier failed while clearing OwnerInitialStake!', {
+            params,
+            error: e,
+          })
+          return {
+            success: false,
+            message: 'Failed while updating the supplier status.',
+            keyUpdate: update,
+          }
+        }
+
+        return { success: true, message: 'Supplier already configured; remediation cleared.' }
+      }
     }
 
     const stakeParams: StakeSupplierParams = {
@@ -391,7 +429,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     log.debug('remediateSupplier: Preparing initial owner stake remediation', {
-      entry: ownerInitialStakeEntry,
+      entry: ownerInitialStakeEntry || serviceMismatchEntry,
     })
 
     const buildSupplierServiceConfigHandler = new BuildSupplierServiceConfigHandler()
@@ -436,13 +474,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.debug(`remediateSupplier: Stake transaction failed for: ${key.address} ${JSON.stringify(txResult)}`)
       update.state = KeyState.RemediationFailed
       update.remediationHistory = addOrUpdateRemediationHistory(
-          {
-            ...ownerInitialStakeEntry,
-            timestamp: Date.now(),
-            txResult: txResult.code,
-            txResultDetails: txResult.message,
-          },
-          remediationHistory
+        {
+          ...(ownerInitialStakeEntry || serviceMismatchEntry)!,
+          timestamp: Date.now(),
+          txResult: txResult.code,
+          txResultDetails: txResult.message,
+        },
+        remediationHistory
       )
     } else {
       let supplierAfter: Supplier | null = null
@@ -455,17 +493,18 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         })
       }
 
-      const nowConfigured =
+      if (ownerInitialStakeEntry) {
+        const nowConfigured =
           supplierAfter
-              ? ((supplierAfter.services?.length ?? 0) > 0 || (supplierAfter.serviceConfigHistory?.length ?? 0) > 0)
-              : false
+            ? ((supplierAfter.services?.length ?? 0) > 0 || (supplierAfter.serviceConfigHistory?.length ?? 0) > 0)
+            : false
 
-      update.state = KeyState.Staked
+        update.state = KeyState.Staked
 
-      if (nowConfigured) {
-        update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake)
-      } else {
-        update.remediationHistory = addOrUpdateRemediationHistory(
+        if (nowConfigured) {
+          update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake)
+        } else {
+          update.remediationHistory = addOrUpdateRemediationHistory(
             {
               ...ownerInitialStakeEntry,
               timestamp: Date.now(),
@@ -473,7 +512,34 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
               txResultDetails: txResult.message,
             },
             remediationHistory
-        )
+          )
+        }
+      } else if (serviceMismatchEntry) {
+        update.state = KeyState.Staked
+
+        const expectedServices = getExpectedServicesFromKey(key)
+
+        const activeServicesFromHistory = supplierAfter?.serviceConfigHistory?.filter((sc: ServiceConfigUpdate) => !sc.deactivationHeight && !!sc.service).map((sc: ServiceConfigUpdate) => sc.service) || []
+
+        const compareHandler = new CompareSupplierServiceConfigHandler()
+        const { isEqual: activeServicesEquals } = compareHandler.execute({
+          serviceConfigSetA: activeServicesFromHistory,
+          serviceConfigSetB: expectedServices,
+        })
+
+        if (!activeServicesEquals) {
+          update.remediationHistory = addOrUpdateRemediationHistory(
+            {
+              ...serviceMismatchEntry,
+              timestamp: Date.now(),
+              txResult: txResult.code,
+              txResultDetails: txResult.message,
+            },
+            remediationHistory
+          )
+        } else {
+          update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.ServiceMismatch)
+        }
       }
     }
 

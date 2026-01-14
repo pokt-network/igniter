@@ -2,6 +2,7 @@ import {SupplierEndpointInterpolationParams} from "@igniter/domain/provider/mode
 import {Supplier, ServiceConfigUpdate} from "@igniter/pocket/proto/pocket/shared/supplier";
 import {RPCType, SupplierEndpoint, SupplierServiceConfig} from '@igniter/pocket/proto/pocket/shared/service'
 import {PROTOCOL_DEFAULT_URL} from "@igniter/domain/provider/constants";
+import {KeyWithGroup} from "@igniter/db/provider/schema";
 
 export function getSchemeForRpcType(rpcType: RPCType) {
     switch (rpcType) {
@@ -104,4 +105,75 @@ export function getSupplierActiveServices(
   })
 
   return [...result]
+}
+
+/**
+ * Builds the expected SupplierServiceConfig array from a KeyWithGroup.
+ * This represents the services that should be configured for a supplier
+ * based on their address group configuration.
+ *
+ * @param key - The key with its associated address group details
+ * @returns Array of expected SupplierServiceConfig
+ */
+export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierServiceConfig> {
+  const expectedServices: Array<SupplierServiceConfig> = []
+
+  for (const addressGroupService of key?.addressGroup?.addressGroupServices || []) {
+    let revShareSum = 0
+
+    const revShare: SupplierServiceConfig['revShare'] = []
+
+    if (key.delegatorRewardsAddress) {
+      revShareSum += key.delegatorRevSharePercentage ?? 0
+
+      revShare.push({
+        address: key.delegatorRewardsAddress,
+        revSharePercentage: key.delegatorRevSharePercentage ?? 0,
+      })
+    }
+
+    if (addressGroupService.addSupplierShare) {
+      revShareSum += addressGroupService.supplierShare ?? 0
+
+      revShare.push({
+        address: key.address,
+        revSharePercentage: addressGroupService.supplierShare ?? 0,
+      })
+    }
+
+    for (const revShareElement of addressGroupService.revShare) {
+      revShareSum += revShareElement.share
+
+      revShare.push({
+        address: revShareElement.address,
+        revSharePercentage: revShareElement.share,
+      })
+    }
+
+    if (revShareSum < 100 && key.ownerAddress) {
+      revShare.push({
+        address: key.ownerAddress,
+        revSharePercentage: 100 - revShareSum,
+      })
+    }
+
+    const newExpectedService: SupplierServiceConfig = {
+      serviceId: addressGroupService.serviceId,
+      endpoints: addressGroupService.service.endpoints?.map((endpoint) => ({
+        url: getEndpointInterpolatedUrl(endpoint, {
+          sid: addressGroupService.serviceId,
+          rm: key.addressGroup?.relayMiner?.identity || '',
+          region: key.addressGroup?.relayMiner?.region?.urlValue || '',
+          domain: key.addressGroup?.relayMiner?.domain || '',
+        }),
+        rpcType: endpoint.rpcType,
+        configs: []
+      })),
+      revShare,
+    }
+
+    expectedServices.push(newExpectedService)
+  }
+
+  return expectedServices
 }

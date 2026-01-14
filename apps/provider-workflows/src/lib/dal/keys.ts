@@ -13,14 +13,14 @@ import {
   Key,
   keysTable,
   addressGroupTable,
-  AddressGroupWithDetails,
+  KeyWithGroup,
 } from '@igniter/db/provider/schema'
 import {KeyState, RemediationHistoryEntryReason} from '@igniter/db/provider/enums'
 import type {Logger} from '@igniter/logger'
 
 export type KeysMinMax = { total: number, minId: number, maxId: number }
 
-export type KeyWithGroup = Key & { addressGroup?: AddressGroupWithDetails | null }
+export type { KeyWithGroup }
 
 /**
  * Represents a utility class for performing operations related to "keys" in the system.
@@ -68,7 +68,10 @@ export default class Keys {
             addressGroupServices: {
               with: {
                 service: {
-                  columns: { name: true },
+                  columns: {
+                    name: true,
+                    endpoints: true,
+                  },
                 },
               },
             },

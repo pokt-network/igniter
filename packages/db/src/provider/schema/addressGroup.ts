@@ -15,6 +15,7 @@ import {
 import { usersTable } from './user'
 import { keysTable } from './keys'
 import { servicesTable } from './service'
+import { RPCType } from '@igniter/pocket'
 
 /**
  * Represents the `address_groups` table in the database.
@@ -149,6 +150,10 @@ export const addressGroupServicesTable = pgTable(
 export type AddressGroupService = typeof addressGroupServicesTable.$inferSelect & {
   service: {
     name: string;
+    endpoints: Array<{
+      url: string;
+      rpcType: RPCType;
+    }>
   }
 };
 
