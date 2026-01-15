@@ -2,7 +2,7 @@
 
 import type { ProviderInfoWithConnection } from '../../context/WalletConnection'
 import { SiwpMessage } from '@poktscan/vault-siwp'
-import { CircleCheckBig, CircleX } from 'lucide-react'
+import { CircleCheckBig, CircleX, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import {Button} from "@igniter/ui/components/button";
 import {
@@ -430,20 +430,31 @@ interface SignInStepProps {
     message: SiwpMessage,
     signature: string,
     publicKey: string,
-  ) => void;
+  ) => Promise<void>;
 }
 
 function SignInStep({
   onSignIn,
   getCsrfToken
 }: SignInStepProps) {
-    const [status, setStatus] = useState<'waiting' | 'signing-message' | 'error' | 'rejected' | 'successful'>('waiting')
+    const [status, setStatus] = useState<'waiting' | 'signing-message' | 'error' | 'rejected' | 'successful' | 'auth-error'>('waiting')
+    const [errorDetails, setErrorDetails] = useState<string | null>(null)
+    const [errorExpanded, setErrorExpanded] = useState(false)
+    const [copied, setCopied] = useState(false)
   const {
     expectedChainId,
     connectedIdentity,
     getPublicKey,
     signMessage,
   } = useWalletConnection();
+
+    const copyErrorToClipboard = async () => {
+      if (errorDetails) {
+        await navigator.clipboard.writeText(errorDetails)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    }
 
     const signSignInMessage = async () => {
       try {
@@ -452,6 +463,8 @@ function SignInStep({
         }
 
         setStatus('signing-message')
+        setErrorDetails(null)
+        setErrorExpanded(false)
 
         const message = new SiwpMessage({
           domain: window.location.host,
@@ -470,9 +483,23 @@ function SignInStep({
 
         setStatus('successful')
 
-        setTimeout(() => {
-          onSignIn(message, signature, publicKey)
-        }, 500)
+        // Wait before calling onSignIn, then handle auth errors
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        try {
+          await onSignIn(message, signature, publicKey)
+        } catch (authError) {
+          const errorMessage = authError instanceof Error ? authError.message : String(authError)
+          const errorStack = authError instanceof Error ? authError.stack : undefined
+          setErrorDetails(JSON.stringify({
+            message: errorMessage,
+            stack: errorStack,
+            timestamp: new Date().toISOString(),
+            address: connectedIdentity,
+            chainId: expectedChainId,
+          }, null, 2))
+          setStatus('auth-error')
+        }
       } catch (e) {
         if (e instanceof Error) {
           setStatus(e.message.includes('rejected') ? 'rejected' : 'error')
@@ -526,6 +553,47 @@ function SignInStep({
       )
       break;
     }
+    case 'auth-error': {
+      content = (
+        <div className={'flex flex-col gap-2 min-h-[65px] mb-2.5 justify-center items-center px-4'}>
+          <CircleX className={'text-[color:#fe7c7c]'} />
+          <p className={'text-center'}>
+            Authentication failed. Please try again.
+          </p>
+          {errorDetails && (
+            <div className={'w-full mt-2 -ml-5'}>
+              <button
+                onClick={() => setErrorExpanded(!errorExpanded)}
+                className={'flex items-center gap-1 text-xs text-[var(--color-white-3)] hover:text-[var(--color-white-1)] transition-colors'}
+              >
+                {errorExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {errorExpanded ? 'Hide error details' : 'Show error details'}
+              </button>
+              {errorExpanded && (
+                <div className={'mt-2 p-2 bg-[var(--color-slate-1)] rounded text-left'}>
+                  <pre className={'text-[10px] text-[var(--color-white-3)] overflow-x-auto max-h-[100px] overflow-y-auto whitespace-pre-wrap break-all'}>
+                    {errorDetails}
+                  </pre>
+                  <div className={'flex items-center justify-between mt-2 pt-2 border-t border-[var(--slate-dividers)]'}>
+                    <p className={'text-[10px] text-[var(--color-white-4)]'}>
+                      If this persists, copy and share with the developers.
+                    </p>
+                    <button
+                      onClick={copyErrorToClipboard}
+                      className={'flex items-center gap-1 text-[10px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] transition-colors'}
+                    >
+                      {copied ? <Check size={12} /> : <Copy size={12} />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )
+      break;
+    }
     case 'successful': {
       content = (
         <div className={'flex flex-col gap-2 min-h-[100px] justify-center items-center px-4'}>
@@ -560,7 +628,7 @@ function SignInStep({
                   Cancel
               </Button>
             </DialogClose>
-            {['error', 'rejected'].includes(status) && (
+            {['error', 'rejected', 'auth-error'].includes(status) && (
               <Button
                 variant={'secondaryStretch'}
                 onClick={signSignInMessage}
@@ -578,7 +646,7 @@ export interface WalletPickerProps {
       message: SiwpMessage,
       signature: string,
       publicKey: string,
-    ) => void;
+    ) => Promise<void>;
     getCsrfToken: () => Promise<string>;
 }
 

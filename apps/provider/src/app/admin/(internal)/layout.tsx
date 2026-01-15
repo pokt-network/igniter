@@ -33,23 +33,23 @@ export default function RootLayout({
               <CurrencyContextProvider>
                 <SidebarProvider className="flex flex-col">
                   <QuickDetailProvider>
-                    <AppTopBar>
-                      <PriceWidget />
-                      <CurrentUser />
-                    </AppTopBar>
-                    <div className="flex flex-1">
-                      <Sidebar />
-                      <SidebarInset>
-                        <div className={"w-full h-full flex overflow-x-hidden"}>
-                          <div className="flex flex-col gap-6 w-[calc(100dvw)] md:w-[calc(100dvw-255px)]">
-                            <RegisterPlugins />
-                            <NotificationsProvider>
+                    <NotificationsProvider>
+                      <AppTopBar>
+                        <PriceWidget />
+                        <CurrentUser />
+                      </AppTopBar>
+                      <div className="flex flex-1">
+                        <Sidebar />
+                        <SidebarInset>
+                          <div className={"w-full h-full flex overflow-x-hidden"}>
+                            <div className="flex flex-col gap-6 w-[calc(100dvw)] md:w-[calc(100dvw-255px)]">
+                              <RegisterPlugins />
                               {children}
-                            </NotificationsProvider>
+                            </div>
                           </div>
-                        </div>
-                      </SidebarInset>
-                    </div>
+                        </SidebarInset>
+                      </div>
+                    </NotificationsProvider>
                   </QuickDetailProvider>
                 </SidebarProvider>
               </CurrencyContextProvider>

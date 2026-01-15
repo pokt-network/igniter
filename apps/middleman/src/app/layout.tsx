@@ -57,24 +57,24 @@ export default function RootLayout({
                   <CurrencyContextProvider>
                     <SidebarProvider className="flex flex-col">
                       <QuickDetailProvider>
-                        <AppTopBar>
-                          <PriceWidget />
-                          <CurrentUser />
-                        </AppTopBar>
-                        <div className="flex flex-1">
-                          <Sidebar />
-                          <SidebarInset className={'transition-none'}>
-                            <div className={"w-full h-full flex overflow-x-hidden"}>
-                              <div className="flex flex-col gap-6 h-[calc(100vh-72px)] overflow-y-scroll scrollbar-hidden w-[calc(100dvw)] md:w-[calc(100dvw-255px)] transition-none">
-                                <RegisterPlugins />
-                                <NotificationsProvider>
+                        <NotificationsProvider>
+                          <AppTopBar>
+                            <PriceWidget />
+                            <CurrentUser />
+                          </AppTopBar>
+                          <div className="flex flex-1">
+                            <Sidebar />
+                            <SidebarInset className={'transition-none'}>
+                              <div className={"w-full h-full flex overflow-x-hidden"}>
+                                <div className="flex flex-col gap-6 h-[calc(100vh-72px)] overflow-y-scroll scrollbar-hidden w-[calc(100dvw)] md:w-[calc(100dvw-255px)] transition-none">
+                                  <RegisterPlugins />
                                   {children}
-                                </NotificationsProvider>
-                                <Toaster />
+                                  <Toaster />
+                                </div>
                               </div>
-                            </div>
-                          </SidebarInset>
-                        </div>
+                            </SidebarInset>
+                          </div>
+                        </NotificationsProvider>
                       </QuickDetailProvider>
                     </SidebarProvider>
                   </CurrencyContextProvider>

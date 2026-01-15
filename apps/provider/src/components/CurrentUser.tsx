@@ -8,6 +8,7 @@ import type {SiwpMessage} from "@poktscan/vault-siwp";
 import UserMenu from "@igniter/ui/components/UserMenu";
 import {WalletPicker} from "@igniter/ui/components/WalletPicker/index";
 import {useWalletConnection} from "@igniter/ui/context/WalletConnection/index";
+import {useNotifications} from "@igniter/ui/context/Notifications/index";
 import {useApplicationSettings} from "@/app/context/ApplicationSettings";
 import {DropdownMenuItem, DropdownMenuSeparator} from "@igniter/ui/components/dropdown-menu";
 import {Routes} from "@/lib/route-constants";
@@ -17,6 +18,7 @@ export default function CurrentUser() {
   const currentPath = usePathname();
   const { data, status } = useSession();
   const applicationSettings = useApplicationSettings();
+  const { addNotification } = useNotifications();
 
   const {
     getChain,
@@ -28,7 +30,7 @@ export default function CurrentUser() {
     message: SiwpMessage,
     signature: string,
     publicKey: string,
-  ) => {
+  ): Promise<void> => {
     try {
       if (status === 'loading') {
         return;
@@ -54,8 +56,13 @@ export default function CurrentUser() {
       if ((error as {message: string})?.message === "The user rejected the request.") {
         clearConnectedIdentity()
       } else {
-        // TODO: show feedback that something went wrong
+        addNotification({
+          id: 'sign-in-error',
+          type: 'error',
+          content: 'Sign-in failed. Please try again or clear your browser cache if the issue persists.',
+        });
       }
+      throw error;
     }
   };
 
