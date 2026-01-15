@@ -5,6 +5,7 @@ import {SiwpMessage} from "@poktscan/vault-siwp";
 import {env} from "@/config/env";
 
 const authConfig: NextAuthConfig = {
+  trustHost: true,
   cookies: {
     sessionToken: {
       name: `provider.authjs.session-token`,
