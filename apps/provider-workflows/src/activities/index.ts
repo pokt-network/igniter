@@ -250,7 +250,8 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         })
 
         if (!activeServicesEquals) {
-          log.debug('upsertSupplierStatus: The key does not have the expected services configured in the service config history. Needs remediation.', {
+          log.warn('upsertSupplierStatus: The key does not have the expected services configured in the service config history. Needs remediation.', {
+            address: key.address,
             activeServicesFromHistory,
             expectedServices,
           })
@@ -263,7 +264,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
             key.remediationHistory ?? []
           )
         } else {
-          log.debug('upsertSupplierStatus: The key does have the expected services configured in the service config history. No further action needed.')
+          log.debug(`upsertSupplierStatus: The key ${key.address} have the expected services configured in the service config history. No further action needed.`)
         }
       }
 
