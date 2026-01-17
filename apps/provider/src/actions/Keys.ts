@@ -92,14 +92,27 @@ export async function UpdateKeysState(ids: number[], state: KeyState) {
 }
 
 export async function validateUserSignedInIsTheOwner() {
+  console.log('[KEYS:validateOwner] Called');
+
   const [identity, appSettings] = await Promise.all([
     getCurrentUserIdentity(),
     GetApplicationSettings(),
   ])
 
+  console.log('[KEYS:validateOwner] Comparison', {
+    identity,
+    ownerIdentity: appSettings.ownerIdentity,
+    match: identity === appSettings.ownerIdentity,
+    identityType: typeof identity,
+    ownerIdentityType: typeof appSettings.ownerIdentity,
+  });
+
   if (identity !== appSettings.ownerIdentity) {
+    console.log('[KEYS:validateOwner] MISMATCH - throwing Unauthorized');
     throw new Error('Unauthorized')
   }
+
+  console.log('[KEYS:validateOwner] MATCH - authorized');
 }
 
 export async function MarkKeysForRemediation() {
