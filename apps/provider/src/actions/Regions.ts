@@ -2,29 +2,38 @@
 
 import type { Region, InsertRegion } from "@igniter/db/provider/schema";
 import { list, remove, insert, update } from "@/lib/dal/regions";
-import { getCurrentUserIdentity } from "@/lib/utils/actions";
+import {
+  withRequireOwnerOrAdmin,
+  withRequireAuth,
+} from '@/lib/utils/actionUtils'
 
 export async function ListRegions() {
+  return withRequireAuth(async () => {
     return list();
+  });
 }
 
 export async function DeleteRegion(id: number) {
+  return withRequireOwnerOrAdmin(async () => {
     return remove(id);
+  });
 }
 
 export async function CreateRegion(region: Omit<InsertRegion, 'createdBy' | 'updatedBy'>) {
-    const identity = await getCurrentUserIdentity();
+  return withRequireOwnerOrAdmin(async (user) => {
     return insert({
-        ...region,
-        createdBy: identity,
-        updatedBy: identity,
+      ...region,
+      createdBy: user.identity,
+      updatedBy: user.identity,
     });
+  });
 }
 
 export async function UpdateRegion(id: number, region: Pick<Region, 'displayName' | 'urlValue'>) {
-    const identity = await getCurrentUserIdentity();
+  return withRequireOwnerOrAdmin(async (user) => {
     return update(id, {
-        ...region,
-        updatedBy: identity,
+      ...region,
+      updatedBy: user.identity,
     });
+  });
 }

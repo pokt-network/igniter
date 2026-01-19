@@ -2,29 +2,38 @@
 
 import type { RelayMiner, InsertRelayMiner } from "@igniter/db/provider/schema";
 import { list, remove, insert, update } from "@/lib/dal/relayMiners";
-import { getCurrentUserIdentity } from "@/lib/utils/actions";
+import {
+  withRequireOwnerOrAdmin,
+  withRequireAuth,
+} from '@/lib/utils/actionUtils'
 
 export async function ListRelayMiners() {
-  return list();
+  return withRequireAuth(async () => {
+    return list();
+  });
 }
 
 export async function DeleteRelayMiner(id: number) {
-  return remove(id);
+  return withRequireOwnerOrAdmin(async () => {
+    return remove(id);
+  });
 }
 
 export async function CreateRelayMiner(relayMiner: Omit<InsertRelayMiner, 'createdBy' | 'updatedBy'>) {
-  const identity = await getCurrentUserIdentity();
-  return insert({
-    ...relayMiner,
-    createdBy: identity,
-    updatedBy: identity,
+  return withRequireOwnerOrAdmin(async (user) => {
+    return insert({
+      ...relayMiner,
+      createdBy: user.identity,
+      updatedBy: user.identity,
+    });
   });
 }
 
 export async function UpdateRelayMiner(id: number, relayMiner: Pick<RelayMiner, 'name' | 'identity' | 'regionId' | 'domain'>) {
-  const identity = await getCurrentUserIdentity();
-  return update(id, {
-    ...relayMiner,
-    updatedBy: identity,
+  return withRequireOwnerOrAdmin(async (user) => {
+    return update(id, {
+      ...relayMiner,
+      updatedBy: user.identity,
+    });
   });
 }

@@ -57,7 +57,7 @@ const authConfigResult = NextAuth({
           }
           return null;
         } catch (error) {
-          console.log(error);
+          console.error('[AUTH] Authorization error:', error);
           return null;
         }
       },
@@ -68,30 +68,12 @@ const authConfigResult = NextAuth({
   },
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger }) {
-      console.log('[AUTH:JWT] Callback triggered', {
-        trigger,
-        hasUser: !!user,
-        hasTokenUser: !!token.user,
-        tokenUserIdentity: (token.user as any)?.identity,
-        userIdentity: (user as any)?.identity,
-      });
-
+    async jwt({ token, user }) {
       if (user) {
         // @TODO: Remove ts-ignore. Once we learn how to update the User type next-auth expects.
         // @ts-ignore
         token.user = user;
-        console.log('[AUTH:JWT] Set token.user from user', {
-          identity: (user as any)?.identity,
-          role: (user as any)?.role,
-        });
       }
-
-      console.log('[AUTH:JWT] Returning token', {
-        hasTokenUser: !!token.user,
-        tokenUserIdentity: (token.user as any)?.identity,
-      });
-
       return token;
     },
   },

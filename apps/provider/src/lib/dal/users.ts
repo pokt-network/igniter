@@ -3,15 +3,20 @@ import {UserRole} from "@igniter/db/provider/enums";
 import {usersTable} from "@igniter/db/provider/schema";
 import {getDb} from "@/db";
 import {eq} from "drizzle-orm";
+import {normalizeIdentityToAddress} from "@/lib/crypto";
 
 export async function createUser(identity: string) {
   try {
     const applicationSettings = await getApplicationSettings();
 
+    // Normalize ownerIdentity in case it was stored as a hex public key (legacy)
+    const normalizedOwnerIdentity = normalizeIdentityToAddress(applicationSettings.ownerIdentity);
+    const isOwner = normalizedOwnerIdentity === identity;
+
     const newUser = {
-      email:  applicationSettings.ownerIdentity === identity ? applicationSettings.ownerEmail : "",
+      email: isOwner ? applicationSettings.ownerEmail : "",
       identity,
-      role: applicationSettings.ownerIdentity === identity ? UserRole.Owner : UserRole.User,
+      role: isOwner ? UserRole.Owner : UserRole.User,
     };
 
     // TODO: Once we support user-invitations, we should create the user with the invited role.

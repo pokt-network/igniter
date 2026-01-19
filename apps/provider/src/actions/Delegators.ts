@@ -10,39 +10,42 @@ import type { Delegator } from '@igniter/db/provider/schema'
 import { delegatorsTable } from '@igniter/db/provider/schema'
 import { getDb } from '@/db'
 import { eq } from 'drizzle-orm'
-import { getCurrentUserIdentity } from '@/lib/utils/actions'
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
+import {
+  withRequireOwnerOrAdmin,
+  withRequireAuth,
+} from '@/lib/utils/actionUtils'
 
 export async function ListDelegators() {
-  return list()
+  return withRequireAuth(async () => {
+    return list()
+  })
 }
 
 export async function UpdateDelegator(identity: string, updateValues: Pick<Delegator, 'enabled'>) {
-  const userIdentity = await getCurrentUserIdentity()
-  return update(identity, {
-    ...updateValues,
-    updatedBy: userIdentity,
+  return withRequireOwnerOrAdmin(async (user) => {
+    return update(identity, {
+      ...updateValues,
+      updatedBy: user.identity,
+    })
   })
 }
 
 export async function UpdateDelegatorsFromSource() {
-  const [userIdentity, appSettings] = await Promise.all([
-    getCurrentUserIdentity(),
-    getApplicationSettings(),
-  ])
+  return withRequireOwnerOrAdmin(async (user) => {
+    const appSettings = await getApplicationSettings()
 
-  const delegatorsCdnUrl = process.env.DELEGATORS_CDN_URL!.replace(
-    '{chainId}',
-    appSettings.chainId,
-  )
+    const delegatorsCdnUrl = process.env.DELEGATORS_CDN_URL!.replace(
+      '{chainId}',
+      appSettings.chainId,
+    )
 
-  if (!delegatorsCdnUrl) {
-    throw new Error('DELEGATORS_CDN_URL environment variable is not defined')
-  }
+    if (!delegatorsCdnUrl) {
+      throw new Error('DELEGATORS_CDN_URL environment variable is not defined')
+    }
 
-  console.log(`[Delegators] Starting update from ${delegatorsCdnUrl}`)
+    console.log(`[Delegators] Starting update from ${delegatorsCdnUrl}`)
 
-  try {
     const response = await fetch(delegatorsCdnUrl)
 
     if (!response.ok) {
@@ -99,7 +102,7 @@ export async function UpdateDelegatorsFromSource() {
                 .set({
                   identity: cdnDelegator.identity,
                   name: cdnDelegator.name,
-                  updatedBy: userIdentity,
+                  updatedBy: user.identity,
                 })
                 .where(eq(delegatorsTable.id, matchingCurrent.id))
               updated += 1
@@ -108,8 +111,8 @@ export async function UpdateDelegatorsFromSource() {
             await tx.insert(delegatorsTable).values({
               name: cdnDelegator.name,
               identity: cdnDelegator.identity,
-              createdBy: userIdentity,
-              updatedBy: userIdentity,
+              createdBy: user.identity,
+              updatedBy: user.identity,
               enabled: false,
             })
             inserted += 1
@@ -123,7 +126,7 @@ export async function UpdateDelegatorsFromSource() {
               .set({
                 enabled: false,
                 updatedAt: new Date(),
-                updatedBy: userIdentity,
+                updatedBy: user.identity,
               })
               .where(eq(delegatorsTable.identity, delegator.identity))
             disabled += 1
@@ -138,22 +141,18 @@ export async function UpdateDelegatorsFromSource() {
       `[Delegators] Done. Inserted: ${inserted}, Updated: ${updated}, Disabled: ${disabled}`,
     )
 
-    return { success: true }
-  } catch (error) {
-    console.error('Error updating delegators:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-    }
-  }
+    return { inserted, updated, disabled }
+  })
 }
 
 export async function DisableAllDelegators() {
-  const userIdentity = await getCurrentUserIdentity()
-  return disableAll(userIdentity)
+  return withRequireOwnerOrAdmin(async (user) => {
+    return disableAll(user.identity)
+  })
 }
 
 export async function EnableAllDelegators() {
-  const userIdentity = await getCurrentUserIdentity()
-  return enableAll(userIdentity)
+  return withRequireOwnerOrAdmin(async (user) => {
+    return enableAll(user.identity)
+  })
 }

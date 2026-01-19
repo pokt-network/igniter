@@ -3,6 +3,7 @@
 import { getNode, getNodesByUser, getOwnerAddressesByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
 import {getCurrentUserIdentity} from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
+import { normalizeIdentityToAddress } from '@/lib/crypto'
 
 export async function GetUserNodes() {
   const userIdentity = await getCurrentUserIdentity();
@@ -15,7 +16,10 @@ export async function GetStakedNodesAddress() {
     getApplicationSettings()
   ])
 
-  if (userIdentity !== applicationSettings.ownerIdentity) {
+  // Normalize ownerIdentity in case it was stored as a hex public key (legacy)
+  const normalizedOwnerIdentity = normalizeIdentityToAddress(applicationSettings.ownerIdentity)
+
+  if (userIdentity !== normalizedOwnerIdentity) {
     throw new Error("Unauthorized")
   }
 

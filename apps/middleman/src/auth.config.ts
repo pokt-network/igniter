@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { bootstrapStatus } from "@/lib/services/bootstrap";
 import { SiwpMessage } from "@poktscan/vault-siwp";
 import {env} from "@/config/env";
+import {normalizeIdentityToAddress} from "@/lib/crypto";
 
 const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -19,14 +20,17 @@ const authConfig: NextAuthConfig = {
   },
   providers: [Credentials],
   callbacks: {
-    async signIn({ user, credentials }) {
+    async signIn({ credentials }) {
       const isBootstrapped = await bootstrapStatus();
 
       const { address } = new SiwpMessage(
         JSON.parse((credentials?.message || "{}") as string)
       );
 
-      if (!isBootstrapped && address !== env.OWNER_IDENTITY) {
+      // Normalize OWNER_IDENTITY in case it was configured as a hex public key (legacy)
+      const normalizedOwnerIdentity = normalizeIdentityToAddress(env.OWNER_IDENTITY);
+
+      if (!isBootstrapped && address !== normalizedOwnerIdentity) {
         return "/auth/error?type=NotReady";
       }
 

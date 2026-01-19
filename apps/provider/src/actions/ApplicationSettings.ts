@@ -1,7 +1,7 @@
 'use server'
 
 import type { ApplicationSettings } from '@igniter/db/provider/schema'
-import { ChainId, UserRole } from '@igniter/db/provider/enums'
+import { ChainId } from '@igniter/db/provider/enums'
 import {
   getApplicationSettings as fetchApplicationSettings,
   insertApplicationSettings,
@@ -9,7 +9,6 @@ import {
 } from '@/lib/dal/applicationSettings'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { getCurrentUser } from '@/lib/utils/actions'
 import urlJoin from 'url-join'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { indexerStatusDocument } from '@igniter/graphql'
@@ -18,6 +17,10 @@ import {
   revalidateTag,
   unstable_cache,
 } from 'next/cache'
+import {
+  type ActionResult,
+  withRequireOwner,
+} from '@/lib/utils/actionUtils'
 
 const UrlSchema = z.string().url('Please enter a valid URL').min(1, 'URL is required')
 
@@ -51,6 +54,7 @@ const getAppSettings = unstable_cache(
   { tags: [appSettingsCacheTag] },
 )
 
+// Public endpoint - no auth required (used for app name display)
 export async function GetAppName() {
   let appSettings = await getAppSettings()
 
@@ -61,6 +65,7 @@ export async function GetAppName() {
   return appSettings?.name || 'Stake Igniter Provider'
 }
 
+// Public endpoint - no auth required (used during bootstrap)
 export async function GetApplicationSettings() {
   const appSettings = await getAppSettings()
 
@@ -82,44 +87,32 @@ function ValidateWithSchema(schema: z.ZodSchema<any>, data: Partial<ApplicationS
 export async function UpsertApplicationSettings(
   values: Partial<ApplicationSettings>,
   isUpdate: boolean,
-) {
-  const user = await getCurrentUser()
-  const userIdentity = user.identity
+): Promise<ActionResult<void>> {
+  return withRequireOwner(async (user) => {
+    const validatedFields = ValidateWithSchema(isUpdate ? UpdateSettingsSchema : CreateSettingsSchema, values)
 
-  if (user.role !== UserRole.Owner) {
-    // TODO: Allow for more granular changes when actual `Admin` users are allowed.
-    throw new Error('Unauthorized')
-  }
+    if (isUpdate) {
+      await updateApplicationSettings({
+        ...validatedFields.data,
+        updatedBy: user.identity,
+      })
+    } else {
+      await insertApplicationSettings({
+        ...validatedFields.data,
+        createdBy: user.identity,
+        updatedBy: user.identity,
+      })
+    }
 
-  const validatedFields = ValidateWithSchema(isUpdate ? UpdateSettingsSchema : CreateSettingsSchema, values)
-
-  if (isUpdate) {
-    await updateApplicationSettings({
-      ...validatedFields.data,
-      updatedBy: userIdentity,
-    })
-  } else {
-    await insertApplicationSettings({
-      ...validatedFields.data,
-      createdBy: userIdentity,
-      updatedBy: userIdentity,
-    })
-  }
-
-  revalidateTag(appSettingsCacheTag)
+    revalidateTag(appSettingsCacheTag)
+  })
 }
 
-export async function completeSetup() {
-  const user = await getCurrentUser()
-  const userIdentity = user.identity
-
-  if (user.role !== UserRole.Owner) {
-    // TODO: Allow for more granular changes when actual `Admin` users are allowed.
-    throw new Error('Unauthorized')
-  }
-
-  await updateApplicationSettings({ isBootstrapped: true, updatedBy: userIdentity })
-  return redirect('/admin')
+export async function completeSetup(): Promise<ActionResult<never>> {
+  return withRequireOwner(async (user) => {
+    await updateApplicationSettings({ isBootstrapped: true, updatedBy: user.identity })
+    redirect('/admin')
+  })
 }
 
 export interface BlockchainSettingsResponse {

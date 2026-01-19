@@ -1,7 +1,6 @@
 'use server'
 import { z } from 'zod'
 import { isValidPrivateKey } from '@igniter/pocket/utils'
-import { getCurrentUserIdentity } from '@/lib/utils/actions'
 import type { InsertKey } from '@igniter/db/provider/schema'
 import { KeyState } from '@igniter/db/provider/enums'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
@@ -9,116 +8,97 @@ import {
   countPrivateKeysByAddressGroup,
   insertMany,
   listKeysWithPk,
-  listPrivateKeysByAddressGroup, updateKeysState,
+  listPrivateKeysByAddressGroup,
+  updateKeysState,
   updateRewardsSettings,
   updateKeysStateWhereCurrentStateIn,
 } from '@/lib/dal/keys'
-import { GetApplicationSettings } from '@/actions/ApplicationSettings'
+import {
+  type ActionResult,
+  withRequireOwner,
+} from '@/lib/utils/actionUtils'
 
 export async function ListKeys() {
-  await validateUserSignedInIsTheOwner()
-  return listKeysWithPk()
+  return withRequireOwner(async () => {
+    return listKeysWithPk()
+  })
 }
 
 const KeysSchema = z.array(z.string().refine(isValidPrivateKey))
 
-export async function ImportKeys(keys: string[], addressGroupId: number) {
-  await validateUserSignedInIsTheOwner()
+const poktAddressRegex = /^pokt1[a-z0-9]{38,43}$/
 
-  const validatedKeys = KeysSchema.parse(keys)
+export async function ImportKeys(keys: string[], addressGroupId: number): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
+    const validatedKeys = KeysSchema.parse(keys)
 
-  const keysToInsert: Array<InsertKey> = await Promise.all(validatedKeys.map(key => {
-    return DirectSecp256k1Wallet.fromKey(Buffer.from(key, 'hex'), 'pokt').then(
-      (wallet) => wallet.getAccounts(),
-    ).then(([account]) => {
-      if (!account) {
-        throw new Error('Failed to get account from key')
-      }
+    const keysToInsert: Array<InsertKey> = await Promise.all(validatedKeys.map(key => {
+      return DirectSecp256k1Wallet.fromKey(Buffer.from(key, 'hex'), 'pokt').then(
+        (wallet) => wallet.getAccounts(),
+      ).then(([account]) => {
+        if (!account) {
+          throw new Error('Failed to get account from key')
+        }
 
-      return {
-        publicKey: Buffer.from(account.pubkey).toString('hex'),
-        privateKey: key,
-        address: account.address,
-        addressGroupId,
-        // once they
-        state: KeyState.Imported,
-        createdAt: new Date(),
-      }
-    })
-  }))
+        return {
+          publicKey: Buffer.from(account.pubkey).toString('hex'),
+          privateKey: key,
+          address: account.address,
+          addressGroupId,
+          state: KeyState.Imported,
+          createdAt: new Date(),
+        }
+      })
+    }))
 
-  await insertMany(keysToInsert)
+    await insertMany(keysToInsert)
+  })
 }
 
 export async function GetKeysByAddressGroupAndState(addressGroupId: number, keyState?: KeyState) {
-  await validateUserSignedInIsTheOwner()
-  return listPrivateKeysByAddressGroup(addressGroupId, keyState)
+  return withRequireOwner(async () => {
+    return listPrivateKeysByAddressGroup(addressGroupId, keyState)
+  })
 }
 
 export async function CountKeysByAddressGroupAndState(addressGroupId: number, keyState?: KeyState) {
-  await validateUserSignedInIsTheOwner()
-  return countPrivateKeysByAddressGroup(addressGroupId, keyState)
+  return withRequireOwner(async () => {
+    return countPrivateKeysByAddressGroup(addressGroupId, keyState)
+  })
 }
-
-const poktAddressRegex = /^pokt[a-zA-Z0-9]{39,42}$/
 
 export async function UpdateKeyRewardsSettings(
   id: number,
   values: { delegatorRewardsAddress: string; delegatorRevSharePercentage: number },
-) {
-  await validateUserSignedInIsTheOwner()
+): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
+    const schema = z.object({
+      delegatorRewardsAddress: z.string().min(1).regex(poktAddressRegex, "Must be a valid POKT bech32 address"),
+      delegatorRevSharePercentage: z.coerce.number().min(0).max(100),
+    })
 
-  const schema = z.object({
-    delegatorRewardsAddress: z.string().min(1).regex(poktAddressRegex, "Must be a valid Cosmos address with 'pokt' prefix"),
-    delegatorRevSharePercentage: z.coerce.number().min(0).max(100),
+    const parsed = schema.parse(values)
+    await updateRewardsSettings(id, parsed)
   })
-
-  const parsed = schema.parse(values)
-
-  await updateRewardsSettings(id, parsed)
 }
 
-export async function UpdateKeysState(ids: number[], state: KeyState) {
-  await validateUserSignedInIsTheOwner()
+export async function UpdateKeysState(ids: number[], state: KeyState): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
+    const schema = z.object({
+      ids: z.array(z.number()),
+      state: z.nativeEnum(KeyState),
+    })
 
-  const schema = z.object({
-    ids: z.array(z.number()),
-    state: z.nativeEnum(KeyState),
+    const parsed = schema.parse({ ids, state })
+    await updateKeysState(parsed.ids, parsed.state)
   })
-
-  const parsed = schema.parse({ ids, state })
-
-  await updateKeysState(parsed.ids, parsed.state)
 }
 
-export async function validateUserSignedInIsTheOwner() {
-  console.log('[KEYS:validateOwner] Called');
-
-  const [identity, appSettings] = await Promise.all([
-    getCurrentUserIdentity(),
-    GetApplicationSettings(),
-  ])
-
-  console.log('[KEYS:validateOwner] Comparison', {
-    identity,
-    ownerIdentity: appSettings.ownerIdentity,
-    match: identity === appSettings.ownerIdentity,
-    identityType: typeof identity,
-    ownerIdentityType: typeof appSettings.ownerIdentity,
-  });
-
-  if (identity !== appSettings.ownerIdentity) {
-    console.log('[KEYS:validateOwner] MISMATCH - throwing Unauthorized');
-    throw new Error('Unauthorized')
-  }
-
-  console.log('[KEYS:validateOwner] MATCH - authorized');
-}
-
-export async function MarkKeysForRemediation() {
-  await validateUserSignedInIsTheOwner()
-  await updateKeysStateWhereCurrentStateIn([
-    KeyState.AttentionNeeded,
-    KeyState.RemediationFailed,
-  ], KeyState.Staked)
+export async function MarkKeysForRemediation(): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
+    await updateKeysStateWhereCurrentStateIn([
+      KeyState.AttentionNeeded,
+      KeyState.RemediationFailed,
+    ], KeyState.Staked)
+  })
 }
