@@ -3,10 +3,7 @@
 import type {InsertService, Service} from "@igniter/db/provider/schema";
 import {insert, list, remove, update} from "@/lib/dal/services";
 import { validRpcTypes } from '@/lib/constants'
-import {
-  withRequireOwnerOrAdmin,
-  withRequireAuth,
-} from '@/lib/utils/actionUtils'
+import { withRequireOwnerOrAdmin } from '@/lib/utils/actionUtils'
 
 export async function CreateService(service: Omit<InsertService, 'createdBy' | 'updatedBy'>) {
   return withRequireOwnerOrAdmin(async (user) => {
@@ -40,14 +37,14 @@ export async function UpdateService(id: string, service: Pick<Service, 'revShare
 }
 
 export async function GetByServiceId(id: string) {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     const [service] = await list([id]);
     return service;
   });
 }
 
 export async function ListServices() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return list();
   });
 }

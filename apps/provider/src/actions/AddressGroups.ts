@@ -6,10 +6,7 @@ import type {
     AddressGroupService,
 } from "@igniter/db/provider/schema";
 import { insert, list, remove, simpleList, update } from '@/lib/dal/addressGroups'
-import {
-  withRequireOwnerOrAdmin,
-  withRequireAuth,
-} from '@/lib/utils/actionUtils'
+import { withRequireOwnerOrAdmin } from '@/lib/utils/actionUtils'
 
 export async function CreateAddressGroup(
   addressGroup: Omit<InsertAddressGroup, 'createdBy' | 'updatedBy'>,
@@ -45,13 +42,13 @@ export async function UpdateAddressGroup(
 }
 
 export async function ListAddressGroups() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return list();
   });
 }
 
 export async function ListBasicAddressGroups() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return simpleList();
   });
 }

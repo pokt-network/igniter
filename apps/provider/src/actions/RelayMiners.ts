@@ -2,13 +2,10 @@
 
 import type { RelayMiner, InsertRelayMiner } from "@igniter/db/provider/schema";
 import { list, remove, insert, update } from "@/lib/dal/relayMiners";
-import {
-  withRequireOwnerOrAdmin,
-  withRequireAuth,
-} from '@/lib/utils/actionUtils'
+import { withRequireOwnerOrAdmin } from '@/lib/utils/actionUtils'
 
 export async function ListRelayMiners() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return list();
   });
 }

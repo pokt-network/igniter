@@ -2,13 +2,10 @@
 
 import type { Region, InsertRegion } from "@igniter/db/provider/schema";
 import { list, remove, insert, update } from "@/lib/dal/regions";
-import {
-  withRequireOwnerOrAdmin,
-  withRequireAuth,
-} from '@/lib/utils/actionUtils'
+import { withRequireOwnerOrAdmin } from '@/lib/utils/actionUtils'
 
 export async function ListRegions() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return list();
   });
 }

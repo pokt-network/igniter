@@ -11,13 +11,10 @@ import { delegatorsTable } from '@igniter/db/provider/schema'
 import { getDb } from '@/db'
 import { eq } from 'drizzle-orm'
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
-import {
-  withRequireOwnerOrAdmin,
-  withRequireAuth,
-} from '@/lib/utils/actionUtils'
+import { withRequireOwnerOrAdmin } from '@/lib/utils/actionUtils'
 
 export async function ListDelegators() {
-  return withRequireAuth(async () => {
+  return withRequireOwnerOrAdmin(async () => {
     return list()
   })
 }
