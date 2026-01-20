@@ -81,8 +81,12 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
   const fetchRegions = async () => {
     try {
       setIsLoadingRegions(true);
-      const regionsList = await ListRegions();
-      setRegions(regionsList);
+      const response = await ListRegions();
+      if (response.success) {
+        setRegions(response.data);
+      } else {
+        console.error("Failed to fetch regions:", response.error);
+      }
     } catch (error) {
       console.error("Failed to fetch regions:", error);
     } finally {
@@ -95,7 +99,10 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
 
     try {
       setIsDeletingRegion(true);
-      await DeleteRegion(regionToDelete.id);
+      const result = await DeleteRegion(regionToDelete.id);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await fetchRegions();
     } catch (error) {
       console.error("Failed to delete region:", error);

@@ -24,7 +24,13 @@ import { useNotifications } from '@igniter/ui/context/Notifications/index'
 export default function RelayMinersTable() {
   const { data: relayMiners, refetch: fetchRelayMiners, isLoading: isLoadingRelayMiners, isError } = useQuery({
     queryKey: ['relay-miners'],
-    queryFn: ListRelayMiners,
+    queryFn: async () => {
+      const result = await ListRelayMiners();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: [],
   })
@@ -82,7 +88,10 @@ export default function RelayMinersTable() {
 
     try {
       setIsDeletingRelayMiner(true)
-      await DeleteRelayMiner(relayMinerToDelete.id)
+      const result = await DeleteRelayMiner(relayMinerToDelete.id)
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await fetchRelayMiners()
     } catch (error) {
       console.error('Failed to delete relay miner:', error)
@@ -90,7 +99,7 @@ export default function RelayMinersTable() {
         id: `delete-relay-miner-error`,
         type: 'error',
         showTypeIcon: true,
-        content: 'Unable to delete relay miner. Please ensure it\'s not associated with any address groups before trying again.',
+        content: error instanceof Error ? error.message : 'Unable to delete relay miner. Please ensure it\'s not associated with any address groups before trying again.',
       })
     } finally {
       setIsDeletingRelayMiner(false)

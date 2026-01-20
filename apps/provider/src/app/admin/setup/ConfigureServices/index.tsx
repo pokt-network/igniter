@@ -79,8 +79,11 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
   const fetchServices = async () => {
     try {
       setIsLoading(true);
-      const servicesList = await ListServices();
-      setServices(servicesList);
+      const result = await ListServices();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setServices(result.data);
     } catch (error) {
       console.error("Failed to fetch services:", error);
     } finally {
@@ -93,7 +96,10 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
 
     try {
       setIsLoading(true);
-      await DeleteService(serviceToDelete.serviceId);
+      const result = await DeleteService(serviceToDelete.serviceId);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await fetchServices();
     } catch (error) {
       console.error("Failed to delete service:", error);

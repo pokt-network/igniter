@@ -11,14 +11,21 @@ export default function KeysTable() {
   const {data, isLoading, isError, refetch} = useQuery({
     queryKey: ['keys'],
     queryFn: async () => {
-      const [keys, addressesGroup] = await Promise.all([
+      const [keysResult, addressesGroupResult] = await Promise.all([
         ListKeys(),
         ListBasicAddressGroups(),
       ]);
 
+      if (!keysResult.success) {
+        throw new Error(keysResult.error.message);
+      }
+      if (!addressesGroupResult.success) {
+        throw new Error(addressesGroupResult.error.message);
+      }
+
       return {
-        keys,
-        addressesGroup
+        keys: keysResult.data,
+        addressesGroup: addressesGroupResult.data
       }
     },
     refetchInterval: 60000,

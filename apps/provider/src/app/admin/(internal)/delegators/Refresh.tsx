@@ -14,7 +14,10 @@ export default function RefreshDelegators() {
     // TODO: Error handling and display
     try {
       setIsUpdatingDelegators(true);
-      await UpdateDelegatorsFromSource();
+      const result = await UpdateDelegatorsFromSource();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await queryClient.invalidateQueries({ queryKey: ['delegators'] });
     } catch (error) {
       console.error("Failed to update delegators from source:", error);

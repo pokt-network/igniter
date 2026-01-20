@@ -64,7 +64,10 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
       const handleToggle = async () => {
         setUpdating(true)
         try {
-          await UpdateDelegator(delegator.identity, { enabled: !isEnabled })
+          const result = await UpdateDelegator(delegator.identity, { enabled: !isEnabled })
+          if (!result.success) {
+            throw new Error(result.error.message)
+          }
           setIsEnabled(!isEnabled)
         } catch (error) {
           console.error('Error updating delegator status:', error)

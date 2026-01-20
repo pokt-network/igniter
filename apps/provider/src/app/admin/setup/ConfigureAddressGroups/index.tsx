@@ -88,8 +88,11 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
   const fetchAddressGroups = async () => {
     try {
       setIsLoadingAddressGroups(true);
-      const addressGroupsList = await ListAddressGroups();
-      setAddressGroups(addressGroupsList);
+      const result = await ListAddressGroups();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setAddressGroups(result.data);
     } catch (error) {
       console.error("Failed to fetch addressGroups:", error);
     } finally {
@@ -102,7 +105,10 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
 
     try {
       setIsDeletingAddressGroup(true);
-      await DeleteAddressGroup(addressGroupToDelete.id);
+      const result = await DeleteAddressGroup(addressGroupToDelete.id);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await fetchAddressGroups();
     } catch (error) {
       console.error("Failed to delete addressGroup:", error);
@@ -115,8 +121,11 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
   const fetchServices = async () => {
     try {
       setIsLoadingServices(true);
-      const servicesList = await ListServices();
-      setServices(servicesList);
+      const result = await ListServices();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setServices(result.data);
     } catch (error) {
       console.error("Failed to fetch services:", error);
     } finally {

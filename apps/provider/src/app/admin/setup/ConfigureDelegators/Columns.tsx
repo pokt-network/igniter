@@ -20,7 +20,10 @@ export const columns: ColumnDef<Delegator>[] = [
         setIsChecked(checked);
 
         try {
-          await UpdateDelegator(delegator.identity, { enabled: checked });
+          const result = await UpdateDelegator(delegator.identity, { enabled: checked });
+          if (!result.success) {
+            throw new Error(result.error.message);
+          }
         } catch (error) {
           setIsChecked(!checked);
           console.error('Error updating delegator status:', error);

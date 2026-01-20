@@ -15,7 +15,13 @@ import {useNotifications} from "@igniter/ui/context/Notifications/index";
 export default function RegionsTable() {
     const { data: regions, isLoading: isLoadingRegions, refetch: refetchRegions, isError } = useQuery({
         queryKey: ['regions'],
-        queryFn: ListRegions,
+        queryFn: async () => {
+            const result = await ListRegions();
+            if (!result.success) {
+                throw new Error(result.error.message);
+            }
+            return result.data;
+        },
         refetchInterval: 60000,
         initialData: []
     });
@@ -74,7 +80,10 @@ export default function RegionsTable() {
 
         setIsDeletingRegion(true);
         try {
-            await DeleteRegion(regionToDelete.id);
+            const result = await DeleteRegion(regionToDelete.id);
+            if (!result.success) {
+                throw new Error(result.error.message);
+            }
             await refetchRegions();
         } catch (error) {
             console.error('Error deleting region:', error);
@@ -82,7 +91,7 @@ export default function RegionsTable() {
                 id: `delete-relay-miner-error`,
                 type: 'error',
                 showTypeIcon: true,
-                content: 'Unable to delete region. Please ensure it\'s not associated with any relay miner before trying again.',
+                content: error instanceof Error ? error.message : 'Unable to delete region. Please ensure it\'s not associated with any relay miner before trying again.',
             });
         } finally {
             setIsDeletingRegion(false);

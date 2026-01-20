@@ -36,7 +36,10 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
     (async function () {
       setIsDisablingAllDelegators(true);
       try {
-        await DisableAllDelegators();
+        const result = await DisableAllDelegators();
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         await updateDelegatorsList();
       } catch (err) {
         console.error("Failed to disable all delegators:", err);
@@ -50,7 +53,10 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
     (async function () {
       setIsEnablingAllDelegators(true);
       try {
-        await EnableAllDelegators();
+        const result = await EnableAllDelegators();
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         await updateDelegatorsList();
       } catch (err) {
         console.error("Failed to select all delegators:", err);
@@ -98,8 +104,11 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
   async function updateDelegatorsList() {
     try {
       setIsLoading(true);
-      const delegatorsList = await ListDelegators();
-      setDelegators(delegatorsList);
+      const result = await ListDelegators();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      setDelegators(result.data);
     } catch (error) {
       console.error("Failed to fetch delegators:", error);
     } finally {
@@ -111,7 +120,10 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
     setIsLoading(true);
     (async function () {
       try {
-        await UpdateDelegatorsFromSource();
+        const result = await UpdateDelegatorsFromSource();
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         console.log('debug: update succeeded?');
       } catch (err) {
         console.error("Failed to update delegators from source:", err);

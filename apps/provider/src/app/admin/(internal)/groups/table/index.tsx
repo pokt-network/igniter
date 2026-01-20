@@ -28,7 +28,13 @@ import { useNotifications } from '@igniter/ui/context/Notifications/index'
 export default function AddressGroupsTable() {
   const { data: addressGroups, refetch: fetchAddressGroups, isLoading: isLoadingAddressGroups, isError } = useQuery({
     queryKey: ['groups'],
-    queryFn: ListAddressGroups,
+    queryFn: async () => {
+      const result = await ListAddressGroups();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: [],
   })
@@ -101,7 +107,10 @@ export default function AddressGroupsTable() {
 
     try {
       setIsDeletingAddressGroup(true)
-      await DeleteAddressGroup(addressGroupToDelete.id)
+      const result = await DeleteAddressGroup(addressGroupToDelete.id)
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await fetchAddressGroups()
     } catch (error) {
       console.error('Failed to delete addressGroup:', error)
@@ -109,7 +118,7 @@ export default function AddressGroupsTable() {
         id: `delete-ag-error`,
         type: 'error',
         showTypeIcon: true,
-        content: 'Failed to delete the address group. This could be due to a network issue or server problem. Please try again or contact support if the problem persists.',
+        content: error instanceof Error ? error.message : 'Failed to delete the address group. This could be due to a network issue or server problem. Please try again or contact support if the problem persists.',
       })
     } finally {
       setIsDeletingAddressGroup(false)

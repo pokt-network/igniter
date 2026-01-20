@@ -2,12 +2,11 @@ import { ColumnDef } from "@igniter/ui/components/table";
 import { KeyState } from '@igniter/db/provider/enums'
 import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import Address from '@igniter/ui/components/Address'
-import { ListBasicAddressGroups } from '@/actions/AddressGroups'
 import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants";
 import {useAddItemToDetail} from "@igniter/ui/components/QuickDetails/Provider";
 import {Button} from "@igniter/ui/components/button";
 import {RightArrowIcon} from "@igniter/ui/assets";
-import {KeyWithRelations} from "@igniter/db/provider/schema";
+import {KeyWithRelations, AddressGroup} from "@igniter/db/provider/schema";
 import {CsvColumnDef} from "@igniter/ui/lib/csv";
 
 export interface Key {
@@ -143,7 +142,7 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
   },
 ]
 
-export function getFilters(addressesGroup: Awaited<ReturnType<typeof ListBasicAddressGroups>>): Array<FilterGroup<KeyWithRelations>> {
+export function getFilters(addressesGroup: AddressGroup[]): Array<FilterGroup<KeyWithRelations>> {
  return [
    {
      group: "state",

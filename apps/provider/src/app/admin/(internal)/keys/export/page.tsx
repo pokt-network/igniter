@@ -13,9 +13,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ExportPage() {
-  const addressesGroup = await ListAddressGroups()
+  const result = await ListAddressGroups()
+
+  if (!result.success) {
+    throw new Error(result.error.message);
+  }
 
   return (
-    <ExportForm addressesGroup={addressesGroup} />
+    <ExportForm addressesGroup={result.data} />
   )
 }

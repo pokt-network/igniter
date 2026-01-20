@@ -84,8 +84,13 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
   const fetchRelayMiners = async () => {
     try {
       setIsLoadingRelayMiners(true);
-      const relayMinersList = await ListRelayMiners();
-      setRelayMiners(relayMinersList);
+      const result = await ListRelayMiners();
+
+      if (!result.success) {
+        throw new Error(result.error.message);
+      } else {
+        setRelayMiners(result.data);
+      }
     } catch (error) {
       console.error("Failed to fetch relayMiners:", error);
     } finally {

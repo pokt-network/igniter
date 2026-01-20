@@ -347,14 +347,26 @@ export function AddOrUpdateAddressGroupDialog({
                                               }: Readonly<AddOrUpdateAddressGroupProps>) {
   const {data: services, isLoading: isLoadingServices} = useQuery({
     queryKey: ['services'],
-    queryFn: ListServices,
+    queryFn: async () => {
+      const result = await ListServices();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: []
   });
 
   const {data: relayMiners, isLoading: isLoadingRelayMiners} = useQuery({
     queryKey: ['relay-miners'],
-    queryFn: ListRelayMiners,
+    queryFn: async () => {
+      const result = await ListRelayMiners();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: []
   });
@@ -456,7 +468,7 @@ export function AddOrUpdateAddressGroupDialog({
     if (addressGroup) {
       setIsUpdatingAddressGroup(true);
       try {
-        await UpdateAddressGroup(
+        const result = await UpdateAddressGroup(
           addressGroup.id,
           values,
           services.map((s) => ({
@@ -468,6 +480,9 @@ export function AddOrUpdateAddressGroupDialog({
             }))
           }))
         );
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to update addressGroup", e);
@@ -477,7 +492,7 @@ export function AddOrUpdateAddressGroupDialog({
     } else {
       setIsCreatingAddressGroup(true);
       try {
-        await CreateAddressGroup(
+        const result = await CreateAddressGroup(
           values,
           services.map((s) => ({
             ...s,
@@ -488,6 +503,9 @@ export function AddOrUpdateAddressGroupDialog({
             }))
           }))
         );
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to create addressGroup", e);

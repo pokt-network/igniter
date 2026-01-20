@@ -1,6 +1,6 @@
 'use client'
 
-import { ListAddressGroups } from '@/actions/AddressGroups'
+import type {AddressGroupWithDetails} from '@igniter/db/provider/schema'
 import { ActivityHeader } from '@igniter/ui/components/ActivityHeader'
 import { useRouter } from 'next/navigation'
 import { AbortConfirmationDialog } from '@igniter/ui/components/AbortConfirmationDialog'
@@ -20,7 +20,7 @@ const errorsMap: Record<keyof ImportProcessStatus, string> = {
 };
 
 interface ImportFormProps {
-  addressesGroup: Awaited<ReturnType<typeof ListAddressGroups>>
+  addressesGroup: AddressGroupWithDetails[]
 }
 
 export default function ImportForm({addressesGroup}: ImportFormProps) {

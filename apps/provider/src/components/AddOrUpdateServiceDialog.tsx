@@ -130,8 +130,11 @@ export function AddOrUpdateServiceDialog({
   const checkLocalService = useCallback(async (serviceId: string) => {
     setIsLoadingService(true);
     try {
-      const existingService = await GetByServiceId(serviceId);
-      if (existingService && !service) {
+      const result = await GetByServiceId(serviceId);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      if (result.data && !service) {
         setServiceExists(true);
         return true;
       }
@@ -263,10 +266,13 @@ export function AddOrUpdateServiceDialog({
     if (service) {
       setIsUpdatingService(true);
       try {
-        await UpdateService(service.serviceId, {
+        const result = await UpdateService(service.serviceId, {
           revSharePercentage: values.revSharePercentage,
           endpoints: values.endpoints.slice(),
         });
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to update service", e);
@@ -276,7 +282,7 @@ export function AddOrUpdateServiceDialog({
     } else {
       setIsCreatingService(true);
       try {
-        await CreateService({
+        const result = await CreateService({
           serviceId: values.serviceId,
           name: serviceOnChain?.name ?? 'Unknown Service',
           ownerAddress: serviceOnChain?.ownerAddress ?? '',
@@ -284,6 +290,9 @@ export function AddOrUpdateServiceDialog({
           revSharePercentage: values.revSharePercentage,
           endpoints: values.endpoints.slice(),
         });
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to create service", e);

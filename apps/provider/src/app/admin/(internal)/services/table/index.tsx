@@ -14,7 +14,13 @@ import { useQuery } from '@tanstack/react-query'
 export default function ServicesTable() {
   const {data: services, refetch: refetchServices, isLoading: isLoadingServices, isError} = useQuery({
     queryKey: ['services'],
-    queryFn: ListServices,
+    queryFn: async () => {
+      const result = await ListServices();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: []
   });
@@ -72,7 +78,10 @@ export default function ServicesTable() {
 
     try {
       setIsDeletingService(true);
-      await DeleteService(serviceToDelete.serviceId);
+      const result = await DeleteService(serviceToDelete.serviceId);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
       await refetchServices();
     } catch (error) {
       console.error("Failed to delete service:", error);

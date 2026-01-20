@@ -77,7 +77,10 @@ export function AddOrUpdateRegionDialog({
     if (region) {
       setIsUpdatingRegion(true);
       try {
-        await UpdateRegion(region.id, values);
+        const result = await UpdateRegion(region.id, values);
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to update region", e);
@@ -88,7 +91,10 @@ export function AddOrUpdateRegionDialog({
     } else {
       setIsCreatingRegion(true);
       try {
-        await CreateRegion(values);
+        const result = await CreateRegion(values);
+        if (!result.success) {
+          throw new Error(result.error.message);
+        }
         onClose?.(true);
       } catch (e) {
         console.error("Failed to create region", e);

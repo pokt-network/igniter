@@ -55,7 +55,7 @@ export const columns: Array<ColumnDef<RelayMinerWithDetails> & CsvColumnDef<Rela
   },
 ]
 
-export function getFilters(miners: Awaited<ReturnType<typeof ListRelayMiners>>): Array<FilterGroup<RelayMinerWithDetails>> {
+export function getFilters(miners: RelayMinerWithDetails[]): Array<FilterGroup<RelayMinerWithDetails>> {
   return [
     {
       group: 'region',

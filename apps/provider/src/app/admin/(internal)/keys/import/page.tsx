@@ -13,9 +13,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ImportPage() {
-  const addressesGroup = await ListAddressGroups()
+  const result = await ListAddressGroups()
+
+  if (!result.success) {
+    throw new Error(result.error.message);
+  }
 
   return (
-    <ImportForm addressesGroup={addressesGroup} />
+    <ImportForm addressesGroup={result.data} />
   )
 }

@@ -68,7 +68,13 @@ export function AddOrUpdateRelayMinerDialog({
   // Add this query to fetch regions
   const { data: regions, isLoading: isLoadingRegions } = useQuery({
     queryKey: ['regions'],
-    queryFn: ListRegions,
+    queryFn: async () => {
+      const result = await ListRegions();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: []
   });
@@ -97,11 +103,14 @@ export function AddOrUpdateRelayMinerDialog({
 
     async function onSubmit(values: z.infer<typeof CreateOrUpdateRelayMinerSchema>) {
         setError(null);
-        
+
         if (relayMiner) {
             setIsUpdatingRelayMiner(true);
             try {
-                await UpdateRelayMiner(relayMiner.id, values);
+                const result = await UpdateRelayMiner(relayMiner.id, values);
+                if (!result.success) {
+                    throw new Error(result.error.message);
+                }
                 onClose?.(true);
             } catch (e) {
                 console.error("Failed to update relay miner", e);
@@ -112,7 +121,10 @@ export function AddOrUpdateRelayMinerDialog({
         } else {
             setIsCreatingRelayMiner(true);
             try {
-                await CreateRelayMiner(values);
+                const result = await CreateRelayMiner(values);
+                if (!result.success) {
+                    throw new Error(result.error.message);
+                }
                 onClose?.(true);
             } catch (e) {
                 console.error("Failed to create relay miner", e);

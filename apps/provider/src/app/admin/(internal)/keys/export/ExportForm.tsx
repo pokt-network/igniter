@@ -1,5 +1,5 @@
 'use client'
-import {ListAddressGroups} from '@/actions/AddressGroups'
+import type {AddressGroupWithDetails} from '@igniter/db/provider/schema'
 import {useRouter} from 'next/navigation'
 import React, {useEffect, useState} from 'react'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@igniter/ui/components/select'
@@ -34,7 +34,7 @@ const exportToJson = (jsonData: object, name: string) => {
 
 
 interface ExportFormProps {
-  addressesGroup: Awaited<ReturnType<typeof ListAddressGroups>>
+  addressesGroup: AddressGroupWithDetails[]
 }
 
 export default function ExportForm({addressesGroup}: ExportFormProps) {

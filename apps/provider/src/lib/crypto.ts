@@ -1,29 +1,6 @@
-import crypto from "crypto";
 import {Secp256k1, Secp256k1Signature, sha256, ripemd160} from '@cosmjs/crypto';
 import {toUtf8, toBech32, fromHex} from "@cosmjs/encoding";
 import {DirectSecp256k1Wallet} from "@cosmjs/proto-signing";
-
-const algorithm = "aes-256-cbc";
-
-export function encrypt(text: string): string {
-  const iv = Buffer.from(process.env.ENCRYPTION_IV!, "hex");
-  const key = Buffer.from(process.env.ENCRYPTION_KEY!, "hex");
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
-  let encrypted = cipher.update(text, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  return iv.toString("hex") + ":" + encrypted;
-}
-
-export function decrypt(text: string): string {
-  const key = Buffer.from(process.env.ENCRYPTION_KEY!, "hex");
-  const textParts = text.split(":");
-  const iv = Buffer.from(textParts.shift()!, "hex");
-  const encryptedText = Buffer.from(textParts.join(":"), "hex");
-  const decipher = crypto.createDecipheriv(algorithm, key, iv);
-  let decrypted = decipher.update(encryptedText, undefined, "utf8");
-  decrypted += decipher.final("utf8");
-  return decrypted;
-}
 
 /**
  * Verifies a secp256k1/ECDSA signature (DER‐encoded) against the given payload.

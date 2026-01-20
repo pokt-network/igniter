@@ -10,7 +10,13 @@ import {useQuery} from "@tanstack/react-query";
 export default function DelegatorsTable() {
   const {data: delegators, isError, isLoading, refetch} = useQuery({
     queryKey: ['delegators'],
-    queryFn: ListDelegators,
+    queryFn: async () => {
+      const result = await ListDelegators();
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      return result.data;
+    },
     refetchInterval: 60000,
     initialData: []
   });
