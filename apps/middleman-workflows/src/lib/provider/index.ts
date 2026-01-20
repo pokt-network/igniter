@@ -55,7 +55,7 @@ export class ProviderService {
         }
       }
     } catch (error) {
-      this.logger.error('Error fetching provider status', { error })
+      this.logger.error(`Error fetching provider status for provider ${provider.name} (${provider.url}) with error: ${error}`, { provider, error })
       return {
         id: provider.id,
         status: ProviderStatus.Unreachable,
