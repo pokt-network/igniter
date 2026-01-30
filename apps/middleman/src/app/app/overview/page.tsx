@@ -36,7 +36,7 @@ export default async function Page() {
             <div className="flex flex-col">
               <div className="flex flex-row gap-3">
                 <Link href="/app/stake">
-                  <Button>Stake</Button>
+                  <Button>New Stake</Button>
                 </Link>
               </div>
             </div>

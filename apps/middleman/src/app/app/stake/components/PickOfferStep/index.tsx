@@ -86,6 +86,23 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                     getApplicationSettings(),
                 ]);
 
+                if (preselectedAddressGroupId && preselectedProviderId) {
+                    const preselectedOffer = calculatedOffers.find(
+                      (offer) => offer.id === preselectedProviderId &&
+                        offer.stakeDistribution.length > 0 &&
+                        offer.status === ProviderStatus.Healthy
+                    );
+                    if (preselectedOffer) {
+                        const addressGroupExists = preselectedOffer.addressGroups.some(
+                          ag => ag.id === preselectedAddressGroupId
+                        );
+                        if (addressGroupExists) {
+                            onOfferSelected(preselectedOffer, preselectedAddressGroupId)
+                            return
+                        }
+                    }
+                }
+
                 setOffers(calculatedOffers);
                 setDelegatorFee(appSettings.fee ? Number(appSettings.fee) : 0);
 

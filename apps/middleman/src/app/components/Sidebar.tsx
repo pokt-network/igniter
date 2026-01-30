@@ -31,7 +31,7 @@ const mainRoutes = [
     icon: ActivityDark,
   },
   {
-    title: "Nodes",
+    title: "Suppliers",
     url: "/app/nodes",
     icon: NodesDark,
   },

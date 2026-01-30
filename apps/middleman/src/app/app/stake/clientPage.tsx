@@ -47,7 +47,7 @@ export default function ClientStakePage() {
     : undefined;
 
   const [step, setStep] = useState<StakeActivitySteps>(
-    connectedIdentities && connectedIdentities.length > 1 ?
+    connectedIdentities && connectedIdentities.length > 1 && !isLinkedAccountConnected ?
       StakeActivitySteps.OwnerAddress :
       StakeActivitySteps.PickStakeAmount
   );
@@ -85,7 +85,7 @@ export default function ClientStakePage() {
           (connectedIdentities!.length > 1 ? '' : connectedIdentity!)
       )
       setStep(
-        connectedIdentities!.length > 1 ?
+        connectedIdentities!.length > 1 && !linkedAccount ?
           StakeActivitySteps.OwnerAddress :
           StakeActivitySteps.PickStakeAmount
       );
@@ -191,6 +191,7 @@ export default function ClientStakePage() {
               selectedOffer={selectedOffer!}
               selectedAddressGroupId={selectedAddressGroupId!}
               ownerAddress={ownerAddress}
+              ownerWasPreselected={ownerAddress === resolvedLinkedAccount}
               onSuppliersReceived={setSupplierProspects}
               onStakeCompleted={(result, transaction) => {
                 if (allStagesSucceeded(result)) {

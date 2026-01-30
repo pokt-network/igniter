@@ -21,13 +21,15 @@ export interface ServicesPopoverProps {
   triggerClassName?: string;
   onTriggerClick?: (e: React.MouseEvent) => void;
   delegatorFee?: number;
+  larger?: boolean
 }
 
 export function ServicesPopover({
   addressGroupName,
   services,
   servicesCount,
-  triggerClassName = "text-[14px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] underline cursor-pointer",
+  larger = true,
+  triggerClassName = !larger ? 'flex flex-row items-center gap-2' : "text-[14px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] underline cursor-pointer",
   onTriggerClick,
   delegatorFee = 0,
 }: ServicesPopoverProps) {
@@ -41,17 +43,17 @@ export function ServicesPopover({
             onTriggerClick?.(e);
           }}
         >
-          Services: {servicesCount}
+          {larger ? `Services: ${servicesCount}` : servicesCount}
         </span>
       </PopoverTrigger>
-      <PopoverContent className="flex flex-col w-[320px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-hidden border-2 border-[var(--black-dividers)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
+      <PopoverContent align={'center'} side={'top'} sideOffset={18} className="flex flex-col w-[320px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-hidden border-2 border-[var(--black-dividers)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
         <div className="sticky top-0 bg-[var(--color-slate-2)] border-b border-[var(--slate-dividers)] z-10">
           <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px] block">
             Services for {addressGroupName}
           </span>
           <div className="grid grid-cols-[1fr_auto] gap-2 px-4 pb-2 text-[11px] text-[var(--color-white-3)] font-medium">
             <span>Service</span>
-            <span className="text-right w-[70px]">Client</span>
+            <span className="text-right w-[70px]">Client Share</span>
           </div>
         </div>
         <div className="flex flex-col overflow-y-auto">

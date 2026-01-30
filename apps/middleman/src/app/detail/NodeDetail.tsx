@@ -79,7 +79,7 @@ export default function NodeDetail({
 
   const summaryRows: Array<SummaryRow> = [
     {
-      label: `Node`,
+      label: `Supplier`,
       value: <Address address={address} />,
     },
     {
@@ -166,10 +166,10 @@ export default function NodeDetail({
             fontWeight: 400,
           }}
         >
-          Node Detail
+          Supplier Detail
         </DrawerTitle>
         <DrawerDescription className={'text-sm'}>
-          Review the details of your node.
+          Review the details of your supplier.
         </DrawerDescription>
       </DrawerHeader>
       <div
@@ -201,7 +201,7 @@ export default function NodeDetail({
       {status === NodeStatus.Staked && (
         <div className={'bg-[color:var(--color-slate-2)] h-[109px] rounded-[8px]'}>
           <p className={'px-4 py-[11px] text-[color:var(--color-white-3)]'}>
-            Recoup your tokens by unstaking this node. Process can take up to{' '}
+            Recoup your tokens by unstaking this supplier. Process can take up to{' '}
             {unstakeDurationData ? (
               <span className="font-mono text-[var(--color-white-1)]">{formatDuration(unstakeDurationData.durationSeconds)}</span>
             ) : (

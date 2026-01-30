@@ -5,7 +5,7 @@ export default function ListLayout({
 }>) {
   return (
     <div className="flex flex-col gap-10">
-      <div className="mx-30 pt-10">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }

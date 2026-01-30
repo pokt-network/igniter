@@ -159,9 +159,10 @@ export interface ReviewStepProps {
     onSuppliersReceived: (suppliers: SupplierStake[]) => void;
     onBack: () => void;
     onClose: () => void;
+    ownerWasPreselected?: boolean;
 }
 
-export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAddressGroupId, ownerAddress, errorMessage, onSuppliersReceived, onBack, onClose}: Readonly<ReviewStepProps>) {
+export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAddressGroupId, ownerAddress, errorMessage, onSuppliersReceived, onBack, onClose, ownerWasPreselected}: Readonly<ReviewStepProps>) {
     const {
         isLoadingFee,
         errorFee,
@@ -412,17 +413,25 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     </>
                 )}
                 {/*TODO: Only show this when there are more than one connected identity? or when the owner address is different than the connected identity signed in?*/}
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
-                        Owner Address
-                    </span>
-                    <span className="flex flex-row items-center text-[14px] text-[var(--color-white-1)]">
-                        <AvatarByString string={ownerAddress} />
-                        <span className="ml-2 font-mono">
-                            {getShortAddress(ownerAddress, 5)}
+                <span className="flex flex-col px-4 py-3 border-b border-[var(--black-dividers)]">
+                    <span className="flex flex-row items-center w-full justify-between">
+                        <span className="text-[14px] text-[var(--color-white-3)]">
+                            Owner Address
+                        </span>
+                        <span className="flex flex-row items-center text-[14px] text-[var(--color-white-1)]">
+                            <AvatarByString string={ownerAddress} />
+                            <span className="ml-2 font-mono">
+                                {getShortAddress(ownerAddress, 5)}
+                            </span>
                         </span>
                     </span>
+                    {ownerWasPreselected && (
+                      <span className={'text-xs text-left text-purple-300 opacity-90'}>
+                        Preselected because the plan you chose is linked to this wallet.
+                      </span>
+                    )}
                 </span>
+
                 <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
                     <span className="flex flex-row items-center gap-2 hover:cursor-pointer" onClick={() => setIsShowingTransactionDetails(!isShowingTransactionDetails)}>
                         {isShowingTransactionDetails && (
