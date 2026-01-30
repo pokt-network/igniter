@@ -1,0 +1,1 @@
+ALTER TYPE "public"."chain_ids" ADD VALUE 'pocket-lego-testnet';

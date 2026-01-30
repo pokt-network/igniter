@@ -1,0 +1,1 @@
+ALTER TABLE "application_settings" ADD COLUMN "rewardAddresses" varchar[];

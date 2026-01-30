@@ -13,18 +13,25 @@ import {StakeDistributionOffer} from "@/lib/models/StakeDistributionOffer";
 import Amount from '@igniter/ui/components/Amount'
 import { MessageType } from "@/lib/constants";
 import { Operation, SendOperation, StakeOperation } from '@/app/detail/TransactionDetail'
+import { calculateShares } from '@/lib/utils/shareCalculations'
+import { PlanDetailsSection } from '@/app/app/stake/components/PlanDetailsSection'
 
 export interface StakeSuccessProps {
     amount: number;
     selectedOffer: StakeDistributionOffer;
+    selectedAddressGroupId: number;
     transaction: Transaction;
     onClose: () => void;
 }
 
-export function StakeSuccessStep({amount, selectedOffer, transaction, onClose}: Readonly<StakeSuccessProps>) {
+export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId, transaction, onClose}: Readonly<StakeSuccessProps>) {
     const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState<boolean>(false);
     const applicationSettings = useApplicationSettings();
     const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
+
+    const selectedAddressGroup = selectedOffer.addressGroups.find(ag => ag.id === selectedAddressGroupId);
+    const delegatorFee = applicationSettings?.fee ? Number(applicationSettings.fee) : 0;
+    const shares = selectedAddressGroup ? calculateShares(selectedAddressGroup, delegatorFee) : null;
 
     const isViewReady = useMemo(() => {
         return amount && amount > 0 &&
@@ -51,7 +58,7 @@ export function StakeSuccessStep({amount, selectedOffer, transaction, onClose}: 
 
     return (
         <div
-            className="flex flex-col w-[480px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 title="Scheduled!"
                 subtitle="Below are the details of your stake operation."
@@ -146,22 +153,6 @@ export function StakeSuccessStep({amount, selectedOffer, transaction, onClose}: 
                     </div>
                     <div key="stake-details"
                          className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
-                    <span
-                        className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
-                        <span>
-                            Provider Fee
-                        </span>
-                        <QuickInfoPopOverIcon
-                            title="Provider Fee"
-                            description="The % of the rewards that the node operator retain for providing the service."
-                            url={''}
-                        />
-                    </span>
-                    <span className="text-[14px] text-[var(--color-white-1)]">
-                        {selectedOffer.fee}%
-                    </span>
-                </span>
                         <span
                             className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
                             <span className="text-[14px] text-[var(--color-white-3)]">
@@ -171,6 +162,24 @@ export function StakeSuccessStep({amount, selectedOffer, transaction, onClose}: 
                                 {selectedOffer.name}
                             </span>
                         </span>
+                        {selectedAddressGroup && shares && (
+                            <>
+                                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+                                    <span className="text-[14px] text-[var(--color-white-3)]">
+                                        Plan
+                                    </span>
+                                    <span className="text-[14px] text-[var(--color-white-1)]">
+                                        {selectedAddressGroup.name}
+                                    </span>
+                                </span>
+                                <PlanDetailsSection
+                                    addressGroupName={selectedAddressGroup.name}
+                                    services={selectedAddressGroup.addressGroupServices}
+                                    shares={shares}
+                                    delegatorFee={delegatorFee}
+                                />
+                            </>
+                        )}
                         <span
                             className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
                             <span className="text-[14px] text-[var(--color-white-3)]">

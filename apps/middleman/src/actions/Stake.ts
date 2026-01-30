@@ -42,50 +42,69 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
 
   const availableNodeSizes = [applicationSettings.minimumStake]
 
-  return providers.map(provider => {
-    let distribution: StakeDistributionItem[] = []
+  return providers
+    .filter(provider => provider.enabled)
+    .map(provider => {
+      let distribution: StakeDistributionItem[] = []
 
-    const ownerCanStakeWithProvider =
-        provider.allowPublicStaking ||
-        provider.allowedStakers?.some((address: string) => address.toLowerCase() === ownerAddress.toLowerCase());
+      // Filter address groups to only include public ones
+      const publicAddressGroups = (provider.addressGroups || []).filter(group =>
+        group.private === false && (
+          !group.linkedAddresses ||
+          group.linkedAddresses.length === 0 ||
+          group.linkedAddresses.some((address) => address.toLowerCase() === ownerAddress.toLowerCase())
+        )
+      )
 
-    if (!ownerCanStakeWithProvider) {
-      distribution = [];
-    }
-
-    if (provider.enabled && provider.operationalFunds && provider.minimumStake && ownerCanStakeWithProvider) {
-
-      const allowedSizes = availableNodeSizes.filter(amount => amount >= provider.minimumStake)
-
-      let remaining = stakeAmount
-
-      distribution = allowedSizes.reduce((acc: StakeDistributionItem[], nodeAmount: number) => {
-        if (remaining <= 0) return acc
-        const qty = Math.floor(remaining / nodeAmount)
-        if (qty > 0) {
-          acc.push({ amount: nodeAmount, qty })
-          remaining -= qty * nodeAmount
-        }
-        return acc
-      }, [])
-
-      if (remaining !== 0) {
-        distribution = []
+      // Skip providers that don't have any public address groups
+      if (publicAddressGroups.length === 0) {
+        return null
       }
-    }
 
-    return {
-      id: provider.id,
-      identity: provider.identity,
-      name: provider.name,
-      fee: provider.fee!,
-      feeType: provider.feeType || ProviderFee.Fixed,
-      regions: provider.regions || [],
-      rewards: 'N/A',
-      operationalFundsAmount: provider.operationalFunds,
-      stakeDistribution: distribution,
-    }
-  })
+      const ownerCanStakeWithProvider =
+          provider.allowPublicStaking ||
+          provider.allowedStakers?.some((address: string) => address.toLowerCase() === ownerAddress.toLowerCase());
+
+      if (!ownerCanStakeWithProvider) {
+        distribution = [];
+      }
+
+      if (provider.enabled && provider.operationalFunds && provider.minimumStake && ownerCanStakeWithProvider) {
+
+        const allowedSizes = availableNodeSizes.filter(amount => amount >= provider.minimumStake)
+
+        let remaining = stakeAmount
+
+        distribution = allowedSizes.reduce((acc: StakeDistributionItem[], nodeAmount: number) => {
+          if (remaining <= 0) return acc
+          const qty = Math.floor(remaining / nodeAmount)
+          if (qty > 0) {
+            acc.push({ amount: nodeAmount, qty })
+            remaining -= qty * nodeAmount
+          }
+          return acc
+        }, [])
+
+        if (remaining !== 0) {
+          distribution = []
+        }
+      }
+
+      return {
+        id: provider.id,
+        identity: provider.identity,
+        name: provider.name,
+        fee: provider.fee!,
+        feeType: provider.feeType || ProviderFee.Fixed,
+        regions: provider.regions || [],
+        rewards: 'N/A',
+        operationalFundsAmount: provider.operationalFunds,
+        status: provider.status,
+        stakeDistribution: distribution,
+        addressGroups: publicAddressGroups,
+      }
+    })
+    .filter((offer): offer is StakeDistributionOffer => offer !== null)
 }
 
 export async function CreateStakeTransaction(request: CreateStakeTransactionRequest) {

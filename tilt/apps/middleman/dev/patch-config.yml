@@ -7,7 +7,7 @@ data:
   AUTH_TRUST_HOST: "http://localhost:3000"
   APP_URL: "http://localhost:3000"
   AUTH_URL: "http://localhost:3000"
-  CHAIN_ID: "pocket-beta"
+  CHAIN_ID: "pocket-lego-testnet"
   BLOCKCHAIN_PROTOCOL: "morse"
   OWNER_IDENTITY: "CHANGE_THIS"
   OWNER_EMAIL: "CHANGE_THIS"

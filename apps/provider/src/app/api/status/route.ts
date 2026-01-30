@@ -20,6 +20,34 @@ function getUniqueDomains(addressGroups: AddressGroupWithDetails[]) {
   ).values());
 }
 
+type AuditKeys = "createdAt" | "updatedAt" | "createdBy" | "updatedBy";
+
+const AUDIT_FIELDS: Record<AuditKeys, true> = {
+  createdAt: true,
+  updatedAt: true,
+  createdBy: true,
+  updatedBy: true,
+};
+
+export function stripAuditFields<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(stripAuditFields) as T;
+  }
+
+  if (value && typeof value === "object") {
+    const result: any = {};
+
+    for (const key in value) {
+      if (AUDIT_FIELDS[key as AuditKeys]) continue;
+      result[key] = stripAuditFields((value as any)[key]);
+    }
+
+    return result;
+  }
+
+  return value;
+}
+
 export async function POST(request: Request) {
   try {
     const isBootstrappedResponse = await ensureApplicationIsBootstrapped();
@@ -35,7 +63,8 @@ export async function POST(request: Request) {
     }
 
     const applicationSettings = await getApplicationSettings();
-    const addressGroups = await list();
+    const addressGroups = await list()
+      .then((addressesGroup) => addressesGroup.filter((ag) => !ag.private));
 
     const minimumStake = applicationSettings.minimumStake;
 
@@ -51,7 +80,7 @@ export async function POST(request: Request) {
     const regions = await getUniqueRegions();
 
     const allowedStakers = Array.from(new Set(addressGroups.flatMap(group => group.linkedAddresses)));
-    
+
     const response: StatusResponse = {
       regions,
       allowedStakers,
@@ -61,6 +90,8 @@ export async function POST(request: Request) {
       feeType: Array.from(new Set(fees)).length === 1 ? ProviderFee.Fixed : ProviderFee.UpTo,
       domains: getUniqueDomains(addressGroups),
       healthy: true,
+      addressGroups: addressGroups.map(stripAuditFields),
+      rewardAddresses: applicationSettings.rewardAddresses,
     };
 
     return NextResponse.json(response);

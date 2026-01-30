@@ -34,7 +34,8 @@ export async function UpdateDelegatorsFromSource() {
 
     const delegatorsCdnUrl = process.env.DELEGATORS_CDN_URL!.replace(
       '{chainId}',
-      appSettings.chainId,
+      // workaround until the repo has the file for this chain id
+      appSettings.chainId.replace('lego-testnet' ,'beta'),
     )
 
     if (!delegatorsCdnUrl) {

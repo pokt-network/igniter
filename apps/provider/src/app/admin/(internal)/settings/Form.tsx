@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from '@igniter/ui/components/form'
 import { Input } from '@igniter/ui/components/input'
+import { Textarea } from '@igniter/ui/components/textarea'
 import { useQuery } from '@tanstack/react-query'
 import {
   GetApplicationSettings,
@@ -24,10 +25,32 @@ import {
 } from '@/actions/ApplicationSettings'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { ChainId } from '@igniter/db/provider/enums'
+import { isPoktBech32Address } from '@/lib/crypto'
+import { cn } from '@igniter/ui/lib/utils'
 
 const FormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   supportEmail: z.string().email('Invalid email format').optional(),
+  rewardAddresses: z.string().refine((value) => {
+    if (!value) {
+      return true;
+    }
+
+    const lines = value.trim().split(/[\n,\s]+/);
+    const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address);
+
+    return addresses.length !== 0
+  }, 'There are no addresses in the list.')
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+
+      const lines = value.trim().split(/[\n,\s]+/);
+      const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address);
+
+      return addresses.length === lines.length;
+    }, 'There are invalid addresses in the list.'),
   rpcUrl: z.string().optional().superRefine(async (url, ctx) => {
     if (!url) {
       return // Skip validation if empty
@@ -102,6 +125,7 @@ export default function SettingsForm() {
     defaultValues: {
       name: settings?.name || '',
       supportEmail: settings?.supportEmail || '',
+      rewardAddresses: settings?.rewardAddresses?.join('\n') || '',
       rpcUrl: settings?.rpcUrl || '',
       indexerApiUrl: settings?.indexerApiUrl || '',
       chainId: settings?.chainId || '',
@@ -112,6 +136,7 @@ export default function SettingsForm() {
     values: settings ? {
       name: settings.name || '',
       supportEmail: settings.supportEmail || '',
+      rewardAddresses: settings.rewardAddresses?.join('\n') || '',
       rpcUrl: settings.rpcUrl || '',
       indexerApiUrl: settings.indexerApiUrl || '',
       chainId: settings.chainId || '',
@@ -152,10 +177,11 @@ export default function SettingsForm() {
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     try {
-      const { chainId, ...settings } = values
+      const { chainId, rewardAddresses, ...settings } = values
       await UpsertApplicationSettings({
         ...settings,
         chainId: chainId as ChainId,
+        rewardAddresses: rewardAddresses?.split(/[\n,\s]+/)?.filter(isPoktBech32Address) || [],
       }, true)
       await refetchSettings()
       form.reset(values)
@@ -217,6 +243,36 @@ export default function SettingsForm() {
                           <Input {...field} />
                         </FormControl>
                         <FormMessage/>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="rewardAddresses"
+                    render={({ field, fieldState: { error } }) => (
+                      <FormItem>
+                        <FormLabel>Reward Addresses</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            id="rewardAddresses"
+                            placeholder={`Enter one or more addresses (separated by new lines, commas, or spaces):
+
+pokt1abc123def456ghi789jkl012mno345pqr678stu
+pokt1xyz789abc123def456ghi789jkl012mno345pqr
+pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
+                            {...field}
+                            className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-[color:--divider] bg-[color:--background] placeholder:text-[color:--secondary]"
+                          />
+                        </FormControl>
+                        <FormMessage className={cn(!error?.message ? 'text-xs! text-[color:var(--color-white-3)]' : null)}>
+                          {error?.message ? error.message : (
+                            <>
+                              Used by Delegators to fetch your rewards. These must match the revenue-share address(es) you provided to suppliers to receive rewards in the addresses group.
+                              <br/>
+                              The Delegators are going to validate that the domains staked match the domains you are going to configure. If it does not match, your rewards are not going to be shown to the users that want to stake in the Delegators.
+                            </>
+                          )}
+                        </FormMessage>
                       </FormItem>
                     )}
                   />

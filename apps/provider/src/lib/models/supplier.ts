@@ -1,5 +1,6 @@
 export interface SupplierStakeRequest {
   region?: number;
+  addressGroupId: number;
   ownerAddress: string;
   revSharePercentage: number;
   delegatorAddress: string;

@@ -170,8 +170,16 @@ export const WalletConnectionProvider = ({
       setAllConnectedIdentities(connectedIdentities);
       setIsConnected(connection.isConnected);
       setConnection(connection);
-      setCookie(WALLET_COOKIE_KEY, providerInfo.connection.name)
-      setCookie(PROVIDER_COOKIE_KEY, providerInfo.name)
+
+      const cookieOptions = {
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 100),
+        secure: true,
+        sameSite: 'Lax'
+      } as const;
+
+      setCookie(WALLET_COOKIE_KEY, providerInfo.connection.name, cookieOptions)
+      setCookie(PROVIDER_COOKIE_KEY, providerInfo.name, cookieOptions)
+
       setAccountListener(providerInfo.provider)
 
       if (connectedIdentities.length === 1) {
@@ -181,6 +189,7 @@ export const WalletConnectionProvider = ({
       return connectedIdentities
     } catch (error) {
       console.error(error);
+      throw error;
     }
 
     return []

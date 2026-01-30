@@ -501,6 +501,7 @@ function SignInStep({
           setStatus('auth-error')
         }
       } catch (e) {
+        console.log(e)
         if (e instanceof Error) {
           setStatus(e.message.includes('rejected') ? 'rejected' : 'error')
         } else {

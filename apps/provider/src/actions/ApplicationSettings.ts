@@ -21,6 +21,7 @@ import {
   type ActionResult,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
+import { isPoktBech32Address } from '@/lib/crypto'
 
 const UrlSchema = z.string().url('Please enter a valid URL').min(1, 'URL is required')
 
@@ -33,6 +34,7 @@ const UpdateSettingsSchema = z.object({
   indexerApiUrl: UrlSchema.optional(),
   minimumStake: z.number().optional(),
   updatedAtHeight: z.string().optional(),
+  rewardAddresses: z.array(z.string().refine(isPoktBech32Address, "Invalid pokt address")).optional(),
 })
 
 const CreateSettingsSchema = z.object({
@@ -108,11 +110,16 @@ export async function UpsertApplicationSettings(
   })
 }
 
-export async function completeSetup(): Promise<ActionResult<never>> {
-  return withRequireOwner(async (user) => {
+export async function completeSetup(): Promise<void> {
+  const result = await withRequireOwner(async (user) => {
     await updateApplicationSettings({ isBootstrapped: true, updatedBy: user.identity })
-    redirect('/admin')
   })
+
+  if (!result.success) {
+    throw new Error(result.error.message)
+  }
+
+  redirect('/admin')
 }
 
 export interface BlockchainSettingsResponse {

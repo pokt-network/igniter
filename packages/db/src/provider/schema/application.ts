@@ -24,6 +24,7 @@ import { chainIdEnum } from './enums'
  * - `isBootstrapped`: A boolean value indicating if the application is bootstrapped, required.
  * - `rpcUrl`: The RPC URL for application interaction, required.
  * - `indexerApiUrl`: The API URL for indexing services, optional.
+ * - `rewardAddresses`: Optional array of reward addresses for the application, stored as a string array. Used by Delegators to fetch provider rewards.
  * - `updatedAtHeight`: Optional field that tracks the blockchain height at the last update, stored as a string.
  * - `createdAt`: Timestamp indicating when the setting was created. Automatically set to the current time by default.
  * - `createdBy`: The identity of the user who created the application setting. It is required and references the `identity` field in the `users` table.
@@ -44,6 +45,7 @@ export const applicationSettingsTable = pgTable('application_settings', {
   isBootstrapped: boolean().notNull(),
   rpcUrl: varchar().notNull(),
   indexerApiUrl: varchar(),
+  rewardAddresses: varchar().array(),
   updatedAtHeight: varchar(),
   createdAt: timestamp().defaultNow(),
   createdBy: varchar({ length: 255 }).references(() => usersTable.identity).notNull(),

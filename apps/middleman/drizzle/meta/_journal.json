@@ -29,6 +29,27 @@
       "when": 1766006762249,
       "tag": "0003_sharp_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1769199829869,
+      "tag": "0004_new_master_chief",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1769524079843,
+      "tag": "0005_lying_owl",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1769785593729,
+      "tag": "0006_brown_titania",
+      "breakpoints": true
     }
   ]
 }

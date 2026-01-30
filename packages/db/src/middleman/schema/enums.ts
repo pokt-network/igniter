@@ -42,6 +42,7 @@ export enum ChainId {
   Pocket = 'pocket',
   PocketBeta = 'pocket-beta',
   PocketAlpha = 'pocket-alpha',
+  PocketTestnet = 'pocket-lego-testnet',
 }
 
 /**

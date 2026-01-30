@@ -2,36 +2,39 @@
 
 import type { SupplierStake, TransactionMessage } from '@/lib/models/Transactions'
 import { useQuery } from '@tanstack/react-query'
-import {ActivityHeader} from "@igniter/ui/components/ActivityHeader";
+import { ActivityHeader } from '@igniter/ui/components/ActivityHeader'
 import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { Button } from '@igniter/ui/components/button'
 import { GetSupplierStakingFee, SimulateFee } from '@/actions/Blockchain'
 import { requestSuppliers } from '@/lib/services/provider'
-import {StakeDistributionOffer} from "@/lib/models/StakeDistributionOffer";
+import { StakeDistributionOffer } from '@/lib/models/StakeDistributionOffer'
 import { getShortAddress, toCurrencyFormat } from '@igniter/ui/lib/utils'
-import {QuickInfoPopOverIcon} from "@igniter/ui/components/QuickInfoPopOverIcon";
-import {CaretSmallIcon, CornerIcon} from "@igniter/ui/assets";
-import {useMemo, useState} from "react"
-import {useApplicationSettings} from "@/app/context/ApplicationSettings";
-import {StakingProcess, StakingProcessStatus} from "@/app/app/stake/components/ReviewStep/StakingProcess";
-import {Transaction} from "@igniter/db/middleman/schema";
-import React from "react";
+import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
+import { CaretSmallIcon, CornerIcon } from '@igniter/ui/assets'
+import React, { useMemo, useState } from 'react'
+import { useApplicationSettings } from '@/app/context/ApplicationSettings'
+import { StakingProcess, StakingProcessStatus } from '@/app/app/stake/components/ReviewStep/StakingProcess'
+import { Transaction } from '@igniter/db/middleman/schema'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
+import { calculateShares } from '@/lib/utils/shareCalculations'
+import { PlanDetailsSection } from '@/app/app/stake/components/PlanDetailsSection'
 
 function useSimulateFee(
   selectedOffer: StakeDistributionOffer,
+  selectedAddressGroupId: number,
   ownerAddress: string,
 ) {
     const {getPublicKey} = useWalletConnection()
     const settings = useApplicationSettings();
 
     return useQuery({
-        queryKey: ['simulate-fee', selectedOffer, ownerAddress],
+        queryKey: ['simulate-fee', selectedOffer, selectedAddressGroupId, ownerAddress],
         queryFn: async () => {
             const pubKey = await getPublicKey(ownerAddress)
 
             const suppliers = await requestSuppliers(
+              selectedAddressGroupId,
               selectedOffer,
               settings!,
               ownerAddress,
@@ -94,6 +97,7 @@ function useBalance(ownerAddress: string) {
 
 function useBalanceAndNetworkFee(
   selectedOffer: StakeDistributionOffer,
+  selectedAddressGroupId: number,
   ownerAddress: string,
   amount: number,
 ) {
@@ -102,7 +106,7 @@ function useBalanceAndNetworkFee(
         isLoading: isLoadingSimulateFee,
         isError: errorSimulateFee,
         refetch: refetchSimulateFee,
-    } = useSimulateFee(selectedOffer, ownerAddress)
+    } = useSimulateFee(selectedOffer, selectedAddressGroupId, ownerAddress)
     const {
         data: stakeSupplierFee,
         isLoading: isLoadingStakeSupplierFee,
@@ -148,6 +152,7 @@ function useBalanceAndNetworkFee(
 export interface ReviewStepProps {
     amount: number;
     selectedOffer: StakeDistributionOffer;
+    selectedAddressGroupId: number;
     errorMessage?: string;
     ownerAddress: string;
     onStakeCompleted: (status: StakingProcessStatus, transaction?: Transaction) => void;
@@ -156,7 +161,7 @@ export interface ReviewStepProps {
     onClose: () => void;
 }
 
-export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddress, errorMessage, onSuppliersReceived, onBack, onClose}: Readonly<ReviewStepProps>) {
+export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAddressGroupId, ownerAddress, errorMessage, onSuppliersReceived, onBack, onClose}: Readonly<ReviewStepProps>) {
     const {
         isLoadingFee,
         errorFee,
@@ -169,12 +174,17 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddres
         balanceCoversTotal
     } = useBalanceAndNetworkFee(
       selectedOffer,
+      selectedAddressGroupId,
       ownerAddress,
       amount,
     )
 
     const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState<boolean>(false);
     const applicationSettings = useApplicationSettings();
+
+    const selectedAddressGroup = selectedOffer.addressGroups.find(ag => ag.id === selectedAddressGroupId);
+    const delegatorFee = applicationSettings?.fee ? Number(applicationSettings.fee) : 0;
+    const shares = selectedAddressGroup ? calculateShares(selectedAddressGroup, delegatorFee) : null;
 
     const prospectTransactions = useMemo(() => {
         return selectedOffer.stakeDistribution.reduce<number[]>((txs, stakeDistribution) => {
@@ -191,7 +201,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddres
 
     return (
         <div
-            className="flex flex-col w-[480px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 onBack={onBack}
                 onClose={onClose}
@@ -376,21 +386,6 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddres
                     </span>
                 </div>
                 <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
-                        <span>
-                            Provider Fee
-                        </span>
-                        <QuickInfoPopOverIcon
-                            title="Provider Fee"
-                            description="The % of the rewards that the node operator retain for providing the service."
-                            url={''}
-                        />
-                    </span>
-                    <span className="text-[14px] text-[var(--color-white-1)]">
-                        {selectedOffer.fee}%
-                    </span>
-                </span>
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
                     <span className="text-[14px] text-[var(--color-white-3)]">
                         Provider
                     </span>
@@ -398,6 +393,24 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddres
                         {selectedOffer.name}
                     </span>
                 </span>
+                {selectedAddressGroup && shares && (
+                    <>
+                        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+                            <span className="text-[14px] text-[var(--color-white-3)]">
+                                Plan
+                            </span>
+                            <span className="text-[14px] text-[var(--color-white-1)]">
+                                {selectedAddressGroup.name}
+                            </span>
+                        </span>
+                        <PlanDetailsSection
+                            addressGroupName={selectedAddressGroup.name}
+                            services={selectedAddressGroup.addressGroupServices}
+                            shares={shares}
+                            delegatorFee={delegatorFee}
+                        />
+                    </>
+                )}
                 {/*TODO: Only show this when there are more than one connected identity? or when the owner address is different than the connected identity signed in?*/}
                 <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
                     <span className="text-[14px] text-[var(--color-white-3)]">
@@ -464,6 +477,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, ownerAddres
               offer={selectedOffer}
               onStakeCompleted={onStakeCompleted}
               onSuppliersReceived={onSuppliersReceived}
+              selectedAddressGroupId={selectedAddressGroupId}
             />
         </div>
     );

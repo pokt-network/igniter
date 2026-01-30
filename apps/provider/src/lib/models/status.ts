@@ -1,4 +1,5 @@
-import type { ProviderFee } from '@igniter/db/provider/schema';
+import { ProviderFee } from '@igniter/db/provider/enums'
+import { AddressGroupWithDetails } from '@igniter/db/provider/schema';
 
 export interface StatusRequest {}
 
@@ -12,4 +13,6 @@ export interface StatusResponse {
   domains: string[];
   regions: string[];
   healthy: boolean;
+  addressGroups: Array<AddressGroupWithDetails>
+  rewardAddresses: Array<string> | null
 }

@@ -51,7 +51,7 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
 
     return (
         <div
-            className="flex flex-col w-[480px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 title="Stake"
                 subtitle={`Use the slider below to pick an amount to stake. The minimum stake is ${toCurrencyFormat(minimumStake)} $POKT.`}

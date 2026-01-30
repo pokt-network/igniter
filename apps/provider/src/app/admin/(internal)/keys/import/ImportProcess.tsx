@@ -126,7 +126,12 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
 
   const importKeys = async () => {
     try {
-      await ImportKeys(keys, parseInt(addressGroupId))
+      const result = await ImportKeys(keys, parseInt(addressGroupId))
+
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+
       setImportStatus({
         validateFile: 'success',
         importKeys: 'success',

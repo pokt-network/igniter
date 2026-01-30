@@ -53,8 +53,13 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
 
     setIsLoadingKeyCount(true);
     try {
-      const count = await CountKeysByAddressGroupAndState(Number(groupId), keyState);
-      setTotalKeysCount(count);
+      const result = await CountKeysByAddressGroupAndState(Number(groupId), keyState);
+
+      if (!result || !result.success) {
+        throw new Error('Failed to fetch keys count');
+      }
+
+      setTotalKeysCount(result.data);
     } catch (error) {
       console.error("Failed to fetch keys count:", error);
       setTotalKeysCount(null);
@@ -68,7 +73,13 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
 
     setStatus('loading')
     try {
-      const privateKeys = await GetKeysByAddressGroupAndState(Number(addressGroup), keyState);
+      const result = await GetKeysByAddressGroupAndState(Number(addressGroup), keyState);
+
+      if (!result || !result.success) {
+        throw new Error('Failed to fetch keys');
+      }
+
+      const privateKeys = result.data;
 
       const filename = `${addressesGroup.find((a) => a.id === parseInt(addressGroup))?.name}-keys-at-${new Date().toISOString().replace(/[:.]/g, '_')}.json`;
 

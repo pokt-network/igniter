@@ -35,6 +35,7 @@ export interface StakingProcessProps {
   onStakeCompleted: (result: StakingProcessStatus, transaction?: DbTransaction) => void;
   onSuppliersReceived: (suppliers: SupplierStake[]) => void;
   disabled?: boolean
+  selectedAddressGroupId: number
 }
 
 enum StakingProcessStep {
@@ -44,7 +45,7 @@ enum StakingProcessStep {
   Completed
 }
 
-export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, onSuppliersReceived, disabled}: Readonly<StakingProcessProps>) {
+export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, onSuppliersReceived, disabled, selectedAddressGroupId}: Readonly<StakingProcessProps>) {
   const [open, setOpen] = useState(false);
   const [isCancellable, setIsCancellable] = useState<boolean>(true);
   const [stakingStatus, setStakingStatus] = useState<StakingProcessStatus>({
@@ -66,7 +67,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
         return;
       }
       try {
-        const suppliers = await requestSuppliers(offer, settings!, ownerAddress, region);
+        const suppliers = await requestSuppliers(selectedAddressGroupId, offer, settings!, ownerAddress, region);
 
         const stakeTransactions: TransactionMessage[] = suppliers.map((supplier) => {
           return {

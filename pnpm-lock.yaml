@@ -71,7 +71,7 @@ importers:
         version: link:../../packages/ui
       '@poktscan/vault-siwp':
         specifier: github:trustsoothe/vault-siwp#shannon-adr36
-        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/b08c22fd085a2f9f2f57e028208d9233f3a71e93
+        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/ae28086ebbf05441e7bd684431f7c71c193b554c
       '@radix-ui/react-slot':
         specifier: 1.1.1
         version: 1.1.1(@types/react@19.0.8)(react@19.0.1)
@@ -313,7 +313,7 @@ importers:
         version: link:../../packages/ui
       '@poktscan/vault-siwp':
         specifier: github:trustsoothe/vault-siwp#shannon
-        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/6abbf451fd4a0b71dce77e09c05f5892fdad2f4b
+        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/4d1d22e0add91604257424240fce681641c1df14
       '@stepperize/react':
         specifier: 5.0.1
         version: 5.0.1(react@19.0.1)
@@ -768,7 +768,7 @@ importers:
         version: 5.17.1(@emotion/react@11.14.0(@types/react@19.0.8)(react@19.0.1))(@emotion/styled@11.14.0(@emotion/react@11.14.0(@types/react@19.0.8)(react@19.0.1))(@types/react@19.0.8)(react@19.0.1))(@types/react@19.0.8)(react@19.0.1)
       '@poktscan/vault-siwp':
         specifier: github:trustsoothe/vault-siwp#shannon-adr36
-        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/b08c22fd085a2f9f2f57e028208d9233f3a71e93
+        version: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/ae28086ebbf05441e7bd684431f7c71c193b554c
       '@radix-ui/react-avatar':
         specifier: 1.1.3
         version: 1.1.3(@types/react-dom@19.0.3(@types/react@19.0.8))(@types/react@19.0.8)(react-dom@19.0.1(react@19.0.1))(react@19.0.1)
@@ -3299,12 +3299,12 @@ packages:
     resolution: {integrity: sha512-fw/a/4RldtN11PaF2lcatFB7PrZd2MeYlPh/sCs97JaMkvhv56R79rei/UVgTiwWoPWKIWwdbAhLwhUKqGkeVg==}
     engines: {node: '>=10'}
 
-  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/6abbf451fd4a0b71dce77e09c05f5892fdad2f4b':
-    resolution: {tarball: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/6abbf451fd4a0b71dce77e09c05f5892fdad2f4b}
+  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/4d1d22e0add91604257424240fce681641c1df14':
+    resolution: {tarball: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/4d1d22e0add91604257424240fce681641c1df14}
     version: 0.0.1
 
-  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/b08c22fd085a2f9f2f57e028208d9233f3a71e93':
-    resolution: {tarball: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/b08c22fd085a2f9f2f57e028208d9233f3a71e93}
+  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/ae28086ebbf05441e7bd684431f7c71c193b554c':
+    resolution: {tarball: https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/ae28086ebbf05441e7bd684431f7c71c193b554c}
     version: 0.0.1
 
   '@protobufjs/aspromise@1.1.2':
@@ -13803,7 +13803,7 @@ snapshots:
       '@tendermint/belt': 0.2.1
       '@tendermint/types': 0.1.1
 
-  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/6abbf451fd4a0b71dce77e09c05f5892fdad2f4b':
+  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/4d1d22e0add91604257424240fce681641c1df14':
     dependencies:
       '@cosmjs/encoding': 0.33.1
       '@noble/curves': 1.8.1
@@ -13812,7 +13812,7 @@ snapshots:
       hex-lite: 1.5.0
       valid-url: 1.0.9
 
-  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/b08c22fd085a2f9f2f57e028208d9233f3a71e93':
+  '@poktscan/vault-siwp@https://codeload.github.com/trustsoothe/vault-siwp/tar.gz/ae28086ebbf05441e7bd684431f7c71c193b554c':
     dependencies:
       '@cosmjs/amino': 0.33.1
       '@cosmjs/encoding': 0.33.1

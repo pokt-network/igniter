@@ -15,89 +15,34 @@ import {getDb} from "@/db";
 import {BuildSupplierServiceConfigHandler} from "@igniter/domain/provider/operations";
 import {InsertKey, Key} from "@igniter/db/provider/schema";
 
-type KeyDistributionItem = { numberOfKeys: number[] };
-
-/**
- * Distributes a specified number of new items across groups with existing workloads.
- * Each new item is assigned to the group with the lowest current total workload.
- *
- * @param newItems A list of stake amounts, its length represents the total number of new keys to be created
- * @param groups Array of groups, each with an existing workload count
- * @returns Array of new item counts per group after distribution
- */
-function calculateDistribution(
-  newItems: number[],
-  groups: { keysCount: number }[]
-): KeyDistributionItem[] {
-  const totalNewItems = newItems.length;
-  const groupCount = groups.length;
-  const newItemsPerGroup: KeyDistributionItem[] = Array.from(
-    {length: groupCount},
-    () => ({numberOfKeys: []})
-  );
-
-
-  if (groupCount === 0) {
-    return newItemsPerGroup;
-  }
-
-  if (groupCount === 1) {
-    newItemsPerGroup[0] = {numberOfKeys: newItems};
-    return newItemsPerGroup;
-  }
-
-  if (!groups[0]) {
-    return newItemsPerGroup;
-  }
-
-  for (let itemIndex = 0; itemIndex < totalNewItems; itemIndex++) {
-    let lowestLoadGroupIndex = 0;
-    let lowestTotalLoad = groups[0].keysCount + (newItemsPerGroup[0]?.numberOfKeys.length || 0);
-
-    for (let groupIndex = 1; groupIndex < groupCount; groupIndex++) {
-      const currentGroup = groups[groupIndex];
-      if (!currentGroup) continue;
-
-      const currentTotalLoad = currentGroup.keysCount + (newItemsPerGroup[groupIndex]?.numberOfKeys.length || 0);
-
-      if (currentTotalLoad < lowestTotalLoad) {
-        lowestTotalLoad = currentTotalLoad;
-        lowestLoadGroupIndex = groupIndex;
-      }
-    }
-
-    newItemsPerGroup[lowestLoadGroupIndex]?.numberOfKeys.push(newItems[itemIndex]!);
-  }
-
-  return newItemsPerGroup;
-}
-
 export async function getSupplierStakeConfigurations(
     stakeDistribution: SupplierStakeRequest,
     requestingDelegator: string,
     simulate: boolean = false,
 ): Promise<Supplier[]> {
     const allGroups = await list(undefined, stakeDistribution.region);
-    const linked = allGroups.filter(g =>
-        g.linkedAddresses?.includes(stakeDistribution.ownerAddress)
-    );
-    const addressGroups = linked.length
-        ? linked
-        : allGroups.filter(g => !g.private);
+
+    // Find the specific address group by ID
+    const selectedAddressGroup = allGroups.find(g => g.id === stakeDistribution.addressGroupId);
+
+    if (!selectedAddressGroup) {
+        throw new Error(`Address group with ID ${stakeDistribution.addressGroupId} not found`);
+    }
 
     const services = await listServices();
 
     const totalAmounts = stakeDistribution.items.flatMap(i =>
         Array(i.qty).fill(i.amount)
     );
-    const perGroup = calculateDistribution(totalAmounts, addressGroups);
-    const slotsByGroup = addressGroups.map((grp, i) => ({
-        addressGroup: grp,
-        slots: perGroup[i]!.numberOfKeys,
-    }));
+
+    // Assign all keys to the selected address group
+    const slotsByGroup = [{
+        addressGroup: selectedAddressGroup,
+        slots: totalAmounts,
+    }];
 
     let allocation: {
-        addressGroup: typeof addressGroups[0];
+        addressGroup: typeof selectedAddressGroup;
         slots: number[];
         keys: { address: string }[];
     }[];

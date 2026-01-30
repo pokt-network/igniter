@@ -8,7 +8,7 @@ data:
   APP_URL: "http://localhost:3001"
   AUTH_URL: "http://localhost:3001"
   OWNER_IDENTITY: "CHANGE_THIS"
-  CHAIN_ID: "pocket-beta"
+  CHAIN_ID: "pocket-lego-testnet"
   BLOCKCHAIN_PROTOCOL: "morse"
   OWNER_EMAIL: "CHANGE_THIS"
   TEMPORAL_URL: "temporal-frontend.default.svc.cluster.local:7233"

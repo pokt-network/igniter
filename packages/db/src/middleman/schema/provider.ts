@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -16,6 +17,39 @@ import { usersTable } from './users'
 import { nodesTable } from './node'
 import { transactionsTable } from './transaction'
 
+type AddressGroupsJson = Array<{
+  id: number;
+  name: string;
+  linkedAddresses: string[];
+  private: boolean;
+  relayMinerId: number;
+  keysCount: number;
+  relayMiner: {
+    id: number;
+    name: string;
+    identity: string;
+    regionId: number;
+    domain: string;
+    region: {
+      id: number;
+      displayName: string;
+      urlValue: string;
+    };
+  };
+  addressGroupServices: Array<{
+    addressGroupId: number;
+    serviceId: string;
+    addSupplierShare: boolean;
+    supplierShare: number;
+    revShare: Array<{
+      address: string;
+      share: number;
+    }>;
+    service: {
+      name: string;
+    };
+  }>;
+}>;
 
 export const providersTable = pgTable('providers', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -33,6 +67,8 @@ export const providersTable = pgTable('providers', {
   status: providerStatusEnum().notNull().default(ProviderStatus.Unknown),
   minimumStake: integer().notNull().default(0),
   operationalFunds: integer().notNull().default(5),
+  addressGroups: jsonb('address_groups').$type<AddressGroupsJson>().default([]),
+  rewardAddresses: varchar().array(),
   createdAt: timestamp().defaultNow(),
   updatedAt: timestamp().defaultNow().$onUpdateFn(() => new Date()),
   createdBy: varchar().references(() => usersTable.identity).notNull(),

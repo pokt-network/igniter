@@ -6,6 +6,7 @@ import { z } from "zod";
 import {getCurrentUserIdentity} from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/actions/ApplicationSettings'
 import {providersTable} from "@igniter/db/middleman/schema";
+import {ProviderStatus} from "@igniter/db/middleman/enums";
 import { getDb} from "@/db";
 import {eq} from "drizzle-orm";
 
@@ -30,7 +31,8 @@ export async function UpdateProvidersFromSource(): Promise<{ success: boolean, e
 
   const providersCdnUrl = process.env.PROVIDERS_CDN_URL!.replace(
     "{chainId}",
-    appSettings.chainId,
+    // workaround until the repo has the file for this chain id
+    appSettings.chainId.replace('lego-testnet', 'beta'),
   );
 
   if (!providersCdnUrl) {
@@ -214,4 +216,93 @@ export async function UpdateEnabled(identity: string, enabled: boolean) {
     console.log('UpdateEnabled: An error occurred while performing the update operation');
     console.error(error);
   }
+}
+
+type AddressGroup = {
+  id: number;
+  name: string;
+  linkedAddresses: string[];
+  private: boolean;
+  relayMinerId: number;
+  keysCount: number;
+  relayMiner: {
+    id: number;
+    name: string;
+    identity: string;
+    regionId: number;
+    domain: string;
+    region: {
+      id: number;
+      displayName: string;
+      urlValue: string;
+    };
+  };
+  addressGroupServices: Array<{
+    addressGroupId: number;
+    serviceId: string;
+    addSupplierShare: boolean;
+    supplierShare: number;
+    revShare: Array<{
+      address: string;
+      share: number;
+    }>;
+    service: {
+      name: string;
+    };
+  }>;
+};
+
+export interface ProviderWithPublicPlans {
+  id: number;
+  name: string;
+  identity: string;
+  status: ProviderStatus;
+  addressGroups: AddressGroup[];
+}
+
+export async function ListProvidersWithPublicPlans(connectedAccounts: string[] = []): Promise<ProviderWithPublicPlans[]> {
+  const providers = await list();
+  const normalizedConnectedAccounts = connectedAccounts.map(addr => addr.toLowerCase());
+
+  return providers
+    .filter(provider => provider.enabled)
+    .map(provider => {
+      // Filter address groups to only include:
+      // 1. Public ones (not private)
+      // 2. If they have linked addresses, at least one must be in connected accounts
+      const publicAddressGroups = (provider.addressGroups || []).filter(
+        (group: AddressGroup) => {
+          // Must not be private
+          if (group.private !== false) {
+            return false;
+          }
+
+          // If the group has linked addresses, check if any are connected
+          if (group.linkedAddresses && group.linkedAddresses.length > 0) {
+            const hasConnectedLinkedAddress = group.linkedAddresses.some(
+              (addr: string) => normalizedConnectedAccounts.includes(addr.toLowerCase())
+            );
+            // Only include if a connected account is linked
+            return hasConnectedLinkedAddress;
+          }
+
+          // No linked addresses means it's fully public
+          return true;
+        }
+      );
+
+      // Skip providers that don't have any public address groups
+      if (publicAddressGroups.length === 0) {
+        return null;
+      }
+
+      return {
+        id: provider.id,
+        name: provider.name,
+        identity: provider.identity,
+        status: provider.status,
+        addressGroups: publicAddressGroups,
+      };
+    })
+    .filter((provider): provider is ProviderWithPublicPlans => provider !== null);
 }
