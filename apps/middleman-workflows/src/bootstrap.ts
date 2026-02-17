@@ -12,6 +12,7 @@ enum ScheduledWorkflowType {
   ProviderStatus = "ProviderStatus",
   ExecutePendingTransaction = "ExecutePendingTransactions",
   SupplierStatus = 'SupplierStatus',
+  ImportSupplierRecovery = 'ImportSupplierRecovery',
 }
 
 const ScheduledWorkflowConfig: Record<
@@ -21,6 +22,7 @@ const ScheduledWorkflowConfig: Record<
   [ScheduledWorkflowType.ProviderStatus]: { interval: "1m" },
   [ScheduledWorkflowType.ExecutePendingTransaction]: { interval: "10s" },
   [ScheduledWorkflowType.SupplierStatus]: { interval: '2m' },
+  [ScheduledWorkflowType.ImportSupplierRecovery]: { interval: '10m' },
 };
 
 async function bootstrapNamespace(client: Client, config: TemporalConfig, logger: Logger) {

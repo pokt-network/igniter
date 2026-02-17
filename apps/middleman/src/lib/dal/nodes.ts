@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/db";
-import {desc, eq, sql} from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   nodesTable,
   NodeWithDetails,
@@ -58,5 +58,34 @@ export async function getStakedNodesAddress() {
     columns: {
       address: true,
     }
+  }).then((nodes) => nodes.map((node) => node.address));
+}
+
+export async function getNodeAddressesByOwnerAndProvider(
+  ownerAddress: string,
+  providerIdentity: string,
+  userIdentity: string,
+): Promise<string[]> {
+  return getDb()
+    .query.nodesTable.findMany({
+      columns: { address: true },
+      where: and(
+        eq(nodesTable.ownerAddress, ownerAddress),
+        eq(nodesTable.providerId, providerIdentity),
+        eq(nodesTable.createdBy, userIdentity),
+      ),
+    })
+    .then((nodes) => nodes.map((n) => n.address))
+}
+
+export async function getExistingNodes(addresses: Array<string>, userIdentity: string) {
+  return await getDb().query.nodesTable.findMany({
+    columns: {
+      address: true,
+    },
+    where: and(
+      eq(nodesTable.createdBy, userIdentity),
+      inArray(nodesTable.address, addresses)
+    )
   }).then((nodes) => nodes.map((node) => node.address));
 }

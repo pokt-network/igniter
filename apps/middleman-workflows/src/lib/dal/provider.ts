@@ -56,4 +56,16 @@ export default class Provider {
       where: eq(providersTable.identity, providerId),
     });
   }
+
+  /**
+   * Gets a provider by its identity.
+   *
+   * @param identity - The provider's identity
+   * @returns The provider or undefined
+   */
+  async getProviderByIdentity(identity: string) {
+    return this.dbClient.db.query.providersTable.findFirst({
+      where: eq(providersTable.identity, identity),
+    });
+  }
 }

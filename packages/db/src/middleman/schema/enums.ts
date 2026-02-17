@@ -217,6 +217,36 @@ export const providerFeeEnum = pgEnum(
   enumToPgEnum(ProviderFee),
 )
 
+/**
+ * Enum representing the status of an import supplier attempt.
+ *
+ * This enumeration is used to track the lifecycle of a supplier import attempt
+ * from the middleman's perspective for audit and recovery purposes.
+ *
+ * - Initiated: Request sent to provider, nonce received.
+ * - Signed: User signed the nonce with their wallet.
+ * - Submitted: Submit request sent to provider.
+ * - Completed: Suppliers have been saved to middleman DB.
+ * - Failed: The attempt failed at some stage.
+ * - Cancelled: User aborted the import process.
+ */
+export enum ImportAttemptStatus {
+  Initiated = 'initiated',
+  Signed = 'signed',
+  Submitted = 'submitted',
+  Completed = 'completed',
+  Failed = 'failed',
+  Cancelled = 'cancelled',
+}
+
+/**
+ * PostgreSQL enum for import attempt status.
+ */
+export const importAttemptStatusEnum = pgEnum(
+  'import_attempt_status',
+  enumToPgEnum(ImportAttemptStatus),
+)
+
 
 
 
