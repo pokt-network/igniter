@@ -94,7 +94,7 @@ Key variables:
   docker compose up -d
   ```
 - If running only one of them, **dependencies** is still required.
-- Check available docker images here: [stake-igniter/packages](https://github.com/orgs/stake-igniter/packages) 
+- Check available docker images here: [pokt-network/packages](https://github.com/pokt-network/igniter/packages) 
 
 ---
 
@@ -136,7 +136,7 @@ To participate in the network, you must submit a Pull Request adding yourself un
 ```
 
 #### Steps:
-1. Fork [stake-igniter/governace](https://github.com/stake-igniter/governace).  
+1. Fork [pokt-network/governace](https://github.com/pokt-network/igniter-governance).  
 2. In the appropriate network folder (e.g. `pocket-beta/`), add your JSON file:
    - Copy one of the above examples and replace the placeholder values with your data.  
 3. Submit a PR.  
