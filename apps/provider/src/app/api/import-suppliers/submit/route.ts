@@ -111,7 +111,7 @@ export async function POST(
     )
 
     if (!pendingRequest) {
-      console.log('No pending import request found.')
+      console.log(`No pending import request found for ${data.ownerAddress} and ${delegatorIdentity}.`)
       return NextResponse.json(
         { error: 'No pending import request found. Please initiate a new request.' },
         { status: 404 },
@@ -120,7 +120,7 @@ export async function POST(
 
     // Check if request has expired
     if (isRequestExpired(pendingRequest)) {
-      console.log('Import request has expired.')
+      console.log(`Import request for ${data.ownerAddress} and ${delegatorIdentity} has expired.`)
       await markRequestExpired(pendingRequest.id)
       return NextResponse.json(
         { error: 'Import request has expired. Please initiate a new request.' },
@@ -134,7 +134,7 @@ export async function POST(
       // Public key is already in hex format (66 chars = 33 bytes compressed)
       derivedAddress = pubkeyToAddress(data.ownerPublicKey)
     } catch (e) {
-      console.error('Failed to derive address from public key:', e)
+      console.error(`Failed to derive address from public key ${data.ownerPublicKey}:`, e)
       await markRequestFailed(pendingRequest.id, 'Invalid public key format')
       return NextResponse.json(
         { error: 'Invalid public key format.' },
@@ -165,7 +165,7 @@ export async function POST(
     )
 
     if (!isValidSignature) {
-      console.log('Invalid nonce signature.')
+      console.log(`Invalid nonce signature for ${data.ownerAddress} and ${delegatorIdentity}.`)
       await markRequestFailed(pendingRequest.id, 'Invalid nonce signature')
       return NextResponse.json(
         { error: 'Invalid signature. Nonce signature verification failed.' },
@@ -173,13 +173,13 @@ export async function POST(
       )
     }
 
-    console.log('Nonce signature verified successfully.')
+    console.log(`Nonce signature verified successfully for ${data.ownerAddress} and ${delegatorIdentity}.`)
 
     // Get the matching suppliers again to ensure they're still unassigned
     const matchingSuppliers = await findSuppliersByOwner(data.ownerAddress)
 
     if (matchingSuppliers.length === 0) {
-      console.log('No unassigned suppliers found (may have been claimed already).')
+      console.log(`No unassigned suppliers found for ${data.ownerAddress} and ${delegatorIdentity}.`)
       await markRequestFailed(pendingRequest.id, 'No suppliers available to import')
       return NextResponse.json(
         { error: 'No unassigned suppliers available for import.' },
@@ -196,7 +196,7 @@ export async function POST(
       data.delegatorAddress,
     )
 
-    console.log(`Assigned ${assignedSuppliers.length} suppliers to delegator`)
+    console.log(`Assigned ${assignedSuppliers.length} suppliers for ${data.ownerAddress} and ${delegatorIdentity}.`)
 
     // Mark request as completed
     await markRequestCompleted(pendingRequest.id)

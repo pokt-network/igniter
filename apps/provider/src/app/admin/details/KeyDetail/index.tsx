@@ -4,15 +4,12 @@ import Amount from '@igniter/ui/components/Amount'
 import React from 'react'
 import { clsx } from 'clsx'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@igniter/ui/components/drawer'
-import { Button } from '@igniter/ui/components/button'
 import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
 import {KeyWithRelations} from "@igniter/db/provider/schema"
 import {KeyState, KeyStateNameMap} from "@igniter/db/provider/enums"
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
-import { useRouter } from 'next/navigation'
-import UpdateKeyRewardsSettings from '@/components/UpdateKeyRewardsSettings'
 import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationHistoryList";
 
 export interface KeyDetail {
@@ -36,9 +33,6 @@ export default function KeyDetail(key: KeyWithRelations) {
     delegatorRewardsAddress,
     remediationHistory,
   } = key;
-
-  const router = useRouter()
-  const [showUpdateRewards, setShowUpdateRewards] = React.useState(false)
 
   const isStakedKey = [KeyState.Staked, KeyState.RemediationFailed, KeyState.AttentionNeeded, KeyState.Unstaked].includes(state);
 
@@ -98,14 +92,6 @@ export default function KeyDetail(key: KeyWithRelations) {
         </div>
       ),
     },
-    {
-      label: '',
-      value: (
-        <Button onClick={() => setShowUpdateRewards(true)}>
-          Update
-        </Button>
-      )
-    }
   ];
 
   return (
@@ -203,20 +189,6 @@ export default function KeyDetail(key: KeyWithRelations) {
           entries={remediationHistory ?? []}
           keyState={state}
           keyId={id}
-        />
-      )}
-
-      {showUpdateRewards && (
-        <UpdateKeyRewardsSettings
-          keyId={id}
-          defaults={{
-            delegatorRewardsAddress,
-            delegatorRevSharePercentage,
-          }}
-          onClose={(updated) => {
-            setShowUpdateRewards(false)
-            if (updated) router.refresh()
-          }}
         />
       )}
     </div>

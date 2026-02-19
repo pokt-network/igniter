@@ -90,7 +90,7 @@ export async function POST(
       delegatorIdentity,
     )
     if (cancelledCount > 0) {
-      console.log(`Cancelled ${cancelledCount} existing pending request(s)`)
+      console.log(`Cancelled ${cancelledCount} existing pending request(s) for ${data.ownerAddress} and ${delegatorIdentity}.`)
     }
 
     // Find unassigned staked suppliers for this owner, excluding already-imported addresses
@@ -110,7 +110,7 @@ export async function POST(
       )
     }
 
-    console.log(`Found ${matchingSuppliers.length} matching suppliers`)
+    console.log(`Found ${matchingSuppliers.length} matching suppliers for ${data.ownerAddress}`)
 
     // Create new import request
     const matchingAddresses = matchingSuppliers.map((s) => s.address)
@@ -121,7 +121,7 @@ export async function POST(
     )
 
     console.log(
-      `Created import request with nonce: ${importRequest.nonce.substring(0, 8)}...`,
+      `Created import request for ${data.ownerAddress} and ${delegatorIdentity} with nonce: ${importRequest.nonce.substring(0, 8)}...`,
     )
 
     return NextResponse.json(
