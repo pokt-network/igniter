@@ -259,3 +259,31 @@ export enum TransactionResult {
   InvalidGasLimit = 41,
   TxTimeout = 42,
 }
+
+/**
+ * Enum representing the status of an import supplier request.
+ *
+ * This enumeration is used to track the lifecycle of a supplier import request
+ * from a delegator to a provider.
+ *
+ * - Pending: Request has been created and is awaiting signature verification.
+ * - Completed: Import was successful and suppliers have been assigned.
+ * - Expired: The request expired before completion (15 minute timeout).
+ * - Cancelled: The request was cancelled by the user (e.g., abort and retry).
+ * - Failed: The request failed due to invalid signature or other error.
+ */
+export enum ImportRequestStatus {
+  Pending = 'pending',
+  Completed = 'completed',
+  Expired = 'expired',
+  Cancelled = 'cancelled',
+  Failed = 'failed',
+}
+
+/**
+ * PostgreSQL enum for import request status.
+ */
+export const importRequestStatusEnum = pgEnum(
+  'import_request_status',
+  enumToPgEnum(ImportRequestStatus),
+)

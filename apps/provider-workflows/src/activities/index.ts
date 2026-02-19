@@ -221,22 +221,6 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         }
       }
 
-      log.debug('upsertSupplierStatus: Checking if the key has the delegatorRewardAddress configured', {
-        ...loggerContext,
-        delegatorRewardAddress: key.delegatorRewardsAddress,
-      })
-
-      if (update.state === KeyState.Staked && !key.delegatorRewardsAddress) {
-        update.remediationHistory = addOrUpdateRemediationHistory(
-          {
-            message: 'The key does not have a delegator address configured, this will prevent any automatic remediation from happening.',
-            reason: RemediationHistoryEntryReason.DelegatorAddressMissing,
-            timestamp: Date.now(),
-          },
-          key.remediationHistory ?? []
-        )
-      }
-
       if (!isOwnerInitialStakeRemediationNeeded && update.state === KeyState.Staked) {
         const expectedServices = getExpectedServicesFromKey(key)
 
@@ -276,7 +260,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       })
 
       // Only set the state to attention needed if the key is staked and the initial owner stake has been remediated. Otherwise, it will remain staked.
-      if (remediationReasons?.length && !remediationReasons.includes(RemediationHistoryEntryReason.OwnerInitialStake) && !remediationReasons.includes(RemediationHistoryEntryReason.ServiceMismatch)) {
+      if (
+        remediationReasons?.length &&
+        !remediationReasons.includes(RemediationHistoryEntryReason.OwnerInitialStake) &&
+        !remediationReasons.includes(RemediationHistoryEntryReason.ServiceMismatch) &&
+        !remediationReasons.includes(RemediationHistoryEntryReason.DelegatorAddressMissing)
+      ) {
         update.state = KeyState.AttentionNeeded
       }
     }

@@ -71,6 +71,7 @@ export async function UpdateKeyRewardsSettings(
   id: number,
   values: { delegatorRewardsAddress: string; delegatorRevSharePercentage: number },
 ): Promise<ActionResult<void>> {
+  throw new Error('Deprecated at v0.4.4')
   return withRequireOwner(async () => {
     const schema = z.object({
       delegatorRewardsAddress: z.string().min(1).regex(poktAddressRegex, "Must be a valid POKT bech32 address"),

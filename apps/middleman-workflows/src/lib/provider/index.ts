@@ -147,6 +147,49 @@ export class ProviderService {
   }
 
   /**
+   * Checks the status of an import supplier request with a provider.
+   *
+   * @param provider - The provider to check with
+   * @param payload - The request payload containing ownerAddress and optional nonce
+   * @param signature - The request signature
+   * @param identity - The app identity
+   * @returns The import status response
+   */
+  async checkImportStatus(
+    provider: Provider,
+    payload: { ownerAddress: string; nonce?: string },
+    signature: string,
+    identity: string,
+  ): Promise<{ status: string; importedSupplierAddresses?: string[]; errorMessage?: string }> {
+    try {
+      const STATUS_URL = urlJoin(provider.url, '/api/import-suppliers/status')
+      const response = await fetch(STATUS_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          [REQUEST_IDENTITY_HEADER]: identity,
+          [REQUEST_SIGNATURE_HEADER]: signature,
+        },
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const { data } = await response.json()
+      return data
+    } catch (error) {
+      this.logger.error('Error checking import status with provider', {
+        provider: provider.name,
+        error,
+      })
+      throw error
+    }
+  }
+
+  /**
    * Signs a given payload and returns an object containing the app's identity and the payload signature.
    *
    * @param {string} payload - The payload to be signed.

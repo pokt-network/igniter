@@ -26,6 +26,9 @@ export default async function Page() {
             </div>
             <div className="flex flex-col">
               <div className="flex flex-row gap-3">
+                <Link href="/app/import-suppliers">
+                  <Button variant="outline">Import Suppliers</Button>
+                </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>
                 </Link>
