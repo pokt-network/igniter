@@ -79,7 +79,7 @@ export default function OwnerAddressStep({title = 'Stake', onClose, onOwnerAddre
       className="flex relative flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title={title}
-        subtitle="Select the owner address of your nodes."
+        subtitle="Select the owner address of your suppliers."
         onClose={onClose}
       />
 

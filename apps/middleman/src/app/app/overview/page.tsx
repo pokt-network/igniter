@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react';
+import React, { Suspense } from 'react';
 import { GetOwnerAddresses, GetUserNodes } from '@/actions/Nodes'
 import ApolloWrapper from '@igniter/ui/graphql/client'
 import SummaryLoader from '@igniter/ui/components/RewardsSummary/Loader';
@@ -35,6 +35,9 @@ export default async function Page() {
             </div>
             <div className="flex flex-col">
               <div className="flex flex-row gap-3">
+                <Link href="/app/import-suppliers">
+                  <Button variant="outline">Import Suppliers</Button>
+                </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>
                 </Link>
