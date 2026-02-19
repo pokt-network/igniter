@@ -22,7 +22,7 @@ const ScheduledWorkflowConfig: Record<
   [ScheduledWorkflowType.ProviderStatus]: { interval: "1m" },
   [ScheduledWorkflowType.ExecutePendingTransaction]: { interval: "10s" },
   [ScheduledWorkflowType.SupplierStatus]: { interval: '2m' },
-  [ScheduledWorkflowType.ImportSupplierRecovery]: { interval: '10m' },
+  [ScheduledWorkflowType.ImportSupplierRecovery]: { interval: '1m' },
 };
 
 async function bootstrapNamespace(client: Client, config: TemporalConfig, logger: Logger) {

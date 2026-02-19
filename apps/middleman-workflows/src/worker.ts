@@ -1,4 +1,5 @@
 import { delegatorActivities } from './activities'
+import { importSupplierRecoveryActivities } from './activities/importSupplierRecovery'
 import bootstrap from './bootstrap'
 import {
   getLogger,
@@ -72,7 +73,10 @@ export async function setupTemporalWorker() {
 
   const { worker, disconnect } = await getWorker(logger, {
     workflowsPath: require.resolve('./workflows'),
-    activities: delegatorActivities(dal, blockchainProvider, providerService),
+    activities: {
+      ...delegatorActivities(dal, blockchainProvider, providerService),
+      ...importSupplierRecoveryActivities(dal, providerService),
+    },
     shutdownGraceTime,
   })
 
