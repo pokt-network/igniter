@@ -34,6 +34,7 @@ objects = decode_yaml_stream(kustomize("./dev"))
 for o in objects:
   if o['metadata']['name'] == 'provider-config':
     o['data']['OWNER_IDENTITY'] = OWNER_IDENTITY
+    o['data']['DELEGATORS_CDN_URL'] = 'http://governance-nginx.default.svc.cluster.local/delegators.json'
     break
 
 for o in objects:
@@ -54,5 +55,5 @@ k8s_resource(
     ],
     extra_pod_selectors=[{"app": "provider", "component": "web"}],
     labels=['apps'],
-    resource_deps=["postgresql", "temporal"],
+    resource_deps=["postgresql", "temporal", "governance-nginx"],
 )

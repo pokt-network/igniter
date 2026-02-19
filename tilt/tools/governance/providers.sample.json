@@ -1,0 +1,8 @@
+[
+  {
+    "name": "LocalProvider",
+    "identity": "SET_PUBLIC_KEY_OF_PROVIDER",
+    "identityHistory": [],
+    "url": "http://provider.default.svc.cluster.local:3001"
+  }
+]

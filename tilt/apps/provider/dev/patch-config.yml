@@ -4,12 +4,12 @@ metadata:
   name: provider-config
 data:
   DELEGATORS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/delegators.json"
-  AUTH_TRUST_HOST: "http://localhost:3001"
+  AUTH_TRUST_HOST: "true"
   APP_URL: "http://localhost:3001"
   AUTH_URL: "http://localhost:3001"
   OWNER_IDENTITY: "CHANGE_THIS"
   CHAIN_ID: "pocket-lego-testnet"
-  BLOCKCHAIN_PROTOCOL: "morse"
+  BLOCKCHAIN_PROTOCOL: "shannon"
   OWNER_EMAIL: "CHANGE_THIS"
   TEMPORAL_URL: "temporal-frontend.default.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "provider"
