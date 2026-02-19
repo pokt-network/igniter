@@ -4,11 +4,11 @@ metadata:
   name: middleman-config
 data:
   PROVIDERS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/providers.json"
-  AUTH_TRUST_HOST: "http://localhost:3000"
+  AUTH_TRUST_HOST: "true"
   APP_URL: "http://localhost:3000"
   AUTH_URL: "http://localhost:3000"
   CHAIN_ID: "pocket-lego-testnet"
-  BLOCKCHAIN_PROTOCOL: "morse"
+  BLOCKCHAIN_PROTOCOL: "shannon"
   OWNER_IDENTITY: "CHANGE_THIS"
   OWNER_EMAIL: "CHANGE_THIS"
   TEMPORAL_URL: "temporal-frontend.default.svc.cluster.local:7233"
