@@ -4,63 +4,7 @@ Bug reports, feature requests, and documentation improvements are welcome. Open 
 
 By submitting a pull request, you agree that your contributions will be licensed under the project's existing license terms.
 
----
-
-## Prerequisites
-
-- **Node.js** >= 18
-- **pnpm** >= 10.15.0 — install with `npm install -g pnpm`
-- **Docker** and **Docker Compose** (v2+) — required for running dependencies locally
-- **[Tilt](https://tilt.dev/)** — optional, but recommended for the full local k8s dev environment
-
----
-
-## Development Setup
-
-### Clone and install
-
-```bash
-git clone https://github.com/pokt-network/igniter.git
-cd igniter
-pnpm install
-```
-
-### Option A: Tilt (recommended for full-stack development)
-
-Tilt manages the full local development environment — apps, workers, database, and Temporal — using Kubernetes. A `Tiltfile` at the repo root wires everything together.
-
-```bash
-# Start all services (requires a local k8s cluster — see tilt/ for cluster setup)
-tilt up
-```
-
-The `tilt/` directory contains Tiltfiles for each app and its workflow worker. Use `tilt/docker/cluster.sh` (via `pnpm create-cluster`) to create the local cluster before first run.
-
-### Option B: Docker Compose (standalone)
-
-For running just the dependencies (PostgreSQL + Temporal) without Kubernetes:
-
-```bash
-cd docker-compose/dependencies
-cp .env.sample .env
-# Edit .env to set POSTGRES_PASSWORD
-docker compose up -d
-```
-
-Then run the apps individually. See each app's README for environment variable setup:
-
-- [Provider Setup](apps/provider/README.md)
-- [Middleman Setup](apps/middleman/README.md)
-
-For the full Docker Compose deployment guide — including Provider and Middleman services — see the [Docker Compose README](docker-compose/README.md).
-
-### Run all apps (development mode)
-
-```bash
-pnpm dev
-```
-
-This uses Turborepo to start all apps and workers in parallel.
+For setting up the development environment, see [DEVELOP.md](DEVELOP.md).
 
 ---
 

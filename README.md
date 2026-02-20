@@ -69,11 +69,13 @@ igniter/
 │   └── guides/
 │       ├── provider/
 │       └── middleman/
-└── CONTRIBUTING.md
+├── CONTRIBUTING.md
+└── DEVELOP.md
 ```
 
 - [docker-compose/](docker-compose/README.md) — Docker Compose deployment files
 - [docs/guides/](docs/guides/) — Step-by-step tutorials
+- [DEVELOP.md](DEVELOP.md) — Development environment setup (Tilt + Kubernetes)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contributing guide
 
 ---
