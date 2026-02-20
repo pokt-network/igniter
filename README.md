@@ -10,25 +10,29 @@ A staking operations platform for the Pocket Network ecosystem.
 
 ## What It Is
 
-Igniter is a self-hosted web platform for managing Pocket Network staking operations. It provides tools for running relay miner infrastructure, handling supplier lifecycles, and giving token holders a clean interface to stake and monitor their positions.
+Igniter is an open-source platform for Pocket Network staking operations. It ships as two apps in a single monorepo — **Provider** and **Middleman** — sharing a database, workflow engine, and common packages.
 
-It ships as two cooperating apps in a single monorepo, sharing a database, workflow engine, and common packages.
+- **Provider** is the core software for node operators. It manages keys, address groups, relay miners, supplier lifecycles, and delegator relationships — everything needed to run Pocket Network infrastructure.
+
+- **Middleman** is a web-facing application that lets users stake tokens, track rewards, import suppliers, and manage their staking portfolio. Providers can optionally run Middleman alongside Provider to give their clients a direct interface for managing stake. Independent entities (like PNF) can also deploy Middleman as a standalone product, connecting users to any working Igniter-powered providers.
+
+Since Igniter is open source, anyone can take Middleman as a base, extend it with additional features, and configure a service fee — a built-in mechanism that lets operators or third parties monetize the value they add on top of the platform.
 
 ---
 
 ## Who It's For
 
-**Operators** run Provider and Middleman on their own infrastructure. They manage keys, address groups, relay miners, and delegator relationships — everything needed to operate a Pocket Network supplier.
+**Providers (Node Operators)** run the Provider app to operate Pocket Network suppliers. Optionally, they can also run Middleman as a client-facing interface so their delegators can connect and manage stake directly.
 
-**Stakeholders / Delegators** use the Middleman interface to stake tokens, track rewards, import suppliers, and manage their staking portfolio without touching backend configuration.
+**Delegators / Stakeholders** use a Middleman instance — whether run by their provider or by an independent entity — to stake tokens, track rewards, and manage their portfolio without touching backend infrastructure.
 
 ---
 
 ## How the Apps Relate
 
-| App | Audience | Responsibilities |
-|-----|----------|-----------------|
-| **Provider** | Operators | Keys, address groups, relay miners, delegator management, supplier lifecycle |
+| App           | Audience                  | Responsibilities                                                              |
+|---------------|---------------------------|-------------------------------------------------------------------------------|
+| **Provider**  | Operators                 | Keys, address groups, relay miners, delegator management, supplier lifecycle  |
 | **Middleman** | Delegators / Stakeholders | Staking, unstaking, import suppliers, overview dashboard, transaction history |
 
 Both apps run alongside **Temporal workflow workers** that handle long-running operations (supplier staking, remediation, etc.) reliably in the background.
@@ -69,12 +73,35 @@ igniter/
 ```
 
 - [docker-compose/](docker-compose/README.md) — Docker Compose deployment files
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Contributing guide
 - [docs/guides/](docs/guides/) — Step-by-step tutorials
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contributing guide
 
 ---
 
-## Getting Started
+## Setup
+
+### Requirements
+
+Igniter depends on two external services that you must provision — either self-hosted or cloud-managed:
+
+- **PostgreSQL** — Stores all application data. For Provider deployments this includes encrypted private keys, so follow [PostgreSQL security best practices](https://www.postgresql.org/docs/current/security.html) for your environment.
+- **Temporal Server** — Orchestrates long-running workflows (staking, remediation, etc.). Can be [self-hosted](https://docs.temporal.io/self-hosted-guide) or run via [Temporal Cloud](https://temporal.io/cloud). Follow [Temporal's security guidance](https://docs.temporal.io/production-readiness/develop#security) for production deployments.
+
+### Running Igniter
+
+| I am a...                                   | Start here                                                                                             |
+|---------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| **Developer** contributing to Igniter       | Use [Tilt](https://tilt.dev/) — run `tilt up` from the repo root for a full local dev environment      |
+| **Provider or Delegator** deploying Igniter | Use [Docker Compose](docker-compose/README.md) — production-ready deployment with per-app setup guides |
+
+Each app also has its own README with environment variables, database migrations, and configuration details:
+
+- [Provider README](apps/provider/README.md)
+- [Middleman README](apps/middleman/README.md)
+
+---
+
+## Guides
 
 Step-by-step tutorials for learning Igniter workflows.
 
@@ -92,36 +119,6 @@ Step-by-step tutorials for learning Igniter workflows.
 
 ---
 
-## Setup
-
-**Prerequisites:**
-- Node.js >= 18 and [pnpm](https://pnpm.io/)
-- PostgreSQL
-- [Temporal Server](https://docs.temporal.io/self-hosted-guide) (self-hosted or Temporal Cloud)
-
-**Clone and install:**
-
-```bash
-git clone https://github.com/pokt-network/igniter.git
-cd igniter
-pnpm install
-```
-
-**Run all apps in development:**
-
-```bash
-pnpm dev
-```
-
-Each app has its own setup guide covering environment variables, database migrations, and how to run in isolation:
-
-- [Provider Setup](apps/provider/README.md)
-- [Middleman Setup](apps/middleman/README.md)
-
-For Docker Compose deployment details, see the [Docker Compose guide](docker-compose/README.md).
-
----
-
 ## Contributing
 
 Bug reports and feature requests go to [GitHub Issues](https://github.com/pokt-network/igniter/issues).
@@ -132,4 +129,12 @@ See the [Contributing Guide](CONTRIBUTING.md) for development setup, coding conv
 
 ## Funded By
 
-This project is funded by [Pocket Network Foundation](https://www.pokt.network/).
+<a href="https://pocket.network">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pocket-network-logo-white.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/pocket-network-logo.png">
+    <img alt="Pocket Network Foundation" src="docs/assets/pocket-network-logo.png" width="200">
+  </picture>
+</a>
+
+This project is funded by [Pocket Network Foundation](https://pocket.network).
