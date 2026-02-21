@@ -99,4 +99,4 @@ At any step, click the **X** button in the header to open the abort confirmation
 
 ---
 
-**See also:** [Staking](./staking.md) · [Import Suppliers](./import-suppliers.md) · [Overview](./overview.md) · [Transactions](./transactions.md)
+**See also:** [Staking](./staking.md) · [Import Suppliers](./import-suppliers.md) · [Overview](../../reference/middleman/overview.md) · [Transactions](../../reference/middleman/transactions.md)

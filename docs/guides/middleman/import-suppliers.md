@@ -8,7 +8,7 @@ Import suppliers lets a delegator claim ownership of nodes that were staked with
 
 The import uses a challenge-response pattern to verify address ownership: the provider generates a nonce, you sign it with your wallet to prove you own the address, and the provider returns the matching suppliers for that address.
 
-> **Before you begin:** For this to work, the provider must already have your supplier keys loaded in their provider-side database. If the provider has not imported your keys yet, contact them first. See the [Provider key management documentation](../provider/key-management.md) for context on how providers manage supplier keys.
+> **Before you begin:** For this to work, the provider must already have your supplier keys loaded in their provider-side database. If the provider has not imported your keys yet, contact them first. See the [Provider key management documentation](../../reference/provider/key-management.md) for context on how providers manage supplier keys.
 
 ---
 
@@ -105,4 +105,4 @@ At any step, click the **X** button in the header to open the abort confirmation
 
 ---
 
-**See also:** [Staking](./staking.md) · [Unstaking](./unstaking.md) · [Overview](./overview.md) · [Transactions](./transactions.md)
+**See also:** [Staking](./staking.md) · [Unstaking](./unstaking.md) · [Overview](../../reference/middleman/overview.md) · [Transactions](../../reference/middleman/transactions.md)

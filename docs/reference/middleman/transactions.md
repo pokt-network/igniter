@@ -103,4 +103,4 @@ Both views share the same columns, filters, and sorting options.
 
 ---
 
-**See also:** [Staking](./staking.md) · [Unstaking](./unstaking.md) · [Import Suppliers](./import-suppliers.md) · [Overview](./overview.md)
+**See also:** [Staking](../../guides/middleman/staking.md) · [Unstaking](../../guides/middleman/unstaking.md) · [Import Suppliers](../../guides/middleman/import-suppliers.md) · [Overview](./overview.md)

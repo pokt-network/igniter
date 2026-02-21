@@ -81,4 +81,4 @@ Reward data comes from the Pocket Network indexer API. The indexer URL is config
 
 ---
 
-**See also:** [Staking](./staking.md) · [Unstaking](./unstaking.md) · [Import Suppliers](./import-suppliers.md) · [Transactions](./transactions.md)
+**See also:** [Staking](../../guides/middleman/staking.md) · [Unstaking](../../guides/middleman/unstaking.md) · [Import Suppliers](../../guides/middleman/import-suppliers.md) · [Transactions](./transactions.md)

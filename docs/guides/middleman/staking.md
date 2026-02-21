@@ -117,4 +117,4 @@ If you close the browser tab instead of using the X button, supplier addresses t
 
 ---
 
-**See also:** [Unstaking](./unstaking.md) · [Import Suppliers](./import-suppliers.md) · [Overview](./overview.md) · [Transactions](./transactions.md)
+**See also:** [Unstaking](./unstaking.md) · [Import Suppliers](./import-suppliers.md) · [Overview](../../reference/middleman/overview.md) · [Transactions](../../reference/middleman/transactions.md)
