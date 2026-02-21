@@ -90,6 +90,6 @@ Use this flow to claim suppliers that were staked with a provider before you sta
 
 ---
 
-For the full unstaking reference including unbonding duration formula, see the [Unstaking reference](../../../apps/middleman/docs/admin/unstaking.md).
+For the full unstaking reference including unbonding duration formula, see the [Unstaking reference](../../reference/middleman/unstaking.md).
 
-For the import suppliers reference including the challenge-response flow details, see the [Import Suppliers reference](../../../apps/middleman/docs/admin/import-suppliers.md).
+For the import suppliers reference including the challenge-response flow details, see the [Import Suppliers reference](../../reference/middleman/import-suppliers.md).

@@ -66,7 +66,10 @@ igniter/
 │   └── apps/
 ├── docs/
 │   ├── architecture.md
-│   └── guides/
+│   ├── guides/
+│   │   ├── provider/
+│   │   └── middleman/
+│   └── reference/
 │       ├── provider/
 │       └── middleman/
 ├── CONTRIBUTING.md
@@ -74,7 +77,7 @@ igniter/
 ```
 
 - [docker-compose/](docker-compose/README.md) — Docker Compose deployment files
-- [docs/guides/](docs/guides/) — Step-by-step tutorials
+- [docs/](docs/) — Guides and reference documentation
 - [DEVELOP.md](DEVELOP.md) — Development environment setup (Tilt + Kubernetes)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Contributing guide
 
@@ -96,28 +99,10 @@ Igniter depends on two external services that you must provision — either self
 | **Developer** contributing to Igniter       | Use [Tilt](https://tilt.dev/) — run `tilt up` from the repo root for a full local dev environment      |
 | **Provider or Delegator** deploying Igniter | Use [Docker Compose](docker-compose/README.md) — production-ready deployment with per-app setup guides |
 
-Each app also has its own README with environment variables, database migrations, and configuration details:
+Each app has its own README with deployment, configuration, guides, and reference documentation:
 
-- [Provider README](apps/provider/README.md)
-- [Middleman README](apps/middleman/README.md)
-
----
-
-## Guides
-
-Step-by-step tutorials for learning Igniter workflows.
-
-### Provider Guides
-
-- [How to onboard a new delegator](docs/guides/provider/onboard-delegator.md) — End-to-end flow from receiving keys to enabling a delegator
-- [How to set up a relay miner with address groups](docs/guides/provider/relay-miner-setup.md) — Configure a miner, create groups, and assign services step by step
-- [How to manage your key inventory](docs/guides/provider/key-inventory.md) — Import keys, track their lifecycle states, and export when needed
-
-### Middleman Guides
-
-- [How to stake your first nodes](docs/guides/middleman/stake-first-nodes.md) — Complete walkthrough from login to staked suppliers
-- [How to monitor your staking portfolio](docs/guides/middleman/monitor-portfolio.md) — Read the overview dashboard, understand rewards, and check transactions
-- [How to unstake and import suppliers](docs/guides/middleman/unstake-import-suppliers.md) — When and how to unstake nodes or claim already-staked suppliers
+- [Provider README](apps/provider/README.md) — For node operators
+- [Middleman README](apps/middleman/README.md) — For delegators and stakeholders
 
 ---
 

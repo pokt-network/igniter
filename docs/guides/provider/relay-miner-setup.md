@@ -42,7 +42,7 @@
    ![Miners list with new miner](screenshots/step-05-miners-list.png)
    <!-- Capture: The Miners table showing the newly created relay miner row with all columns visible. -->
 
-6. **Navigate to the Address Groups page.** In the sidebar, click **Admin > Groups**. Address groups link your relay miner to on-chain services and define how relay earnings are split between you and your delegators. For the full field reference and advanced options, see the [Relay Miners reference](../../../apps/provider/docs/admin/relay-miners.md) and [Address Groups reference](../../../apps/provider/docs/admin/address-groups.md).
+6. **Navigate to the Address Groups page.** In the sidebar, click **Admin > Groups**. Address groups link your relay miner to on-chain services and define how relay earnings are split between you and your delegators. For the full field reference and advanced options, see the [Relay Miners reference](../../reference/provider/relay-miners.md) and [Address Groups reference](../../reference/provider/address-groups.md).
 
    ![Address Groups page](screenshots/step-06-address-groups-page.png)
    <!-- Capture: The Address Groups (Groups) page showing either an empty state or the groups table. Include the Add New button. -->
@@ -78,4 +78,4 @@ Your relay miner is fully set up with address groups and services. When a delega
 **Next steps:**
 
 - To import and manage supplier keys, see the [How to manage your key inventory](./key-inventory.md) guide.
-- For the full field reference and advanced configuration options, see the [Relay Miners reference](../../../apps/provider/docs/admin/relay-miners.md) and the [Address Groups reference](../../../apps/provider/docs/admin/address-groups.md).
+- For the full field reference and advanced configuration options, see the [Relay Miners reference](../../reference/provider/relay-miners.md) and the [Address Groups reference](../../reference/provider/address-groups.md).

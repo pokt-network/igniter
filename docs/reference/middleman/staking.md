@@ -1,4 +1,4 @@
-[< Back to Middleman documentation](../../README.md)
+[< Back to Middleman documentation](../../../apps/middleman/README.md)
 
 # Staking
 

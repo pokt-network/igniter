@@ -15,7 +15,7 @@
    ![Navigate to Delegators page](screenshots/step-01-delegators-page.png)
    <!-- Capture: The Delegators page showing the table with Name, Identity, Created At, and Enable/Disable columns. Include the Reload button in the top-right area. -->
 
-2. **Set up your CDN URL (if you haven't already).** If you plan to import delegators from the governance CDN, confirm that `DELEGATORS_CDN_URL` is set in your environment file. The default value (`https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/middleman.json`) works for most setups — the `{chainId}` placeholder is replaced automatically at runtime with your configured chain. For full details on the CDN format, see the [Delegators reference](../../../apps/provider/docs/admin/delegators.md).
+2. **Set up your CDN URL (if you haven't already).** If you plan to import delegators from the governance CDN, confirm that `DELEGATORS_CDN_URL` is set in your environment file. The default value (`https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/middleman.json`) works for most setups — the `{chainId}` placeholder is replaced automatically at runtime with your configured chain. For full details on the CDN format, see the [Delegators reference](../../reference/provider/delegators.md).
 
    ![Environment configuration for CDN URL](screenshots/step-02-cdn-url-config.png)
    <!-- Capture: A terminal or text editor showing the .env file with DELEGATORS_CDN_URL set. Blur or redact any sensitive values. -->
@@ -46,5 +46,5 @@ The delegator is now onboarded and enabled on your Provider. Their Middleman ins
 
 **Next steps:**
 
-- To review the full CDN JSON format and understand what happens during each import, see the [Delegators reference](../../../apps/provider/docs/admin/delegators.md).
-- To track supplier keys after a delegator delivers them, see the [Key Management reference](../../../apps/provider/docs/admin/key-management.md).
+- To review the full CDN JSON format and understand what happens during each import, see the [Delegators reference](../../reference/provider/delegators.md).
+- To track supplier keys after a delegator delivers them, see the [Key Management reference](../../reference/provider/key-management.md).

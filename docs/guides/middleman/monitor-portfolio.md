@@ -8,7 +8,7 @@
 > - You are logged in to Middleman with your Pocket Network wallet
 > - You have at least one staked node — if not, follow [How to stake your first nodes](./stake-first-nodes.md) first
 >
-> This guide covers the overview dashboard and transactions page. For the full reference, see the [Overview reference](../../../apps/middleman/docs/admin/overview.md) and the [Transactions reference](../../../apps/middleman/docs/admin/transactions.md).
+> This guide covers the overview dashboard and transactions page. For the full reference, see the [Overview reference](../../reference/middleman/overview.md) and the [Transactions reference](../../reference/middleman/transactions.md).
 
 ---
 
@@ -59,6 +59,6 @@
 
 ---
 
-For the full overview dashboard reference including admin vs. user view differences, see the [Overview reference](../../../apps/middleman/docs/admin/overview.md).
+For the full overview dashboard reference including admin vs. user view differences, see the [Overview reference](../../reference/middleman/overview.md).
 
-For all transaction types, statuses, and columns, see the [Transactions reference](../../../apps/middleman/docs/admin/transactions.md).
+For all transaction types, statuses, and columns, see the [Transactions reference](../../reference/middleman/transactions.md).

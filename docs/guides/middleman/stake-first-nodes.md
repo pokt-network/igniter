@@ -60,4 +60,4 @@
 
 ---
 
-For the full staking reference including deep-link parameters and all cost fields, see the [Staking reference](../../../apps/middleman/docs/admin/staking.md).
+For the full staking reference including deep-link parameters and all cost fields, see the [Staking reference](../../reference/middleman/staking.md).

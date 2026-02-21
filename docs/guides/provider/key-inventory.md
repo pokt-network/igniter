@@ -6,7 +6,7 @@
 >
 > - Your Provider instance must be deployed and fully bootstrapped. See the [Provider setup guide](../../../apps/provider/README.md) if you haven't done this yet.
 > - You need at least one address group set up before importing keys — keys must be assigned to a group on import. See the [How to set up a relay miner with address groups](./relay-miner-setup.md) guide if you need to create one first.
-> - Your keys file must be a JSON array of hex-encoded private keys. For the exact format, see the [Key Management reference](../../../apps/provider/docs/admin/key-management.md).
+> - Your keys file must be a JSON array of hex-encoded private keys. For the exact format, see the [Key Management reference](../../reference/provider/key-management.md).
 > - You should be logged in to the Provider admin UI (`/admin`) with your owner wallet.
 
 ---
@@ -47,7 +47,7 @@
    | **Remediation Failed** | Auto-remediation did not work. Use Mark for Remediation to retry. |
    | **Attention Needed** | System cannot auto-resolve this. Review the key details and take action. |
 
-   > Keys progress through states automatically as staking operations proceed. See the [Key Management reference](../../../apps/provider/docs/admin/key-management.md) for the full lifecycle diagram and all 11 state definitions.
+   > Keys progress through states automatically as staking operations proceed. See the [Key Management reference](../../reference/provider/key-management.md) for the full lifecycle diagram and all 11 state definitions.
 
    ![Key state badges in the table](screenshots/step-05-state-badges.png)
    <!-- Capture: The Keys table showing multiple keys in different states — ideally showing Imported, Available, Staked, and one error state badge together. -->
@@ -73,5 +73,5 @@ You can now import, track, filter, and export keys in your Provider. Your key in
 
 **Next steps:**
 
-- For the full key lifecycle diagram, all 11 state definitions, and remediation guidance, see the [Key Management reference](../../../apps/provider/docs/admin/key-management.md).
+- For the full key lifecycle diagram, all 11 state definitions, and remediation guidance, see the [Key Management reference](../../reference/provider/key-management.md).
 - To understand how delegators deliver keys to your Provider, see the [How to onboard a new delegator](./onboard-delegator.md) guide.

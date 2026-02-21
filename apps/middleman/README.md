@@ -15,17 +15,30 @@ This README is for **delegators/owners** running their own Middleman instance vi
 - [Deployment with Docker Compose](#deployment-with-docker-compose)
 - [Database Migrations](#database-migrations)
 - [Bootstrap Wizard](#bootstrap-wizard)
-- [Admin Workflows](#admin-workflows)
+- [Guides](#guides)
+- [Reference](#reference)
 
-## Admin Workflows
+## Guides
+
+Step-by-step tutorials for common Middleman workflows.
+
+| Guide | What it covers |
+|-------|----------------|
+| [How to stake your first nodes](../../docs/guides/middleman/stake-first-nodes.md) | Complete walkthrough from login to staked suppliers |
+| [How to monitor your staking portfolio](../../docs/guides/middleman/monitor-portfolio.md) | Read the overview dashboard, understand rewards, and check transactions |
+| [How to unstake and import suppliers](../../docs/guides/middleman/unstake-import-suppliers.md) | When and how to unstake nodes or claim already-staked suppliers |
+
+## Reference
+
+Detailed feature documentation for each area.
 
 | Doc | What it covers |
 |-----|----------------|
-| [Staking](docs/admin/staking.md) | Step-by-step staking flow: select provider, choose amount, pick offer, review, and execute |
-| [Unstaking](docs/admin/unstaking.md) | Unstake nodes: select owner, choose nodes, review, and execute |
-| [Import Suppliers](docs/admin/import-suppliers.md) | Claim already-staked suppliers from a provider |
-| [Overview Dashboard](docs/admin/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
-| [Transactions](docs/admin/transactions.md) | Transaction history with status tracking and filtering |
+| [Staking](../../docs/reference/middleman/staking.md) | Step-by-step staking flow: select provider, choose amount, pick offer, review, and execute |
+| [Unstaking](../../docs/reference/middleman/unstaking.md) | Unstake nodes: select owner, choose nodes, review, and execute |
+| [Import Suppliers](../../docs/reference/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
+| [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
+| [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
 
 ---
 

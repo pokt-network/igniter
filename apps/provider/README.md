@@ -12,7 +12,8 @@ This README covers configuration and usage for node operators. For local develop
 - [Environment Variables](#environment-variables)
 - [Database Migrations](#database-migrations)
 - [Bootstrap Wizard](#bootstrap-wizard)
-- [Admin Guides](#admin-workflows)
+- [Guides](#guides)
+- [Reference](#reference)
 
 ---
 
@@ -111,16 +112,28 @@ pnpm provider:migration:migrate
 
 After deployment, the Provider app is running but not yet configured. The bootstrap wizard is a one-time setup flow that walks you through connecting to the blockchain, setting your identity, configuring regions, relay miners, services, address groups, and delegators.
 
-For the detailed step-by-step walkthrough, see the [Bootstrap guide](docs/admin/bootstrap.md).
+For the detailed step-by-step walkthrough, see the [Bootstrap guide](../../docs/reference/provider/bootstrap.md).
 
 ---
 
-## Admin Guides
+## Guides
+
+Step-by-step tutorials for common Provider workflows.
+
+| Guide | What it covers |
+|-------|----------------|
+| [How to set up a relay miner with address groups](../../docs/guides/provider/relay-miner-setup.md) | Configure a miner, create groups, and assign services step by step |
+| [How to manage your key inventory](../../docs/guides/provider/key-inventory.md) | Import keys, track their lifecycle states, and export when needed |
+| [How to onboard a new delegator](../../docs/guides/provider/onboard-delegator.md) | End-to-end flow from receiving keys to enabling a delegator |
+
+## Reference
+
+Detailed feature documentation for each admin area.
 
 | Doc                                            | What it covers                                                           |
 |------------------------------------------------|--------------------------------------------------------------------------|
-| [Bootstrap](docs/admin/bootstrap.md)           | One-time setup wizard — blockchain, identity, regions, miners, services  |
-| [Relay Miners](docs/admin/relay-miners.md)     | Register and configure relay miner nodes                                 |
-| [Address Groups](docs/admin/address-groups.md) | Organize miners into groups with service and revenue share configuration |
-| [Key Management](docs/admin/key-management.md) | Import, track, and export supplier keys through their lifecycle          |
-| [Delegators](docs/admin/delegators.md)         | Enable delegators and manage revenue sharing, including CDN import       |
+| [Bootstrap](../../docs/reference/provider/bootstrap.md)           | One-time setup wizard — blockchain, identity, regions, miners, services  |
+| [Relay Miners](../../docs/reference/provider/relay-miners.md)     | Register and configure relay miner nodes                                 |
+| [Address Groups](../../docs/reference/provider/address-groups.md) | Organize miners into groups with service and revenue share configuration |
+| [Key Management](../../docs/reference/provider/key-management.md) | Import, track, and export supplier keys through their lifecycle          |
+| [Delegators](../../docs/reference/provider/delegators.md)         | Enable delegators and manage revenue sharing, including CDN import       |

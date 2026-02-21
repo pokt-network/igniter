@@ -1,4 +1,4 @@
-[< Back to Provider documentation](../../README.md)
+[< Back to Provider documentation](../../../apps/provider/README.md)
 
 # Bootstrap Wizard
 
