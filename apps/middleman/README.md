@@ -27,6 +27,9 @@ Step-by-step tutorials for common Middleman workflows.
 | [How to stake your first nodes](../../docs/guides/middleman/stake-first-nodes.md) | Complete walkthrough from login to staked suppliers |
 | [How to monitor your staking portfolio](../../docs/guides/middleman/monitor-portfolio.md) | Read the overview dashboard, understand rewards, and check transactions |
 | [How to unstake and import suppliers](../../docs/guides/middleman/unstake-import-suppliers.md) | When and how to unstake nodes or claim already-staked suppliers |
+| [Staking](../../docs/guides/middleman/staking.md) | Detailed staking flow: select provider, choose amount, pick offer, review, and execute |
+| [Unstaking](../../docs/guides/middleman/unstaking.md) | Detailed unstaking flow: select owner, choose nodes, review, and execute |
+| [Import Suppliers](../../docs/guides/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
 
 ## Reference
 
@@ -34,9 +37,6 @@ Detailed feature documentation for each area.
 
 | Doc | What it covers |
 |-----|----------------|
-| [Staking](../../docs/reference/middleman/staking.md) | Step-by-step staking flow: select provider, choose amount, pick offer, review, and execute |
-| [Unstaking](../../docs/reference/middleman/unstaking.md) | Unstake nodes: select owner, choose nodes, review, and execute |
-| [Import Suppliers](../../docs/reference/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
 | [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
 | [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
 
