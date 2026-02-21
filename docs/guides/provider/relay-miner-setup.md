@@ -6,7 +6,7 @@
 >
 > - Your Provider instance must be deployed and fully bootstrapped. See the [Provider setup guide](../../../apps/provider/README.md) if you haven't done this yet.
 > - You'll need the domain your relay miner node is reachable at (e.g., `miner.example.com`).
-> - You'll need to know which on-chain service IDs you want to serve (e.g., `eth-mainnet`, `arbitrum-one`). These must already exist on the Pocket Network for the service lookup to work.
+> - You'll need to know which on-chain service IDs you want to serve (e.g., `eth`, `arb-one`). These must already exist on the Pocket Network for the service lookup to work.
 > - You should be logged in to the Provider admin UI (`/admin`) with your owner wallet.
 
 ---
@@ -56,24 +56,24 @@
    ![Create address group form - left panel](screenshots/step-07-create-address-group.png)
    <!-- Capture: The Add New AddressGroup dialog with the Name filled in and a relay miner selected from the dropdown. Show the left panel before adding services. -->
 
-8. **Assign a service to the group.** In the **Assign services** combobox on the same form, search for your service by name or ID (e.g., `eth-mainnet`) and select it. The service appears in the right panel, where you'll see a preview of the interpolated endpoint URLs based on your miner's identity, region, and domain. Confirm the URLs look correct.
+8. **Assign a service to the group.** In the **Assign services** combobox on the same form, search for your service by name or ID (e.g., `eth`) and select it. The service appears in the right panel, where you'll see a preview of the interpolated endpoint URLs based on your miner's identity, region, and domain. Confirm the URLs look correct.
 
    ![Address group with service assigned](screenshots/step-08-assign-service.png)
    <!-- Capture: The Add New AddressGroup dialog with a service assigned in the right panel. Show the endpoint URL preview. -->
 
-9. **Configure revenue share for the group.** In the right panel for your assigned service, click **Add Supplier Share** to enable an operator cut and enter your percentage. Then use **Add Share** to add a delegator revenue share entry — set the address to `{of}` (which resolves to the delegator's own address at stake time) and enter their share percentage. The total of all shares for a service cannot exceed 100%. Click **Add Address Group** to save.
+9. **Configure revenue share for the group.** In the right panel for your assigned service, configure the **Supplier Share** percentage to fund on-chain claim/proof transactions. Then use **Add Share** to add your own operator reward address and percentage. The remaining percentage up to 100% is what the supplier owner receives. Click **Add Address Group** to save.
 
    ![Revenue share configuration](screenshots/step-09-revenue-share.png)
    <!-- Capture: The right panel of the Add New AddressGroup dialog showing the Add Supplier Share toggle enabled with a percentage, and at least one delegator share entry with {of} as the address. -->
 
-10. **Verify the complete setup.** Back on the Groups page, find your new address group in the table. Confirm it shows the correct relay miner, your assigned service badge(s), and the right visibility setting. Your relay miner is now registered, linked to a region, and associated with an address group that's ready to accept delegator keys.
+10. **Verify the complete setup.** Back on the Groups page, find your new address group in the table. Confirm it shows the correct relay miner, your assigned service badge(s), and the right visibility setting. Your relay miner is now registered, linked to a region, and associated with an address group that's ready for staking.
 
     ![Address group in list](screenshots/step-10-verify-group.png)
     <!-- Capture: The Address Groups table showing the newly created group row with Relay Miner, Services badge(s), and other columns visible. -->
 
 ---
 
-Your relay miner is fully set up with address groups and services. When a delegator's Middleman instance imports supplier keys, those keys will be staked under this group — routing traffic through your miner with the revenue share configuration you defined.
+Your relay miner is fully set up with address groups and services. When a delegator stakes suppliers through their Middleman instance, the suppliers are staked under this group — routing traffic through your miner with the revenue share configuration you defined.
 
 **Next steps:**
 
