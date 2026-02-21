@@ -58,8 +58,9 @@ services:
     tty: true
 
   # IMPORTANT:
-  # Please be careful with leave this on, since this example does not implement AUTH, but you can do it following the documentation.
-  # https://docs.temporal.io/references/web-ui-configuration#auth
+  # This service runs WITHOUT authentication by default.
+  # If exposed publicly, anyone could view and control workflows.
+  # Follow: https://docs.temporal.io/references/web-ui-configuration#auth
   temporal-ui:
     image: temporalio/ui:${TEMPORAL_UI_VERSION}
     container_name: temporal-ui

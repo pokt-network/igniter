@@ -19,6 +19,8 @@ services:
     depends_on:
       provider-migration:
         condition: service_completed_successfully
+    # Bound to localhost — use a reverse proxy to expose only the API paths
+    # listed in the README to the public network.
     ports:
       - "127.0.0.1:3001:3001"
 

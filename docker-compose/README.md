@@ -7,7 +7,15 @@
 This repository contains a **demonstration setup** for running the Igniter tooling locally or in a controlled environment.
 It is **not production-ready** as provided.
 
-If deploying beyond local testing, you **must**:
+**Before starting any service**, set a strong PostgreSQL password in `docker-compose/dependencies/.env`:
+
+```bash
+cp docker-compose/dependencies/.env.sample docker-compose/dependencies/.env
+```
+
+Then edit the file and set `POSTGRES_PASSWORD` to a strong, unique value. This same password must be set as `PGPASSWORD` in both the provider and middleman `.env` files. **Do not skip this step** — the dependencies stack will not start without it, and the applications will fail to connect to the database if the passwords do not match.
+
+If deploying beyond local testing, you **must** also:
 
 - **Secure Temporal UI** — The included `temporal-ui` service runs **without authentication** by default. If exposed publicly, anyone could control workflows.
   Follow [Temporal Web UI Auth Docs](https://docs.temporal.io/references/web-ui-configuration#auth) to enable authentication.
@@ -19,7 +27,30 @@ If deploying beyond local testing, you **must**:
 
 - **Use TLS/HTTPS** — For any exposed endpoints, enable encryption.
 
-> **Note:** Igniter apps themselves include authentication — the above warning applies **only** to `temporal-ui`.
+### Exposing Provider API for Middleman Communication
+
+The **Middleman** application needs to reach the **Provider** API over the network. However, the Provider also serves an admin web interface that **must not** be publicly accessible.
+
+When deploying, you should place a **reverse proxy** (nginx, Caddy, Traefik, etc.) in front of the Provider and only forward the following paths:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/suppliers` | Get supplier stake configurations |
+| `POST` | `/api/suppliers/stake` | Mark suppliers as staked |
+| `POST` | `/api/suppliers/unstaking` | Mark suppliers as unstaking |
+| `POST` | `/api/suppliers/release` | Release suppliers from staking |
+| `POST` | `/api/import-suppliers/request` | Initiate supplier import (returns nonce) |
+| `POST` | `/api/import-suppliers/submit` | Submit import with owner signature |
+| `POST` | `/api/import-suppliers/status` | Check import request status |
+| `POST` | `/api/status` | Get provider configuration and status |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/bootstrap` | Bootstrap status |
+
+All other routes (`/`, `/admin/*`, `/api/auth/*`, `/_next/*`, and any server action paths) **must be blocked** from public access. These serve the admin UI and session management, which should only be reachable from a private network, VPN, or localhost.
+
+These API endpoints are authenticated using cryptographic signatures (`X-Middleman-Identity` and `X-Middleman-Signature` headers) — they do not rely on browser sessions or cookies.
+
+> **Summary:** Middleman = public-facing (expose everything). Provider = internal admin tool (expose **only** the API paths listed above).
 
 ---
 
