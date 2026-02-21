@@ -18,28 +18,6 @@ This README is for **delegators/owners** running their own Middleman instance vi
 - [Guides](#guides)
 - [Reference](#reference)
 
-## Guides
-
-Step-by-step tutorials for common Middleman workflows.
-
-| Guide | What it covers |
-|-------|----------------|
-| [How to stake your first nodes](../../docs/guides/middleman/stake-first-nodes.md) | Complete walkthrough from login to staked suppliers |
-| [How to monitor your staking portfolio](../../docs/guides/middleman/monitor-portfolio.md) | Read the overview dashboard, understand rewards, and check transactions |
-| [How to unstake and import suppliers](../../docs/guides/middleman/unstake-import-suppliers.md) | When and how to unstake nodes or claim already-staked suppliers |
-| [Staking](../../docs/guides/middleman/staking.md) | Detailed staking flow: select provider, choose amount, pick offer, review, and execute |
-| [Unstaking](../../docs/guides/middleman/unstaking.md) | Detailed unstaking flow: select owner, choose nodes, review, and execute |
-| [Import Suppliers](../../docs/guides/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
-
-## Reference
-
-Detailed feature documentation for each area.
-
-| Doc | What it covers |
-|-----|----------------|
-| [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
-| [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
-
 ---
 
 ## Prerequisites
@@ -115,7 +93,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 |----------|----------|-------------|-------------------|
 | `APP_URL` | Required | Public URL where Middleman is accessible — used for redirect links and CORS | `http://localhost:3000` |
 | `AUTH_URL` | Required | URL used by NextAuth for auth callbacks — typically same as `APP_URL` | `http://localhost:3000` |
-| `AUTH_TRUST_HOST` | Optional | Set to your app URL if running behind a reverse proxy (trusts `X-Forwarded-*` headers) | `http://localhost:3000` |
+| `AUTH_TRUST_HOST` | Optional | Set to `true` if running behind a reverse proxy (trusts `X-Forwarded-*` headers) | `false` |
 
 > **Note:** Middleman runs on port `3000` by default. If running both Provider and Middleman on the same host, one of them must use a different port (Provider defaults to `3001`).
 
@@ -131,7 +109,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 
 | Variable | Required | Description | Example / Default |
 |----------|----------|-------------|-------------------|
-| `COIN_MARKET_CAP_API_KEY` | Required | API key for CoinMarketCap — used to display current POKT coin value to delegators. Get one at [coinmarketcap.com/api](https://coinmarketcap.com/api/documentation/v1/) | *(your API key)* |
+| `COIN_MARKET_CAP_API_KEY` | Required | API key for CoinMarketCap — used to display current POKT coin value to users. Get one at [coinmarketcap.com/api](https://coinmarketcap.com/api/documentation/v1/) | *(your API key)* |
 
 ---
 
@@ -243,14 +221,14 @@ The wizard walks through 4 steps in sequence:
 |------|------|-------------------|
 | 1 | **Blockchain Settings** | REST API URL (port `1317`), chain ID, and blockchain-derived settings (minimum stake buffer, app identity) |
 | 2 | **Application Settings and Branding** | App name, support email, owner email, service fee percentage, delegator rewards address, and indexer API URL |
-| 3 | **Configure Providers** | Select which providers are visible and enabled for delegators to stake with |
+| 3 | **Configure Providers** | Select which providers are visible and enabled for staking |
 | 4 | **Complete** | Review and finalize bootstrap — click Complete to activate the app |
 
 After completing all 4 steps and clicking **Complete**, you are redirected to `/admin/overview`.
 
 ### Provider Discovery and Governance JSON Exchange
 
-Middleman discovers available providers via the `PROVIDERS_CDN_URL`. This URL points to a governance repository JSON file that lists providers who have registered themselves as available for delegators to stake through.
+Middleman discovers available providers via the `PROVIDERS_CDN_URL`. This URL points to a governance repository JSON file that lists providers who have registered themselves as available for staking.
 
 At runtime, `{chainId}` in `PROVIDERS_CDN_URL` is replaced with the value of `CHAIN_ID` to fetch the provider list for the correct network. The providers fetched from this URL are what appear in Step 3 of the bootstrap wizard (Configure Providers) and in the staking flow.
 
@@ -262,3 +240,27 @@ Once bootstrapped, Middleman exposes two interface areas:
 
 - **`/admin/`** — For the Middleman operator. Manage application settings, configure which providers are available, and view all transactions across all delegators.
 - **`/app/`** — For delegators. Stake, unstake, import suppliers, and monitor their staking portfolio and rewards.
+
+---
+
+## Guides
+
+Step-by-step tutorials for common Middleman workflows.
+
+| Guide | What it covers |
+|-------|----------------|
+| [How to stake your first nodes](../../docs/guides/middleman/stake-first-nodes.md) | Complete walkthrough from login to staked suppliers |
+| [How to monitor your staking portfolio](../../docs/guides/middleman/monitor-portfolio.md) | Read the overview dashboard, understand rewards, and check transactions |
+| [How to unstake and import suppliers](../../docs/guides/middleman/unstake-import-suppliers.md) | When and how to unstake nodes or claim already-staked suppliers |
+| [Staking](../../docs/guides/middleman/staking.md) | Detailed staking flow: select provider, choose amount, pick offer, review, and execute |
+| [Unstaking](../../docs/guides/middleman/unstaking.md) | Detailed unstaking flow: select owner, choose nodes, review, and execute |
+| [Import Suppliers](../../docs/guides/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
+
+## Reference
+
+Detailed feature documentation for each area.
+
+| Doc | What it covers |
+|-----|----------------|
+| [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
+| [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
