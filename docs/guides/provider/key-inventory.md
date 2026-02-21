@@ -36,14 +36,14 @@
    | State | What it means |
    |-------|---------------|
    | **Imported** | Just added — system is checking it against the chain. Resolves automatically. |
-   | **Available** | Confirmed unstaked and ready to be delivered to a delegator for staking. |
-   | **Delivered** | Assigned to a delegator's Middleman. A staking transaction is expected soon. |
+   | **Available** | Confirmed unstaked and ready to be assigned for staking. |
+   | **Delivered** | Address shared with a Middleman instance. A staking transaction is expected soon. |
    | **Staking** | Staking transaction submitted to the chain and awaiting confirmation. |
    | **Staked** | Actively operating as a supplier. |
    | **Unstaking** | Unstake transaction submitted and awaiting confirmation. |
    | **Unstaked** | No longer staked — available for export or re-use. |
    | **Stake Failed** | Staking transaction failed. Operator action required. |
-   | **Missing Stake** | Expected stake not found after 24 hours. Investigate with the delegator. |
+   | **Missing Stake** | Expected stake not found after 24 hours. Investigate with the owner/staker. |
    | **Remediation Failed** | Auto-remediation did not work. Use Mark for Remediation to retry. |
    | **Attention Needed** | System cannot auto-resolve this. Review the key details and take action. |
 
@@ -74,4 +74,4 @@ You can now import, track, filter, and export keys in your Provider. Your key in
 **Next steps:**
 
 - For the full key lifecycle diagram, all 11 state definitions, and remediation guidance, see the [Key Management reference](../../reference/provider/key-management.md).
-- To understand how delegators deliver keys to your Provider, see the [How to onboard a new delegator](./onboard-delegator.md) guide.
+- To enable delegators to stake through your Provider, see the [How to onboard a new delegator](./onboard-delegator.md) guide.
