@@ -4,7 +4,7 @@
 
 ## What are Relay Miners?
 
-Relay miners are the nodes that perform relay work on the Pocket Network — they handle the actual traffic routing between delegators and on-chain services. In the Provider app, a relay miner represents one of your infrastructure nodes: you register it with a name, a unique identity slug, a domain, and a region. Once registered, relay miners become available for assignment to address groups, which link them to specific services and delegator keys.
+Relay miners are the nodes that perform relay work on the Pocket Network — they service relays for the suppliers staked on your infrastructure. In the Provider app, a relay miner represents one of your infrastructure nodes: you register it with a name, a unique identity slug, a domain, and a region. Once registered, relay miners become available for assignment to address groups, which link them to specific services and supplier keys.
 
 Every relay miner belongs to exactly one region. Regions let you organize miners geographically and are referenced in service endpoint URL templates when staking new suppliers.
 
@@ -121,7 +121,7 @@ You can filter the table by region using the filter bar above the table.
 
 ## Next Steps
 
-Once your relay miners are configured, you can assign them to address groups. Each address group links one relay miner to a set of services and delegator keys.
+Once your relay miners are configured, you can assign them to address groups. Each address group links one relay miner to a set of services and supplier keys.
 
 See [Address Groups](./address-groups.md) to continue setup.
 

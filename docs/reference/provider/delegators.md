@@ -4,7 +4,7 @@
 
 ## What is Delegator Management?
 
-Delegators are entities — typically Middleman operators — that delegate their staking keys to your Provider to operate on their behalf. When a delegator's keys are staked through your Provider, their suppliers earn rewards on the Pocket Network and your Provider earns a revenue share in return. The Delegators page is where you import who is allowed to use your Provider, control which delegators are active, and manage revenue share.
+Delegators are entities — typically Middleman operators — that stake suppliers through your Provider's infrastructure. They request supplier addresses from your Provider, and the owner signs the stake transaction on their side. No private keys are ever transferred. Once suppliers are staked, they service relays through your relay miners and your Provider earns a revenue share from the configured address groups. The Delegators page is where you manage who is allowed to use your Provider and control which delegators are active.
 
 Delegators are identified by their Pocket Network public key (their **identity**). The Provider ships with a governance-maintained list of approved delegators that you can import from a CDN, making it straightforward to stay in sync with the ecosystem.
 
@@ -28,7 +28,7 @@ The Delegators page shows all delegators currently known to your Provider instan
 
 ## Enable or Disable a Delegator
 
-Enabling a delegator allows them to send keys to your Provider for staking. Disabling stops their keys from being delivered, though keys already staked are unaffected — staking is managed by the Pocket Network itself.
+Enabling a delegator allows their Middleman instance to request supplier addresses from your Provider and initiate stake transactions. Disabling prevents new staking requests, though suppliers already staked are unaffected — staking is managed by the Pocket Network itself.
 
 **Steps:**
 
@@ -113,19 +113,19 @@ The `UpdateDelegatorsFromSource` action performs the sync in a single database t
 
 ## Import Suppliers (from Middleman)
 
-The **Import Suppliers** flow is how a connected Middleman instance sends its delegator's keys to the Provider. This is a machine-to-machine API flow — operators do not trigger it manually. Understanding it helps you verify integrations and diagnose issues.
+The **Import Suppliers** flow is how a connected Middleman instance claims already-staked suppliers from the Provider. This is a machine-to-machine API flow — operators do not trigger it manually. Understanding it helps you verify integrations and diagnose issues.
 
 ### The three-step API flow
 
-A Middleman instance goes through three steps to deliver suppliers to the Provider:
+A Middleman instance goes through three steps to import suppliers from the Provider:
 
 **Step 1: Request** — `POST /api/import-suppliers/request`
 
-The Middleman sends the delegator owner's address and any addresses it already has. The Provider finds matching staked suppliers for that owner, creates an import request with a one-time nonce, and returns the nonce and how many suppliers matched. The request expires after 15 minutes.
+The Middleman sends the supplier owner's address and any addresses it already has. The Provider finds matching staked suppliers for that owner, creates an import request with a one-time nonce, and returns the nonce and how many suppliers matched. The request expires after 15 minutes.
 
 **Step 2: Submit** — `POST /api/import-suppliers/submit`
 
-The Middleman signs the nonce with the owner's private key and sends the signature back along with the owner's public key, delegator rewards address, and revenue share percentage. The Provider verifies the signature, then delivers the matching supplier keys to the delegator in the database.
+The Middleman signs the nonce with the owner's private key and sends the signature back along with the owner's public key, delegator rewards address, and revenue share percentage. The Provider verifies the signature, then assigns the matching suppliers to the delegator in the database.
 
 **Step 3: Status** — `POST /api/import-suppliers/status`
 
@@ -157,7 +157,7 @@ Once suppliers are assigned during the Submit step, the affected keys move to th
 ## Related
 
 - [Key Management](./key-management.md) — Track keys through their full lifecycle from import to staking and beyond.
-- [Address Groups](./address-groups.md) — Configure how keys are grouped and presented to delegators.
+- [Address Groups](./address-groups.md) — Configure how keys are grouped and how staking is organized.
 
 ---
 

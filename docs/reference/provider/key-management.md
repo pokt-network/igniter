@@ -22,7 +22,7 @@ stateDiagram-v2
     Imported --> Staked : key already staked on chain
     Imported --> Unstaked : key found unstaked on chain
 
-    Available --> Delivered : assigned to a delegator
+    Available --> Delivered : address shared with Middleman
     Delivered --> Staking : staking transaction submitted
     Staking --> Staked : transaction confirmed
     Staking --> StakeFailed : transaction failed
@@ -47,14 +47,14 @@ stateDiagram-v2
 | State | Display Name | What it means |
 |-------|-------------|----------------|
 | `imported` | Imported | The key was just added. The system is evaluating it against the chain to determine its actual state. |
-| `available` | Available | The key is confirmed unstaked and ready to be delivered to a delegator for staking. |
-| `delivered` | Delivered | The key has been assigned to a delegator's Middleman instance. A staking transaction is expected soon. |
+| `available` | Available | The key is confirmed unstaked and ready to be assigned for staking. |
+| `delivered` | Delivered | The supplier address has been shared with a Middleman instance. A staking transaction is expected soon. |
 | `staking` | Staking | A staking transaction has been submitted to the chain and is being confirmed. |
 | `staked` | Staked | The key is active as a supplier on the Pocket Network. The system is monitoring it. |
 | `stake_failed` | Stake Failed | The staking transaction failed. The operator should investigate and retry. |
 | `unstaking` | Unstaking | An unstake transaction was submitted and is being confirmed. |
 | `unstaked` | Unstaked | The key is no longer staked. It can be re-imported or exported. |
-| `missing_stake` | Missing Stake | The key was delivered and expected to stake, but no stake was found after 24 hours. |
+| `missing_stake` | Missing Stake | The address was shared and expected to be staked, but no stake was found after 24 hours. |
 | `remediation_failed` | Remediation Failed | The system attempted automatic remediation (e.g. re-staking after slashing) but it did not succeed. |
 | `attention_needed` | Attention Needed | The key is in an unhealthy state that requires human judgment — automatic remediation is not possible. |
 
@@ -63,7 +63,7 @@ stateDiagram-v2
 These states will not resolve automatically. Check the key detail view for remediation history and context:
 
 - **Stake Failed** — The staking transaction failed. Review the error and retry staking.
-- **Missing Stake** — Expected a stake but found none after 24 hours. Investigate with the delegator.
+- **Missing Stake** — Expected a stake but found none after 24 hours. Investigate with the owner/staker.
 - **Remediation Failed** — Automatic remediation did not work. Review the remediation history and retry manually.
 - **Attention Needed** — The system detected a condition it cannot resolve. Review the details and take manual action.
 
@@ -118,7 +118,7 @@ The Keys page shows all keys currently in the Provider, with their address, addr
 4. To view full details of a key, click the arrow button at the right of any row. A detail panel opens showing:
    - Address, balance, owner, stake owner (if different from owner), delivered-to delegator, last updated blockchain height.
    - Stake amount (for staked keys).
-   - Delegator rewards address and revenue share percentage.
+   - Middleman rewards address and revenue share percentage.
    - Remediation history (for keys with issues).
 
 <!-- SCREENSHOT: Capture the Keys table with the state filter expanded showing all available states. Then capture the key detail panel for a staked key showing its stake amount and delegator rewards details. -->
@@ -163,14 +163,14 @@ All 11 key states from the `KeyState` enum, with display names and operator guid
 | State | Display Name | Operator Action Required? | Notes |
 |-------|-------------|--------------------------|-------|
 | `imported` | Imported | No | System evaluates the key against the chain. Resolves automatically. |
-| `available` | Available | No | Key is ready for delivery. Will be picked up automatically when a delegator requests suppliers. |
-| `delivered` | Delivered | No | Assigned to a delegator. A staking transaction is expected. |
+| `available` | Available | No | Key is ready to be assigned. Will be picked up automatically when a Middleman requests supplier addresses. |
+| `delivered` | Delivered | No | Address shared with a Middleman instance. A staking transaction is expected. |
 | `staking` | Staking | No | Transaction submitted. Waiting for chain confirmation. |
 | `staked` | Staked | No | Actively operating as a supplier. |
 | `stake_failed` | Stake Failed | **Yes** | Staking transaction failed. Review and retry. |
 | `unstaking` | Unstaking | No | Unstake transaction submitted. Resolves automatically. |
 | `unstaked` | Unstaked | No | Key is no longer staked. Available for export or re-use. |
-| `missing_stake` | Missing Stake | **Yes** | Expected stake not found after 24 hours. Investigate with delegator. |
+| `missing_stake` | Missing Stake | **Yes** | Expected stake not found after 24 hours. Investigate with the owner/staker. |
 | `remediation_failed` | Remediation Failed | **Yes** | Auto-remediation failed. Review remediation history, then use Mark for Remediation. |
 | `attention_needed` | Attention Needed | **Yes** | System cannot auto-resolve. Review key details and take manual action. |
 
@@ -184,7 +184,7 @@ All 11 key states from the `KeyState` enum, with display names and operator guid
 
 ## Related
 
-- [Address Groups](./address-groups.md) — Organize keys into groups for relay miner assignment and delegator delivery.
+- [Address Groups](./address-groups.md) — Organize keys into groups for relay miner assignment and staking configuration.
 
 ---
 

@@ -4,9 +4,9 @@
 
 ## What are Address Groups?
 
-Address groups are the central organizing concept in the Provider app. Each group links a relay miner to one or more on-chain services, along with the revenue share configuration that determines how relay earnings are split between the operator and delegators. When a delegator's key is staked through Provider, it is staked under a specific address group — meaning it will route traffic through that group's relay miner and service configuration.
+Address groups are the central organizing concept in the Provider app. Each group links a relay miner to one or more on-chain services, along with the revenue share configuration that determines how relay earnings are split between the supplier, the operator, and the supplier owner. When a supplier is staked through the Provider, it is staked under a specific address group — meaning it will route traffic through that group's relay miner and service configuration.
 
-Think of an address group as a "slot": it defines the infrastructure context (which miner, which region, which services) and the economic parameters (revenue share) for a set of staked keys.
+Think of an address group as a "slot": it defines the infrastructure context (which miner, which region, which services) and the economic parameters (revenue share) for a set of supplier keys.
 
 > Before creating an address group, you need at least one relay miner and one service configured. See [Relay Miners](./relay-miners.md) to set up miners, and the [Services](#configure-services) section below for service setup.
 
@@ -32,13 +32,13 @@ Think of an address group as a "slot": it defines the infrastructure context (wh
 
 Set a default revenue share configuration that pre-fills each service you add to this group. You can override per-service after adding.
 
-- **Add Supplier Share** toggle — Enable to include a supplier (operator) share in the revenue split.
-- **Supplier share %** — The percentage of relay earnings retained by the operator (1–100). Only active when the toggle is on.
-- **Add Share** — Add delegator revenue share entries. Each entry requires:
-  - **Address** — A valid `pokt…` Cosmos address (or the special placeholder `{of}` for the delegator's own address).
+- **Add Supplier Share** toggle — Enable to reserve a percentage for the supplier key itself. This funds the on-chain transactions (claim and proof) the supplier must submit each session.
+- **Supplier share %** — The percentage of relay earnings reserved for the supplier key (1–100). Only active when the toggle is on.
+- **Add Share** — Add additional revenue share entries. Each entry requires:
+  - **Address** — A valid `pokt…` Cosmos address (typically the operator's own reward address).
   - **Share %** — Percentage of relay earnings going to this address (1–100).
 
-> Total of all shares (supplier + all delegator entries) across a service cannot exceed 100%.
+> Total of all shares (supplier + operator entries) across a service cannot exceed 100%. The remaining percentage is what the supplier owner receives.
 
 ### Assign Services
 
@@ -53,14 +53,14 @@ For each assigned service, the right panel shows:
 - The service name and on-chain ID.
 - A preview of the interpolated endpoint URLs based on the selected relay miner's identity, region, and domain.
 - An **Add Supplier Share** toggle and percentage input.
-- **Add Share** to add per-service delegator revenue share entries.
+- **Add Share** to add per-service revenue share entries (e.g., operator reward address).
 - **Remove** to detach the service from this group.
 
 ### Visibility
 
 | Field | Description |
 |-------|-------------|
-| **Internal use only** toggle | When enabled, this group is marked as private and not exposed to delegators browsing your provider. Use for operator-reserved key slots. |
+| **Internal use only** toggle | When enabled, this group is marked as private and not visible to stakers browsing your provider. |
 
 ### Linked Addresses
 
@@ -103,13 +103,13 @@ Linked Addresses are `pokt…` wallet addresses that are explicitly associated w
 
 ## Configure Services
 
-Services represent the on-chain Pocket Network services your relay miners will serve (e.g., Ethereum mainnet, Arbitrum). Each service in the Provider app maps to an on-chain service ID and stores the endpoint configuration your miners use to handle relay requests.
+Services represent the on-chain Pocket Network services your relay miners will serve (e.g., Ethereum, Arbitrum). Each service in the Provider app maps to an on-chain service ID and stores the endpoint configuration your miners use to handle relay requests.
 
 ### Create a Service
 
 1. In the sidebar, navigate to **Admin > Services**.
 2. Click **Add New**.
-3. In the **Service ID** field, enter the on-chain service ID (e.g., `eth-mainnet`). The app fetches the service's on-chain details automatically after a short delay.
+3. In the **Service ID** field, enter the on-chain service ID (e.g., `eth`). The app fetches the service's on-chain details automatically after a short delay.
 4. Once the on-chain details load in the left panel (name, owner, compute units), the right panel becomes active.
 5. Configure one or more protocol endpoints:
    - **RPC Type** — Select the protocol (e.g., JSON-RPC, REST). Each endpoint must have a unique RPC type.
@@ -153,20 +153,20 @@ Services represent the on-chain Pocket Network services your relay miners will s
 
 ## Revenue Share Configuration
 
-Revenue share determines how relay earnings are split between the operator (supplier) and delegators. The Provider app implements two fee modes from the `ProviderFee` enum:
+Revenue share determines how relay earnings are split between the supplier key, the operator, and the supplier owner. The Provider app implements two fee modes from the `ProviderFee` enum:
 
 ### Fee Types
 
 | Type | Value | Behavior |
 |------|-------|----------|
-| **UpTo** | `up_to` | The operator takes up to a specified percentage, with the remainder going to the delegator. The actual split depends on the agreed configuration. |
+| **UpTo** | `up_to` | The operator takes up to a specified percentage, with the remainder going to the supplier owner. The actual split depends on the agreed configuration. |
 | **Fixed** | `fixed` | The operator takes exactly the specified percentage, regardless of other factors. |
 
 In practice, when configuring revenue shares within an address group:
 
-- **Add Supplier Share** — Enable this to include an operator cut. Enter the percentage (1–100) the operator retains from relay earnings in this group/service.
-- **Delegator revenue shares** — Each entry specifies an address and a percentage. The address can be a specific `pokt…` wallet or the `{of}` placeholder (which resolves to the delegator's own address at stake time).
-- The combined total of all share percentages for a given service cannot exceed 100%.
+- **Supplier Share** — A percentage reserved for the supplier key to fund on-chain claim/proof transactions.
+- **Operator Share** — Use **Add Share** to add your own reward address and the percentage you want to keep as the provider operator.
+- The combined total of all share percentages for a given service cannot exceed 100%. The remaining percentage is what the supplier owner receives.
 
 ### Setting Revenue Share
 
