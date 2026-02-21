@@ -30,7 +30,7 @@
    ![Filter to Disabled delegators](screenshots/step-04-filter-disabled.png)
    <!-- Capture: The Delegators table with the Disabled filter active, showing one or more newly imported delegators with the Disabled toggle visible in their row. -->
 
-5. **Enable the delegator.** Find the delegator you want to onboard and click **Enable** in the rightmost column of their row. The button updates immediately on success — you should see it switch to **Disable**, confirming the delegator is now active. Enabling a delegator allows their Middleman instance to send keys to your Provider for staking, and your Provider begins earning a revenue share on their relays.
+5. **Enable the delegator.** Find the delegator you want to onboard and click **Enable** in the rightmost column of their row. The button updates immediately on success — you should see it switch to **Disable**, confirming the delegator is now active. Enabling a delegator allows their Middleman instance to request supplier addresses from your Provider and initiate stake transactions that the owner signs. No private keys are ever transferred — the owner always retains custody and signs on their side.
 
    ![Enable delegator toggle](screenshots/step-05-enable-delegator.png)
    <!-- Capture: The Delegators page immediately after enabling a delegator, showing the toggle in the enabled state for that row. -->
@@ -42,9 +42,9 @@
 
 ---
 
-The delegator is now onboarded and enabled on your Provider. Their Middleman instance can start sending supplier keys for staking, and you'll begin earning revenue share on their relays.
+The delegator is now onboarded and enabled on your Provider. Their Middleman instance can now request supplier addresses and initiate stake transactions. Once suppliers are staked, they begin servicing relays through your relay miners and you earn revenue share from the configured address groups.
 
 **Next steps:**
 
 - To review the full CDN JSON format and understand what happens during each import, see the [Delegators reference](../../reference/provider/delegators.md).
-- To track supplier keys after a delegator delivers them, see the [Key Management reference](../../reference/provider/key-management.md).
+- To track supplier keys managed by your Provider, see the [Key Management reference](../../reference/provider/key-management.md).

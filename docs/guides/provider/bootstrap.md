@@ -208,13 +208,12 @@ Once bootstrapped, the setup page is no longer accessible — navigating to `/ad
 
 ## Next Steps
 
-After bootstrap, manage your Provider through the admin interface:
+After bootstrap, continue setting up your Provider:
 
-- [Relay Miners](../../reference/provider/relay-miners.md) — Add, update, or remove relay miner nodes
-- [Address Groups](../../reference/provider/address-groups.md) — Manage groups, services, and revenue share configuration
-- [Key Management](../../reference/provider/key-management.md) — Import, track, and export supplier keys
-- [Delegators](../../reference/provider/delegators.md) — Enable or disable delegators and manage revenue sharing
+- [Manage your key inventory](./key-inventory.md) — Import, track, and export supplier keys
+- [Set up a relay miner with address groups](./relay-miner-setup.md) — Configure relay miners and link them to services
+- [Onboard a new delegator](./onboard-delegator.md) — Enable delegators and configure revenue sharing
 
 ---
 
-**See also:** [Relay Miners](../../reference/provider/relay-miners.md) · [Address Groups](../../reference/provider/address-groups.md) · [Key Management](../../reference/provider/key-management.md) · [Delegators](../../reference/provider/delegators.md)
+**See also:** [Relay Miners reference](../../reference/provider/relay-miners.md) · [Address Groups reference](../../reference/provider/address-groups.md) · [Key Management reference](../../reference/provider/key-management.md) · [Delegators reference](../../reference/provider/delegators.md)
