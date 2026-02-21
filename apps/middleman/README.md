@@ -49,7 +49,7 @@ Before deploying, you need:
 - **Docker** and **Docker Compose** (v2+)
 - **A Pocket Network wallet address** — used as the owner identity for SIWP login (`OWNER_IDENTITY`). Must be a valid `pokt1...` bech32 address.
 - **A Pocket Network private key** — used for governance signing (`APP_IDENTITY`). This is a hex-encoded private key.
-- **Access to a Pocket Network RPC endpoint** — can be your own node or a [public endpoint](https://dev.poktroll.com/category/explorers-faucets-wallets-and-more)
+- **Access to a Pocket Network node** — you need both the Tendermint RPC endpoint (port `26657`, used by the workflows service to broadcast transactions via `POKT_RPC_URL`) and the REST API endpoint (port `1317`, configured during bootstrap as "Shannon API URL" for querying chain data). You can use your own node or [public endpoints](https://github.com/pokt-network/pocket-network-resources).
 - **A CoinMarketCap API key** — used to display POKT coin value to users. Get one at [coinmarketcap.com/api](https://coinmarketcap.com/api/documentation/v1/)
 
 ---
@@ -241,7 +241,7 @@ The wizard walks through 4 steps in sequence:
 
 | Step | Name | What you configure |
 |------|------|-------------------|
-| 1 | **Blockchain Settings** | RPC URL, chain ID, and blockchain-derived settings (minimum stake buffer, app identity) |
+| 1 | **Blockchain Settings** | REST API URL (port `1317`), chain ID, and blockchain-derived settings (minimum stake buffer, app identity) |
 | 2 | **Application Settings and Branding** | App name, support email, owner email, service fee percentage, delegator rewards address, and indexer API URL |
 | 3 | **Configure Providers** | Select which providers are visible and enabled for delegators to stake with |
 | 4 | **Complete** | Review and finalize bootstrap — click Complete to activate the app |
@@ -254,7 +254,7 @@ Middleman discovers available providers via the `PROVIDERS_CDN_URL`. This URL po
 
 At runtime, `{chainId}` in `PROVIDERS_CDN_URL` is replaced with the value of `CHAIN_ID` to fetch the provider list for the correct network. The providers fetched from this URL are what appear in Step 3 of the bootstrap wizard (Configure Providers) and in the staking flow.
 
-When a delegator stakes through Middleman, the transaction is routed to the selected provider's infrastructure for execution. Middleman and Provider communicate indirectly through this governance JSON file exchange — neither app requires direct network access to the other.
+When a user stakes through Middleman, the application communicates directly with the selected Provider's API to request supplier addresses, and the owner signs the stake transaction locally. Middleman discovers which providers are available via the governance JSON, but the staking and import-suppliers flows require direct network access between Middleman and Provider instances.
 
 ### Admin vs. Delegator Interface
 

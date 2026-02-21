@@ -88,7 +88,7 @@ Imported suppliers are tracked for rewards and status exactly the same as nodes 
 The import attempt lifecycle tracks each stage:
 
 - **Initiated** — Import request sent to provider
-- **Signed** — Nonce signed by delegator wallet
+- **Signed** — Nonce signed by owner wallet
 - **Submitted** — Signed nonce delivered to provider
 - **Completed** — Provider confirmed and returned supplier list
 - **Failed / Cancelled** — Import did not complete
