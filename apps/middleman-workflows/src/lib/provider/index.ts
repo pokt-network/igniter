@@ -122,6 +122,39 @@ export class ProviderService {
     }
   }
 
+  /**
+   * Fetches supplier address groups from a provider for the given list of addresses
+   * @param addresses List of staked node addresses
+   * @param provider The provider to query
+   * @returns Array of address groups with their IDs, names, and addresses
+   */
+  async fetchSupplierAddressGroups(addresses: string[], provider: Provider): Promise<Array<{ id: number; name: string; addresses: string[] }>> {
+    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
+
+    try {
+      const URL = urlJoin(provider.url, '/api/suppliers/address-groups')
+      const response = await fetch(URL, {
+        method: 'POST',
+        body: JSON.stringify({ addresses }),
+        headers: {
+          'Content-Type': 'application/json',
+          [REQUEST_IDENTITY_HEADER]: identity,
+          [REQUEST_SIGNATURE_HEADER]: signature,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Error fetching supplier address groups: ${response.statusText}`)
+      }
+
+      const { data } = await response.json()
+      return data.addressGroups
+    } catch (error) {
+      this.logger.error('An error occurred while fetching supplier address groups.', { provider: provider.name, error })
+      throw error
+    }
+  }
+
   async releaseSuppliers(addresses: string[], provider: Provider) {
     const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
 

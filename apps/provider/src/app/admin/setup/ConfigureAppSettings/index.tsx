@@ -6,6 +6,7 @@ import { Button } from "@igniter/ui/components/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -26,8 +27,8 @@ interface FormProps {
 }
 
 export const FormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  supportEmail: z.string().email().optional(),
+  name: z.string().min(1, "Name is required").max(255, "Name cannot exceed 255 characters"),
+  supportEmail: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
   rewardAddresses: z.string().refine((value) => {
     if (!value) {
       return true;
@@ -98,10 +99,13 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Provider Name</FormLabel>
                   <FormControl>
-                    <Input {...field} />
+                    <Input {...field} placeholder="e.g., My POKT Provider" />
                   </FormControl>
+                  <FormDescription>
+                    The public name of your provider. This is displayed to delegators and stakers.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -114,8 +118,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
                 <FormItem>
                   <FormLabel>Support Email</FormLabel>
                   <FormControl>
-                    <Input {...field} />
+                    <Input {...field} placeholder="e.g., support@mycompany.com" />
                   </FormControl>
+                  <FormDescription>
+                    Optional. A contact email shown to delegators and stakers who need help.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

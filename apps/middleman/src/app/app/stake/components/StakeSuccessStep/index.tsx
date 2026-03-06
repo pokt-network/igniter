@@ -177,6 +177,9 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                                     services={selectedAddressGroup.addressGroupServices}
                                     shares={shares}
                                     delegatorFee={delegatorFee}
+                                    grossRewardsPerService={selectedAddressGroup.grossRewardsPerService}
+                                    rewardsSuppliersCount={selectedAddressGroup.rewardsSuppliersCount}
+                                    rewardsUpdatedAt={selectedAddressGroup.rewardsUpdatedAt}
                                 />
                             </>
                         )}

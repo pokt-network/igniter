@@ -199,6 +199,7 @@ export default function UnstakePage() {
       <AbortConfirmationDialog
         isOpen={isAbortDialogOpen}
         isLoading={isAborting}
+        type="unstake"
         onResponse={(abort) => { onAbort(abort) }}
       />
     </>

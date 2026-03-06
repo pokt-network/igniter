@@ -17,7 +17,7 @@ import { usersTable } from './users'
 import { nodesTable } from './node'
 import { transactionsTable } from './transaction'
 
-type AddressGroupsJson = Array<{
+export type AddressGroupsJson = Array<{
   id: number;
   name: string;
   linkedAddresses: string[];
@@ -47,7 +47,20 @@ type AddressGroupsJson = Array<{
     }>;
     service: {
       name: string;
+      endpoints?: Array<{ url: string; rpcType: number }>;
     };
+  }>;
+  rewardsSuppliersCount?: number;
+  rewardsUpdatedAt?: string;
+  grossRewardsPerService?: Array<{
+    relays: number;
+    service_id: string;
+    gross_rewards: number;
+    computed_units: number;
+    estimated_relays: number;
+    estimated_computed_units: number;
+    staked_suppliers: number;
+    amount: string;
   }>;
 }>;
 
@@ -68,6 +81,7 @@ export const providersTable = pgTable('providers', {
   minimumStake: integer().notNull().default(0),
   operationalFunds: integer().notNull().default(5),
   addressGroups: jsonb('address_groups').$type<AddressGroupsJson>().default([]),
+  supplierStats: jsonb('supplier_stats').$type<{ suppliers_count: number; total_staked_tokens: number }>(),
   rewardAddresses: varchar().array(),
   createdAt: timestamp().defaultNow(),
   updatedAt: timestamp().defaultNow().$onUpdateFn(() => new Date()),

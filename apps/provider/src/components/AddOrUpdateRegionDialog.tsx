@@ -7,6 +7,7 @@ import { Button } from "@igniter/ui/components/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -24,17 +25,25 @@ import { LoaderIcon } from "@igniter/ui/assets";
 import type { Region } from "@igniter/db/provider/schema";
 import { CreateRegion, UpdateRegion } from "@/actions/Regions";
 
+const Code = ({ children }: { children: React.ReactNode }) => (
+  <code className="rounded-sm border border-[color:var(--color-white-4)] bg-[var(--color-black-2)] px-1 py-0.5 font-mono text-[11px] text-[var(--color-slate-12)]">
+    {children}
+  </code>
+);
+
 const CreateOrUpdateRegionSchema = z.object({
   displayName: z
     .string()
-    .min(1, "Display name is required"),
-  
+    .min(1, "Display name is required")
+    .max(20, "Display name cannot exceed 20 characters"),
+
   urlValue: z
     .string()
     .min(1, "URL value is required")
+    .max(20, "URL value cannot exceed 20 characters")
     .regex(
       /^[a-z0-9-]+$/,
-      "URL value must contain only lowercase letters, numbers, and hyphens"
+      "Only lowercase letters, numbers, and hyphens are allowed"
     ),
 });
 
@@ -150,8 +159,11 @@ export function AddOrUpdateRegionDialog({
                     <FormItem className="flex flex-col gap-2">
                       <FormLabel>Display Name</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="e.g., US East" />
+                        <Input {...field} placeholder="e.g., US East" maxLength={20} />
                       </FormControl>
+                      <FormDescription>
+                        A human-readable label for this region. Shown in dropdowns and tables. Max 20 characters.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -165,18 +177,26 @@ export function AddOrUpdateRegionDialog({
                     <FormItem className="flex flex-col gap-2">
                       <FormLabel>URL Value</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="e.g., us-east" />
+                        <Input {...field} placeholder="e.g., us-east" maxLength={20} />
                       </FormControl>
-                      {!region &&
-                          <div className="text-[var(--color-slate-9)] text-xs">
-                            This value will available for use in your service URLs configurations.
-                          </div>
-                      }
-                      {region &&
-                          <div className="text-[var(--color-slate-9)] text-xs">
-                            This value might be in use on service urls of staked suppliers. Changing it will require that these are re-staked if your infrastructure has changed.
-                          </div>
-                      }
+                      <FormDescription className={'leading-5'}>
+                        This value is used as the <Code>{'{region}'}</Code> token when building service endpoint URLs for suppliers. The URL pattern is:
+                        <br/>
+                        <Code>{'{scheme}://{region}-{rm}-{sid}-{protocol}.{domain}'}</Code>
+                        <br/>
+                        For example, with URL value <Code>us-east</Code> the endpoint becomes:
+                        <br/>
+                        <Code>{'https://us-east-{rm}-{sid}-{protocol}.{domain}'}</Code>
+                        <br/>
+                        <b className={'mt-1 inline-block'}>Max 20 characters. Only lowercase letters, numbers, and hyphens are allowed.</b>
+
+                        {region && (
+                          <>
+                            <br/>
+                            <strong>Warning:</strong> this value may already be part of staked supplier URLs. Changing it will require those suppliers to be re-staked.
+                          </>
+                        )}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

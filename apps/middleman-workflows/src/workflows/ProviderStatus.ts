@@ -4,7 +4,7 @@ import { delegatorActivities } from '@/activities';
 export interface ProviderStatusArgs {}
 
 export async function ProviderStatus(args: ProviderStatusArgs) {
-  const { listProviders, fetchProviderStatus, updateProviders } =
+  const { listProviders, fetchProviderStatus, updateProviders, fetchSupplierAddressGroups, fetchAndStoreAddressGroupRewards } =
     proxyActivities<ReturnType<typeof delegatorActivities>>({
       startToCloseTimeout: "30s",
       retry: {
@@ -17,5 +17,8 @@ export async function ProviderStatus(args: ProviderStatusArgs) {
 
   await updateProviders(providerStatus);
 
-  return providerStatus;
+  const supplierAddressGroups = await fetchSupplierAddressGroups(providers);
+  await fetchAndStoreAddressGroupRewards(providers);
+
+  return { providerStatus, supplierAddressGroups };
 }

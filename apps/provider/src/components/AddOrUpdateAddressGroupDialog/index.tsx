@@ -7,6 +7,7 @@ import { Button } from "@igniter/ui/components/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -770,7 +771,7 @@ export function AddOrUpdateAddressGroupDialog({
                       control={form.control}
                       name="private"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-4">
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md py-4 pr-4 -mt-2">
                           <FormControl>
                             <Switch
                               checked={field.value}
@@ -778,7 +779,14 @@ export function AddOrUpdateAddressGroupDialog({
                               className="border-[var(--slate-dividers)]"
                             />
                           </FormControl>
-                          <FormLabel>Internal use only</FormLabel>
+                          <div className="flex flex-col gap-1">
+                            <FormLabel>Internal use only</FormLabel>
+                            <FormDescription className={'-ml-11 mt-2 !text-[12px]'}>
+                              When enabled, this address group is kept private and will not be shared with Delegators.
+                              Users on the Delegators platform will not see it and won't be able to stake through it.
+                              Use this for address groups reserved for internal operations or testing.
+                            </FormDescription>
+                          </div>
                         </FormItem>
                       )}
                     />
@@ -787,7 +795,7 @@ export function AddOrUpdateAddressGroupDialog({
                         name="linkedAddresses"
                         control={form.control}
                         render={() => (
-                            <FormItem className="flex flex-col gap-2">
+                            <FormItem className="flex flex-col gap-2 -mt-2">
                               <div className="flex justify-between">
                                 <FormLabel>Linked Addresses</FormLabel>
                                 <FormLabel
@@ -835,6 +843,11 @@ export function AddOrUpdateAddressGroupDialog({
                                 </div>
                               </FormControl>
                               <FormMessage />
+                              <FormDescription className="-mt-1 !text-[12px]">
+                                When one or more addresses are added, only users signed into the Delegators platform
+                                with a matching wallet address will be able to see and stake through this address group.
+                                Leave empty to make it available to all users.
+                              </FormDescription>
                             </FormItem>
                         )}
                     />

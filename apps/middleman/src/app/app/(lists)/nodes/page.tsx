@@ -29,6 +29,9 @@ export default async function Page() {
                 <Link href="/app/import-suppliers">
                   <Button variant="outline">Import Suppliers</Button>
                 </Link>
+                <Link href="/app/unstake">
+                  <Button variant="outline">Unstake</Button>
+                </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>
                 </Link>
