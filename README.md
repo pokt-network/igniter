@@ -1,84 +1,127 @@
-# Turborepo starter
+# Igniter
 
-This Turborepo starter is maintained by the Turborepo core team.
+A staking operations platform for the Pocket Network ecosystem.
 
-## Using this example
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![Node](https://img.shields.io/badge/node-%3E%3D18-blue)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
-```
+## What It Is
 
-## What's inside?
+Igniter is an open-source platform for Pocket Network staking operations. It ships as two apps in a single monorepo — **Provider** and **Middleman** — sharing a database, workflow engine, and common packages.
 
-This Turborepo includes the following packages/apps:
+- **Provider** is the core software for node operators. It manages keys, address groups, relay miners, supplier lifecycles, and delegator relationships — everything needed to run Pocket Network infrastructure.
 
-### Apps and Packages
+- **Middleman** is a web-facing application that lets users stake tokens, track rewards, import suppliers, and manage their staking portfolio. Providers can optionally run Middleman alongside Provider to give their clients a direct interface for managing stake. Independent entities (like PNF) can also deploy Middleman as a standalone product, connecting users to any working Igniter-powered providers.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+Since Igniter is open source, anyone can take Middleman as a base, extend it with additional features, and configure a service fee — a built-in mechanism that lets operators or third parties monetize the value they add on top of the platform.
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+---
 
-### Utilities
+## Who It's For
 
-This Turborepo has some additional tools already setup for you:
+**Providers (Node Operators)** run the Provider app to operate Pocket Network suppliers. Optionally, they can also run Middleman as a client-facing interface so their delegators can connect and manage stake directly.
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+**Delegators / Stakeholders** use a Middleman instance — whether run by their provider or by an independent entity — to stake tokens, track rewards, and manage their portfolio without touching backend infrastructure.
 
-### Build
+---
 
-To build all apps and packages, run the following command:
+## How the Apps Relate
 
-```
-cd my-turborepo
-pnpm build
-```
+| App           | Audience                  | Responsibilities                                                              |
+|---------------|---------------------------|-------------------------------------------------------------------------------|
+| **Provider**  | Operators                 | Keys, address groups, relay miners, delegator management, supplier lifecycle  |
+| **Middleman** | Delegators / Stakeholders | Staking, unstaking, import suppliers, overview dashboard, transaction history |
 
-### Develop
+Both apps run alongside **Temporal workflow workers** that handle long-running operations (supplier staking, remediation, etc.) reliably in the background.
 
-To develop all apps and packages, run the following command:
+Shared packages provide common UI components, the database layer (Drizzle + PostgreSQL), GraphQL integration with Pocket Network, Temporal workflow definitions, and logging — so both apps stay consistent without duplicating code.
 
-```
-cd my-turborepo
-pnpm dev
-```
+[View architecture diagram](docs/architecture.md)
 
-### Remote Caching
+---
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+## Monorepo Structure
 
 ```
-cd my-turborepo
-npx turbo login
+igniter/
+├── apps/
+│   ├── provider/           # Operator-facing admin panel
+│   ├── provider-workflows/ # Temporal worker for Provider
+│   ├── middleman/          # Delegator-facing staking interface
+│   └── middleman-workflows/# Temporal worker for Middleman
+├── packages/
+│   ├── @repo/ui            # Shared React component library
+│   ├── @repo/db            # Drizzle ORM + PostgreSQL schema
+│   ├── @repo/graphql       # Pocket Network GraphQL client
+│   ├── @repo/pocket        # Pocket Network SDK integration
+│   ├── @repo/temporal      # Temporal workflow definitions
+│   ├── @repo/domain        # Shared domain types and logic
+│   ├── @repo/commons       # Shared utilities
+│   └── @repo/logger        # Structured logging
+├── docker-compose/
+│   ├── dependencies/
+│   └── apps/
+├── docs/
+│   ├── architecture.md
+│   ├── guides/
+│   │   ├── provider/
+│   │   └── middleman/
+│   └── reference/
+│       ├── provider/
+│       └── middleman/
+├── CONTRIBUTING.md
+└── DEVELOP.md
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+- [docker-compose/](docker-compose/README.md) — Docker Compose deployment files
+- [docs/](docs/) — Guides and reference documentation
+- [DEVELOP.md](DEVELOP.md) — Development environment setup (Tilt + Kubernetes)
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contributing guide
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+---
 
-```
-npx turbo link
-```
+## Setup
 
-## Useful Links
+### Requirements
 
-Learn more about the power of Turborepo:
+Igniter depends on two external services that you must provision — either self-hosted or cloud-managed:
 
-- [Tasks](https://turbo.build/repo/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turbo.build/repo/docs/core-concepts/caching)
-- [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching)
-- [Filtering](https://turbo.build/repo/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
-- [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
+- **PostgreSQL** — Stores all application data. For Provider deployments this includes encrypted private keys, so follow [PostgreSQL security best practices](https://www.postgresql.org/docs/current/security.html) for your environment.
+- **Temporal Server** — Orchestrates long-running workflows (staking, remediation, etc.). Can be [self-hosted](https://docs.temporal.io/self-hosted-guide) or run via [Temporal Cloud](https://temporal.io/cloud). Follow [Temporal's security guidance](https://docs.temporal.io/production-readiness/develop#security) for production deployments.
+
+### Running Igniter
+
+| I am a...                                   | Start here                                                                                             |
+|---------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| **Developer** contributing to Igniter       | Use [Tilt](https://tilt.dev/) — run `tilt up` from the repo root for a full local dev environment      |
+| **Provider or Delegator** deploying Igniter | Use [Docker Compose](docker-compose/README.md) — production-ready deployment with per-app setup guides |
+
+Each app has its own README with deployment, configuration, guides, and reference documentation:
+
+- [Provider README](apps/provider/README.md) — For node operators
+- [Middleman README](apps/middleman/README.md) — For delegators and stakeholders
+
+---
+
+## Contributing
+
+Bug reports and feature requests go to [GitHub Issues](https://github.com/pokt-network/igniter/issues).
+
+See the [Contributing Guide](CONTRIBUTING.md) for development setup, coding conventions, and how to submit a pull request.
+
+---
+
+## Funded By
+
+<a href="https://pocket.network">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pocket-network-logo-white.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/pocket-network-logo.png">
+    <img alt="Pocket Network Foundation" src="docs/assets/pocket-network-logo.png" width="200">
+  </picture>
+</a>
+
+This project is funded by [Pocket Network Foundation](https://pocket.network).

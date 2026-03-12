@@ -61,4 +61,5 @@ tilt/tools/governance/providers.json
 /**/postgres/**/postgres-secrets.yml
 /**/postgres/**/postgres-tls.yml
 
-
+# planing from gsd
+.planning
