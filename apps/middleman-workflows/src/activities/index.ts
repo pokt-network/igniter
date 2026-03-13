@@ -807,6 +807,25 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     } catch (e) {
       statusResult = { ...(e as object) } as Provider
     }
+
+    // Preserve existing reward data in address groups so the status update doesn't wipe it
+    if (statusResult.addressGroups && provider.addressGroups) {
+      const existingGroupsMap = new Map(
+        (provider.addressGroups as Array<{ id: number; grossRewardsPerService?: unknown; rewardsSuppliersCount?: unknown; rewardsUpdatedAt?: unknown }>)
+          .map(ag => [ag.id, ag])
+      )
+      statusResult.addressGroups = statusResult.addressGroups.map((ag) => {
+        const existing = existingGroupsMap.get(ag.id)
+        if (!existing) return ag
+        return {
+          ...ag,
+          grossRewardsPerService: existing.grossRewardsPerService,
+          rewardsSuppliersCount: existing.rewardsSuppliersCount,
+          rewardsUpdatedAt: existing.rewardsUpdatedAt,
+        } as typeof ag
+      })
+    }
+
     await dal.provider.updateProviders([statusResult])
 
     const appSettings = await dal.appSettings.getFirst()

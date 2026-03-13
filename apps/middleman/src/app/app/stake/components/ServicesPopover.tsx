@@ -141,7 +141,7 @@ function MetricsFooter({ rewardsFresh }: { rewardsFresh: boolean }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-[var(--color-white-2)]">APR</span>
-            <span className="text-[var(--color-white-3)]">Annual Percentage Rate: (Performance × 365 ÷ minimum stake) × 100.</span>
+            <span className="text-[var(--color-white-3)]">Annual Percentage Rate: (Est. Yield × 365 ÷ minimum stake) × 100.</span>
           </div>
         </div>
       )}

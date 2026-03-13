@@ -1,1 +1,1 @@
-ALTER TABLE "nodes" ADD COLUMN "services" jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE "nodes" ADD COLUMN IF NOT EXISTS "services" jsonb DEFAULT '[]'::jsonb;

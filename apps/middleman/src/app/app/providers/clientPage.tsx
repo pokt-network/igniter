@@ -263,7 +263,7 @@ function ProviderCard({
                         <span className="font-medium text-[var(--color-white-1)]">APR</span>
                         <span className="text-[13px] text-[var(--color-white-3)]">
                           Annual Percentage Rate, estimated from recent performance.
-                          Calculated as: (Performance POKT/supplier/day × 365 ÷ minimum stake) × 100.
+                          Calculated as: (Est. Yield POKT/supplier/day × 365 ÷ minimum stake) × 100.
                         </span>
                       </div>
                     </div>
@@ -311,8 +311,8 @@ function ProviderCard({
               const linkedAccount = getLinkedAccount(addressGroup.linkedAddresses);
               const planPerformance = calculateAddressGroupPerformance(addressGroup);
               const effectiveYield = calculateEffectiveYield(planPerformance, shares.clientShare);
-              const apr = planPerformance !== null && minimumStake > 0
-                ? (planPerformance * 365 / minimumStake) * 100
+              const apr = effectiveYield !== null && minimumStake > 0
+                ? (effectiveYield * 365 / minimumStake) * 100
                 : null;
 
               return (
