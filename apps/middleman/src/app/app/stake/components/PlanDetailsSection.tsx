@@ -38,8 +38,6 @@ export function PlanDetailsSection({
   rewardsSuppliersCount,
   rewardsUpdatedAt,
 }: PlanDetailsSectionProps) {
-  const servicesCount = services.length;
-
   return (
     <>
       <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
@@ -52,7 +50,6 @@ export function PlanDetailsSection({
         <ServicesPopover
           addressGroupName={addressGroupName}
           services={services}
-          servicesCount={servicesCount}
           delegatorFee={delegatorFee}
           grossRewardsPerService={grossRewardsPerService}
           rewardsSuppliersCount={rewardsSuppliersCount}

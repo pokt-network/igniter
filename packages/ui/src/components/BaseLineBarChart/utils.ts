@@ -508,7 +508,7 @@ interface FillChartDataOptions<T extends LineBarItem> {
   defaultProps?: Partial<T>
 }
 
-export function fillChartData<T extends LineBarItem>({
+export function fillChartDataOld<T extends LineBarItem>({
                                                        data,
                                                        startDate,
                                                        endDate,
@@ -527,4 +527,91 @@ export function fillChartData<T extends LineBarItem>({
       point: point.start_date
     })
   ) as unknown as Array<T>
+}
+
+export function fillChartData<T extends LineBarItem>({
+  data,
+  startDate,
+  endDate,
+  unitToFormatDate,
+  defaultProps,
+}: FillChartDataOptions<T>): Array<T> {
+  // Early bailout: if no data or invalid dates, return empty or original data
+  if (!data || data.length === 0) {
+    return data || []
+  }
+
+  if (!startDate || !endDate) {
+    return data
+  }
+
+  // Create a Map for O(1) lookup by point (date string)
+  // This replaces the O(n×m) nested loop in passingResultsToPoints
+  const dataMap = new Map<string, T>()
+  for (const item of data) {
+    // Normalize the point to ensure consistent matching
+    const normalizedPoint = normalizeIsoDate(item.point)
+    dataMap.set(normalizedPoint, item)
+  }
+
+  // Calculate date range efficiently
+  const start = getDateFromIsoString(startDate)
+  const end = getDateFromIsoString(endDate)
+
+  // Determine increment function based on unit
+  const incrementFn = unitToFormatDate === 'hour' ? addHoursToUtc : addDaysToUtc
+  const startOfFn = unitToFormatDate === 'hour' ? getUtcStartOfHour : getUtcStartOfDay
+
+  // Pre-calculate the number of points to avoid growing arrays
+  const totalPoints = unitToFormatDate === 'hour'
+    ? differenceInHours(end, start) + 1
+    : differenceInDays(end, start) + 1
+
+  // Validate totalPoints to prevent Safari RangeError
+  if (!Number.isFinite(totalPoints) || totalPoints <= 0 || totalPoints > Number.MAX_SAFE_INTEGER) {
+    console.error(`[fillChartData] Invalid totalPoints: ${totalPoints}. Returning original data.`)
+    return data
+  }
+
+  // Performance bailout: if dataset is very large (>100 points), consider skipping fill
+  // This prevents multi-second blocking for extreme cases
+  if (totalPoints > 100) {
+    console.warn(`[fillChartDataOptimized] Large dataset detected (${totalPoints} points). Consider skipping fillChartData for better performance.`)
+  }
+
+  // Pre-allocate array for better memory performance
+  const result: Array<T> = new Array(totalPoints)
+
+  // Generate points iteratively - much faster than getPointsBetweenDateRanges
+  let currentDate = startOfFn(start)
+  let index = 0
+
+  while (compareAsc(currentDate, end) <= 0 && index < totalPoints) {
+    const pointIso = currentDate.toISOString()
+    const normalizedPoint = normalizeIsoDate(pointIso)
+
+    // O(1) lookup instead of O(n) inner loop
+    const existingData = dataMap.get(normalizedPoint)
+
+    if (existingData) {
+      // Use existing data directly (avoid spreading if possible)
+      result[index] = existingData
+    } else {
+      // Create missing point with default props
+      // eslint-disable-next-line
+      // @ts-ignore
+      result[index] = {
+        ...defaultProps,
+        point: normalizedPoint,
+        start_date: normalizedPoint,
+      } as T
+    }
+
+    // Move to next time unit
+    currentDate = incrementFn(currentDate, 1)
+    index++
+  }
+
+  // Trim array if we allocated more than needed (edge case)
+  return index < totalPoints ? result.slice(0, index) : result
 }

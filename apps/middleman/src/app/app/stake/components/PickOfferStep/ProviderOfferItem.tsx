@@ -2,6 +2,7 @@ import ProviderIcon from '@/app/assets/icons/dark/providers.svg'
 import { StakeDistributionOffer } from '@/lib/models/StakeDistributionOffer'
 import { CheckIcon, InfoIcon, CaretIcon } from '@igniter/ui/assets'
 import { Popover, PopoverContent, PopoverTrigger } from '@igniter/ui/components/popover'
+import millify from 'millify'
 import { useState } from 'react'
 import { calculateShares, calculateProviderPerformance, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations'
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover'
@@ -14,9 +15,10 @@ export interface ProviderOfferItemProps {
     disabled?: boolean;
     delegatorFee: number;
     userIdentity: string;
+    minimumStake: number;
 }
 
-export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddressGroup, disabled, delegatorFee, userIdentity }: Readonly<ProviderOfferItemProps>) {
+export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddressGroup, disabled, delegatorFee, userIdentity, minimumStake }: Readonly<ProviderOfferItemProps>) {
     const [isExpanded, setIsExpanded] = useState(offer.addressGroups.length === 1)
 
     // Sort address groups: linked/personal ones first
@@ -75,17 +77,10 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                                 </span>
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-[var(--color-white-1)]">Performance</span>
+                                                <span className="font-medium text-[var(--color-white-1)]">APR</span>
                                                 <span className="text-[13px] text-[var(--color-white-3)]">
-                                                    Average gross rewards per supplier per day over the last 7 days, after applying the on-chain supplier mint allocation percentage.
-                                                    Calculated as: total rewards ÷ suppliers ÷ 7 days.
-                                                    {providerPerformance?.isPartial && ' Marked as partial because not all plans have rewards data yet.'}
-                                                </span>
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-[var(--color-white-1)]">POKT/sup/day</span>
-                                                <span className="text-[13px] text-[var(--color-white-3)]">
-                                                    Short for <span className="text-[var(--color-white-2)]">POKT per supplier per day</span>. This is the unit used for Performance and Est. Yield — it tells you how many POKT tokens a single staked supplier earns on average each day.
+                                                    Annual Percentage Rate, estimated from recent performance.
+                                                    Calculated as: (Performance POKT/supplier/day × 365 ÷ minimum stake) × 100.
                                                 </span>
                                             </div>
                                         </div>
@@ -93,12 +88,18 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                 </Popover>
                             </span>
                             <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px]">
-                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Performance: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{providerPerformance ? `${formatPerformance(providerPerformance.value)}${providerPerformance.isPartial ? ' (partial)' : ''}` : 'N/A'}</span></span>
                                 <span className="whitespace-nowrap text-[var(--color-white-3)]">Plans: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.addressGroups.length}</span></span>
                                 {offer.supplierStats && (
                                     <>
-                                        <span className="whitespace-nowrap text-[var(--color-white-3)]">Staked Suppliers: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.supplierStats.suppliers_count.toLocaleString()}</span></span>
-                                        <span className="whitespace-nowrap text-[var(--color-white-3)]">Total Staked: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{(offer.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT</span></span>
+                                        <span className="whitespace-nowrap text-[var(--color-white-3)]">Suppliers: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Total Staked: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{millify(offer.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                {(offer.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
+                                            </TooltipContent>
+                                        </Tooltip>
                                     </>
                                 )}
                             </span>
@@ -115,9 +116,11 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                         {sortedAddressGroups.map((addressGroup, index) => {
                             const shares = calculateShares(addressGroup, delegatorFee)
                             const isSelected = addressGroup.id === selectedAddressGroupId
-                            const servicesCount = addressGroup.addressGroupServices?.length || 0
                             const planPerformance = calculateAddressGroupPerformance(addressGroup)
                             const effectiveYield = calculateEffectiveYield(planPerformance, shares.clientShare)
+                            const apr = planPerformance !== null && minimumStake > 0
+                                ? (planPerformance * 365 / minimumStake) * 100
+                                : null
 
                             return (
                                 <div
@@ -133,7 +136,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                     {/* Top row: plan name + actions */}
                                     <div className="flex flex-row items-center justify-between overflow-visible">
                                         <span className="flex flex-row items-center gap-2 overflow-visible">
-                                            <span className="font-medium">{addressGroup.name}</span>
+                                            <span className="font-medium">Plan #{index + 1}: {addressGroup.name}</span>
                                             {addressGroup.linkedAddresses && addressGroup.linkedAddresses.length > 0 && addressGroup.linkedAddresses.some((addr: string) => addr.toLowerCase() === userIdentity.toLowerCase()) && (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -168,19 +171,22 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                             <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
                                         </div>
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] text-[var(--color-white-3)]">Performance</span>
-                                            <span className="font-mono text-[13px]">{planPerformance !== null ? formatPerformance(planPerformance) : '—'}</span>
+                                            <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                                            <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                                         </div>
                                     </div>
                                     {/* Services row */}
                                     <ServicesPopover
                                         addressGroupName={addressGroup.name}
                                         services={addressGroup.addressGroupServices}
-                                        servicesCount={servicesCount}
                                         delegatorFee={delegatorFee}
                                         grossRewardsPerService={addressGroup.grossRewardsPerService}
                                         rewardsSuppliersCount={addressGroup.rewardsSuppliersCount}
                                         rewardsUpdatedAt={addressGroup.rewardsUpdatedAt}
+                                        planEstYield={effectiveYield !== null ? formatPerformance(effectiveYield) : null}
+                                        planClientShare={`${shares.clientShare.toFixed(1)}%`}
+                                        planPerformance={planPerformance !== null ? formatPerformance(planPerformance) : null}
+                                        planApr={apr !== null ? `${apr.toFixed(1)}%` : null}
                                     />
                                 </div>
                             )

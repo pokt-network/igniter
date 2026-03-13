@@ -185,7 +185,7 @@ export function calculateEffectiveYield(
   return performance * (clientShare / 100);
 }
 
-/** Formats a performance value as "X.XX POKT/sup/day" */
+/** Formats a performance value as "X.XX POKT/supplier/day" */
 export function formatPerformance(value: number): string {
-  return `${value.toFixed(2)} POKT/sup/day`;
+  return `${value.toFixed(2)} POKT/supplier/day`;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import millify from 'millify'
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@igniter/ui/components/button';
@@ -33,6 +34,7 @@ export default function ClientProvidersPage() {
       return {
         providers: providersData,
         delegatorFee: appSettings.fee ? Number(appSettings.fee) : 0,
+        minimumStake: appSettings.minimumStake ?? 0,
       };
     },
     enabled: isConnected,
@@ -41,6 +43,7 @@ export default function ClientProvidersPage() {
 
   const providers = data?.providers || [];
   const delegatorFee = data?.delegatorFee || 0;
+  const minimumStake = data?.minimumStake || 0;
 
   useEffect(() => {
     if (!hasInitializedExpanded && providers.length > 0) {
@@ -132,6 +135,7 @@ export default function ClientProvidersPage() {
                 onStakeClick={handleStakeClick}
                 delegatorFee={delegatorFee}
                 connectedAccounts={connectedIdentities || []}
+                minimumStake={minimumStake}
               />
             ))}
           </MasonryGrid>
@@ -181,6 +185,7 @@ interface ProviderCardProps {
   onStakeClick: (providerId: number, addressGroupId: number, linkedAccount?: string | null) => void;
   delegatorFee: number;
   connectedAccounts: string[];
+  minimumStake: number;
 }
 
 function ProviderCard({
@@ -190,6 +195,7 @@ function ProviderCard({
   onStakeClick,
   delegatorFee,
   connectedAccounts,
+  minimumStake,
 }: ProviderCardProps) {
   const normalizedConnectedAccounts = connectedAccounts.map(addr => addr.toLowerCase());
 
@@ -256,17 +262,10 @@ function ProviderCard({
                         </span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[var(--color-white-1)]">Performance</span>
+                        <span className="font-medium text-[var(--color-white-1)]">APR</span>
                         <span className="text-[13px] text-[var(--color-white-3)]">
-                          Average gross rewards per supplier per day over the last 7 days, after applying the on-chain supplier mint allocation percentage.
-                          Calculated as: total rewards ÷ suppliers ÷ 7 days.
-                          {providerPerformance?.isPartial && ' Marked as partial because not all plans have rewards data yet.'}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[var(--color-white-1)]">POKT/sup/day</span>
-                        <span className="text-[13px] text-[var(--color-white-3)]">
-                          Short for <span className="text-[var(--color-white-2)]">POKT per supplier per day</span>. This is the unit used for Performance and Est. Yield — it tells you how many POKT tokens a single staked supplier earns on average each day.
+                          Annual Percentage Rate, estimated from recent performance.
+                          Calculated as: (Performance POKT/supplier/day × 365 ÷ minimum stake) × 100.
                         </span>
                       </div>
                     </div>
@@ -274,12 +273,18 @@ function ProviderCard({
                 </Popover>
               </span>
               <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--color-white-3)]">
-                <span className="whitespace-nowrap">Performance: <span className="text-[var(--color-white-1)]">{providerPerformance ? `${formatPerformance(providerPerformance.value)}${providerPerformance.isPartial ? ' (partial)' : ''}` : 'N/A'}</span></span>
                 <span className="whitespace-nowrap">Plans: <span className="text-[var(--color-white-1)]">{provider.addressGroups.length}</span></span>
                 {provider.supplierStats && (
                   <>
-                    <span className="whitespace-nowrap">Staked Suppliers: <span className="text-[var(--color-white-1)]">{provider.supplierStats.suppliers_count.toLocaleString()}</span></span>
-                    <span className="whitespace-nowrap">Total Staked: <span className="text-[var(--color-white-1)]">{(provider.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT</span></span>
+                    <span className="whitespace-nowrap">Suppliers: <span className="text-[var(--color-white-1)]">{provider.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="whitespace-nowrap">Total Staked: <span className="text-[var(--color-white-1)]">{millify(provider.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {(provider.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
+                      </TooltipContent>
+                    </Tooltip>
                   </>
                 )}
                 {provider.status !== ProviderStatus.Healthy && (
@@ -305,10 +310,12 @@ function ProviderCard({
           <div className="flex flex-col border-t border-[var(--black-dividers)]">
             {sortedAddressGroups.map((addressGroup, index) => {
               const shares = calculateShares(addressGroup, delegatorFee);
-              const servicesCount = addressGroup.addressGroupServices?.length || 0;
               const linkedAccount = getLinkedAccount(addressGroup.linkedAddresses);
               const planPerformance = calculateAddressGroupPerformance(addressGroup);
               const effectiveYield = calculateEffectiveYield(planPerformance, shares.clientShare);
+              const apr = planPerformance !== null && minimumStake > 0
+                ? (planPerformance * 365 / minimumStake) * 100
+                : null;
 
               return (
                 <div
@@ -322,7 +329,7 @@ function ProviderCard({
                   {/* Top row: plan name + actions */}
                   <div className="flex flex-row items-center justify-between">
                     <span className="flex flex-row items-center gap-2">
-                      <span className="font-medium">{addressGroup.name}</span>
+                      <span className="font-medium">Plan #{index + 1}: {addressGroup.name}</span>
                       {linkedAccount && (
                         <Tooltip>
                           <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -369,19 +376,22 @@ function ProviderCard({
                       <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--color-white-3)]">Performance</span>
-                      <span className="font-mono text-[13px]">{planPerformance !== null ? formatPerformance(planPerformance) : '—'}</span>
+                      <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                      <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                     </div>
                   </div>
                   {/* Services row */}
                   <ServicesPopover
                     addressGroupName={addressGroup.name}
                     services={addressGroup.addressGroupServices || []}
-                    servicesCount={servicesCount}
                     delegatorFee={delegatorFee}
                     grossRewardsPerService={addressGroup.grossRewardsPerService}
                     rewardsSuppliersCount={addressGroup.rewardsSuppliersCount}
                     rewardsUpdatedAt={addressGroup.rewardsUpdatedAt}
+                    planEstYield={effectiveYield !== null ? formatPerformance(effectiveYield) : null}
+                    planClientShare={`${shares.clientShare.toFixed(1)}%`}
+                    planPerformance={planPerformance !== null ? formatPerformance(planPerformance) : null}
+                    planApr={apr !== null ? `${apr.toFixed(1)}%` : null}
                   />
                 </div>
               );

@@ -72,7 +72,6 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
   log.debug('SupplierStatus: Preparing to trigger child workflows', { ...loggerContext })
 
   const notInStates = [
-    KeyState.Available,
     KeyState.Unstaked,
     KeyState.RemediationFailed,
     KeyState.AttentionNeeded,
