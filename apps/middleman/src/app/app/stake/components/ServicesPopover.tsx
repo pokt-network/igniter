@@ -119,7 +119,7 @@ function MetricsFooter({ rewardsFresh }: { rewardsFresh: boolean }) {
           {rewardsFresh ? 'Performance & Est. Yield in POKT/supplier/day' : 'How are these metrics calculated?'}
         </span>
         <span className="flex items-center gap-1">
-          <span>{isExpanded ? 'Hide' : 'View more'}</span>
+          <span>{isExpanded ? 'Hide' : 'About the Metrics'}</span>
           <span className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
             <CaretSmallIcon />
           </span>

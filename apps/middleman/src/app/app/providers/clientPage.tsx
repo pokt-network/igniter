@@ -15,7 +15,7 @@ import { ListProvidersWithPublicPlans, ProviderWithPublicPlans } from '@/actions
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover';
 import { getApplicationSettings } from '@/actions/ApplicationSettings';
 import ProviderIcon from '@/app/assets/icons/dark/providers.svg';
-import { calculateShares, calculateProviderPerformance, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations';
+import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
 export default function ClientProvidersPage() {
@@ -221,8 +221,6 @@ function ProviderCard({
     if (!aLinkedAccount && bLinkedAccount) return 1;
     return 0;
   });
-
-  const providerPerformance = calculateProviderPerformance(provider.addressGroups);
 
   return (
     <div className="flex flex-col rounded-[8px] border-[2px] border-[--black-dividers]">

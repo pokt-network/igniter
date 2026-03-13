@@ -4,7 +4,7 @@ import { CheckIcon, InfoIcon, CaretIcon } from '@igniter/ui/assets'
 import { Popover, PopoverContent, PopoverTrigger } from '@igniter/ui/components/popover'
 import millify from 'millify'
 import { useState } from 'react'
-import { calculateShares, calculateProviderPerformance, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations'
+import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations'
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
@@ -32,7 +32,6 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
     })
 
     const hasSelection = offer.addressGroups.some(ag => ag.id === selectedAddressGroupId)
-    const providerPerformance = calculateProviderPerformance(offer.addressGroups)
 
     const className = hasSelection
         ? 'relative flex flex-col gradient-border-purple'
@@ -40,7 +39,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
 
     return (
         <div className={className}>
-            <div className={`flex flex-col m-[0.5px] bg-[var(--background)] rounded-[8px]`}>
+            <div className={`flex flex-col m-[0.5px] bg-[var(--background)] rounded-[8px] overflow-hidden`}>
                 {/* Provider Header */}
                 <div
                     className="flex flex-row items-center justify-between p-[20px_25px] cursor-pointer hover:opacity-80"
