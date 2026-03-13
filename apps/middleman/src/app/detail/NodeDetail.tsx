@@ -3,6 +3,7 @@
 import { NodeStatus } from '@igniter/db/middleman/enums'
 import Amount from '@igniter/ui/components/Amount'
 import React, { useState } from 'react'
+import { Badge } from '@igniter/ui/components/badge'
 import { clsx } from 'clsx'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@igniter/ui/components/drawer'
 import { Button, ButtonProps } from '@igniter/ui/components/button'
@@ -14,7 +15,7 @@ import {useAddItemToDetail, useRemoveLastItemFromDetail} from '@igniter/ui/compo
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
-import { Provider } from '@igniter/db/middleman/schema'
+import { NodeService, Provider } from '@igniter/db/middleman/schema'
 import {TransactionDetailBody} from "@/app/detail/TransactionDetail"
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
@@ -31,6 +32,7 @@ export interface NodeDetailBody {
   stakeAmount: number;
   operationalFundsAmount: number;
   transactions: Array<TransactionDetailBody>;
+  services: NodeService[];
 }
 
 export interface NodeDetail {
@@ -38,6 +40,77 @@ export interface NodeDetail {
   body: NodeDetailBody
 }
 
+
+const RPC_TYPE_LABELS: Record<number, string> = {
+  1: 'gRPC',
+  2: 'WebSocket',
+  3: 'JSON-RPC',
+  4: 'REST',
+  5: 'CometBFT',
+}
+
+function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAddress: string }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  const ownerRevShare = service.revShare.find(
+    (rs) => rs.address.toLowerCase() === ownerAddress.toLowerCase()
+  )
+  const clientShare = ownerRevShare?.revSharePercentage ?? null
+  const hasDetails = service.endpoints.length > 0 || service.revShare.length > 0
+
+  return (
+    <div className="rounded-[8px] border border-[color:var(--divider)] p-3 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {hasDetails && (
+            <span
+              className="flex items-center justify-center cursor-pointer shrink-0"
+              onClick={() => setIsExpanded(prev => !prev)}
+            >
+              <CaretSmallIcon style={{ transform: isExpanded ? 'rotate(90deg)' : undefined }} />
+            </span>
+          )}
+          <Badge variant="outline" className="font-mono">
+            {service.serviceId}
+          </Badge>
+        </div>
+        {clientShare !== null && (
+          <span className="text-xs text-[color:var(--color-white-3)]">
+            Client Share: <span className="font-mono text-[color:var(--color-white-1)]">{clientShare.toFixed(1)}%</span>
+          </span>
+        )}
+      </div>
+
+      {isExpanded && (
+        <>
+          {service.endpoints.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-[color:var(--muted-foreground)]">Endpoints</p>
+              {service.endpoints.map((ep, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs truncate text-[color:var(--color-white-3)]">{ep.url}</span>
+                  <Badge variant="secondary" className="text-xs shrink-0">{RPC_TYPE_LABELS[ep.rpcType] ?? 'Unknown'}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {service.revShare.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-[color:var(--muted-foreground)]">Revenue Share</p>
+              {service.revShare.map((rs, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs text-[color:var(--color-white-3)]">{getShortAddress(rs.address, 5)}</span>
+                  <span className="font-mono text-xs">{rs.revSharePercentage}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
 function ActionButton({children, ...props}: React.PropsWithChildren & Omit<ButtonProps, 'children'>) {
   return (
@@ -62,12 +135,14 @@ export default function NodeDetail({
    transactions,
    provider,
    operationalFundsAmount,
-   stakeAmount
+   stakeAmount,
+   services,
 }: NodeDetailBody) {
   const addItem = useAddItemToDetail()
   const removeLastItem = useRemoveLastItemFromDetail()
   const router = useRouter()
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
+  const [isShowingServices, setIsShowingServices] = useState(false);
 
   const {
     data: unstakeDurationData,
@@ -197,6 +272,81 @@ export default function NodeDetail({
       <Summary
         rows={summaryRows}
       />
+
+      {(() => {
+        const activeServices = (services ?? []).filter(s => !s.pendingActivationHeight)
+        const pendingServices = (services ?? []).filter(s => !!s.pendingActivationHeight)
+
+        if (activeServices.length === 0 && pendingServices.length === 0) {
+          return (
+            <div className="rounded-[8px] bg-[color:var(--color-slate-2)] px-4 py-3">
+              <p className="text-sm text-[color:var(--color-white-3)]">
+                No services yet. The provider will configure services once they process your stake.
+              </p>
+            </div>
+          )
+        }
+
+        return (
+          <div className="flex flex-col gap-3">
+            {activeServices.length > 0 && (
+              <>
+                <span
+                  className="flex items-center gap-2 cursor-pointer w-fit"
+                  onClick={() => setIsShowingServices(prev => !prev)}
+                >
+                  <span className="flex items-center justify-center">
+                    <CaretSmallIcon
+                      style={{ transform: isShowingServices ? 'rotate(90deg)' : undefined }}
+                    />
+                  </span>
+                  <span className="text-sm">Services ({activeServices.length})</span>
+                </span>
+
+                {isShowingServices && (
+                  <div className="flex flex-col gap-3">
+                    {activeServices.map((service) => (
+                      <ServiceCard key={service.serviceId} service={service} ownerAddress={ownerAddress} />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {pendingServices.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-[color:var(--color-white-3)]">
+                  Services pending activation
+                </p>
+                {Object.entries(
+                  pendingServices.reduce<Record<number, typeof pendingServices>>((groups, s) => {
+                    const h = s.pendingActivationHeight!
+                    ;(groups[h] ??= []).push(s)
+                    return groups
+                  }, {})
+                )
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .map(([height, svcs]) => (
+                    <div key={height} className="rounded-[8px] bg-[color:var(--color-slate-2)] px-4 py-3 flex flex-col gap-2">
+                      <p className="text-xs text-[color:var(--color-white-3)]">
+                        {svcs.length} service{svcs.length > 1 ? 's' : ''} scheduled to activate at block{' '}
+                        <span className="font-mono text-[color:var(--color-white-1)]">{height}</span>
+                        . Not yet visible on-chain — won&apos;t appear in blockchain explorers until that block is reached.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {svcs.map((s) => (
+                          <Badge key={s.serviceId} variant="outline" className="font-mono text-[color:var(--color-white-3)]">
+                            {s.serviceId}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {status === NodeStatus.Staked && (
         <div className={'bg-[color:var(--color-slate-2)] h-[109px] rounded-[8px]'}>

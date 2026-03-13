@@ -111,6 +111,26 @@ export default class Node {
   }
 
   /**
+   * Returns the addresses of nodes staked with the given provider that are in Staked or Unstaking status.
+   *
+   * @param {string} providerIdentity - The identity of the provider.
+   * @return {Promise<string[]>} A promise that resolves to an array of node addresses.
+   */
+  async getStakedNodesByProvider(providerIdentity: string): Promise<string[]> {
+    const rows = await this.dbClient.db
+      .select({ address: nodesTable.address })
+      .from(nodesTable)
+      .where(
+        and(
+          eq(nodesTable.providerId, providerIdentity),
+          inArray(nodesTable.status, [NodeStatus.Staked, NodeStatus.Unstaking]),
+        ),
+      )
+
+    return rows.map(row => row.address)
+  }
+
+  /**
    * Updates the key information for the specified address in the database.
    *
    * @param {string} address - The unique identifier of the key to be updated.

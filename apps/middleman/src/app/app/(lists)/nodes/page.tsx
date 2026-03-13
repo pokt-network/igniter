@@ -23,11 +23,21 @@ export default async function Page() {
           <div className="flex flex-row justify-between items-center">
             <div className="flex flex-col">
               <h1>Suppliers</h1>
+              <p className="text-muted-foreground">
+                Manage your suppliers and their stake configurations. View active suppliers, their services, and
+                performance metrics.
+              </p>
             </div>
             <div className="flex flex-col">
               <div className="flex flex-row gap-3">
+                <Link href="/app/unstake">
+                  <Button variant="outline" className={'border-red-800/45'}>Unstake</Button>
+                </Link>
                 <Link href="/app/import-suppliers">
                   <Button variant="outline">Import Suppliers</Button>
+                </Link>
+                <Link href="/app/unstake">
+                  <Button variant="outline">Unstake</Button>
                 </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>

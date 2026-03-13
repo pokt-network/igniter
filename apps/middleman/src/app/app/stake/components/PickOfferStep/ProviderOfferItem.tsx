@@ -2,8 +2,9 @@ import ProviderIcon from '@/app/assets/icons/dark/providers.svg'
 import { StakeDistributionOffer } from '@/lib/models/StakeDistributionOffer'
 import { CheckIcon, InfoIcon, CaretIcon } from '@igniter/ui/assets'
 import { Popover, PopoverContent, PopoverTrigger } from '@igniter/ui/components/popover'
+import millify from 'millify'
 import { useState } from 'react'
-import { calculateShares } from '@/lib/utils/shareCalculations'
+import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations'
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
@@ -14,9 +15,10 @@ export interface ProviderOfferItemProps {
     disabled?: boolean;
     delegatorFee: number;
     userIdentity: string;
+    minimumStake: number;
 }
 
-export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddressGroup, disabled, delegatorFee, userIdentity }: Readonly<ProviderOfferItemProps>) {
+export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddressGroup, disabled, delegatorFee, userIdentity, minimumStake }: Readonly<ProviderOfferItemProps>) {
     const [isExpanded, setIsExpanded] = useState(offer.addressGroups.length === 1)
 
     // Sort address groups: linked/personal ones first
@@ -37,7 +39,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
 
     return (
         <div className={className}>
-            <div className={`flex flex-col m-[0.5px] bg-[var(--background)] rounded-[8px]`}>
+            <div className={`flex flex-col m-[0.5px] bg-[var(--background)] rounded-[8px] overflow-hidden`}>
                 {/* Provider Header */}
                 <div
                     className="flex flex-row items-center justify-between p-[20px_25px] cursor-pointer hover:opacity-80"
@@ -56,26 +58,49 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                     </PopoverTrigger>
                                     <PopoverContent className="flex flex-col w-[360px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-y-auto">
                                         <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px] sticky top-0 bg-[var(--color-slate-2)] border-b border-[var(--slate-dividers)]">
-                                            About Client Share
+                                            About these metrics
                                         </span>
                                         <div className="flex flex-col gap-4 p-[12px_16px]">
                                             <div className="flex flex-col gap-1">
+                                                <span className="font-medium text-[var(--color-white-1)]">Est. Yield</span>
+                                                <span className="text-[13px] text-[var(--color-white-3)]">
+                                                    Your estimated earnings per supplier per day, calculated as: Performance × Client Share.
+                                                    This is the net amount you would receive after all fees are applied.
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
                                                 <span className="font-medium text-[var(--color-white-1)]">Client Share</span>
                                                 <span className="text-[13px] text-[var(--color-white-3)]">
-                                                    The share of the rewards you will receive from this plan.
+                                                    The median share of rewards you will receive across all services in this plan.
+                                                    Calculated per service as: 100% − Provider Share − Supplier Share − Delegator Fee, then the median is taken.
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-medium text-[var(--color-white-1)]">APR</span>
+                                                <span className="text-[13px] text-[var(--color-white-3)]">
+                                                    Annual Percentage Rate, estimated from recent performance.
+                                                    Calculated as: (Performance POKT/supplier/day × 365 ÷ minimum stake) × 100.
                                                 </span>
                                             </div>
                                         </div>
                                     </PopoverContent>
                                 </Popover>
                             </span>
-                            <span className="flex flex-row items-center gap-4 text-[14px]">
-                                <span className={`${disabled ? 'text-[var(--color-white-3)]' : ''}`}>
-                                    Performance: {offer.rewards}
-                                </span>
-                                <span className={`${disabled ? 'text-[var(--color-white-3)]' : ''}`}>
-                                    Plans: {offer.addressGroups.length}
-                                </span>
+                            <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px]">
+                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Plans: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.addressGroups.length}</span></span>
+                                {offer.supplierStats && (
+                                    <>
+                                        <span className="whitespace-nowrap text-[var(--color-white-3)]">Suppliers: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Total Staked: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{millify(offer.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                {(offer.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </>
+                                )}
                             </span>
                         </span>
                     </span>
@@ -90,12 +115,16 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                         {sortedAddressGroups.map((addressGroup, index) => {
                             const shares = calculateShares(addressGroup, delegatorFee)
                             const isSelected = addressGroup.id === selectedAddressGroupId
-                            const servicesCount = addressGroup.addressGroupServices?.length || 0
+                            const planPerformance = calculateAddressGroupPerformance(addressGroup)
+                            const effectiveYield = calculateEffectiveYield(planPerformance, shares.clientShare)
+                            const apr = planPerformance !== null && minimumStake > 0
+                                ? (planPerformance * 365 / minimumStake) * 100
+                                : null
 
                             return (
                                 <div
                                     key={addressGroup.id}
-                                    className={`flex flex-col p-[16px_25px] overflow-visible ${index !== sortedAddressGroups.length - 1 ? 'border-b border-[var(--black-dividers)]' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--color-slate-2)]'} ${isSelected ? 'bg-[var(--color-slate-2)]' : ''}`}
+                                    className={`flex flex-col gap-1 p-[16px_25px] overflow-visible ${index !== sortedAddressGroups.length - 1 ? 'border-b border-[var(--black-dividers)]' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--color-slate-2)]'} ${isSelected ? 'bg-[var(--color-slate-2)]' : ''}`}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         if (!disabled && onSelectAddressGroup) {
@@ -103,48 +132,61 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                         }
                                     }}
                                 >
+                                    {/* Top row: plan name + actions */}
                                     <div className="flex flex-row items-center justify-between overflow-visible">
                                         <span className="flex flex-row items-center gap-2 overflow-visible">
-                                            <span className="font-medium">{addressGroup.name}</span>
+                                            <span className="font-medium">Plan #{index + 1}: {addressGroup.name}</span>
                                             {addressGroup.linkedAddresses && addressGroup.linkedAddresses.length > 0 && addressGroup.linkedAddresses.some((addr: string) => addr.toLowerCase() === userIdentity.toLowerCase()) && (
-                                                <span className="flex flex-row items-center gap-1.5">
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                            <span className="px-2 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
-                                                                Personal
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="flex flex-col w-[260px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
-                                                            <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
-                                                                Personal Plan
-                                                            </span>
-                                                            <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
-                                                            <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
-                                                                This plan is exclusively available to you based on your selected owner address being linked to this provider's plan. Other users cannot stake to this plan.
-                                                            </span>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </span>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <span className="px-2 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
+                                                            Personal
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="flex flex-col w-[260px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
+                                                        <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
+                                                            Personal Plan
+                                                        </span>
+                                                        <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+                                                        <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
+                                                            This plan is exclusively available to you based on your selected owner address being linked to this provider's plan. Other users cannot stake to this plan.
+                                                        </span>
+                                                    </TooltipContent>
+                                                </Tooltip>
                                             )}
-                                            <span className="text-[var(--color-white-3)] -ml-2">:</span>
-                                            <span className="flex flex-row items-center gap-1.5 text-[14px] mt-0.5">
-                                                <span className="text-[var(--color-white-3)]">Client Share:</span>
-                                                <span className="font-mono">{shares.clientShare.toFixed(1)}%</span>
-                                            </span>
                                         </span>
-                                        <div className="flex flex-row items-center gap-3">
-                                            <ServicesPopover
-                                                addressGroupName={addressGroup.name}
-                                                services={addressGroup.addressGroupServices}
-                                                servicesCount={servicesCount}
-                                                triggerClassName="text-[14px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] underline cursor-pointer"
-                                                delegatorFee={delegatorFee}
-                                            />
-                                            <span className="w-5 h-5 flex items-center justify-center">
-                                                {isSelected && <CheckIcon />}
-                                            </span>
+                                        <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                                            {isSelected && <CheckIcon />}
+                                        </span>
+                                    </div>
+                                    {/* Metrics row */}
+                                    <div className="flex flex-row gap-6 mt-1">
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-[11px] text-[var(--color-white-3)]">Est. Yield</span>
+                                            <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-[11px] text-[var(--color-white-3)]">Client Share</span>
+                                            <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                                            <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                                         </div>
                                     </div>
+                                    {/* Services row */}
+                                    <ServicesPopover
+                                        addressGroupName={addressGroup.name}
+                                        services={addressGroup.addressGroupServices}
+                                        delegatorFee={delegatorFee}
+                                        grossRewardsPerService={addressGroup.grossRewardsPerService}
+                                        rewardsSuppliersCount={addressGroup.rewardsSuppliersCount}
+                                        rewardsUpdatedAt={addressGroup.rewardsUpdatedAt}
+                                        planEstYield={effectiveYield !== null ? formatPerformance(effectiveYield) : null}
+                                        planClientShare={`${shares.clientShare.toFixed(1)}%`}
+                                        planPerformance={planPerformance !== null ? formatPerformance(planPerformance) : null}
+                                        planApr={apr !== null ? `${apr.toFixed(1)}%` : null}
+                                    />
                                 </div>
                             )
                         })}

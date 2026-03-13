@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import millify from 'millify'
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@igniter/ui/components/button';
@@ -14,7 +15,7 @@ import { ListProvidersWithPublicPlans, ProviderWithPublicPlans } from '@/actions
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover';
 import { getApplicationSettings } from '@/actions/ApplicationSettings';
 import ProviderIcon from '@/app/assets/icons/dark/providers.svg';
-import { calculateShares } from '@/lib/utils/shareCalculations';
+import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
 export default function ClientProvidersPage() {
@@ -33,6 +34,7 @@ export default function ClientProvidersPage() {
       return {
         providers: providersData,
         delegatorFee: appSettings.fee ? Number(appSettings.fee) : 0,
+        minimumStake: appSettings.minimumStake ?? 0,
       };
     },
     enabled: isConnected,
@@ -41,6 +43,7 @@ export default function ClientProvidersPage() {
 
   const providers = data?.providers || [];
   const delegatorFee = data?.delegatorFee || 0;
+  const minimumStake = data?.minimumStake || 0;
 
   useEffect(() => {
     if (!hasInitializedExpanded && providers.length > 0) {
@@ -122,7 +125,7 @@ export default function ClientProvidersPage() {
         )}
 
         {!isLoading && !isError && providers.length > 0 && (
-          <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(600px, 1fr))' }}>
+          <MasonryGrid>
             {providers.map(provider => (
               <ProviderCard
                 key={provider.id}
@@ -132,12 +135,46 @@ export default function ClientProvidersPage() {
                 onStakeClick={handleStakeClick}
                 delegatorFee={delegatorFee}
                 connectedAccounts={connectedIdentities || []}
+                minimumStake={minimumStake}
               />
             ))}
-          </div>
+          </MasonryGrid>
         )}
       </div>
     </>
+  );
+}
+
+function useMasonryColumns(minItemWidth = 700): number {
+  const [count, setCount] = useState(() => {
+    if (typeof window === 'undefined') return 3;
+    return Math.max(1, Math.floor(window.innerWidth / minItemWidth));
+  });
+
+  useEffect(() => {
+    const update = () =>
+      setCount(Math.max(1, Math.floor(window.innerWidth / minItemWidth)));
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [minItemWidth]);
+
+  return count;
+}
+
+function MasonryGrid({ children }: { children: React.ReactNode[] }) {
+  const columnCount = useMasonryColumns();
+  const columns = Array.from({ length: columnCount }, (_, col) =>
+    children.filter((_, i) => i % columnCount === col)
+  );
+
+  return (
+    <div className="flex flex-row gap-6">
+      {columns.map((col, colIdx) => (
+        <div key={colIdx} className="flex flex-col gap-6 flex-1 min-w-0">
+          {col}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -148,6 +185,7 @@ interface ProviderCardProps {
   onStakeClick: (providerId: number, addressGroupId: number, linkedAccount?: string | null) => void;
   delegatorFee: number;
   connectedAccounts: string[];
+  minimumStake: number;
 }
 
 function ProviderCard({
@@ -157,6 +195,7 @@ function ProviderCard({
   onStakeClick,
   delegatorFee,
   connectedAccounts,
+  minimumStake,
 }: ProviderCardProps) {
   const normalizedConnectedAccounts = connectedAccounts.map(addr => addr.toLowerCase());
 
@@ -203,22 +242,49 @@ function ProviderCard({
                   </PopoverTrigger>
                   <PopoverContent className="flex flex-col w-[360px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-y-auto">
                     <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px] sticky top-0 bg-[var(--color-slate-2)] border-b border-[var(--slate-dividers)]">
-                      About Client Share
+                      About these metrics
                     </span>
                     <div className="flex flex-col gap-4 p-[12px_16px]">
                       <div className="flex flex-col gap-1">
+                        <span className="font-medium text-[var(--color-white-1)]">Est. Yield</span>
+                        <span className="text-[13px] text-[var(--color-white-3)]">
+                          Your estimated earnings per supplier per day, calculated as: Performance × Client Share.
+                          This is the net amount you would receive after all fees are applied.
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <span className="font-medium text-[var(--color-white-1)]">Client Share</span>
                         <span className="text-[13px] text-[var(--color-white-3)]">
-                          The share of the rewards you will receive from this plan.
+                          The median share of rewards you will receive across all services in this plan.
+                          Calculated per service as: 100% − Provider Share − Supplier Share − Delegator Fee, then the median is taken.
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-[var(--color-white-1)]">APR</span>
+                        <span className="text-[13px] text-[var(--color-white-3)]">
+                          Annual Percentage Rate, estimated from recent performance.
+                          Calculated as: (Performance POKT/supplier/day × 365 ÷ minimum stake) × 100.
                         </span>
                       </div>
                     </div>
                   </PopoverContent>
                 </Popover>
               </span>
-              <span className="flex flex-row items-center gap-4 text-[14px]">
-                <span>Performance: N/A</span>
-                <span>Plans: {provider.addressGroups.length}</span>
+              <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--color-white-3)]">
+                <span className="whitespace-nowrap">Plans: <span className="text-[var(--color-white-1)]">{provider.addressGroups.length}</span></span>
+                {provider.supplierStats && (
+                  <>
+                    <span className="whitespace-nowrap">Suppliers: <span className="text-[var(--color-white-1)]">{provider.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="whitespace-nowrap">Total Staked: <span className="text-[var(--color-white-1)]">{millify(provider.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {(provider.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
+                      </TooltipContent>
+                    </Tooltip>
+                  </>
+                )}
                 {provider.status !== ProviderStatus.Healthy && (
                   <span className={`px-2 py-0.5 text-[11px] font-medium rounded ${
                     provider.status === ProviderStatus.Unhealthy ? 'bg-red-500/20 text-red-300' :
@@ -242,72 +308,89 @@ function ProviderCard({
           <div className="flex flex-col border-t border-[var(--black-dividers)]">
             {sortedAddressGroups.map((addressGroup, index) => {
               const shares = calculateShares(addressGroup, delegatorFee);
-              const servicesCount = addressGroup.addressGroupServices?.length || 0;
               const linkedAccount = getLinkedAccount(addressGroup.linkedAddresses);
+              const planPerformance = calculateAddressGroupPerformance(addressGroup);
+              const effectiveYield = calculateEffectiveYield(planPerformance, shares.clientShare);
+              const apr = planPerformance !== null && minimumStake > 0
+                ? (planPerformance * 365 / minimumStake) * 100
+                : null;
 
               return (
                 <div
                   key={addressGroup.id}
-                  className={`flex flex-col p-[16px_25px] ${
+                  className={`flex flex-col gap-1 p-[16px_25px] ${
                     index !== sortedAddressGroups.length - 1
                       ? 'border-b border-[var(--black-dividers)]'
                       : ''
                   }`}
                 >
+                  {/* Top row: plan name + actions */}
                   <div className="flex flex-row items-center justify-between">
                     <span className="flex flex-row items-center gap-2">
-                      <span className="font-medium">{addressGroup.name}</span>
+                      <span className="font-medium">Plan #{index + 1}: {addressGroup.name}</span>
                       {linkedAccount && (
-                        <span className="flex flex-row items-center gap-1.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <span className="flex flex-row items-center h-6 gap-1.5 pr-2 pl-1 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
-                                <AvatarByString string={linkedAccount} size={18} />
-                                <span className="font-mono">{getShortAddress(linkedAccount, 5)}</span>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="flex flex-col w-[280px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)]">
-                              <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
-                                Personal Plan
-                              </span>
-                              <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
-                              <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
-                                This plan is exclusively available to you based on your wallet address
-                                <span className="font-mono text-[var(--color-white-1)] inline-flex items-center gap-2 mt-1">
-                                  <AvatarByString string={linkedAccount} size={15} />
-                                  <span>{getShortAddress(linkedAccount, 5)}</span>
-                                </span>.
-                              </span>
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <span className="flex flex-row items-center h-6 gap-1.5 pr-2 pl-1 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
+                              <AvatarByString string={linkedAccount} size={18} />
+                              <span className="font-mono">{getShortAddress(linkedAccount, 5)}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="flex flex-col w-[280px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)]">
+                            <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
+                              Personal Plan
+                            </span>
+                            <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+                            <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
+                              This plan is exclusively available to you based on your wallet address
+                              <span className="font-mono text-[var(--color-white-1)] inline-flex items-center gap-2 mt-1">
+                                <AvatarByString string={linkedAccount} size={15} />
+                                <span>{getShortAddress(linkedAccount, 5)}</span>
+                              </span>.
+                            </span>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
-                      <span className="text-[var(--color-white-3)] -ml-2">:</span>
-                      <span className="flex flex-row items-center gap-1.5 text-[14px] mt-0.5">
-                        <span className="text-[var(--color-white-3)]">Client Share:</span>
-                        <span className="font-mono mt-0.5">{shares.clientShare.toFixed(1)}%</span>
-                      </span>
                     </span>
-                    <div className="flex flex-row items-center gap-3">
-                      <ServicesPopover
-                        addressGroupName={addressGroup.name}
-                        services={addressGroup.addressGroupServices || []}
-                        servicesCount={servicesCount}
-                        triggerClassName="text-[14px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] underline cursor-pointer"
-                        delegatorFee={delegatorFee}
-                      />
-                      <Button
-                        size="sm"
-                        disabled={provider.status !== ProviderStatus.Healthy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStakeClick(provider.id, addressGroup.id, linkedAccount);
-                        }}
-                      >
-                        Stake
-                      </Button>
+                    <Button
+                      size="sm"
+                      disabled={provider.status !== ProviderStatus.Healthy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStakeClick(provider.id, addressGroup.id, linkedAccount);
+                      }}
+                    >
+                      Stake
+                    </Button>
+                  </div>
+                  {/* Metrics row */}
+                  <div className="flex flex-row gap-6 mt-1">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-[var(--color-white-3)]">Est. Yield</span>
+                      <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-[var(--color-white-3)]">Client Share</span>
+                      <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                      <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                     </div>
                   </div>
+                  {/* Services row */}
+                  <ServicesPopover
+                    addressGroupName={addressGroup.name}
+                    services={addressGroup.addressGroupServices || []}
+                    delegatorFee={delegatorFee}
+                    grossRewardsPerService={addressGroup.grossRewardsPerService}
+                    rewardsSuppliersCount={addressGroup.rewardsSuppliersCount}
+                    rewardsUpdatedAt={addressGroup.rewardsUpdatedAt}
+                    planEstYield={effectiveYield !== null ? formatPerformance(effectiveYield) : null}
+                    planClientShare={`${shares.clientShare.toFixed(1)}%`}
+                    planPerformance={planPerformance !== null ? formatPerformance(planPerformance) : null}
+                    planApr={apr !== null ? `${apr.toFixed(1)}%` : null}
+                  />
                 </div>
               );
             })}

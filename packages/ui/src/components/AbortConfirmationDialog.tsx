@@ -12,7 +12,7 @@ import {LoaderIcon} from "../assets";
 export interface AbortConfirmationDialogProps {
     isOpen: boolean;
     onResponse: (abort: boolean) => void;
-    type?: 'stake' | 'migration' | 'import' | 'export';
+    type?: 'stake' | 'unstake' | 'migration' | 'import' | 'export';
     isLoading?: boolean;
 }
 

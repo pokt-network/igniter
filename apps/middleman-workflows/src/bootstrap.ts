@@ -82,9 +82,13 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
             intervals: [{ every: interval as Duration }],
           },
         });
-      } catch (error) {
-        logger.error({ error, workflowType }, 'Error scheduling scheduled workflow')
-        throw error;
+      } catch (error: any) {
+        if (error?.code === 6 || error?.message?.match(/already exists/i)) {
+          logger.info({ workflowType }, 'Scheduled workflow already exists. Skipping registration...')
+        } else {
+          logger.error({ error, workflowType }, 'Error scheduling scheduled workflow')
+          throw error;
+        }
       }
     }
   }

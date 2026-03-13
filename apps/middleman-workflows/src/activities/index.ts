@@ -5,6 +5,7 @@ import {
   sleep,
 } from '@temporalio/activity'
 import {
+  AddressGroupsJson,
   InsertNode,
   Node,
   Provider,
@@ -17,7 +18,8 @@ import {
 import { extractTransactionStakingSuppliers, extractTransactionUnstakingSuppliers } from '@/workflows/utils'
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
-import type { PocketBlockchain } from '@igniter/pocket'
+import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare } from '@igniter/pocket'
+import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 import { NodesMinMax } from '@/lib/dal/nodes'
 
 export type Height = number
@@ -32,6 +34,59 @@ export type LoadNodesInRangeResult = Array<{ id: number; address: string }>
 export type UpsertSupplierStatusParams = {
   address: string;
   height: number;
+}
+
+export type RewardBySupplier = {
+  relays: number
+  service_id: string
+  gross_rewards: number
+  computed_units: number
+  estimated_relays: number
+  estimated_computed_units: number
+  staked_suppliers: number
+}
+
+
+/**
+ * Extracts the hostname from a URL string, stripping the protocol, port, and path.
+ * Returns null if the URL cannot be parsed.
+ */
+function extractDomainFromUrl(rawUrl: string): string | null {
+  try {
+    return new URL(rawUrl).hostname || null
+  } catch {
+    // Fallback for URLs with template placeholders that confuse the URL parser
+    let s = rawUrl.replace(/^https?:\/\//, '')
+    s = (s.split('/')[0] ?? '').split(':')[0] ?? ''
+    return s || null
+  }
+}
+
+/**
+ * Returns the unique set of relay miner domains for an address group, derived from
+ * each service's endpoint URLs. Falls back to relayMiner.domain when:
+ *   - the service has no endpoints, OR
+ *   - the endpoint URL ends with the literal "{domain}" template placeholder.
+ * Otherwise extracts the domain directly from the endpoint URL.
+ */
+function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
+  const domains = new Set<string>()
+  for (const ags of ag.addressGroupServices) {
+    const endpoints = ags.service?.endpoints
+    if (!endpoints || endpoints.length === 0) {
+      domains.add(ag.relayMiner.domain)
+    } else {
+      for (const ep of endpoints) {
+        if (ep.url.endsWith('{domain}')) {
+          domains.add(ag.relayMiner.domain)
+        } else {
+          const domain = extractDomainFromUrl(ep.url)
+          if (domain) domains.add(domain)
+        }
+      }
+    }
+  }
+  return Array.from(domains)
 }
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => ({
@@ -96,7 +151,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
             update.status = node.status
         }
       } else {
-        const { ownerAddress, stake, unstakeSessionEndHeight } = supplier
+        const { ownerAddress, stake, unstakeSessionEndHeight, services, serviceConfigHistory } = supplier
 
         // Supplier is present, determine state based on unstakeSessionEndHeight
         if (unstakeSessionEndHeight === 0) {
@@ -110,6 +165,43 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         if (update.status === NodeStatus.Unstaking || update.status === NodeStatus.Staked) {
           update.ownerAddress = ownerAddress
           update.stakeAmount = stake ? stake.amount : '0'
+
+          const activeServices: Array<{
+            serviceId: string,
+            endpoints: Array<{ url: string, rpcType: string }>,
+            revShare: Array<{ address: string, revSharePercentage: string }>,
+          }> = services.map((svc: SupplierServiceConfig) => ({
+            serviceId: svc.serviceId,
+            endpoints: svc.endpoints.map((ep: SupplierEndpoint) => ({ url: ep.url, rpcType: ep.rpcType })),
+            revShare: svc.revShare.map((rs: ServiceRevenueShare) => ({ address: rs.address, revSharePercentage: rs.revSharePercentage })),
+          }))
+
+          // Include pending entries from serviceConfigHistory (deactivationHeight === 0) that are
+          // not yet reflected in the active services array. This covers two cases:
+          //   1. New services scheduled for a future activationHeight (not in services[] yet)
+          //   2. Existing services with a pending config update (same serviceId, different config)
+          // Entries whose serviceId + config already match an active service are skipped.
+          const pendingServices = (serviceConfigHistory ?? [])
+            .filter((sc: ServiceConfigUpdate) => !sc.deactivationHeight && !!sc.service)
+            .filter((sc: ServiceConfigUpdate) => {
+              const svc = sc.service!
+              const activeMatch = activeServices.find(a => a.serviceId === svc.serviceId)
+              if (!activeMatch) return true // new service not yet in services[]
+              // Include if config differs from the currently active version (pending update)
+              const endpointsMatch = JSON.stringify(activeMatch.endpoints) ===
+                JSON.stringify(svc.endpoints.map((ep: SupplierEndpoint) => ({ url: ep.url, rpcType: ep.rpcType })))
+              const revShareMatch = JSON.stringify(activeMatch.revShare) ===
+                JSON.stringify(svc.revShare.map((rs: ServiceRevenueShare) => ({ address: rs.address, revSharePercentage: rs.revSharePercentage })))
+              return !endpointsMatch || !revShareMatch
+            })
+            .map((sc: ServiceConfigUpdate) => ({
+              serviceId: sc.service!.serviceId,
+              endpoints: sc.service!.endpoints.map((ep: SupplierEndpoint) => ({ url: ep.url, rpcType: ep.rpcType })),
+              revShare: sc.service!.revShare.map((rs: ServiceRevenueShare) => ({ address: rs.address, revSharePercentage: rs.revSharePercentage })),
+              pendingActivationHeight: sc.activationHeight,
+            }))
+
+          update.services = [...activeServices, ...pendingServices]
         }
       }
 
@@ -475,6 +567,405 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    *   - `message` (string): A message describing the result of the operation.
    *   - `addresses` (Array<string>): (Optional) A list of released supplier addresses if the operation is successful.
    */
+  /**
+   * Fetches supplier address groups from each provider for the supplier nodes staked with that provider.
+   *
+   * @param {Provider[]} providers - The list of providers to query.
+   * @return {Promise<Array>} A promise that resolves to an array of per-provider address group results.
+   */
+  async fetchSupplierAddressGroups(providers: Provider[]) {
+    const results = await Promise.all(
+      providers.map(async (provider) => {
+        const addresses = await dal.node.getStakedNodesByProvider(provider.identity)
+
+        if (addresses.length === 0) {
+          return null
+        }
+
+        const addressGroups = await providerService.fetchSupplierAddressGroups(addresses, provider)
+
+        const sentAddressSet = new Set(addresses.map((a) => a.toLowerCase()))
+        const validatedAddressGroups = addressGroups
+          .map((ag) => {
+            const validAddresses = ag.addresses.filter((addr) => {
+              return true;
+
+              const valid = sentAddressSet.has(addr.toLowerCase())
+              if (!valid) {
+                log.warn('Provider returned address not in sent set — dropping to prevent fraud', {
+                  provider: provider.identity,
+                  addressGroupId: ag.id,
+                  address: addr,
+                })
+              }
+              return valid
+            })
+            return { ...ag, addresses: validAddresses }
+          })
+          .filter((ag) => ag.addresses.length > 0)
+
+        return {
+          providerId: provider.id,
+          providerIdentity: provider.identity,
+          addressGroups: validatedAddressGroups,
+        }
+      })
+    )
+
+    return results.filter((result) => result !== null)
+  },
+
+  /**
+   * Fetches gross rewards per service for each address group over the last 7 days from the
+   * indexer GraphQL API using the relay miner domains derived from service endpoint URLs.
+   * Applies the supplier mint allocation percentage, filters to only services configured in
+   * each address group, and persists the net rewards into the addressGroups JSONB column.
+   *
+   * @param providers - The list of providers whose address group rewards should be updated.
+   */
+  async fetchAndStoreAddressGroupRewards(providers: Provider[]) {
+    const appSettings = await dal.appSettings.getFirst()
+    const indexerApiUrl = appSettings?.indexerApiUrl
+
+    if (!indexerApiUrl) {
+      log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch')
+      return
+    }
+
+    // Fetch latest block timestamp and supplier allocation percentage in parallel
+    const latestBlockQuery = `
+      {
+        blocks(orderBy: ID_DESC, first: 1) {
+          nodes {
+            id
+            timestamp
+          }
+        }
+      }
+    `
+    const paramQuery = `
+      query GetSupplierAllocation {
+        param(id: "tokenomics-mint_allocation_percentages") {
+          value
+        }
+      }
+    `
+    const [latestBlockResponse, paramResponse] = await Promise.all([
+      fetch(indexerApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: latestBlockQuery }),
+      }),
+      fetch(indexerApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: paramQuery }),
+      }),
+    ])
+
+    const latestBlockResult = await latestBlockResponse.json() as { data: { blocks: { nodes: Array<{ id: string; timestamp: string }> } } }
+    const latestBlockTimestamp = latestBlockResult.data?.blocks?.nodes?.[0]?.timestamp
+
+    const latestBlock = latestBlockTimestamp ? new Date(latestBlockTimestamp) : new Date()
+    const Y = latestBlock.getUTCFullYear()
+    const M = latestBlock.getUTCMonth()
+    const D = latestBlock.getUTCDate()
+    const endTs = new Date(Date.UTC(Y, M, D, 23, 59, 59, 999))
+    const startTs = new Date(Date.UTC(Y, M, D - 6, 0, 0, 0, 0))
+
+    const paramResult = await paramResponse.json() as { data: { param: { value: string } | null } }
+    const supplierAllocation = paramResult.data?.param?.value
+      ? (JSON.parse(paramResult.data.param.value) as { supplier: number }).supplier
+      : -1
+
+    if (supplierAllocation === -1) {
+      throw new Error('Failed to fetch supplier allocation percentage from indexer')
+    }
+
+    const rewardsQuery = `
+      query RewardsByDomains($domains: [String!]!, $startTs: Datetime!, $endTs: Datetime!) {
+        data: getRewardsByDomainsAndTimeGroupByService(
+          domains: $domains,
+          startTs: $startTs,
+          endTs: $endTs
+        )
+      }
+    `
+
+    const supplierStatsQuery = `
+      query SupplierStatsByDomains($domains: [String!]!) {
+        data: getSupplierStatsByDomains(domains: $domains)
+      }
+    `
+
+    await Promise.all(
+      providers.map(async (provider) => {
+        const dbProvider = await dal.provider.getProvider(provider.identity)
+        if (!dbProvider) {
+          log.warn('Provider not found, skipping rewards fetch', { providerIdentity: provider.identity })
+          return null
+        }
+
+        const addressGroups = (dbProvider.addressGroups ?? [])
+        const currentAddressGroups = addressGroups as Array<{ id: number; grossRewardsPerService?: unknown; [key: string]: unknown }>
+
+        // Collect all unique domains across all address groups for the provider-level stats query
+        const allDomains = Array.from(
+          new Set(addressGroups.flatMap((ag) => extractDomainsForAddressGroup(ag)))
+        )
+
+        // Fetch supplier stats once per provider and per-address-group rewards in parallel
+        const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
+          allDomains.length > 0
+            ? fetch(indexerApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: supplierStatsQuery, variables: { domains: ['easy2stake.com','nodefleet.net'] } }),
+              })
+                .then((r) => r.json() as Promise<{ data: { data: { suppliers_count: number; total_staked_tokens: number } } }>)
+                .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
+            : Promise.resolve(null),
+
+          Promise.all(
+            addressGroups
+              .filter((ag) => ag.addressGroupServices.length > 0)
+              .map(async (ag) => {
+                const domains = extractDomainsForAddressGroup(ag)
+
+                if (domains.length === 0) {
+                  log.warn('No domains extracted for address group, skipping', { addressGroupId: ag.id })
+                  return null
+                }
+
+                try {
+                  const response = await fetch(indexerApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      query: rewardsQuery,
+                      variables: { domains: ag.id === 1 ? ['easy2stake.com'] : ['nodefleet.net'], startTs: startTs.toISOString(), endTs: endTs.toISOString() },
+                    }),
+                  })
+                  const result = await response.json() as { data: { data: { services: RewardBySupplier[]; suppliers_count: number } } }
+                  const rawRewards: Array<RewardBySupplier> = result.data?.data?.services ?? []
+
+                  const configuredServiceIds = new Set(ag.addressGroupServices.map((s) => s.serviceId))
+                  const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id) || true)
+
+                  const adjustedRewards = filteredRewards.map((entry) => ({
+                    ...entry,
+                    amount: Math.floor(entry.gross_rewards * supplierAllocation).toString(),
+                  }))
+
+                  return { id: ag.id, rewards: adjustedRewards }
+                } catch (e) {
+                  log.error('Failed to fetch rewards for address group', { addressGroupId: ag.id, error: e })
+                  return null
+                }
+              })
+          ),
+        ])
+
+        const supplierStats = supplierStatsResult?.data?.data ?? null
+        const suppliersCount = supplierStats?.suppliers_count ?? 0
+
+        for (const entry of rewardsByGroupId) {
+          if (!entry) continue
+          const matchingEntry = currentAddressGroups.find((ag) => ag.id === entry.id)
+          if (matchingEntry) {
+            matchingEntry.grossRewardsPerService = entry.rewards
+            matchingEntry.rewardsSuppliersCount = suppliersCount
+            matchingEntry.rewardsUpdatedAt = new Date().toISOString()
+          }
+        }
+
+        await dal.provider.updateProvider(dbProvider.id, {
+          addressGroups: currentAddressGroups as typeof dbProvider.addressGroups,
+          supplierStats,
+        })
+      })
+    )
+  },
+
+  /**
+   * Processes all status-related operations for a single provider:
+   * fetches and updates provider status, supplier address groups, and address group rewards.
+   *
+   * @param {string} providerIdentity - The identity of the provider to process.
+   */
+  async processProviderStatus(providerIdentity: string) {
+    const provider = await dal.provider.getProvider(providerIdentity)
+    if (!provider) {
+      log.warn('Provider not found, skipping', { providerIdentity })
+      return null
+    }
+
+    const { signature, identity } = await providerService.signPayload(JSON.stringify({}))
+    let statusResult: Provider
+    try {
+      statusResult = await providerService.status(provider, signature, identity)
+    } catch (e) {
+      statusResult = { ...(e as object) } as Provider
+    }
+    await dal.provider.updateProviders([statusResult])
+
+    const appSettings = await dal.appSettings.getFirst()
+    const indexerApiUrl = appSettings?.indexerApiUrl
+
+    if (!indexerApiUrl) {
+      log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', { providerIdentity })
+      return { statusResult }
+    }
+
+    const latestBlockQuery = `
+      {
+        blocks(orderBy: ID_DESC, first: 1) {
+          nodes {
+            id
+            timestamp
+          }
+        }
+      }
+    `
+    const paramQuery = `
+      query GetSupplierAllocation {
+        param(id: "tokenomics-mint_allocation_percentages") {
+          value
+        }
+      }
+    `
+    const [latestBlockResponse, paramResponse] = await Promise.all([
+      fetch(indexerApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: latestBlockQuery }),
+      }),
+      fetch(indexerApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: paramQuery }),
+      }),
+    ])
+
+    const latestBlockResult = await latestBlockResponse.json() as { data: { blocks: { nodes: Array<{ id: string; timestamp: string }> } } }
+    const latestBlockTimestamp = latestBlockResult.data?.blocks?.nodes?.[0]?.timestamp
+
+    const latestBlock = latestBlockTimestamp ? new Date(latestBlockTimestamp) : new Date()
+    const Y = latestBlock.getUTCFullYear()
+    const M = latestBlock.getUTCMonth()
+    const D = latestBlock.getUTCDate()
+    const endTs = new Date(Date.UTC(Y, M, D, 23, 59, 59, 999))
+    const startTs = new Date(Date.UTC(Y, M, D - 6, 0, 0, 0, 0))
+
+    const paramResult = await paramResponse.json() as { data: { param: { value: string } | null } }
+    const supplierAllocation = paramResult.data?.param?.value
+      ? (JSON.parse(paramResult.data.param.value) as { supplier: number }).supplier
+      : -1
+
+    if (supplierAllocation === -1) {
+      throw new Error('Failed to fetch supplier allocation percentage from indexer')
+    }
+
+    const rewardsQuery = `
+      query RewardsByDomains($domains: [String!]!, $startTs: Datetime!, $endTs: Datetime!) {
+        data: getRewardsByDomainsAndTimeGroupByService(
+          domains: $domains,
+          startTs: $startTs,
+          endTs: $endTs
+        )
+      }
+    `
+    const supplierStatsQuery = `
+      query SupplierStatsByDomains($domains: [String!]!) {
+        data: getSupplierStatsByDomains(domains: $domains)
+      }
+    `
+
+    const dbProvider = await dal.provider.getProvider(provider.identity)
+    if (!dbProvider) {
+      log.warn('Provider not found after status update, skipping rewards fetch', { providerIdentity: provider.identity })
+      return { statusResult }
+    }
+
+    const addressGroupsData = (dbProvider.addressGroups ?? [])
+    const currentAddressGroups = addressGroupsData as Array<{ id: number; grossRewardsPerService?: unknown; [key: string]: unknown }>
+
+    const allDomains = Array.from(
+      new Set(addressGroupsData.flatMap((ag) => extractDomainsForAddressGroup(ag)))
+    )
+
+    const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
+      allDomains.length > 0
+        ? fetch(indexerApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: supplierStatsQuery, variables: { domains: allDomains } }),
+          })
+            .then((r) => r.json() as Promise<{ data: { data: { suppliers_count: number; total_staked_tokens: number } } }>)
+            .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
+        : Promise.resolve(null),
+
+      Promise.all(
+        addressGroupsData
+          .filter((ag) => ag.addressGroupServices.length > 0)
+          .map(async (ag) => {
+            const domains = extractDomainsForAddressGroup(ag)
+
+            if (domains.length === 0) {
+              log.warn('No domains extracted for address group, skipping', { addressGroupId: ag.id })
+              return null
+            }
+
+            try {
+              const response = await fetch(indexerApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  query: rewardsQuery,
+                  variables: { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },
+                }),
+              })
+              const result = await response.json() as { data: { data: { services: RewardBySupplier[]; suppliers_count: number } } }
+              const rawRewards: Array<RewardBySupplier> = result.data?.data?.services ?? []
+
+              const configuredServiceIds = new Set(ag.addressGroupServices.map((s) => s.serviceId))
+              const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id))
+
+              const adjustedRewards = filteredRewards.map((entry) => ({
+                ...entry,
+                amount: Math.floor(entry.gross_rewards * supplierAllocation).toString(),
+              }))
+
+              return { id: ag.id, rewards: adjustedRewards }
+            } catch (e) {
+              log.error('Failed to fetch rewards for address group', { addressGroupId: ag.id, error: e })
+              return null
+            }
+          })
+      ),
+    ])
+
+    const supplierStats = supplierStatsResult?.data?.data ?? null
+    const suppliersCount = supplierStats?.suppliers_count ?? 0
+
+    for (const entry of rewardsByGroupId) {
+      if (!entry) continue
+      const matchingEntry = currentAddressGroups.find((ag) => ag.id === entry.id)
+      if (matchingEntry) {
+        matchingEntry.grossRewardsPerService = entry.rewards
+        matchingEntry.rewardsSuppliersCount = suppliersCount
+        matchingEntry.rewardsUpdatedAt = new Date().toISOString()
+      }
+    }
+
+    await dal.provider.updateProvider(dbProvider.id, {
+      addressGroups: currentAddressGroups as typeof dbProvider.addressGroups,
+      supplierStats,
+    })
+
+    return { statusResult }
+  },
+
   async notifyProviderOfFailedStakes(transactionId: number) {
     try {
       const transaction = await dal.transaction.getTransaction(transactionId)

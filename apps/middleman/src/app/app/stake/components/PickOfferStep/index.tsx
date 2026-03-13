@@ -32,6 +32,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
     const [offers, setOffers] = useState<StakeDistributionOffer[]>([]);
     const [isLoadingOffers, setIsLoadingOffers] = useState<boolean>(false);
     const [delegatorFee, setDelegatorFee] = useState<number>(0);
+    const [minimumStake, setMinimumStake] = useState<number>(0);
 
     {/* TODO: Calculate the amount based on POKT. Using the function provided by currency context. Show the currency from the context. */}
     const subtitle = `Pick a node runner for your ${toCurrencyFormat(amount)} $POKT stake.`;
@@ -105,6 +106,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
 
                 setOffers(calculatedOffers);
                 setDelegatorFee(appSettings.fee ? Number(appSettings.fee) : 0);
+                setMinimumStake(appSettings.minimumStake ?? 0);
 
                 // Handle preselection from URL params (only on first load)
                 // Only preselect if the provider is healthy
@@ -176,6 +178,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                         onSelectAddressGroup={handleAddressGroupSelection}
                         delegatorFee={delegatorFee}
                         userIdentity={ownerAddress}
+                        minimumStake={minimumStake}
                     />
                 ))}
 
@@ -215,6 +218,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                             disabled={true}
                             delegatorFee={delegatorFee}
                             userIdentity={ownerAddress}
+                            minimumStake={minimumStake}
                         />
                     ))}
                 </div>

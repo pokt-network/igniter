@@ -102,6 +102,7 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
         status: provider.status,
         stakeDistribution: distribution,
         addressGroups: publicAddressGroups,
+        supplierStats: provider.supplierStats ?? null,
       }
     })
     .filter((offer): offer is StakeDistributionOffer => offer !== null)

@@ -250,6 +250,9 @@ type AddressGroup = {
       name: string;
     };
   }>;
+  grossRewardsPerService?: Array<{ service_id: string; amount: string; [key: string]: unknown }>;
+  rewardsSuppliersCount?: number;
+  rewardsUpdatedAt?: string;
 };
 
 export interface ProviderWithPublicPlans {
@@ -258,6 +261,7 @@ export interface ProviderWithPublicPlans {
   identity: string;
   status: ProviderStatus;
   addressGroups: AddressGroup[];
+  supplierStats: { suppliers_count: number; total_staked_tokens: number } | null;
 }
 
 export async function ListProvidersWithPublicPlans(connectedAccounts: string[] = []): Promise<ProviderWithPublicPlans[]> {
@@ -302,6 +306,7 @@ export async function ListProvidersWithPublicPlans(connectedAccounts: string[] =
         identity: provider.identity,
         status: provider.status,
         addressGroups: publicAddressGroups,
+        supplierStats: provider.supplierStats ?? null,
       };
     })
     .filter((provider): provider is ProviderWithPublicPlans => provider !== null);

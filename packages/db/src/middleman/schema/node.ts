@@ -2,6 +2,7 @@ import {
   bigint,
   integer,
   json,
+  jsonb,
   pgTable,
   primaryKey,
   timestamp,
@@ -20,6 +21,14 @@ import {
 } from './transaction'
 
 
+export type NodeService = {
+  serviceId: string;
+  endpoints: Array<{ url: string; rpcType: number }>;
+  revShare: Array<{ address: string; revSharePercentage: number }>;
+  /** Set when the service comes from serviceConfigHistory and is not yet active on-chain */
+  pendingActivationHeight?: number;
+};
+
 export const nodesTable = pgTable('nodes', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   address: varchar({ length: 255 }).notNull(),
@@ -33,6 +42,7 @@ export const nodesTable = pgTable('nodes', {
   createdBy: varchar().references(() => usersTable.identity).notNull(),
   // metadata coming from the blockchain
   lastUpdatedHeight: integer().default(0), // prevent updating this record with values of a lower height
+  services: jsonb('services').$type<NodeService[]>().default([]),
 })
 
 export type Node = typeof nodesTable.$inferSelect;

@@ -184,6 +184,7 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
                   stakeAmount: Number(node.stakeAmount),
                   operationalFundsAmount: Number(node.balance.toString()),
                   provider: node.provider,
+                  services: node.services ?? [],
                   transactions: node.transactions.map(t => ({
                     id: t.id,
                     type: t.type,

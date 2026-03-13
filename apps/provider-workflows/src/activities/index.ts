@@ -131,7 +131,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         update.stakeAmountUpokt = BigInt(stake ? stake.amount : '0')
         update.services = services || []
 
-        if (key.state === KeyState.Imported) {
+        if (key.state === KeyState.Imported || key.state === KeyState.Available) {
           // means the key is imported and is already staked, let's set it to the owner address
           update.ownerAddress = supplier.ownerAddress
         }

@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "supplier_stats" jsonb;

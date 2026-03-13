@@ -5,6 +5,7 @@ import { ServicesPopover } from './ServicesPopover';
 import React from 'react'
 
 type AddressGroupService = {
+  serviceId: string;
   addSupplierShare: boolean;
   supplierShare: number;
   revShare?: Array<{
@@ -22,6 +23,9 @@ export interface PlanDetailsSectionProps {
   shares: ShareCalculation;
   className?: string;
   delegatorFee?: number;
+  grossRewardsPerService?: Array<{ service_id: string; amount: string; staked_suppliers?: number }>;
+  rewardsSuppliersCount?: number;
+  rewardsUpdatedAt?: string;
 }
 
 export function PlanDetailsSection({
@@ -30,9 +34,10 @@ export function PlanDetailsSection({
   shares,
   className = '',
   delegatorFee = 0,
+  grossRewardsPerService,
+  rewardsSuppliersCount,
+  rewardsUpdatedAt,
 }: PlanDetailsSectionProps) {
-  const servicesCount = services.length;
-
   return (
     <>
       <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
@@ -41,17 +46,16 @@ export function PlanDetailsSection({
           {shares.clientShare.toFixed(1)}%
         </span>
       </span>
-      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] text-[14px]">
-        <span className="text-[14px] text-[var(--color-white-3)]">Services</span>
+      <div className="flex flex-row items-center justify-between pl-4 py-3 border-b border-[var(--black-dividers)] text-[14px] w-full [&_p]:text-[14px] [&_p]:font-normal [&_section]:w-full [&_section]:mr-0 ">
         <ServicesPopover
           addressGroupName={addressGroupName}
           services={services}
-          servicesCount={servicesCount}
-          triggerClassName="text-[13px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] underline cursor-pointer"
           delegatorFee={delegatorFee}
-          larger={false}
+          grossRewardsPerService={grossRewardsPerService}
+          rewardsSuppliersCount={rewardsSuppliersCount}
+          rewardsUpdatedAt={rewardsUpdatedAt}
         />
-      </span>
+      </div>
     </>
   );
 }

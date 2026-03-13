@@ -7,6 +7,7 @@ import { Button } from "@igniter/ui/components/button";
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -27,27 +28,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ListRegions } from "@/actions/Regions";
 import { useQuery } from "@tanstack/react-query";
 
+const Code = ({ children }: { children: React.ReactNode }) => (
+    <code className="rounded-sm border border-[color:var(--color-white-4)] bg-[var(--color-black-2)] px-1 py-0.5 font-mono text-[11px] text-[var(--color-slate-12)]">
+        {children}
+    </code>
+);
+
 const CreateOrUpdateRelayMinerSchema = z.object({
     name: z
         .string()
-        .min(1, "Name is required"),
+        .min(1, "Name is required")
+        .max(255, "Name cannot exceed 255 characters"),
 
     identity: z
         .string()
         .min(1, "Identity is required")
+        .max(66, "Identity cannot exceed 66 characters")
         .regex(
             /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
             "Identity must be a valid slug (lowercase letters, numbers, and hyphens only, cannot start or end with a hyphen)"
         ),
 
-    regionId: z.coerce.number(),
+    regionId: z.coerce.number().min(1, "Please select a region"),
 
     domain: z
         .string()
         .min(1, "Domain is required")
+        .max(255, "Domain cannot exceed 255 characters")
         .regex(
             /^(?!:\/\/)([a-zA-Z0-9-_]+(\.[a-zA-Z0-9-_]+)+.*)$/,
-            "Invalid domain format. Ensure it's a valid domain name."
+            "Invalid domain format. Ensure it's a valid domain name (e.g., relayminer.example.com)."
         ),
 });
 
@@ -64,7 +74,7 @@ export function AddOrUpdateRelayMinerDialog({
   const [isCreatingRelayMiner, setIsCreatingRelayMiner] = useState(false);
   const [isUpdatingRelayMiner, setIsUpdatingRelayMiner] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Add this query to fetch regions
   const { data: regions, isLoading: isLoadingRegions } = useQuery({
     queryKey: ['regions'],
@@ -178,10 +188,13 @@ export function AddOrUpdateRelayMinerDialog({
                                     control={form.control}
                                     render={({ field }) => (
                                         <FormItem className="flex flex-col gap-2">
-                                            <FormLabel>Name</FormLabel>
+                                            <FormLabel className={'mb-0'}>Name</FormLabel>
                                             <FormControl>
-                                                <Input {...field} />
+                                                <Input {...field} placeholder="e.g., US East Relay Miner 1" />
                                             </FormControl>
+                                            <FormDescription className={'-mt-3'}>
+                                                A human-readable display name for this relay miner. Used only for identification in this dashboard.
+                                            </FormDescription>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -193,11 +206,19 @@ export function AddOrUpdateRelayMinerDialog({
                                     control={form.control}
                                     render={({ field }) => (
                                         <FormItem className="flex flex-col gap-2">
-                                            <FormLabel>Identity</FormLabel>
+                                            <FormLabel className={'mb-0'}>Identity</FormLabel>
                                             <FormControl>
-                                                <Input {...field} placeholder="URL compatible identity. E.g. rm-01"/>
+                                                <Input {...field} placeholder="e.g., rm-us-east-01" />
                                             </FormControl>
-                                            <FormMessage />
+                                            <FormDescription className={'-mt-3'}>
+                                                A unique URL-safe identifier for this relay miner. Used as the <Code>{'{rm}'}</Code> token in service endpoint URLs, must be unique per region.
+                                                Only lowercase letters, numbers, and hyphens are allowed.
+                                                <br/>
+                                                For example, with identity <Code>rm-us-east-01</Code> the endpoint becomes:
+                                                <br/>
+                                                <Code>{'https://{region}-rm-us-east-01-{sid}-{protocol}.{domain}'}</Code>
+                                            </FormDescription>
+                                          <FormMessage />
                                         </FormItem>
                                     )}
                                 />
@@ -208,7 +229,7 @@ export function AddOrUpdateRelayMinerDialog({
                                     control={form.control}
                                     render={({ field }) => (
                                         <FormItem className="flex flex-col gap-2">
-                                            <FormLabel>Region</FormLabel>
+                                            <FormLabel className={'mb-0'}>Region</FormLabel>
                                             <FormControl>
                                                 {!isLoadingRegions && (
                                                     <Select
@@ -230,6 +251,9 @@ export function AddOrUpdateRelayMinerDialog({
                                                     </Select>
                                                 )}
                                             </FormControl>
+                                            <FormDescription className={'-mt-3'}>
+                                                The geographic region where this relay miner is hosted. The combination of identity + region must be unique.
+                                            </FormDescription>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -241,15 +265,29 @@ export function AddOrUpdateRelayMinerDialog({
                                     control={form.control}
                                     render={({ field }) => (
                                         <FormItem className="flex flex-col gap-2">
-                                            <FormLabel>Domain</FormLabel>
+                                            <FormLabel className={'mb-0'}>Domain</FormLabel>
                                             <FormControl>
-                                                <Input {...field} placeholder="e.g., example.com" />
+                                                <Input {...field} placeholder="e.g., relayminer.example.com" />
                                             </FormControl>
+                                            <FormDescription className={'-mt-3'}>
+                                                The public domain name where this relay miner is reachable. Used as the <Code>{'{domain}'}</Code> token in service endpoint URLs.
+                                                Do not include <Code>https://</Code> or a trailing slash.
+                                                <br/>
+                                                For example, with domain <Code>example.com</Code> the endpoint becomes:
+                                                <br/>
+                                                <Code>{'https://{region}-{rm}-{sid}-{protocol}.example.com'}</Code>
+                                            </FormDescription>
                                             <FormMessage />
                                         </FormItem>
                                     )}
                                 />
                             </div>
+
+                            {relayMiner && (
+                                <p className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded-md px-3 py-2">
+                                    <strong>Warning:</strong> Identity and Domain may already be part of staked supplier URLs. Changing either will require those suppliers to be re-staked.
+                                </p>
+                            )}
 
                             <DialogFooter className="pt-4">
                                 <Button

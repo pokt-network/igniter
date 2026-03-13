@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Button } from '@igniter/ui/components/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@igniter/ui/components/tooltip'
 import {
   Form,
   FormControl,
@@ -96,6 +97,9 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   ])
 
   const debouncedRetrieveParams = useCallback(() => {
+    // Clear the error immediately so the user gets instant feedback when they start fixing the URL
+    form.clearErrors('rpcUrl')
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current)
     }
@@ -131,10 +135,13 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
     if (!validatedUrl.success) {
       form.setError('rpcUrl', {
         type: 'manual',
-        message: 'Please enter a valid URL',
+        message: 'Please enter a valid URL (e.g., https://your-node.example.com:26657)',
       })
       return
     }
+
+    // Clear any previous error before fetching — a valid URL format is a good sign
+    form.clearErrors('rpcUrl')
 
     try {
       setIsLoadingBlockchainParams(true)
@@ -151,6 +158,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
         })
         return
       } else if (response.network && response.height && response.minStake) {
+        form.clearErrors('rpcUrl')
         form.setValue('chainId', response.network as ChainId)
         form.setValue('minimumStake', response.minStake)
         form.setValue('updatedAtHeight', response.height)
@@ -206,12 +214,18 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shannon API Url</FormLabel>
+                  <FormLabel>Node API URL</FormLabel>
                   <FormControl>
-                    <Input {...field} disabled={isLoadingBlockchainParams}/>
+                    <Input
+                      {...field}
+                      disabled={isLoadingBlockchainParams}
+                      placeholder="https://your-shannon-node.example.com:26657"
+                    />
                   </FormControl>
                   <FormDescription>
-                    The RPC will determine the chainID and minimum stake. The chainID can not be changed later.
+                    The API endpoint of your full node — <strong>not</strong> a public RPC or gateway URL.
+                    This is used to auto-detect the network and minimum stake. The network (chain ID) cannot be changed after setup.
+                    Example: <code>https://shannon-node.mycompany.com:26657</code>
                   </FormDescription>
                   <FormMessage/>
                 </FormItem>
@@ -228,6 +242,9 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                   <FormControl>
                     <Input {...field} disabled={true}/>
                   </FormControl>
+                  <FormDescription>
+                    Auto-detected from your node. Cannot be changed after setup.
+                  </FormDescription>
                   <FormMessage/>
                 </FormItem>
               )}
@@ -241,6 +258,9 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                   <FormControl>
                     <Input {...field} disabled={true}/>
                   </FormControl>
+                  <FormDescription>
+                    Auto-detected from your node. Suppliers must stake at least this amount (in uPOKT).
+                  </FormDescription>
                   <FormMessage/>
                 </FormItem>
               )}
@@ -250,18 +270,62 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
             <FormField
               name="indexerApiUrl"
               control={form.control}
-              render={({ field }) => (
+              render={({ field }) => {
+                const isDisabled = !chainId || !rpcUrl || isLoadingBlockchainParams;
+                return (
                 <FormItem>
-                  <FormLabel>Indexer API Url</FormLabel>
+                  <FormLabel>Indexer API URL</FormLabel>
                   <FormControl>
-                    <Input {...field} disabled={!chainId || !rpcUrl || isLoadingBlockchainParams}/>
+                    <Input
+                      {...field}
+                      disabled={isDisabled}
+                      placeholder="https://shannon-indexer.example.com/graphql"
+                    />
                   </FormControl>
                   <FormDescription>
-                    This URL will be used to retrieve rewards from the indexer.
+                    The GraphQL API URL of the POKTscan indexer for your network. Used to fetch supplier rewards and on-chain data.
+                    Must match the same network as your node.
+                    <br/>
+                    For example:
+                    <br/>
+                    POKTscan Mainnet:{' '}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <code
+                            className="cursor-pointer underline decoration-dotted hover:text-foreground transition-colors"
+                            onClick={isDisabled ? undefined : () => field.onChange('https://api.poktscan.com')}
+                          >
+                            https://api.poktscan.com
+                          </code>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isDisabled ? 'Fill in the Node API URL first' : 'Click to use this URL'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <br/>
+                    POKTscan Beta:{' '}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <code
+                            className="cursor-pointer underline decoration-dotted hover:text-foreground transition-colors"
+                            onClick={isDisabled ? undefined : () => field.onChange('https://beta-api.poktscan.com')}
+                          >
+                            https://beta-api.poktscan.com
+                          </code>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {isDisabled ? 'Fill in the Node API URL first' : 'Click to use this URL'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </FormDescription>
                   <FormMessage/>
                 </FormItem>
-              )}
+                );
+              }}
             />
           </div>
         </form>

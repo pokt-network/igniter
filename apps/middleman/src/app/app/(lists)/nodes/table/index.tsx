@@ -47,6 +47,7 @@ export default function NodesTable() {
               provider: node.provider || null,
               stakeAmount: Number(node.stakeAmount),
               operationalFundsAmount: Number(node.balance.toString()),
+              services: node.services ?? [],
               transactions: node.transactionsToNodes.map((transaction) => transaction.transaction).map(t => ({
                 id: t.id,
                 type: t.type,

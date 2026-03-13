@@ -32,6 +32,9 @@ type AddressGroup = {
       name: string;
     };
   }>;
+  grossRewardsPerService?: Array<{ service_id: string; amount: string; staked_suppliers?: number; [key: string]: unknown }>;
+  rewardsSuppliersCount?: number;
+  rewardsUpdatedAt?: string;
 };
 
 export interface StakeDistributionOffer {
@@ -46,6 +49,7 @@ export interface StakeDistributionOffer {
     status: ProviderStatus;
     stakeDistribution: StakeDistributionItem[];
     addressGroups: AddressGroup[];
+    supplierStats: { suppliers_count: number; total_staked_tokens: number } | null;
 }
 
 export interface StakeDistributionItem {

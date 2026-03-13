@@ -155,6 +155,7 @@ export async function list(
           service: {
             columns: {
               name: true,
+              endpoints: true,
             },
           },
         },
