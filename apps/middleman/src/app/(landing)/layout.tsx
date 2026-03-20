@@ -15,5 +15,5 @@ export default function LandingLayout({
     setOpenMobile(false);
   }, [setOpen, setOpenMobile]);
 
-  return <>{children}</>;
+  return <div data-landing="true">{children}</div>;
 }
