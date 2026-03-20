@@ -85,7 +85,7 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
       return (
         <div className="flex items-center justify-end px-4">
           <Button
-            className="bg-slate-2 border-0"
+            className="bg-bg-elevated border-0"
             variant={'outline'}
             onClick={handleToggle}
           >

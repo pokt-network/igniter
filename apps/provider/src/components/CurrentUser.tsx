@@ -72,7 +72,7 @@ export default function CurrentUser() {
   if (status === "loading") {
     return (
         <div
-            className="flex items-center justify-center w-[150px] h-9 bg-[color:var(--secondary)] rounded-md opacity-50"
+            className="flex items-center justify-center w-[150px] h-9 bg-bg-elevated rounded-md opacity-50"
         >
           <LoaderIcon className="animate-spin" />
         </div>

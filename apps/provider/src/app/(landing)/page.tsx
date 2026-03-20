@@ -14,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function Landing() {
   return (
-    <div className="flex flex-col items-center justify-center text-center w-full max-w-[400px] gap-3 py-10 px-4 sm:!bg-background sm:border border-[color:var(--divider)] rounded-lg">
+    <div className="flex flex-col items-center justify-center text-center w-full max-w-[400px] gap-3 py-10 px-4 bg-bg-surface sm:border border-border-primary rounded-lg">
       <h1 className={'font-bold'}>Stake Igniter Provider</h1>
       <p className={'mb-3'}>
         If you are an admin, please sign in to continue.

@@ -140,22 +140,22 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
         </Select>
 
         {addressGroup && (
-          <div className="p-4 rounded-md bg-[var(--color-slate-2)]">
+          <div className="p-4 rounded-md bg-bg-elevated">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-[var(--color-white-3)]">Name</span>
+                <span className="font-medium text-text-secondary">Name</span>
                 <span className="text-sm">
           {addressesGroup.find(group => group.id.toString() === addressGroup)?.name}
         </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="font-medium text-[var(--color-white-3)]">Visibility</span>
+                <span className="font-medium text-text-secondary">Visibility</span>
                 <span className="text-sm">
           {addressesGroup.find(group => group.id.toString() === addressGroup)?.private ? 'Private' : 'Public'}
                 </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-[var(--color-white-3)]">Keys to Export:</span>
+                    <span className="font-medium text-text-secondary">Keys to Export:</span>
                     <span className="text-sm">
               {isLoadingKeyCount ? (
                 <div className="flex items-center justify-center px-4">
@@ -176,7 +176,7 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
         <p>
           Example output:
           <br/>
-          <div className="p-4 rounded-md bg-[var(--color-slate-2)] mt-2">
+          <div className="p-4 rounded-md bg-bg-elevated mt-2">
             <pre className="whitespace-pre-wrap">{JSON.stringify([{ hex: '<pk1>' },{ hex: '<pk2>' }], null, 2)}</pre>
           </div>
         </p>
@@ -199,8 +199,8 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
           className={'relative flex h-[64px] mt-[-5px] gradient-border-green'}
         >
           <div
-            className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-[var(--color-white-3)]">
+            className={`absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between`}>
+          <span className="text-[20px] text-text-secondary">
             Keys Exported
           </span>
             <div className="flex flex-row items-center gap-2">
@@ -211,8 +211,8 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
           </div>
         </div>
 
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-1)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-primary p-[11px_16px]">
             You have successfully exported {keysExported} keys from the address group "{
             addressesGroup.find((a) => a.id === parseInt(addressGroup))?.name
           }".
@@ -240,8 +240,8 @@ export default function ExportForm({addressesGroup}: ExportFormProps) {
           className={'relative flex h-[64px] mt-[-5px] gradient-border-red'}
         >
           <div
-            className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-[var(--color-white-3)]">
+            className={`absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between`}>
+          <span className="text-[20px] text-text-secondary">
             Oops! Something went wrong.
           </span>
           </div>

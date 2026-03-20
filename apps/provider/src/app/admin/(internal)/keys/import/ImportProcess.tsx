@@ -189,7 +189,7 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
       <DialogContent
         onInteractOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => event.preventDefault()}
-        className="gap-0 w-[280px] p-0 rounded-lg bg-[var(--color-slate-2)]"
+        className="gap-0 w-[280px] p-0 rounded-lg bg-bg-elevated"
         hideClose
       >
         <DialogTitle asChild>

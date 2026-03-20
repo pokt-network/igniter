@@ -242,7 +242,7 @@ const ServiceItem = ({
           {service.name} ({service.serviceId})
         </span>
         <FormLabel
-          className="text-[var(--color-slate-9)] hover:underline cursor-pointer"
+          className="text-text-tertiary hover:underline cursor-pointer"
           onClick={onRemove}
         >
           Remove
@@ -270,7 +270,7 @@ const ServiceItem = ({
             Revenue Shares
           </span>
           <FormLabel
-            className="text-[var(--color-slate-9)] hover:underline cursor-pointer"
+            className="text-text-tertiary hover:underline cursor-pointer"
             onClick={handleAddRevShare}
           >
             Add Share
@@ -527,7 +527,7 @@ export function AddOrUpdateAddressGroupDialog({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-[var(--color-slate-2)] !w-[900px] !min-w-none !max-w-none h-[670px]"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[900px] !min-w-none !max-w-none h-[670px]"
         hideClose
       >
         <DialogTitle asChild>
@@ -603,7 +603,7 @@ export function AddOrUpdateAddressGroupDialog({
                         <Button
                           variant={'ghost'}
                           type={'button'}
-                          className="text-[var(--color-slate-9)] hover:underline cursor-pointer p-0 h-auto hover:bg-transparent"
+                          className="text-text-tertiary hover:underline cursor-pointer p-0 h-auto hover:bg-transparent"
                           onClick={() => {
                             append({
                               address: '',
@@ -799,7 +799,7 @@ export function AddOrUpdateAddressGroupDialog({
                               <div className="flex justify-between">
                                 <FormLabel>Linked Addresses</FormLabel>
                                 <FormLabel
-                                    className="text-[var(--color-slate-9)] hover:underline cursor-pointer"
+                                    className="text-text-tertiary hover:underline cursor-pointer"
                                     onClick={() => {
                                       const currentAddresses = form.getValues("linkedAddresses");
                                       form.setValue("linkedAddresses", [...currentAddresses, ""]);

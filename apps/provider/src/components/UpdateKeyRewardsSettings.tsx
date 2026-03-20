@@ -101,7 +101,7 @@ export function UpdateKeyRewardsSettings({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-[var(--color-slate-2)] !w-[500px] !min-w-none !max-w-none"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none"
         hideClose
       >
         <DialogTitle asChild>
@@ -111,7 +111,7 @@ export function UpdateKeyRewardsSettings({
         </DialogTitle>
         {!error && <div className="h-[1px] bg-[var(--slate-dividers)]" />}
         {error && (
-          <div className={"flex flex-col items-center bg-[color:var(--color-black-1)]"}>
+          <div className={"flex flex-col items-center bg-bg-root"}>
             <div className={"flex items-center"}>
               <div className={"flex flex-row items-center p-1"}>{error}</div>
             </div>
@@ -145,7 +145,7 @@ export function UpdateKeyRewardsSettings({
                       <FormControl>
                         <Input type="number" min={0} max={100} step={1} {...field} />
                       </FormControl>
-                      <div className="text-[var(--color-slate-9)] text-xs">
+                      <div className="text-text-tertiary text-xs">
                         Percentage of rewards the delegator expects to receive.
                       </div>
                       <FormMessage />
@@ -169,7 +169,7 @@ export function UpdateKeyRewardsSettings({
 
         {isCancelling && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
-            <div className="bg-[var(--color-slate-2)] p-4 rounded-lg w-[300px]">
+            <div className="bg-bg-elevated p-4 rounded-lg w-[300px]">
               <h3 className="text-lg font-medium mb-2">Discard changes?</h3>
               <p className="mb-4">You have unsaved changes. Are you sure you want to discard them?</p>
               <div className="flex justify-end gap-2">

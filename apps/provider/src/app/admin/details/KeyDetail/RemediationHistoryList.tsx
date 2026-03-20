@@ -112,7 +112,7 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
       <Button
         type="button"
         onClick={copy}
-        className="h-[22px] px-2 text-[11px] bg-transparent border border-[color:var(--button-2-border)] hover:bg-[color:var(--secondary)]"
+        className="h-[22px] px-2 text-[11px] bg-transparent border border-border-primary hover:bg-bg-elevated"
         aria-label="Copy entry"
         title={copied ? 'Copied' : 'Copy'}
       >
@@ -167,23 +167,23 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
         )}
       >
         {error && (
-          <div className="px-4 py-2 text-[12px] text-red-400 bg-[color:var(--color-black-1)]">
+          <div className="px-4 py-2 text-[12px] text-red-400 bg-bg-root">
             {error}
           </div>
         )}
-        <div className="py-3 text-[14px] text-[var(--color-white-3)]">
+        <div className="py-3 text-[14px] text-text-secondary">
           This will set the key state back to <span className="font-semibold">Staked</span>. Prompting the system to re-evaluate it.
         </div>
       </ConfirmationDialog>
 
-      <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-        <div className="text-[12px] text-[var(--color-white-3)] p-[8px_12px]">Remediation history</div>
+      <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+        <div className="text-[12px] text-text-secondary p-[8px_12px]">Remediation history</div>
         <div className="flex flex-col">
           {sorted.map((e, idx) => {
             const ms = toMs(e.timestamp)
             const when = formatWhen(ms)
             return (
-              <div key={`${e.timestamp}-${e.reason}-${idx}`} className="p-[8px_12px] text-[12px] text-[var(--color-white-3)] border-t border-[color:var(--button-2-border)] first:border-t-0">
+              <div key={`${e.timestamp}-${e.reason}-${idx}`} className="p-[8px_12px] text-[12px] text-text-secondary border-t border-border-primary first:border-t-0">
                 <div className="flex flex-row items-start justify-between gap-2 opacity-80">
                   <div className="flex flex-row items-center gap-2">
                     <span className="font-semibold">[{String(e.reason)}]</span>
