@@ -68,6 +68,7 @@
   --tag-opacity: 0.85;
   --slider-track: #2a3240;
   --slider-fill: var(--pnf-blue);
+  --chart-grid: rgba(255, 255, 255, 0.15);
   --scrollbar-thumb: #2a3240;
   --scrollbar-track: transparent;
 }
@@ -105,6 +106,7 @@
   --tag-opacity: 1;
   --slider-track: #d8dde4;
   --slider-fill: var(--pnf-blue);
+  --chart-grid: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb: #cdd3da;
   --scrollbar-track: transparent;
 }

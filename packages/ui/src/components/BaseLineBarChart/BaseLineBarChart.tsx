@@ -17,6 +17,7 @@ import { toCurrencyFormat } from '../../lib/utils'
 const colors = {
   primary: 'var(--chart-line-1)',
   skeleton: 'var(--border-subtle)',
+  grid: 'var(--chart-grid)',
   secondary: 'var(--text-secondary)',
 }
 
@@ -135,8 +136,8 @@ export default function BaseLineBarChart<T extends LineBarItem>({
           display: true,
           drawBorder: false,
           lineWidth: 2,
-          color: colors.skeleton,
-          borderColor: colors.skeleton,
+          color: colors.grid,
+          borderColor: colors.grid,
           tickColor: 'transparent',
           tickLength: 6,
         },
@@ -169,8 +170,8 @@ export default function BaseLineBarChart<T extends LineBarItem>({
         grid: {
           display: true,
           drawBorder: false,
-          color: colors.skeleton,
-          borderColor: colors.skeleton,
+          color: colors.grid,
+          borderColor: colors.grid,
           lineWidth: 2,
           tickColor: 'transparent',
           tickLength: 6,
