@@ -6,6 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@igniter/ui/components/dropdown-menu";
 import { CheckSmallIcon } from "@igniter/ui/assets";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PaginationProps {
   totalPages: number;
@@ -20,8 +21,20 @@ export default function Pagination({
   onPageChange,
   disabled,
 }: PaginationProps) {
+  const canPrev = currentPage > 0 && !disabled
+  const canNext = currentPage < totalPages - 1 && !disabled
+
   return (
-    <div className="flex items-center justify-end space-x-2 py-4">
+    <div className="flex items-center justify-end space-x-1 py-4">
+      <button
+        className="flex items-center justify-center p-2 bg-(--input-bg) border rounded-lg hover:bg-secondary disabled:opacity-50 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground transition-colors"
+        disabled={!canPrev}
+        onClick={() => onPageChange(currentPage - 1)}
+        aria-label="Previous page"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+
       <DropdownMenu>
         <DropdownMenuTrigger disabled={totalPages <= 1 || disabled}>
           <div className="flex items-center gap-2 p-2">
@@ -30,7 +43,7 @@ export default function Pagination({
             </span>
           </div>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top">
+        <DropdownMenuContent side="top" className="max-h-60 overflow-y-auto">
           {Array.from({ length: totalPages }, (_, i) => (
             <DropdownMenuItem
               key={i}
@@ -43,6 +56,15 @@ export default function Pagination({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <button
+        className="flex items-center justify-center p-2 bg-(--input-bg) border rounded-lg hover:bg-secondary disabled:opacity-50 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground transition-colors"
+        disabled={!canNext}
+        onClick={() => onPageChange(currentPage + 1)}
+        aria-label="Next page"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
     </div>
   );
 }
