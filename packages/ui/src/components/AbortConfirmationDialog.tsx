@@ -28,7 +28,7 @@ export function AbortConfirmationDialog({
             <DialogContent
                 onInteractOutside={(event) => event.preventDefault()}
                 onEscapeKeyDown={(event) => event.preventDefault()}
-                className="gap-0 w-[360px] p-0 rounded-lg bg-[var(--color-slate-2)]"
+                className="gap-0 w-[360px] p-0 rounded-lg bg-bg-surface border-border-primary"
                 hideClose
             >
                 <DialogTitle asChild>
@@ -36,13 +36,13 @@ export function AbortConfirmationDialog({
                         <span className="text-[14px]">Abort {typeLabel}</span>
                     </div>
                 </DialogTitle>
-                <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+                <div className="h-[1px] bg-border-primary"></div>
                 <div className="flex flex-row justify-between items-center py-3 px-4">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                    <span className="text-[14px] text-text-secondary">
                         Are you sure you want to abort this {type}? Be certain you can restart the {type} process anytime.
                     </span>
                 </div>
-                <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+                <div className="h-[1px] bg-border-primary"></div>
                 <DialogFooter className="p-2 flex flex-row ">
                     <Button
                         variant={'secondaryStretch'}

@@ -285,16 +285,16 @@ export default function SettingsForm() {
                     )}
                   />
 
-                  <div className="p-4 rounded-md bg-[var(--color-slate-2)]">
+                  <div className="p-4 rounded-md bg-[var(--bg-surface)]">
                     <div className="space-y-3">
                       <FormField
                         control={form.control}
                         name="rpcUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">RPC URL</FormLabel>
+                            <FormLabel className="text-[var(--text-secondary)]">RPC URL</FormLabel>
                             <FormControl>
-                              <Input {...field} className="bg-[var(--color-slate-3)]" />
+                              <Input {...field} className="bg-[var(--bg-hover)]" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -302,10 +302,10 @@ export default function SettingsForm() {
                       />
                     </div>
                     <div className="mt-4 space-y-3 flex justify-between">
-                      <span className="font-medium text-[var(--color-white-3)]">Blockchain Derived Settings</span>
+                      <span className="font-medium text-[var(--text-tertiary)]">Blockchain Derived Settings</span>
                       {!isReloadingBlockchainSettings && (
                         <Button
-                          className={'bg-slate-2'}
+                          className={'bg-bg-elevated'}
                           variant="outline"
                           type={'button'}
                           disabled={isSubmitting || form.formState.dirtyFields.rpcUrl}
@@ -324,9 +324,9 @@ export default function SettingsForm() {
                         name="chainId"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Chain ID</FormLabel>
+                            <FormLabel className="text-[var(--text-secondary)]">Chain ID</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none" />
+                              <Input {...field} readOnly className="bg-[var(--bg-hover)] pointer-events-none" />
                             </FormControl>
                           </FormItem>
                         )}
@@ -336,9 +336,9 @@ export default function SettingsForm() {
                         name="minimumStake"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Minimum Stake</FormLabel>
+                            <FormLabel className="text-[var(--text-secondary)]">Minimum Stake</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none" />
+                              <Input {...field} readOnly className="bg-[var(--bg-hover)] pointer-events-none" />
                             </FormControl>
                           </FormItem>
                         )}
@@ -348,9 +348,9 @@ export default function SettingsForm() {
                         name="appIdentity"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">App Identity</FormLabel>
+                            <FormLabel className="text-[var(--text-secondary)]">App Identity</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none" />
+                              <Input {...field} readOnly className="bg-[var(--bg-hover)] pointer-events-none" />
                             </FormControl>
                           </FormItem>
                         )}
@@ -360,9 +360,9 @@ export default function SettingsForm() {
                         name="updatedAtHeight"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Updated At Height</FormLabel>
+                            <FormLabel className="text-[var(--text-secondary)]">Updated At Height</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none" />
+                              <Input {...field} readOnly className="bg-[var(--bg-hover)] pointer-events-none" />
                             </FormControl>
                           </FormItem>
                         )}

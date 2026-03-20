@@ -15,9 +15,9 @@ import merge from 'lodash/merge'
 import { toCurrencyFormat } from '../../lib/utils'
 
 const colors = {
-  primary: '#35a6e3',
-  skeleton: 'rgba(23,23,23,0.43)',
-  secondary: 'rgb(188, 202, 218)',
+  primary: 'var(--chart-line-1)',
+  skeleton: 'var(--border-subtle)',
+  secondary: 'var(--text-secondary)',
 }
 
 interface BaseLineBarChartProps<T extends LineBarItem> {
@@ -146,7 +146,7 @@ export default function BaseLineBarChart<T extends LineBarItem>({
         title: {
           display: true,
           text: yAxisLabel,
-          color: 'rgb(188, 202, 218)',
+          color: 'var(--text-secondary)',
           font: {
             weight: '600',
             size: 13,

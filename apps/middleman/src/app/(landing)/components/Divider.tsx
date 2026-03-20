@@ -5,7 +5,7 @@ export interface DividerProps {
 export default function Divider({ top }: Readonly<DividerProps>) {
     return (
         <div
-            className="absolute w-full h-[1px] bg-[var(--black-dividers)] left-1/2 -translate-x-1/2"
+            className="absolute w-full h-[1px] bg-border-primary left-1/2 -translate-x-1/2"
             style={{ top: `${top}px` }}
         />
     );

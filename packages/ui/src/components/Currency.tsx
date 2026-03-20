@@ -11,8 +11,8 @@ export interface CurrencyProps {
 const currencyStyles = cva('font-mono', {
     variants: {
         variant: {
-            small: 'flex items-center text-[14px] font-mono text-[var(--color-white-1)]',
-            large: 'flex items-center text-[20px] font-mono text-[var(--color-white-1)]',
+            small: 'flex items-center text-[14px] font-mono text-text-primary',
+            large: 'flex items-center text-[20px] font-mono text-text-primary',
         },
     },
     defaultVariants: {

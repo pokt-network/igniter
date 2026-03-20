@@ -224,7 +224,7 @@ export function UnstakingProcess({
       <DialogContent
         onInteractOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => event.preventDefault()}
-        className="gap-0 w-[280px] p-0 rounded-lg bg-[var(--color-slate-2)]"
+        className="gap-0 w-[280px] p-0 rounded-lg bg-[var(--bg-surface)]"
         hideClose
       >
         <DialogTitle asChild>
@@ -233,7 +233,7 @@ export function UnstakingProcess({
             <LoaderIcon className="animate-spin" />
           </div>
         </DialogTitle>
-        <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+        <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <div className="flex flex-row justify-between items-center py-3 px-4">
           <span className="text-[14px]">Transaction Signature</span>
           {stageSucceeded(unstakingStatus.transactionSignatureStatus) && <CheckSuccess />}
@@ -241,7 +241,7 @@ export function UnstakingProcess({
             <XIcon className={`fill-current text-[var(--color-destructive)]`} />
           )}
         </div>
-        <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+        <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <div className="flex flex-row justify-between items-center py-3 px-4 font-size[14px]">
           <span className="text-[14px]">Scheduling Transaction</span>
           {stageSucceeded(unstakingStatus.schedulingTransactionStatus) && <CheckSuccess />}
@@ -249,7 +249,7 @@ export function UnstakingProcess({
             <XIcon className={`fill-current text-[var(--color-destructive)]`} />
           )}
         </div>
-        <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
+        <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <DialogFooter className="p-2">
           <DialogClose className="w-full" asChild>
             <Button disabled={!isCancellable} variant={'secondaryBorder'} type="submit">

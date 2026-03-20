@@ -107,7 +107,7 @@ export function NodeSelectionStep({
   };
 
   return (
-    <div className="flex flex-col w-[480px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-6">
+    <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-6">
       <ActivityHeader
         onBack={onBack}
         onClose={onClose}
@@ -125,15 +125,15 @@ export function NodeSelectionStep({
 
       {isLoading && (
         <div className="flex flex-col gap-2">
-          <Skeleton className="w-full h-16 bg-gray-700" />
-          <Skeleton className="w-full h-16 bg-gray-700" />
-          <Skeleton className="w-full h-16 bg-gray-700" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
         </div>
       )}
 
       {isError && (
-        <div className="flex flex-col bg-[#f4424257] p-4 rounded-[8px]">
-          <span className="text-[14px] font-medium text-[var(--color-white-1)]">
+        <div className="flex flex-col bg-error-bg p-4 rounded-[8px]">
+          <span className="text-[14px] font-medium text-[var(--text-primary)]">
             Failed to load nodes
           </span>
           <Button onClick={() => refetch()} className="mt-2 w-fit">
@@ -145,8 +145,8 @@ export function NodeSelectionStep({
       {!isLoading && !isError && nodes && (
         <>
           {filteredNodes.length === 0 && (
-            <div className="flex flex-col bg-[var(--color-slate-2)] p-4 rounded-[8px]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+            <div className="flex flex-col bg-[var(--bg-surface)] p-4 rounded-[8px]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 {searchTerm ? "No nodes found matching your search." : "You don't have any staked nodes to unstake."}
               </span>
             </div>
@@ -154,28 +154,28 @@ export function NodeSelectionStep({
 
           {filteredNodes.length > 0 && (
             <>
-              <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] bg-[var(--color-slate-2)] rounded-t-[8px]">
+              <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-surface)] rounded-t-[8px]">
                 <div className="flex flex-row items-center gap-3">
                   <Checkbox
                     checked={allFilteredSelected}
                     onCheckedChange={handleToggleAll}
                     disabled={filteredNodes.length === 0}
                   />
-                  <span className="text-[14px] text-[var(--color-white-3)]">
+                  <span className="text-[14px] text-[var(--text-tertiary)]">
                     Select All ({filteredNodes.length} available)
                   </span>
                 </div>
-                <span className="text-[14px] text-[var(--color-white-1)]">
+                <span className="text-[14px] text-[var(--text-primary)]">
                   {internalSelectedNodes.length} selected
                 </span>
               </div>
 
-              <div className="flex flex-col max-h-[400px] overflow-y-auto border border-[var(--black-dividers)] rounded-b-[8px]">
+              <div className="flex flex-col max-h-[400px] overflow-y-auto border border-[var(--border-primary)] rounded-b-[8px]">
                 {filteredNodes.map((node) => {
                   return (
                     <div
                       key={node.address}
-                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] last:border-b-0 hover:bg-[var(--color-slate-2)] cursor-pointer"
+                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] last:border-b-0 hover:bg-[var(--bg-surface)] cursor-pointer"
                       onClick={() => handleToggleNode(node)}
                     >
                       <div className="flex flex-row items-center gap-3 flex-1">
@@ -186,22 +186,22 @@ export function NodeSelectionStep({
                         <div className="flex flex-col gap-1">
                           <div className="flex flex-row items-center gap-2">
                             <AvatarByString string={node.address} />
-                            <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                            <span className="font-mono text-[14px] text-[var(--text-primary)]">
                               {getShortAddress(node.address, 5)}
                             </span>
                           </div>
                           {node.provider?.name && (
-                            <div className="flex flex-row items-center gap-2 text-[12px] text-[var(--color-white-3)]">
+                            <div className="flex flex-row items-center gap-2 text-[12px] text-[var(--text-tertiary)]">
                               <span>Provider: {node.provider.name}</span>
                             </div>
                           )}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-0">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                           {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
                         </span>
-                        <span className="font-mono text-[12px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[12px] text-[var(--text-tertiary)]">
                           $POKT
                         </span>
                       </div>

@@ -23,7 +23,7 @@ export default async function Page() {
           <div className="flex flex-row justify-between items-center">
             <div className="flex flex-col">
               <h1>Suppliers</h1>
-              <p className="text-muted-foreground">
+              <p className="text-text-secondary">
                 Manage your suppliers and their stake configurations. View active suppliers, their services, and
                 performance metrics.
               </p>

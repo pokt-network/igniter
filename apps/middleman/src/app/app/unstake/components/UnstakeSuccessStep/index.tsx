@@ -37,7 +37,7 @@ export function UnstakeSuccessStep({ nodeCount, totalStakeAmount, transaction, o
   }
 
   return (
-    <div className="flex flex-col w-[480px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title="Scheduled!"
         subtitle="Below are the details of your unstake operation."
@@ -53,42 +53,42 @@ export function UnstakeSuccessStep({ nodeCount, totalStakeAmount, transaction, o
           <div className="relative flex h-[64px] gradient-border-green">
             <div
               className={`absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-              <span className="text-[20px] text-[var(--color-white-3)]">
+              <span className="text-[20px] text-[var(--text-tertiary)]">
                 Unstake
               </span>
               <span className="flex flex-row items-center gap-2">
-                <span className="font-mono text-[20px] text-[var(--color-white-1)]">
+                <span className="font-mono text-[20px] text-[var(--text-primary)]">
                   {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
                 </span>
-                <span className="font-mono text-[20px] text-[var(--color-white-3)]">
+                <span className="font-mono text-[20px] text-[var(--text-tertiary)]">
                   $POKT
                 </span>
               </span>
             </div>
           </div>
-          <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-            <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+          <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
+            <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
               Unstake is being processed. Your nodes will enter an unbonding period and stop generating rewards. After the unbonding period completes, your staked tokens will automatically return to the owner addresses.
             </span>
           </div>
-          <div key="unstake-details" className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
-            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+          <div key="unstake-details" className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
+            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 Timestamp
               </span>
-              <span className="text-[14px] text-[var(--color-white-1)]">
+              <span className="text-[14px] text-[var(--text-primary)]">
                 {toDateFormat(transaction.createdAt)}
               </span>
             </span>
-            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 Status
               </span>
-              <span className="text-[14px] text-[var(--color-white-1)]">
+              <span className="text-[14px] text-[var(--text-primary)]">
                 {transaction.status}
               </span>
             </span>
-            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+            <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
               <span className="flex flex-row items-center gap-2 hover:cursor-pointer"
                 onClick={() => setIsShowingTransactionDetails(!isShowingTransactionDetails)}>
                 {isShowingTransactionDetails && (
@@ -97,7 +97,7 @@ export function UnstakeSuccessStep({ nodeCount, totalStakeAmount, transaction, o
                 {!isShowingTransactionDetails && (
                   <CaretSmallIcon />
                 )}
-                <span className="text-[14px] text-[var(--color-white-3)]">
+                <span className="text-[14px] text-[var(--text-tertiary)]">
                   {`Unstake Node (${unstakeOperations.length})`}
                 </span>
               </span>
@@ -105,11 +105,11 @@ export function UnstakeSuccessStep({ nodeCount, totalStakeAmount, transaction, o
             {isShowingTransactionDetails && unstakeOperations.map((operation, index) => {
               return (
                 <span key={`unstake-${index}`}
-                  className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                  <span className="text-[14px] text-[var(--color-white-3)]">
+                  className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                  <span className="text-[14px] text-[var(--text-tertiary)]">
                     Operator Address
                   </span>
-                    <span className="flex flex-row items-center text-[14px] text-[var(--color-white-1)]">
+                    <span className="flex flex-row items-center text-[14px] text-[var(--text-primary)]">
                         <AvatarByString string={operation.value.operatorAddress} />
                         <span className="ml-2 font-mono">
                             {getShortAddress(operation.value.operatorAddress, 5)}

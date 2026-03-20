@@ -123,7 +123,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
               onClick={() => setIndex(index - 1)}
               className={'w-[30px] px-0'}
             >
-              <RightArrowIcon className={'!size-[18px] text-[color:var(--color-white-1)] rotate-180'} />
+              <RightArrowIcon className={'!size-[18px] text-text-primary rotate-180'} />
             </Button>
             <Button
               variant={'icon'}
@@ -132,7 +132,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
               onClick={() => setIndex(index + 1)}
               className={'w-[30px] px-0'}
             >
-              <RightArrowIcon className={'!size-[18px] text-[color:var(--color-white-1)]'} />
+              <RightArrowIcon className={'!size-[18px] text-text-primary'} />
             </Button>
           </div>
         )
@@ -140,16 +140,16 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
         paginationInfo = (
           <>
             <div
-              className={'!size-0.5 !min-w-0.5 !min-h-0.5 bg-[color:var(--color-white-4)] rounded-full]'}
+              className={'!size-0.5 !min-w-0.5 !min-h-0.5 bg-text-tertiary rounded-full]'}
             />
-            <p className={'whitespace-nowrap [color:var(--color-white-3)] !text-sm'}>{index + 1} of {notifications.length}</p>
+            <p className={'whitespace-nowrap text-text-tertiary !text-sm'}>{index + 1} of {notifications.length}</p>
           </>
         )
       }
 
       notificationsRender = (
         <div
-          className={'sticky top-0 z-20 flex flex-col h-[70px] pt-5 bg-[color:var(--color-black-1)]'}
+          className={'sticky top-0 z-20 flex flex-col h-[70px] pt-5 bg-bg-root'}
         >
           <div className={'flex items-center gap-2 justify-between mx-30'}>
             <div className={'flex flex-row items-center gap-3'}>
@@ -162,7 +162,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
               className={
                 clsx(
                   'flex flex-row items-center gap-2',
-                  '[&_button]:border [&_button]:border-[color:var(--button-2-border)] [&_button]:bg-[color:var(--color-slate-1)] [&_button]:h-[30px]'
+                  '[&_button]:border [&_button]:border-[color:var(--button-2-border)] [&_button]:bg-bg-elevated [&_button]:h-[30px]'
                 )
               }
             >
@@ -181,7 +181,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
             className={
               clsx(
                 '!min-h-0.5 !h-[2px] mt-[18px] w-full bg-linear-to-r',
-                notification.type === 'success' && 'from-[color:#86b35e] to-[color:var(--color-green-1)]',
+                notification.type === 'success' && 'from-[color:#86b35e] to-[color:var(--success)]',
                 notification.type === 'info' && 'from-[color:#394758] to-[color:#4d6078]',
                 notification.type === 'warning' && 'from-[color:#f97834] to-[color:#f8a23e]',
                 notification.type === 'error' && 'from-[color:#f97834] to-[color:#f8a23e]',

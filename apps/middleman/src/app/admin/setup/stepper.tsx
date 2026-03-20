@@ -133,7 +133,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
                       className={cn(
                         "flex size-11 items-center justify-center rounded-full border pointer-events-none",
                         {
-                          "bg-blue-1/70 ring-2 ring-blue-1/70 ring-offset-3 ring-offset-background":
+                          "bg-accent/70 ring-2 ring-accent/70 ring-offset-3 ring-offset-background":
                             stepper.current.id === step.id,
                           "bg-success/70": index < currentIndex,
                           "bg-primary": index > currentIndex,
@@ -143,7 +143,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
                       {index < currentIndex ? <CheckIcon /> : null}
                     </Button>
                     <div className="flex flex-col items-center gap-2">
-                      <span className="text-sm text-muted-foreground tracking-wider uppercase">
+                      <span className="text-sm text-text-secondary tracking-wider uppercase">
                         Step {index + 1}
                       </span>
                       <span className="text-md text-secondary-foreground font-medium">
@@ -155,8 +155,8 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
                           index < currentIndex
                             ? "text-success"
                             : index === currentIndex
-                              ? "text-blue-1"
-                              : "text-muted-foreground"
+                              ? "text-accent"
+                              : "text-text-secondary"
                         )}
                       >
                         {index < currentIndex

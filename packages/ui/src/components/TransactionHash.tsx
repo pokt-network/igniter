@@ -22,7 +22,7 @@ export default function TransactionHash({hash, onClick}: TransactionHashProps) {
 
   return (
     <div className={'flex items-center gap-3'}>
-      <Button variant={'link'} className={'!p-0 text-[color:var(--ring)] border-none h-5'} onClick={onClick}>
+      <Button variant={'link'} className={'!p-0 text-accent border-none h-5 font-mono'} onClick={onClick}>
         {truncateHash}
       </Button>
       <Button variant={'icon'} className={'h-5'} onClick={handleCopy}>

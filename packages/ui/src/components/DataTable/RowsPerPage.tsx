@@ -36,7 +36,7 @@ export default function RowsPerPage({
           {pageSizeOptions.map((pageSize) => (
             <DropdownMenuItem
               key={pageSize}
-              className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-secondary"
+              className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
               onClick={() => onPageSizeChange(pageSize)}
             >
               <span className="text-sm">{pageSize === Number.MAX_SAFE_INTEGER ? 'All' : pageSize}</span>

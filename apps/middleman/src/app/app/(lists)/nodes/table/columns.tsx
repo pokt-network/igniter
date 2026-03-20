@@ -123,7 +123,7 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
       return (
         <div className="flex items-baseline gap-3 font-mono justify-end">
           <span>{roundAndSeparate(stakeAmount)}</span>
-          <span className="text-muted-foreground">$POKT</span>
+          <span className="text-text-tertiary">$POKT</span>
         </div>
       );
     },
@@ -140,7 +140,7 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
       return (
         <div className="flex items-baseline gap-3 font-mono justify-end">
           <span>{roundAndSeparate(amountToPokt(balance), 2)}</span>
-          <span className="text-muted-foreground">$POKT</span>
+          <span className="text-text-tertiary">$POKT</span>
         </div>
       );
     },

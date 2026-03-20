@@ -54,7 +54,7 @@ export default function SortDropdown<TData>({
             {sortGroup.map((sortBy) => (
               <DropdownMenuItem
                 key={`${String(sortBy.column)}-${sortBy.label}`}
-                className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-secondary"
+                className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
                 onClick={() =>
                   table
                     .getColumn(String(sortBy.column))
@@ -74,7 +74,7 @@ export default function SortDropdown<TData>({
         ].map((direction) => (
           <DropdownMenuItem
             key={direction.value}
-            className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-secondary"
+            className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
             onClick={() => {
               const currentSort = selectedSort;
               if (currentSort) {

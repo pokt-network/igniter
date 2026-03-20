@@ -61,7 +61,7 @@ export default function FilterDropdown<TData>({
             {group.map((filter) => (
               <DropdownMenuItem
                 key={String(filter.value)}
-                className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-secondary"
+                className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
                 onClick={() => {
                   if (filter.value === "") {
                     table.resetColumnFilters();

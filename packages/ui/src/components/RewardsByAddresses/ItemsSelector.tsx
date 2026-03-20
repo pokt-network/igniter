@@ -120,7 +120,7 @@ function TopChip({
       className={
         clsx(
           'hover:bg-transparent border-none h-5 min-h-5 max-h-5 !text-[12px] font-mono font-medium leading-5 rounded-2xl w-12 px-0.5 pb-0 gap-0 !pt-0.5',
-          areAllSelected && 'bg-[color:var(--primary)] hover:bg-[color:var(--primary-background)] text-white font-bold'
+          areAllSelected && 'bg-pnf-blue hover:bg-pnf-blue-hover text-white font-bold'
         )
       }
     >

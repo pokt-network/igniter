@@ -12,20 +12,20 @@ const buttonVariants = cva(
       variant: {
         icon: "border-none !p-0",
         default:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+          "bg-pnf-blue text-white border-transparent shadow-sm hover:bg-pnf-blue-hover",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
+          "bg-transparent text-error border-error hover:bg-error-bg",
         success:
-          "bg-success text-success-foreground shadow-xs hover:bg-success/90",
+          "bg-success-bg text-success border-transparent shadow-xs hover:opacity-90",
         outline:
-          "border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
+          "bg-transparent text-text-primary border-border-primary hover:border-text-tertiary hover:bg-bg-hover",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+          "bg-bg-elevated text-text-primary border-border-primary shadow-xs hover:border-text-tertiary",
         secondaryBorder:
-              "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80 border border-[var(--button-2-border)]",
-        secondaryStretch: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80 w-full text-[var(--color-white-1)] border border-[var(--button-2-border)]",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+              "bg-bg-elevated text-text-primary shadow-xs hover:border-text-tertiary border border-border-primary",
+        secondaryStretch: "bg-bg-elevated text-text-primary shadow-xs hover:border-text-tertiary w-full border border-border-primary",
+        ghost: "bg-transparent border-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary",
+        link: "text-accent border-transparent underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -106,8 +106,8 @@ const ButtonGroup = ({
               "rounded-t-none": isVertical && !isFirst,
               "rounded-b-none": isVertical && !isLast,
               "border-t-0": isVertical && !isFirst,
-              "bg-(--input-bg)": isActive,
-              "text-(--muted-foreground)": !isActive,
+              "bg-bg-input": isActive,
+              "text-text-secondary": !isActive,
               [fontWeight]: true,
             },
             child.props.className

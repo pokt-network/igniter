@@ -17,10 +17,10 @@ export default function Summary({
   rows
 }: SummaryProps) {
   return (
-    <div className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
+    <div className="flex flex-col p-0 rounded-[8px] border border-border-primary">
       {rows.map((row, index) => (
-        <div key={index} className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] last:border-none">
-          <div className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+        <div key={index} className="flex flex-row items-center justify-between px-4 py-3 border-b border-border-primary last:border-none">
+          <div className="flex flex-row items-center gap-2 text-[14px] text-text-tertiary">
             {typeof row.label === 'string' ? (
               <span>
                 {row.label}
@@ -35,7 +35,7 @@ export default function Summary({
             )}
           </div>
           {typeof row.value === 'string' ? (
-            <span className="text-[14px] text-[var(--color-white-1)]">
+            <span className="text-[14px] text-text-primary">
               {row.value}
             </span>
           ) : row.value}

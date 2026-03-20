@@ -34,7 +34,7 @@ export default function Pagination({
           {Array.from({ length: totalPages }, (_, i) => (
             <DropdownMenuItem
               key={i}
-              className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-secondary"
+              className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
               onClick={() => onPageChange(i)}
             >
               <span className="text-sm">Page {i + 1}</span>
