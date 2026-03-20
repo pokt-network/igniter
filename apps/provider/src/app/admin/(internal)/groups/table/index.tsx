@@ -152,7 +152,7 @@ export default function AddressGroupsTable() {
           addressGroup={updateAddressGroup}
         />
       )}
-      <div className="py-2 max-h-[500px] min-h-[300px] overflow-y-scroll scrollbar-hidden">
+      <div className="py-2">
         {content}
       </div>
       {addressGroupToDelete && (

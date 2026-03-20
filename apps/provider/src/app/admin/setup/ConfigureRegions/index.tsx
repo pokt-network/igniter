@@ -142,7 +142,7 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
           region={updateRegion}
         />
       )}
-      <div className="py-2 max-h-[500px] min-h-[300px] overflow-y-scroll scrollbar-hidden">
+      <div className="py-2">
         {content}
       </div>
       {goNext && goBack && (
