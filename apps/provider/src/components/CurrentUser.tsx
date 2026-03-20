@@ -2,7 +2,7 @@
 
 import React from "react";
 import {getCsrfToken, signIn, useSession, signOut} from "next-auth/react";
-import Link from 'next/link';
+
 import { usePathname } from "next/navigation";
 import type {SiwpMessage} from "@poktscan/vault-siwp";
 import UserMenu from "@igniter/ui/components/UserMenu";
@@ -92,22 +92,22 @@ export default function CurrentUser() {
     return (
         <UserMenu user={data.user}>
           {!isLanding && (
-              <Link href={Routes.root}>
+              <a href={Routes.root}>
                 <DropdownMenuItem className="max-h-[38px]">
               <span>
                 Go to portal
               </span>
                 </DropdownMenuItem>
-              </Link>
+              </a>
           )}
           {!isApp && (
-              <Link href={Routes.appRoot}>
+              <a href={Routes.appRoot}>
                 <DropdownMenuItem className="max-h-[38px]">
               <span>
                 Go to App
               </span>
                 </DropdownMenuItem>
-              </Link>
+              </a>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => signOut()}>Sign out</DropdownMenuItem>
