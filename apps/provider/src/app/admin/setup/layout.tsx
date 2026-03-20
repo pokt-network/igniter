@@ -32,16 +32,16 @@ export default function RootLayout({
         >
           <ApplicationSettingsProvider>
             <WalletConnectionProvider>
-              <SidebarProvider className="flex flex-col">
+              <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
                 <NotificationsProvider>
                   <AppTopBar>
                     <CurrentUser/>
                   </AppTopBar>
-                  <div className="flex flex-1">
+                  <div className="flex flex-1 min-h-0">
                     <Sidebar />
-                    <SidebarInset>
+                    <SidebarInset className="!min-h-0">
                       <div className={"w-full h-full flex overflow-x-hidden"}>
-                        <div className="flex flex-col w-full gap-6 md:w-[calc(100dvw-255px)]">{children}</div>
+                        <div className="flex flex-col w-full gap-6 flex-1 overflow-y-auto scrollbar-hidden md:w-[calc(100dvw-255px)]">{children}</div>
                       </div>
                     </SidebarInset>
                   </div>
