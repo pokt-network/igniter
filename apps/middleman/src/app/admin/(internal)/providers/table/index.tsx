@@ -32,7 +32,7 @@ export default function ProvidersTable() {
 
   return (
     <div className='flex flex-col gap-4'>
-      <div className="py-2 max-h-[500px] min-h-[300px] overflow-y-scroll scrollbar-hidden">
+      <div className="py-2">
         {content}
       </div>
     </div>
