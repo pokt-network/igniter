@@ -22,8 +22,8 @@ export default function UserMenu({ user, children }: Readonly<UserMenuProps>) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="rounded-full hover:border-text-tertiary">
-        <div className="flex items-center gap-2 p-2">
-          <AvatarByString string={address}  />
+        <div className="flex items-center gap-2 px-3 py-2">
+          <AvatarByString string={address} />
           <span className="font-mono text-sm text-text-primary">
             {getShortAddress(address, 5)}
           </span>

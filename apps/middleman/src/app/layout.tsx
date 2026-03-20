@@ -6,7 +6,7 @@ import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import { ApplicationSettingsProvider } from "@/app/context/ApplicationSettings";
 import { SidebarInset, SidebarProvider } from "@igniter/ui/components/sidebar";
 import { AppTopBar } from "@igniter/ui/components/AppTopBar/index";
-import PriceWidget from "@/app/components/PriceWidget";
+
 import CurrentUser from "@/app/components/CurrentUser";
 import { CurrencyContextProvider } from "@igniter/ui/context/currency";
 import Sidebar from "@/app/components/Sidebar";
@@ -60,7 +60,6 @@ export default function RootLayout({
                       <QuickDetailProvider>
                         <NotificationsProvider>
                           <AppTopBar>
-                            <PriceWidget />
                             <CurrentUser />
                             <ThemeToggle />
                           </AppTopBar>
