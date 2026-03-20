@@ -13,7 +13,7 @@ export function AmountDisplay({balance, amount, minimumStake, onMaxSelected}: Re
 
     return (
         <div className="flex flex-col w-full border border-border-primary rounded-[8px]">
-            <div className="flex flex-row w-full h-[55px] bg-[#10161e] justify-between items-center p-4">
+            <div className="flex flex-row w-full h-[55px] bg-bg-input justify-between items-center p-4">
                 <Currency amount={amount} variant="large" />
                 <span className="flex flex-row items-center gap-3">
                     <Button

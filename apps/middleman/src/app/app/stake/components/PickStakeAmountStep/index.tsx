@@ -76,7 +76,6 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
                         <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
                             Token balance is not enough to stake. Transfer more tokens to your wallet to stake $POKT.
                         </span>
-                        {/*<div className="h-[1px] bg-[var(--slate-dividers)]" />*/}
                         {/*<div className="p-2">*/}
                         {/*    <Button variant="secondaryBorder" className="w-full">*/}
                         {/*        About Staking*/}

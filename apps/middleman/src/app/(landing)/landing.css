@@ -189,7 +189,7 @@ html:has([data-landing]) .landing-wrapper {
   gap: 6px;
   padding: 12px 28px;
   border-radius: var(--radius-md);
-  font-family: var(--font-family);
+  font-family: var(--font-sans), sans-serif;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
@@ -643,4 +643,15 @@ html:has([data-landing]) .landing-wrapper {
 @media (max-width: 480px) {
   .hero-actions { flex-direction: column; }
   .hero-actions .hero-btn { width: 100%; }
+}
+
+/* Accessibility — disable decorative animations for users with vestibular disorders */
+@media (prefers-reduced-motion: reduce) {
+  .bg-canvas .orb { animation: none; }
+  .hero-badge,
+  .landing-hero h1,
+  .hero-sub,
+  .hero-actions { animation: none; }
+  .hero-badge .pulse { animation: none; }
+  #particles-canvas { display: none; }
 }

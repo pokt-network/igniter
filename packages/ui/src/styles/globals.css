@@ -20,19 +20,50 @@
   --pnf-coral: #ff5a5f;
   --pnf-lavender: #b8b8ff;
 
-  /* Typography */
-  --font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-
   /* Sizing */
-  --sidebar-w: 220px;
-  --navbar-h: 56px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
   --radius-full: 9999px;
+
+  /* SSR / JS-disabled fallback — dark theme as default so tokens are never undefined */
+  --bg-root: #0f1318;
+  --bg-surface: #171c22;
+  --bg-elevated: #1e2530;
+  --bg-hover: #252d3a;
+  --bg-input: #141920;
+  --border-primary: #2a3240;
+  --border-subtle: #1e2530;
+  --border-focus: var(--pnf-blue);
+  --text-primary: #e6edf5;
+  --text-secondary: #8b98a9;
+  --text-tertiary: #5a6a7e;
+  --text-inverse: #171c1f;
+  --accent: var(--pnf-blue);
+  --accent-hover: var(--pnf-blue-hover);
+  --accent-text: #ffffff;
+  --success: var(--pnf-mint);
+  --success-bg: rgba(72, 229, 194, 0.1);
+  --warning: var(--pnf-gold);
+  --warning-bg: rgba(255, 197, 71, 0.1);
+  --error: var(--pnf-coral);
+  --error-bg: rgba(255, 90, 95, 0.1);
+  --info-bg: rgba(2, 90, 242, 0.08);
+  --sidebar-active-bg: rgba(2, 90, 242, 0.15);
+  --sidebar-active-text: var(--pnf-blue-light);
+  --chart-line-1: var(--pnf-mint);
+  --chart-line-2: var(--pnf-lavender);
+  --chart-line-3: var(--pnf-gold);
+  --overlay: rgba(0, 0, 0, 0.65);
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --tag-opacity: 0.85;
+  --slider-track: #2a3240;
+  --slider-fill: var(--pnf-blue);
+  --chart-grid: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb: #2a3240;
+  --scrollbar-track: transparent;
 }
 
 [data-theme="dark"] {
@@ -83,16 +114,16 @@
   --border-focus: var(--pnf-blue);
   --text-primary: #171c1f;
   --text-secondary: #5a6a7e;
-  --text-tertiary: #8b98a9;
+  --text-tertiary: #6b7a8e;
   --text-inverse: #ffffff;
   --accent: var(--pnf-blue);
   --accent-hover: var(--pnf-blue-hover);
   --accent-text: #ffffff;
-  --success: #0dab76;
+  --success: #087a54;
   --success-bg: rgba(13, 171, 118, 0.08);
-  --warning: #c89b2f;
+  --warning: #9a7520;
   --warning-bg: rgba(200, 155, 47, 0.08);
-  --error: #d93d42;
+  --error: #c43539;
   --error-bg: rgba(217, 61, 66, 0.07);
   --info-bg: rgba(2, 90, 242, 0.06);
   --sidebar-active-bg: rgba(2, 90, 242, 0.08);
@@ -173,12 +204,12 @@
   --color-overlay: var(--overlay);
 
   /* Radius tokens */
-  --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
-  --radius-full: var(--radius-full);
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
 
   /* Legacy shadcn mappings — keep during migration so existing classes work */
   --color-background: var(--bg-root);

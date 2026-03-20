@@ -162,7 +162,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
               className={
                 clsx(
                   'flex flex-row items-center gap-2',
-                  '[&_button]:border [&_button]:border-[color:var(--button-2-border)] [&_button]:bg-bg-elevated [&_button]:h-[30px]'
+                  '[&_button]:border [&_button]:border-border-primary [&_button]:bg-bg-elevated [&_button]:h-[30px]'
                 )
               }
             >

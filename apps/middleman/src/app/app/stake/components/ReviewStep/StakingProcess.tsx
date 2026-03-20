@@ -296,19 +296,19 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
         <div className="flex flex-row justify-between items-center py-3 px-4">
           <span className="text-[14px]">Requesting Keys</span>
           {stageSucceeded(stakingStatus.requestSuppliersStatus) && <CheckSuccess/>}
-          {stageFailed(stakingStatus.requestSuppliersStatus) && <XIcon className={`fill-current text-[var(--color-destructive)]`}/>}
+          {stageFailed(stakingStatus.requestSuppliersStatus) && <XIcon className={`fill-current text-error`}/>}
         </div>
         <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <div className="flex flex-row justify-between items-center py-3 px-4">
           <span className="text-[14px]">Transactions Signature</span>
           {stageSucceeded(stakingStatus.transactionSignatureStatus) && <CheckSuccess/>}
-          {stageFailed(stakingStatus.transactionSignatureStatus) && <XIcon className={`fill-current text-[var(--color-destructive)]`}/>}
+          {stageFailed(stakingStatus.transactionSignatureStatus) && <XIcon className={`fill-current text-error`}/>}
         </div>
         <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <div className="flex flex-row justify-between items-center py-3 px-4 font-size[14px]">
           <span className="text-[14px]">Scheduling Transactions</span>
           {stageSucceeded(stakingStatus.schedulingTransactionStatus) && <CheckSuccess/>}
-          {stageFailed(stakingStatus.schedulingTransactionStatus) && <XIcon className={`fill-current text-[var(--color-destructive)]`}/>}
+          {stageFailed(stakingStatus.schedulingTransactionStatus) && <XIcon className={`fill-current text-error`}/>}
         </div>
         <div className="h-[1px] bg-[var(--border-subtle)]"></div>
         <DialogFooter className="p-2">

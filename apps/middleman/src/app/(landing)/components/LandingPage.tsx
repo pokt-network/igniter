@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useTheme } from "next-themes";
+import { PocketLogoWhite, PocketLogoBlack } from "@igniter/ui/assets";
 import "../landing.css";
 
 export default function LandingPage() {
@@ -13,6 +14,10 @@ export default function LandingPage() {
   const initParticles = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Respect prefers-reduced-motion
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -540,20 +545,13 @@ export default function LandingPage() {
 
 function FooterLogo() {
   const { resolvedTheme } = useTheme();
-  // Default to dark (white) logo — resolvedTheme is undefined before hydration
-  const src =
-    resolvedTheme === "light"
-      ? "https://pocket.network/wp-content/uploads/2025/06/Pocket-Logo-Black.svg"
-      : "https://pocket.network/wp-content/uploads/2025/06/Pocket-Logo-White.svg";
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <img
-      className="footer-logo"
-      src={src}
-      alt="Pocket Network"
-      onError={(e) => {
-        (e.target as HTMLImageElement).style.display = "none";
-      }}
-    />
-  );
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
+  const Logo = resolvedTheme === "light" ? PocketLogoBlack : PocketLogoWhite;
+
+  return <Logo className="footer-logo" />;
 }

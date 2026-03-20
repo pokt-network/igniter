@@ -237,7 +237,6 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     {errorMessage}
                   </span>
                 )}
-                {/*<div className="h-[1px] bg-[var(--slate-dividers)]" />*/}
                 {/*<div className="p-2">*/}
                 {/*    <Button variant="secondaryBorder" className="w-full">*/}
                 {/*        About Staking*/}

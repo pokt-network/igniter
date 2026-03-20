@@ -238,7 +238,7 @@ export function UnstakingProcess({
           <span className="text-[14px]">Transaction Signature</span>
           {stageSucceeded(unstakingStatus.transactionSignatureStatus) && <CheckSuccess />}
           {stageFailed(unstakingStatus.transactionSignatureStatus) && (
-            <XIcon className={`fill-current text-[var(--color-destructive)]`} />
+            <XIcon className={`fill-current text-error`} />
           )}
         </div>
         <div className="h-[1px] bg-[var(--border-subtle)]"></div>
@@ -246,7 +246,7 @@ export function UnstakingProcess({
           <span className="text-[14px]">Scheduling Transaction</span>
           {stageSucceeded(unstakingStatus.schedulingTransactionStatus) && <CheckSuccess />}
           {stageFailed(unstakingStatus.schedulingTransactionStatus) && (
-            <XIcon className={`fill-current text-[var(--color-destructive)]`} />
+            <XIcon className={`fill-current text-error`} />
           )}
         </div>
         <div className="h-[1px] bg-[var(--border-subtle)]"></div>

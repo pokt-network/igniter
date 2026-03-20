@@ -15,7 +15,9 @@ export function PocketBrandLogo({ href = "/" }: Readonly<PocketBrandLogoProps>) 
 
   useEffect(() => setMounted(true), []);
 
-  const Logo = mounted && resolvedTheme === "dark" ? PocketLogoWhite : PocketLogoBlack;
+  if (!mounted) return <Link href={href} className="h-[26px] flex items-center" />;
+
+  const Logo = resolvedTheme === "dark" ? PocketLogoWhite : PocketLogoBlack;
 
   return (
     <Link href={href} className="h-[26px] flex items-center">

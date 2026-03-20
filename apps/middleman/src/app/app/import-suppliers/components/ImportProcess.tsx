@@ -425,7 +425,7 @@ export function ImportProcess({
             <span className="text-[14px]">Requesting Import</span>
             {stageSucceeded(importStatus.requestImportStatus) && <CheckSuccess />}
             {stageFailed(importStatus.requestImportStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
           <div className="h-[1px] bg-[var(--border-subtle)]" />
@@ -434,7 +434,7 @@ export function ImportProcess({
             <span className="text-[14px]">Signing Verification</span>
             {stageSucceeded(importStatus.signNonceStatus) && <CheckSuccess />}
             {stageFailed(importStatus.signNonceStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
           <div className="h-[1px] bg-[var(--border-subtle)]" />
@@ -443,7 +443,7 @@ export function ImportProcess({
             <span className="text-[14px]">Completing Import</span>
             {stageSucceeded(importStatus.submitImportStatus) && <CheckSuccess />}
             {stageFailed(importStatus.submitImportStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
           <div className="h-[1px] bg-[var(--border-subtle)]" />
