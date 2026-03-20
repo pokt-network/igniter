@@ -918,7 +918,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         ? fetch(indexerApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: supplierStatsQuery, variables: { domains: allDomains } }),
+            body: JSON.stringify({ query: supplierStatsQuery, variables: { pDomains: allDomains } }),
           })
             .then((r) => r.json() as Promise<{ data: { data: { suppliers_count: number; total_staked_tokens: number } } }>)
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
