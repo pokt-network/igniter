@@ -21,7 +21,7 @@ import {
   TransactionType,
 } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
-import { getCurrentUserIdentity } from '@/lib/utils/actions'
+import { requireAuth } from '@/lib/utils/actions'
 import {
   getCompressedPublicKeyFromAppIdentity,
   signPayload,
@@ -90,7 +90,7 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
         }
       }
 
-      return {
+      const offer: StakeDistributionOffer = {
         id: provider.id,
         identity: provider.identity,
         name: provider.name,
@@ -104,14 +104,15 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
         addressGroups: publicAddressGroups,
         supplierStats: provider.supplierStats ?? null,
       }
+      return offer
     })
     .filter((offer): offer is StakeDistributionOffer => offer !== null)
 }
 
 export async function CreateStakeTransaction(request: CreateStakeTransactionRequest) {
-  const userIdentity = await getCurrentUserIdentity()
+  const userIdentity = await requireAuth()
 
-  const creatingTransaction: InsertTransaction = {
+  return insert({
     type: TransactionType.Stake,
     status: TransactionStatus.Pending,
     signedPayload: request.transaction.signedPayload,
@@ -123,9 +124,7 @@ export async function CreateStakeTransaction(request: CreateStakeTransactionRequ
     consumedFee: 0,
     typeProviderFee: request.offer.feeType,
     createdBy: userIdentity,
-  }
-
-  return insert(creatingTransaction)
+  })
 }
 
 export async function CreateSignedMemo(request: CreateSignedMemoRequest): Promise<SignedMemo> {

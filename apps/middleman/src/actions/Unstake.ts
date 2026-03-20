@@ -6,7 +6,7 @@ import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getStartAndEndDateBasedOnTime, Time } from '@igniter/ui/lib/dates'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { SignedTransaction } from '@igniter/ui/models'
-import { getCurrentUserIdentity } from '@/lib/utils/actions'
+import { requireAuth } from '@/lib/utils/actions'
 import { InsertTransaction } from '@igniter/db/middleman/schema'
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
@@ -78,9 +78,9 @@ export interface CreateUnstakeTransactionRequest {
 }
 
 export async function CreateUnstakeTransaction(request: CreateUnstakeTransactionRequest) {
-  const userIdentity = await getCurrentUserIdentity()
+  const userIdentity = await requireAuth()
 
-  const creatingTransaction: InsertTransaction = {
+  return insert({
     type: TransactionType.Unstake,
     status: TransactionStatus.Pending,
     signedPayload: request.transaction.signedPayload,
@@ -89,7 +89,5 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
     estimatedFee: request.transaction.estimatedFee,
     consumedFee: 0,
     createdBy: userIdentity,
-  }
-
-  return insert(creatingTransaction)
+  })
 }

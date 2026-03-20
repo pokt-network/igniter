@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/db";
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import {
   nodesTable,
   NodeWithDetails,
@@ -41,15 +41,12 @@ export async function getNode(address: string): Promise<NodeWithDetails | undefi
 }
 
 export async function getOwnerAddressesByUser(userIdentity: string) {
-  const result = await getDb().execute(
-    sql`
-    SELECT DISTINCT ${nodesTable.ownerAddress}
-    FROM ${nodesTable}
-    WHERE ${nodesTable.createdBy} = ${userIdentity}
-  `
-  );
+  const nodes = await getDb()
+    .selectDistinct({ ownerAddress: nodesTable.ownerAddress })
+    .from(nodesTable)
+    .where(eq(nodesTable.createdBy, userIdentity));
 
-  return result.rows.map((row) => row.ownerAddress as string);
+  return nodes.map((row) => row.ownerAddress);
 }
 
 // TODO: filter for staked nodes only when we handle this state

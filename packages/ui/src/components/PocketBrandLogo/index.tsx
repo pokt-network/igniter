@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { PocketLogoWhite, PocketLogoBlack } from "@igniter/ui/assets";
@@ -9,9 +10,12 @@ export interface PocketBrandLogoProps {
 }
 
 export function PocketBrandLogo({ href = "/" }: Readonly<PocketBrandLogoProps>) {
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  const Logo = theme === "dark" ? PocketLogoWhite : PocketLogoBlack;
+  useEffect(() => setMounted(true), []);
+
+  const Logo = mounted && resolvedTheme === "dark" ? PocketLogoWhite : PocketLogoBlack;
 
   return (
     <Link href={href} className="h-[26px] flex items-center">
