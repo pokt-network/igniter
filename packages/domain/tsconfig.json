@@ -13,5 +13,5 @@
     "resolveJsonModule": true
   },
   "include": ["src", "src/globals.d.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
 }
