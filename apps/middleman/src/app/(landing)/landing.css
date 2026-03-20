@@ -1,4 +1,32 @@
 /* ============================================================
+   LANDING PAGE — SCROLL FIX
+   Override the app shell's nested scroll container so the landing
+   page scrolls at the document level, keeping header/footer visible.
+   ============================================================ */
+html:has([data-landing]) {
+  overflow: auto;
+}
+
+html:has([data-landing]) [data-slot="sidebar-inset"] > div > div {
+  height: auto;
+  overflow-y: visible;
+  gap: 0;
+}
+
+/* Pin the header when the landing page is active */
+html:has([data-landing]) header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* Offset content below the fixed header */
+html:has([data-landing]) .landing-wrapper {
+  padding-top: var(--header-height);
+}
+
+/* ============================================================
    LANDING PAGE — ANIMATED BACKGROUND LAYERS
    ============================================================ */
 .bg-canvas {
