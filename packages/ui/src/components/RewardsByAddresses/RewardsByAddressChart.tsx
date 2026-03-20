@@ -5,7 +5,8 @@ import {
 } from './operations'
 import { useChartType } from '../BaseLineBarChart/ChartType'
 import { useDataContext } from '../../context/data'
-import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useApolloClient } from '@apollo/client'
 import ErrorRetry  from '../ErrorRetry'
 import NoData from '../NoData'
 import BaseLineBarChart from '../BaseLineBarChart/BaseLineBarChart'
@@ -17,10 +18,12 @@ import ItemsSelector from './ItemsSelector'
 import { clsx } from 'clsx'
 import { useGroupAll } from './GroupAllSwitch'
 import { amountToPokt, getShortAddress, toCompactFormat, toCurrencyFormat } from '../../lib/utils'
-import useFetchOnBlock, { DocumentNodeData, ExtractVariables } from '../../hooks/useFetchOnNewBlock'
+import { DocumentNodeData, ExtractVariables } from '../../hooks/useFetchOnNewBlock'
 import { ContentLoader } from './Loader'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
 import { useSelectedTime } from './TimeSelector'
+import { useHeightContext } from '../../context/Height/height'
+import { batchArray } from '../../lib/batch'
 
 export interface RewardItem extends LineBarItem {
   totalAmount: number
@@ -46,25 +49,79 @@ export default function RewardsByAddressChart({
   const {chartType} = useChartType()
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
+  const client = useApolloClient()
+  const { currentHeight, currentTime, firstHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
-  const variables = useCallback((_: number, timestamp: string) => {
-    return lastVariables.current = rewardsByAddressAndTimeGroupByDateVariables(
-      addresses,
-      supplierAddresses,
-      timestamp,
-      selectedTime,
-    )
-  }, [addresses, supplierAddresses, selectedTime])
+  type RewardsData = DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument>
+  const [rawData, setRawData] = useState<RewardsData | null>(initialData)
+  const [error, setError] = useState(initialError)
+  const [isLoading, setIsLoading] = useState(false)
+  const firstRenderRef = useRef(true)
+  const lastSelectedTimeRef = useRef(selectedTime)
 
-  const { data: rawData, error, refetch, isLoading } = useFetchOnBlock({
-    query: rewardsByAddressAndTimeGroupByDateDocument,
-    variables,
-    initialResult: initialData,
-    initialError,
-    skip: !addresses.length,
-    updateOnNewSession: true,
-  })
+  const fetchBatched = useCallback(async () => {
+    if (!addresses.length) return
+
+    setIsLoading(true)
+    try {
+      const batches = batchArray(supplierAddresses)
+      const results = await Promise.all(
+        batches.map((batch) => {
+          const vars = rewardsByAddressAndTimeGroupByDateVariables(
+            addresses,
+            batch,
+            currentTime,
+            selectedTime,
+          )
+          lastVariables.current = vars
+          return client.query({
+            query: rewardsByAddressAndTimeGroupByDateDocument,
+            variables: vars,
+            fetchPolicy: 'network-only',
+          })
+        }),
+      )
+
+      const aggregated = results.reduce(
+        (acc, { data: d }) => {
+          if (!acc) return d
+          const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
+          const dRewards = Array.isArray(d.rewards) ? d.rewards : []
+          return { ...d, rewards: [...accRewards, ...dRewards] }
+        },
+        null as RewardsData | null,
+      )
+
+      setRawData(aggregated)
+      setError(false)
+    } catch {
+      setError(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [client, addresses, supplierAddresses, currentTime, selectedTime])
+
+  useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false
+      return
+    }
+
+    if (!addresses.length) return
+
+    // Refetch on new session or when selectedTime changes
+    const timeChanged = lastSelectedTimeRef.current !== selectedTime
+    lastSelectedTimeRef.current = selectedTime
+
+    if (
+      timeChanged ||
+      currentHeight !== firstHeight
+    ) {
+      fetchBatched()
+    }
+    // eslint-disable-next-line
+  }, [currentHeight, selectedTime])
 
   const {groupAll: groupAllAddresses} = useGroupAll()
 
@@ -212,7 +269,7 @@ export default function RewardsByAddressChart({
     content = (
       <div className={'mt-[-10px] flex w-full grow'}>
         <ErrorRetry
-          onRetry={refetch}
+          onRetry={fetchBatched}
         />
       </div>
     )
