@@ -143,7 +143,7 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
           relayMiner={updateRelayMiner}
         />
       )}
-      <div className="py-2 max-h-[500px] min-h-[300px] overflow-y-scroll scrollbar-hidden">
+      <div className="py-2">
         {content}
       </div>
       <div className="flex justify-end gap-4">
