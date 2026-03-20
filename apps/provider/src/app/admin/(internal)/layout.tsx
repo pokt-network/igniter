@@ -23,9 +23,9 @@ export default function RootLayout({
     <QueryClientProvider>
       <SessionProvider>
         <ThemeProvider
-          attribute="class"
+          attribute="data-theme"
           defaultTheme="dark"
-          enableSystem
+          enableSystem={false}
           disableTransitionOnChange
         >
           <ApplicationSettingsProvider>
