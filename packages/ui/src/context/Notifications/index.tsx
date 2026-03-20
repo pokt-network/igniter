@@ -140,7 +140,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
         paginationInfo = (
           <>
             <div
-              className={'!size-0.5 !min-w-0.5 !min-h-0.5 bg-text-tertiary rounded-full]'}
+              className={'!size-0.5 !min-w-0.5 !min-h-0.5 bg-text-tertiary rounded-full'}
             />
             <p className={'whitespace-nowrap text-text-tertiary !text-sm'}>{index + 1} of {notifications.length}</p>
           </>
