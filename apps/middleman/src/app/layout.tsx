@@ -15,6 +15,7 @@ import QueryClientProvider from '@/app/context/QueryClientProvider';
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins';
 import NotificationsProvider from '@igniter/ui/context/Notifications/index';
 import QuickDetailProvider from "@/app/detail/QuickDetailProviderBridge";
+import { ThemeToggle } from "@igniter/ui/theme-toggle";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -61,6 +62,7 @@ export default function RootLayout({
                           <AppTopBar>
                             <PriceWidget />
                             <CurrentUser />
+                            <ThemeToggle />
                           </AppTopBar>
                           <div className="flex flex-1">
                             <Sidebar />
