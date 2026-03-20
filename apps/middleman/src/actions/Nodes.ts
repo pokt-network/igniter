@@ -2,7 +2,7 @@
 
 import type { NodeWithDetails } from '@igniter/db/middleman/schema'
 import { getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
-import {getCurrentUserIdentity} from "@/lib/utils/actions";
+import { requireAuth, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { normalizeIdentityToAddress } from '@/lib/crypto'
 import { summaryDocument, StakeStatus } from '@igniter/graphql'
@@ -12,17 +12,16 @@ import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
 
 export async function GetUserNodes() {
-  const userIdentity = await getCurrentUserIdentity();
+  const userIdentity = await requireAuth()
   return getNodesByUser(userIdentity)
 }
 
 export async function GetStakedNodesAddress() {
   const [userIdentity, applicationSettings] = await Promise.all([
-    getCurrentUserIdentity(),
+    requireAuth(),
     getApplicationSettings()
   ])
 
-  // Normalize ownerIdentity in case it was stored as a hex public key (legacy)
   const normalizedOwnerIdentity = normalizeIdentityToAddress(applicationSettings.ownerIdentity)
 
   if (userIdentity !== normalizedOwnerIdentity) {
@@ -35,27 +34,20 @@ export async function GetStakedNodesAddress() {
 export async function GetNode(address: string) {
   const [node, userIdentity] = await Promise.all([
     getNode(address),
-    getCurrentUserIdentity()
+    requireAuth()
   ])
 
-  if (!node) {
-    throw new Error("Node not found")
-  }
-
-  if (node.createdBy !== userIdentity) {
-    throw new Error("Unauthorized")
-  }
-
+  assertOwnership(node, userIdentity, 'createdBy', 'Node')
   return node
 }
 
 export async function GetOwnerAddresses() {
-  const userIdentity = await getCurrentUserIdentity();
+  const userIdentity = await requireAuth()
   return await getOwnerAddressesByUser(userIdentity)
 }
 
 export async function GetProviderCount(): Promise<number> {
-  const userIdentity = await getCurrentUserIdentity();
+  const userIdentity = await requireAuth()
   return await getProviderCountByUser(userIdentity)
 }
 

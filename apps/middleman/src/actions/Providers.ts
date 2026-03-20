@@ -3,7 +3,7 @@
 import {list, upsertProviders, getByIdentity, update} from "@/lib/dal/providers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import {getCurrentUserIdentity} from "@/lib/utils/actions";
+import {requireAuth} from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/actions/ApplicationSettings'
 import {providersTable} from "@igniter/db/middleman/schema";
 import {ProviderStatus} from "@igniter/db/middleman/enums";
@@ -24,10 +24,8 @@ const updateProvidersSchema = z.object({
 });
 
 export async function UpdateProvidersFromSource(): Promise<{ success: boolean, error?: string, data: Provider[] }> {
-  const [userIdentity, appSettings] = await Promise.all([
-    getCurrentUserIdentity(),
-    getApplicationSettings(),
-  ]);
+  const userIdentity = await requireAuth()
+  const appSettings = await getApplicationSettings();
 
   const providersCdnUrl = process.env.PROVIDERS_CDN_URL!.replace(
     "{chainId}",
@@ -167,7 +165,7 @@ export async function submitProviders(
   values: SubmitProvidersValues,
   providers: Provider[]
 ): Promise<SubmitProvidersResult | void> {
-  const userIdentity = await getCurrentUserIdentity();
+  const userIdentity = await requireAuth()
 
   const validatedFields = updateProvidersSchema.safeParse(values);
 
@@ -300,7 +298,7 @@ export async function ListProvidersWithPublicPlans(connectedAccounts: string[] =
         return null;
       }
 
-      return {
+      const result: ProviderWithPublicPlans = {
         id: provider.id,
         name: provider.name,
         identity: provider.identity,
@@ -308,6 +306,7 @@ export async function ListProvidersWithPublicPlans(connectedAccounts: string[] =
         addressGroups: publicAddressGroups,
         supplierStats: provider.supplierStats ?? null,
       };
+      return result;
     })
-    .filter((provider): provider is ProviderWithPublicPlans => provider !== null);
+    .filter((p): p is ProviderWithPublicPlans => p !== null);
 }

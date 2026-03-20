@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getDb } from "@/db";
 import {
   ApplicationSettings,
@@ -32,7 +33,12 @@ const defaultSettings: ApplicationSettings = {
   updatedAtHeight: null
 };
 
-export async function getApplicationSettings(): Promise<ApplicationSettings> {
+/**
+ * Per-request cached application settings fetch.
+ * React's cache() deduplicates calls within the same server render,
+ * so multiple components/actions calling this in one request hit the DB only once.
+ */
+export const getApplicationSettings = cache(async (): Promise<ApplicationSettings> => {
   const dbSettings = await getApplicationSettingsFromDatabase();
   const appIdentity = await getCompressedPublicKeyFromAppIdentity();
 
@@ -48,7 +54,7 @@ export async function getApplicationSettings(): Promise<ApplicationSettings> {
     ...envSettings,
     ...(dbSettings ?? {}),
   };
-}
+});
 
 export async function getApplicationSettingsFromDatabase() {
   return getDb().query.applicationSettingsTable.findFirst();
