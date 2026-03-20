@@ -121,8 +121,8 @@ export default function KeyDetail(key: KeyWithRelations) {
             )
           }
         >
-          <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-            <span className="text-[20px] text-[var(--color-white-3)]">
+          <div className={`absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between`}>
+            <span className="text-[20px] text-text-secondary">
               {KeyStateNameMap[KeyState.Staked]}
             </span>
             <div className="flex flex-row items-center gap-2">
@@ -135,40 +135,40 @@ export default function KeyDetail(key: KeyWithRelations) {
       )}
 
       {!isStakedKey && (state === KeyState.Available) && (
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-secondary p-[11px_16px]">
              This key is readily <strong>available</strong> to be staked. When a request for suppliers is received this key is prioritized. It's a recommended practice to pre-configure these keys in their corresponding relay miner.
           </span>
         </div>
       )}
 
       {!isStakedKey && (state === KeyState.Imported) && (
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-secondary p-[11px_16px]">
              This key has recently been <strong>imported</strong>. The system will eventually evaluate it in the network and set it to its corresponding state, either <strong>available</strong>, <strong>staked</strong> or <strong>unstaked</strong>.
           </span>
         </div>
       )}
 
       {!isStakedKey && (state === KeyState.MissingStake) && (
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-secondary p-[11px_16px]">
              This key was delivered for staking over 24h ago, but we could not find a corresponding stake in the network.
           </span>
         </div>
       )}
 
       {state === KeyState.Staked && (
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-secondary p-[11px_16px]">
              This key is <strong>{KeyStateNameMap[state]}</strong>. The system has not detected any issues.
           </span>
         </div>
       )}
 
       {[KeyState.RemediationFailed, KeyState.AttentionNeeded].includes(state) && (
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-secondary p-[11px_16px]">
              This key is <strong>{KeyStateNameMap[state]}</strong>. The system has detected issues with the key. This doesn't mean the supplier is not operational. Please review the details below.
           </span>
         </div>

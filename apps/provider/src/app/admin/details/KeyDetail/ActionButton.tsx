@@ -7,7 +7,7 @@ export function ActionButton({children, ...props}: React.PropsWithChildren & Omi
       {...props}
       className={
         clsx(
-          'w-full h-[30px] bg-[color:var(--secondary)] border border-[color:var(--button-2-border)] hover:bg-transparent',
+          'w-full h-[30px] bg-bg-elevated border border-border-primary hover:bg-transparent',
           props.className,
         )
       }

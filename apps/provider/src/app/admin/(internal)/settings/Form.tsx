@@ -261,10 +261,10 @@ pokt1abc123def456ghi789jkl012mno345pqr678stu
 pokt1xyz789abc123def456ghi789jkl012mno345pqr
 pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                             {...field}
-                            className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-[color:--divider] bg-[color:--background] placeholder:text-[color:--secondary]"
+                            className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-border-primary bg-bg-root placeholder:text-text-tertiary"
                           />
                         </FormControl>
-                        <FormMessage className={cn(!error?.message ? 'text-xs! text-[color:var(--color-white-3)]' : null)}>
+                        <FormMessage className={cn(!error?.message ? 'text-xs! text-text-secondary' : null)}>
                           {error?.message ? error.message : (
                             <>
                               Used by Delegators to fetch your rewards. These must match the revenue-share address(es) you provided to suppliers to receive rewards in the addresses group.
@@ -277,16 +277,16 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                     )}
                   />
 
-                  <div className="p-4 rounded-md bg-[var(--color-slate-2)]">
+                  <div className="p-4 rounded-md bg-bg-elevated">
                     <div className="space-y-3">
                       <FormField
                         control={form.control}
                         name="rpcUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">RPC URL</FormLabel>
+                            <FormLabel className="text-text-secondary">RPC URL</FormLabel>
                             <FormControl>
-                              <Input {...field} className="bg-[var(--color-slate-3)]"/>
+                              <Input {...field} className="bg-bg-input"/>
                             </FormControl>
                             <FormMessage/>
                           </FormItem>
@@ -294,10 +294,10 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                       />
                     </div>
                     <div className="mt-4 space-y-3 flex justify-between">
-                      <span className="font-medium text-[var(--color-white-3)]">Blockchain Derived Settings</span>
+                      <span className="font-medium text-text-secondary">Blockchain Derived Settings</span>
                       {!isReloadingBlockchainSettings && (
                         <Button
-                          className={'bg-slate-2'}
+                          className={'bg-bg-elevated'}
                           variant="outline"
                           type={'button'}
                           disabled={isSubmitting || form.formState.dirtyFields.rpcUrl}
@@ -316,9 +316,9 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         name="chainId"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Chain ID</FormLabel>
+                            <FormLabel className="text-text-secondary">Chain ID</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none"/>
+                              <Input {...field} readOnly className="bg-bg-input pointer-events-none"/>
                             </FormControl>
                           </FormItem>
                         )}
@@ -328,9 +328,9 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         name="minimumStake"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Minimum Stake</FormLabel>
+                            <FormLabel className="text-text-secondary">Minimum Stake</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none"/>
+                              <Input {...field} readOnly className="bg-bg-input pointer-events-none"/>
                             </FormControl>
                           </FormItem>
                         )}
@@ -340,9 +340,9 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         name="appIdentity"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">App Identity</FormLabel>
+                            <FormLabel className="text-text-secondary">App Identity</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none"/>
+                              <Input {...field} readOnly className="bg-bg-input pointer-events-none"/>
                             </FormControl>
                           </FormItem>
                         )}
@@ -352,9 +352,9 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         name="updatedAtHeight"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[var(--color-white-2)]">Updated At Height</FormLabel>
+                            <FormLabel className="text-text-secondary">Updated At Height</FormLabel>
                             <FormControl>
-                              <Input {...field} readOnly className="bg-[var(--color-slate-3)] pointer-events-none"/>
+                              <Input {...field} readOnly className="bg-bg-input pointer-events-none"/>
                             </FormControl>
                           </FormItem>
                         )}

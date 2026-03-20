@@ -77,8 +77,8 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
     content = (
       <>
         {importErrorMessage && (
-          <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-            <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+          <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+            <span className="text-[14px] text-text-secondary p-[11px_16px]">
               {importErrorMessage}
             </span>
           </div>
@@ -98,16 +98,16 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
         </Select>
 
         {addressGroup && (
-          <div className="p-4 rounded-md bg-[var(--color-slate-2)]">
+          <div className="p-4 rounded-md bg-bg-elevated">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-[var(--color-white-3)]">Name</span>
+                <span className="font-medium text-text-secondary">Name</span>
                 <span className="text-sm">
           {addressesGroup.find(group => group.id.toString() === addressGroup)?.name}
         </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="font-medium text-[var(--color-white-3)]">Visibility</span>
+                <span className="font-medium text-text-secondary">Visibility</span>
                 <span className="text-sm">
           {addressesGroup.find(group => group.id.toString() === addressGroup)?.private ? 'Private' : 'Public'}
         </span>
@@ -125,7 +125,7 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
               <div>
                 <p className="font-semibold">
                   {file ? (<span>
-                    Uploaded file: <span className={'bg-[var(--color-slate-2)] px-2 py-0.5 rounded-[8px]'}>
+                    Uploaded file: <span className={'bg-bg-elevated px-2 py-0.5 rounded-[8px]'}>
                       {file.name}
                     </span>
                   </span>) : 'Upload your keys json file'}
@@ -162,8 +162,8 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
         <div
           className={'relative flex h-[64px] mt-[-5px] gradient-border-green'}
         >
-          <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-[var(--color-white-3)]">
+          <div className={`absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between`}>
+          <span className="text-[20px] text-text-secondary">
             Keys Imported
           </span>
             <div className="flex flex-row items-center gap-2">
@@ -174,8 +174,8 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
           </div>
         </div>
 
-        <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-          <span className="text-[14px] text-[var(--color-white-1)] p-[11px_16px]">
+        <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
+          <span className="text-[14px] text-text-primary p-[11px_16px]">
             You have successfully imported {keysImported} keys for the address group "{
             addressesGroup.find((a) => a.id === parseInt(addressGroup))?.name
           }".
