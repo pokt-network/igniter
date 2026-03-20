@@ -24,19 +24,19 @@ export function ActivityHeader({
             <div className={classes}>
                 {onBack && (
                     <span
-                        className={`flex flex-row gap-4.5 items-center text-[var(--color-white-3)] group ${
+                        className={`flex flex-row gap-4.5 items-center text-text-tertiary group ${
                             isDisabled ? "cursor-not-allowed opacity-60" : "hover:cursor-pointer"
                         }`}
                         onClick={!isDisabled ? onBack : undefined}
                     >
             <ArrowBackIcon
-                className={`fill-current text-[var(--color-white-2)] group-hover:text-[var(--color-white-4)] ${
+                className={`fill-current text-text-secondary group-hover:text-text-tertiary ${
                     isDisabled ? "cursor-not-allowed" : "hover:cursor-pointer"
                 }`}
             />
             <span
                 className={`text-[14px] ${
-                    isDisabled ? "" : "group-hover:text-[var(--color-white-4)]"
+                    isDisabled ? "" : "group-hover:text-text-tertiary"
                 }`}
             >
               Go Back
@@ -45,20 +45,20 @@ export function ActivityHeader({
                 )}
 
                 <XIcon
-                    className={`fill-current text-[var(--color-white-2)] ${
+                    className={`fill-current text-text-secondary ${
                         isDisabled
                             ? "cursor-not-allowed opacity-60"
-                            : "hover:text-[var(--color-white-4)] hover:cursor-pointer"
+                            : "hover:text-text-tertiary hover:cursor-pointer"
                     }`}
                     onClick={!isDisabled ? onClose : undefined}
                 />
             </div>
 
             <div className="flex flex-col">
-        <span className="font-[Jost] text-[30px] font-normal leading-normal tracking-normal text-[var(--color-white-1)] mb-2">
+        <span className="font-[Rubik] text-[30px] font-normal leading-normal tracking-normal text-text-primary mb-2">
           {title}
         </span>
-                <span className="text-[14px] font-normal leading-[1.43] text-[var(--color-white-3)]">
+                <span className="text-[14px] font-normal leading-[1.43] text-text-tertiary">
           {subtitle}
         </span>
             </div>

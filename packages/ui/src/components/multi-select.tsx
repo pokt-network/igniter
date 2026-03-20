@@ -184,7 +184,7 @@ export const MultiSelect: React.FC<SelectPillsProps> = ({
             {pill}
             <button
               onClick={() => handlePillRemove(pill)}
-              className="appearance-none text-muted-foreground group-hover:text-foreground transition-colors"
+              className="appearance-none text-text-tertiary group-hover:text-text-primary transition-colors"
             >
               <X size={12} />
             </button>
@@ -228,8 +228,8 @@ export const MultiSelect: React.FC<SelectPillsProps> = ({
             <div
               key={item.id || item.value || item.name}
               className={cn(
-                "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent/70 focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
-                highlightedIndex === index && "bg-accent"
+                "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors text-text-primary hover:bg-bg-hover focus:bg-bg-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+                highlightedIndex === index && "bg-bg-hover"
               )}
             >
               <input

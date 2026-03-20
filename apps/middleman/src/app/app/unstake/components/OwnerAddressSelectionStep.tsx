@@ -80,7 +80,7 @@ export function OwnerAddressSelectionStep({
   }, [nodes, connectedIdentities, connectedIdentity]);
 
   return (
-    <div className="flex relative flex-col w-[480px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex relative flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title="Select Owner Address"
         subtitle="Choose the owner address of the nodes you want to unstake."
@@ -90,15 +90,15 @@ export function OwnerAddressSelectionStep({
 
       {isLoading && (
         <div className="flex flex-col gap-4">
-          <Skeleton className="w-full h-16 bg-gray-700" />
-          <Skeleton className="w-full h-16 bg-gray-700" />
-          <Skeleton className="w-full h-16 bg-gray-700" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
+          <Skeleton className="w-full h-16 bg-bg-elevated" />
         </div>
       )}
 
       {isError && (
-        <div className="flex flex-col bg-[#f4424257] p-4 rounded-[8px]">
-          <span className="text-[14px] font-medium text-[var(--color-white-1)]">
+        <div className="flex flex-col bg-error-bg p-4 rounded-[8px]">
+          <span className="text-[14px] font-medium text-[var(--text-primary)]">
             Failed to load owner addresses
           </span>
           <Button onClick={() => refetch()} className="mt-2 w-fit">
@@ -110,8 +110,8 @@ export function OwnerAddressSelectionStep({
       {!isLoading && !isError && (
         <>
           {ownerAddressData.length === 0 && (
-            <div className="flex flex-col bg-[var(--color-slate-2)] p-4 rounded-[8px]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+            <div className="flex flex-col bg-[var(--bg-surface)] p-4 rounded-[8px]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 No owner addresses with staked nodes found.
               </span>
             </div>
@@ -125,7 +125,7 @@ export function OwnerAddressSelectionStep({
                   <div key={data.address}>
                     <div
                       className={`w-full cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 bg-(--input-bg) border rounded-lg ${
-                        isPrimaryAccount ? 'border-amber-100' : ''
+                        isPrimaryAccount ? 'border-border-focus' : ''
                       }`}
                       onClick={() => setSelectedOwnerAddress(data.address)}
                     >
@@ -134,15 +134,15 @@ export function OwnerAddressSelectionStep({
                         <p className="font-mono text-sm">
                           {getShortAddress(data.address, 5)}
                         </p>
-                        <p className="text-[12px] text-[var(--color-white-3)]">
+                        <p className="text-[12px] text-[var(--text-tertiary)]">
                           {data.nodeCount} {data.nodeCount === 1 ? 'node' : 'nodes'}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-0">
-                        <p className="whitespace-nowrap text-xs font-mono text-[var(--color-white-1)]">
+                        <p className="whitespace-nowrap text-xs font-mono text-[var(--text-primary)]">
                           {toCurrencyFormat(data.totalStakedAmount / 1e6, 2, 2)}
                         </p>
-                        <p className="whitespace-nowrap text-[10px] text-[var(--color-white-3)]">
+                        <p className="whitespace-nowrap text-[10px] text-[var(--text-tertiary)]">
                           $POKT
                         </p>
                       </div>
@@ -154,7 +154,7 @@ export function OwnerAddressSelectionStep({
                       </p>
                     )}
                     {isPrimaryAccount && ownerAddressData.length > 1 && (
-                      <div className="w-full h-[1px] bg-[var(--slate-dividers)] my-2" />
+                      <div className="w-full h-[1px] bg-[var(--border-subtle)] my-2" />
                     )}
                   </div>
                 );

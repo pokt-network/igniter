@@ -59,7 +59,7 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
   const hasDetails = service.endpoints.length > 0 || service.revShare.length > 0
 
   return (
-    <div className="rounded-[8px] border border-[color:var(--divider)] p-3 flex flex-col gap-3">
+    <div className="rounded-[8px] border border-border-primary p-3 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {hasDetails && (
@@ -75,8 +75,8 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
           </Badge>
         </div>
         {clientShare !== null && (
-          <span className="text-xs text-[color:var(--color-white-3)]">
-            Client Share: <span className="font-mono text-[color:var(--color-white-1)]">{clientShare.toFixed(1)}%</span>
+          <span className="text-xs text-text-tertiary">
+            Client Share: <span className="font-mono text-text-primary">{clientShare.toFixed(1)}%</span>
           </span>
         )}
       </div>
@@ -88,7 +88,7 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
               <p className="text-xs text-[color:var(--muted-foreground)]">Endpoints</p>
               {service.endpoints.map((ep, i) => (
                 <div key={i} className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs truncate text-[color:var(--color-white-3)]">{ep.url}</span>
+                  <span className="font-mono text-xs truncate text-text-tertiary">{ep.url}</span>
                   <Badge variant="secondary" className="text-xs shrink-0">{RPC_TYPE_LABELS[ep.rpcType] ?? 'Unknown'}</Badge>
                 </div>
               ))}
@@ -100,7 +100,7 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
               <p className="text-xs text-[color:var(--muted-foreground)]">Revenue Share</p>
               {service.revShare.map((rs, i) => (
                 <div key={i} className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-[color:var(--color-white-3)]">{getShortAddress(rs.address, 5)}</span>
+                  <span className="font-mono text-xs text-text-tertiary">{getShortAddress(rs.address, 5)}</span>
                   <span className="font-mono text-xs">{rs.revSharePercentage}%</span>
                 </div>
               ))}
@@ -118,7 +118,7 @@ function ActionButton({children, ...props}: React.PropsWithChildren & Omit<Butto
       {...props}
       className={
         clsx(
-          'w-full h-[30px] bg-[color:var(--secondary)] border border-[color:var(--button-2-border)] hover:bg-transparent',
+          'w-full h-[30px] bg-bg-elevated border border-border-primary hover:bg-transparent',
           props.className,
         )
       }
@@ -258,7 +258,7 @@ export default function NodeDetail({
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-[var(--color-white-3)]">
+          <span className="text-[20px] text-text-tertiary">
             {status.slice(0, 1).toUpperCase() + status.slice(1)}
           </span>
           <div className="flex flex-row items-center gap-2">
@@ -279,8 +279,8 @@ export default function NodeDetail({
 
         if (activeServices.length === 0 && pendingServices.length === 0) {
           return (
-            <div className="rounded-[8px] bg-[color:var(--color-slate-2)] px-4 py-3">
-              <p className="text-sm text-[color:var(--color-white-3)]">
+            <div className="rounded-[8px] bg-bg-surface px-4 py-3">
+              <p className="text-sm text-text-tertiary">
                 No services yet. The provider will configure services once they process your stake.
               </p>
             </div>
@@ -315,7 +315,7 @@ export default function NodeDetail({
 
             {pendingServices.length > 0 && (
               <div className="flex flex-col gap-2">
-                <p className="text-sm text-[color:var(--color-white-3)]">
+                <p className="text-sm text-text-tertiary">
                   Services pending activation
                 </p>
                 {Object.entries(
@@ -327,15 +327,15 @@ export default function NodeDetail({
                 )
                   .sort(([a], [b]) => Number(a) - Number(b))
                   .map(([height, svcs]) => (
-                    <div key={height} className="rounded-[8px] bg-[color:var(--color-slate-2)] px-4 py-3 flex flex-col gap-2">
-                      <p className="text-xs text-[color:var(--color-white-3)]">
+                    <div key={height} className="rounded-[8px] bg-bg-surface px-4 py-3 flex flex-col gap-2">
+                      <p className="text-xs text-text-tertiary">
                         {svcs.length} service{svcs.length > 1 ? 's' : ''} scheduled to activate at block{' '}
-                        <span className="font-mono text-[color:var(--color-white-1)]">{height}</span>
+                        <span className="font-mono text-text-primary">{height}</span>
                         . Not yet visible on-chain — won&apos;t appear in blockchain explorers until that block is reached.
                       </p>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {svcs.map((s) => (
-                          <Badge key={s.serviceId} variant="outline" className="font-mono text-[color:var(--color-white-3)]">
+                          <Badge key={s.serviceId} variant="outline" className="font-mono text-text-tertiary">
                             {s.serviceId}
                           </Badge>
                         ))}
@@ -349,16 +349,16 @@ export default function NodeDetail({
       })()}
 
       {status === NodeStatus.Staked && (
-        <div className={'bg-[color:var(--color-slate-2)] h-[109px] rounded-[8px]'}>
-          <p className={'px-4 py-[11px] text-[color:var(--color-white-3)]'}>
+        <div className={'bg-bg-surface h-[109px] rounded-[8px]'}>
+          <p className={'px-4 py-[11px] text-text-tertiary'}>
             Recoup your tokens by unstaking this supplier. Process can take up to{' '}
             {unstakeDurationData ? (
-              <span className="font-mono text-[var(--color-white-1)]">{formatDuration(unstakeDurationData.durationSeconds)}</span>
+              <span className="font-mono text-text-primary">{formatDuration(unstakeDurationData.durationSeconds)}</span>
             ) : (
               '...'
             )}. Tokens will be withdrawn to your wallet.
           </p>
-          <hr className={'border-[color:var(--divider)]'} />
+          <hr className={'border-border-primary'} />
           <div className={'flex flex-row items-center gap-2 p-2'}>
             <ActionButton
               onClick={() => {

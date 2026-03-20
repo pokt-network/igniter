@@ -95,7 +95,7 @@ function SelectWalletStep({
                     />
                   ))}
                   {detectedProviders.length <= 0 && (
-                    <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-[var(--color-white-3)]">
+                    <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-text-secondary">
                         No wallets detected.
                     </DialogDescription>
                   )}
@@ -110,17 +110,17 @@ function SelectWalletStep({
         <>
             <div className="px-2 flex flex-col gap-5">
                 <DialogHeader>
-                    <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-[var(--color-white-1)]">
+                    <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-text-primary">
                         Connect Wallet
                     </DialogTitle>
-                    <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-[var(--color-white-3)]">
+                    <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-text-secondary">
                         Login anonymously using your preferred wallet.
                     </DialogDescription>
                 </DialogHeader>
 
             </div>
             {content}
-            <div className="absolute bottom-[54px] w-[318px] h-[1px] bg-[var(--slate-dividers)]"></div>
+            <div className="absolute bottom-[54px] w-[318px] h-[1px] bg-border-primary"></div>
             <DialogFooter className="mt-4">
                 <DialogClose className="w-full" asChild>
                     <Button
@@ -163,10 +163,10 @@ function SelectAccountStep({
     return (
       <>
           <DialogHeader>
-              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-[var(--color-white-1)]">
+              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-text-primary">
                   Select your Account
               </DialogTitle>
-              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-[var(--color-white-3)]">
+              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-text-secondary">
                   Select the account you want to use to sign in.
               </DialogDescription>
           </DialogHeader>
@@ -174,7 +174,7 @@ function SelectAccountStep({
               {addressLastSignedIn && (
                 <>
                     <div
-                      className="border border-amber-100 w-full h-11 cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 bg-(--input-bg) border rounded-lg"
+                      className="border-accent bg-info-bg w-full h-11 cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 border rounded-lg"
                       onClick={() => setSelectedAccount(addressLastSignedIn)}
                     >
                         <AvatarByString string={addressLastSignedIn} />
@@ -190,13 +190,13 @@ function SelectAccountStep({
                     <p className={'!text-[10px] mb-4'}>
                         It appears this was the last account you signed in with.
                     </p>
-                    <div className="absolute top-[160px] left-0 w-[318px] h-[1px] bg-[var(--slate-dividers)]"></div>
+                    <div className="absolute top-[160px] left-0 w-[318px] h-[1px] bg-border-primary"></div>
                 </>
               )}
               {addresses!.map((address) => (
                 <div
                   key={address}
-                  className="w-full h-11 cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 bg-(--input-bg) border rounded-lg"
+                  className="w-full h-11 cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 bg-bg-input border border-border-subtle rounded-lg hover:border-border-primary"
                   onClick={() => setSelectedAccount(address)}
                 >
                     <AvatarByString string={address} />
@@ -211,7 +211,7 @@ function SelectAccountStep({
                 </div>
               ))}
           </div>
-          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-[var(--slate-dividers)]"></div>
+          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-border-primary"></div>
           <DialogFooter className="mt-2">
               <Button
                 variant={'secondaryStretch'}
@@ -383,7 +383,7 @@ function EnsureExpectedChainStep({
             content = (
               <div className={'flex flex-col gap-2 min-h-[100px] justify-center items-center px-1'}>
                 <div className={'flex flex-row items-center gap-2'}>
-                  <CircleCheckBig className={'text-[var(--color-green-1)]'} />
+                  <CircleCheckBig className={'text-success'} />
                   <p>Your wallet is set!</p>
                 </div>
                 <p className={'text-center my-2'}>You will be prompted to sign a message to complete your sign in!</p>
@@ -396,15 +396,15 @@ function EnsureExpectedChainStep({
     return (
       <>
           <DialogHeader>
-              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-[var(--color-white-1)]">
+              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-text-primary">
                   Ensure Expected Chain
               </DialogTitle>
-              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-[var(--color-white-3)]">
+              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-text-secondary">
                   Your wallet must be connected to {labelByChainId[expectedChainId] || expectedChainId}.
               </DialogDescription>
           </DialogHeader>
           {content}
-          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-[var(--slate-dividers)]"></div>
+          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-border-primary"></div>
           <DialogFooter className="mt-2">
               <Button
                 variant={'secondaryStretch'}
@@ -546,7 +546,7 @@ function SignInStep({
     case 'error': {
       content = (
         <div className={'flex flex-col gap-2 min-h-[65px] mb-2.5 justify-center items-center px-4'}>
-          <CircleX className={'text-[color:#fe7c7c]'} />
+          <CircleX className={'text-error'} />
           <p>
             {status === 'rejected' ? 'You rejected signing the message.' : 'There was an error signing the message.'}
           </p>
@@ -557,7 +557,7 @@ function SignInStep({
     case 'auth-error': {
       content = (
         <div className={'flex flex-col gap-2 min-h-[65px] mb-2.5 justify-center items-center px-4'}>
-          <CircleX className={'text-[color:#fe7c7c]'} />
+          <CircleX className={'text-error'} />
           <p className={'text-center'}>
             Authentication failed. Please try again.
           </p>
@@ -565,23 +565,23 @@ function SignInStep({
             <div className={'w-full mt-2 -ml-5'}>
               <button
                 onClick={() => setErrorExpanded(!errorExpanded)}
-                className={'flex items-center gap-1 text-xs text-[var(--color-white-3)] hover:text-[var(--color-white-1)] transition-colors'}
+                className={'flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary transition-colors'}
               >
                 {errorExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 {errorExpanded ? 'Hide error details' : 'Show error details'}
               </button>
               {errorExpanded && (
-                <div className={'mt-2 p-2 bg-[var(--color-slate-1)] rounded text-left'}>
-                  <pre className={'text-[10px] text-[var(--color-white-3)] overflow-x-auto max-h-[100px] overflow-y-auto whitespace-pre-wrap break-all'}>
+                <div className={'mt-2 p-2 bg-bg-elevated rounded text-left'}>
+                  <pre className={'text-[10px] text-text-secondary overflow-x-auto max-h-[100px] overflow-y-auto whitespace-pre-wrap break-all'}>
                     {errorDetails}
                   </pre>
-                  <div className={'flex items-center justify-between mt-2 pt-2 border-t border-[var(--slate-dividers)]'}>
-                    <p className={'text-[10px] text-[var(--color-white-4)]'}>
+                  <div className={'flex items-center justify-between mt-2 pt-2 border-t border-border-primary'}>
+                    <p className={'text-[10px] text-text-tertiary'}>
                       If this persists, copy and share with the developers.
                     </p>
                     <button
                       onClick={copyErrorToClipboard}
-                      className={'flex items-center gap-1 text-[10px] text-[var(--color-white-3)] hover:text-[var(--color-white-1)] transition-colors'}
+                      className={'flex items-center gap-1 text-[10px] text-text-secondary hover:text-text-primary transition-colors'}
                     >
                       {copied ? <Check size={12} /> : <Copy size={12} />}
                       {copied ? 'Copied!' : 'Copy'}
@@ -598,7 +598,7 @@ function SignInStep({
     case 'successful': {
       content = (
         <div className={'flex flex-col gap-2 min-h-[100px] justify-center items-center px-4'}>
-          <CircleCheckBig className={'text-[var(--color-green-1)]'} />
+          <CircleCheckBig className={'text-success'} />
           <p className={'text-center'}>
             Your message was signed successfully! You’ll be signed in and redirected to your dashboard.
           </p>
@@ -611,15 +611,15 @@ function SignInStep({
     return (
       <>
           <DialogHeader>
-              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-[var(--color-white-1)]">
+              <DialogTitle className="!text-[16px] font-[var(--font-sans)] text-text-primary">
                   Finish Sign-In
               </DialogTitle>
-              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-[var(--color-white-3)]">
+              <DialogDescription className="!text-[14px] font-[var(--font-sans)] text-text-secondary">
                 To complete your sign-in, please sign the message to verify your identity.
               </DialogDescription>
           </DialogHeader>
           {content}
-          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-[var(--slate-dividers)]"></div>
+          <div className="absolute bottom-[54px] w-[338px] h-[1px] bg-border-primary"></div>
           <DialogFooter className="mt-2">
             <DialogClose className="w-full" asChild>
               <Button
@@ -726,7 +726,7 @@ export function WalletPicker({ onSignIn, getCsrfToken }: Readonly<WalletPickerPr
             <DialogTrigger asChild>
                 <Button variant={"secondary"}>Connect Wallet</Button>
             </DialogTrigger>
-            <DialogContent className="w-[340px] pt-[20px] pb-[8px] px-[8px] rounded-lg shadow-[0_2px_12px_0_var(--shadow-1)] bg-[var(--color-slate-2)]" hideClose>
+            <DialogContent className="w-[340px] pt-[20px] pb-[8px] px-[8px] rounded-lg shadow-lg bg-bg-surface border-border-primary" hideClose>
                 {content}
             </DialogContent>
         </Dialog>

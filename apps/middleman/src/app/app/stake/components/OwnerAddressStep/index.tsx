@@ -76,7 +76,7 @@ export default function OwnerAddressStep({title = 'Stake', onClose, onOwnerAddre
 
   return (
     <div
-      className="flex relative flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+      className="flex relative flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title={title}
         subtitle="Select the owner address of your suppliers."
@@ -87,7 +87,7 @@ export default function OwnerAddressStep({title = 'Stake', onClose, onOwnerAddre
         {/* Highlighted account at top */}
         <div
           className={`w-full h-11 cursor-pointer select-none flex flex-row items-center gap-2 py-3 pl-3 pr-4 bg-(--input-bg) border rounded-lg ${
-            isHighlightedPreselected ? 'border-purple-500/50' : 'border-amber-100'
+            isHighlightedPreselected ? 'border-[color:var(--pnf-lavender)]/50' : 'border-border-focus'
           }`}
           onClick={() => setSelectedOwnerAddress(highlightedAccount)}
         >
@@ -114,13 +114,13 @@ export default function OwnerAddressStep({title = 'Stake', onClose, onOwnerAddre
             checked={selectedOwnerAddress === highlightedAccount}
           />
         </div>
-        <p className={`!text-[10px] mb-2.5 mt-[-12px] ml-1 ${isHighlightedPreselected ? 'text-purple-300' : ''}`}>
+        <p className={`!text-[10px] mb-2.5 mt-[-12px] ml-1 ${isHighlightedPreselected ? 'text-pnf-lavender' : ''}`}>
           {isHighlightedPreselected
             ? 'Preselected because the plan you chose is linked to this wallet.'
             : "You're signed in with this account."}
         </p>
 
-        <div className="absolute left-[24px] top-[246px] w-[432px] h-[1px] bg-[var(--slate-dividers)]"/>
+        <div className="absolute left-[24px] top-[246px] w-[432px] h-[1px] bg-[var(--border-subtle)]"/>
 
         {/* Other accounts */}
         {otherAccounts.map((address) => {

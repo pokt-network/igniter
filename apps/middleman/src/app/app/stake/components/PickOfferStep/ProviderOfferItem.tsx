@@ -35,7 +35,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
 
     const className = hasSelection
         ? 'relative flex flex-col gradient-border-purple'
-        : 'relative flex flex-col rounded-[8px] border-[2px] border-[--black-dividers]'
+        : 'relative flex flex-col rounded-[8px] border-[2px] border-border-primary'
 
     return (
         <div className={className}>
@@ -51,33 +51,33 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                         </span>
                         <span className="flex flex-col gap-2">
                             <span className="flex flex-row items-center gap-2">
-                                <span className={`${disabled ? 'text-[var(--color-white-3)]' : ''}`}>{offer.name}</span>
+                                <span className={`${disabled ? 'text-[var(--text-tertiary)]' : ''}`}>{offer.name}</span>
                                 <Popover>
                                     <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
                                         <InfoIcon />
                                     </PopoverTrigger>
-                                    <PopoverContent className="flex flex-col w-[360px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-y-auto">
-                                        <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px] sticky top-0 bg-[var(--color-slate-2)] border-b border-[var(--slate-dividers)]">
+                                    <PopoverContent className="flex flex-col w-[360px] bg-[var(--bg-surface)] p-0 max-h-[500px] overflow-y-auto">
+                                        <span className="text-[14px] font-medium text-[var(--text-primary)] p-[12px_16px] sticky top-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
                                             About these metrics
                                         </span>
                                         <div className="flex flex-col gap-4 p-[12px_16px]">
                                             <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-[var(--color-white-1)]">Est. Yield</span>
-                                                <span className="text-[13px] text-[var(--color-white-3)]">
+                                                <span className="font-medium text-[var(--text-primary)]">Est. Yield</span>
+                                                <span className="text-[13px] text-[var(--text-tertiary)]">
                                                     Your estimated earnings per supplier per day, calculated as: Performance × Client Share.
                                                     This is the net amount you would receive after all fees are applied.
                                                 </span>
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-[var(--color-white-1)]">Client Share</span>
-                                                <span className="text-[13px] text-[var(--color-white-3)]">
+                                                <span className="font-medium text-[var(--text-primary)]">Client Share</span>
+                                                <span className="text-[13px] text-[var(--text-tertiary)]">
                                                     The median share of rewards you will receive across all services in this plan.
                                                     Calculated per service as: 100% − Provider Share − Supplier Share − Delegator Fee, then the median is taken.
                                                 </span>
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-[var(--color-white-1)]">APR</span>
-                                                <span className="text-[13px] text-[var(--color-white-3)]">
+                                                <span className="font-medium text-[var(--text-primary)]">APR</span>
+                                                <span className="text-[13px] text-[var(--text-tertiary)]">
                                                     Annual Percentage Rate, estimated from recent performance.
                                                     Calculated as: (Est. Yield POKT/supplier/day × 365 ÷ minimum stake) × 100.
                                                 </span>
@@ -87,13 +87,13 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                 </Popover>
                             </span>
                             <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px]">
-                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Plans: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.addressGroups.length}</span></span>
+                                <span className="whitespace-nowrap text-[var(--text-tertiary)]">Plans: <span className={disabled ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}>{offer.addressGroups.length}</span></span>
                                 {offer.supplierStats && (
                                     <>
-                                        <span className="whitespace-nowrap text-[var(--color-white-3)]">Suppliers: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{offer.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                                        <span className="whitespace-nowrap text-[var(--text-tertiary)]">Suppliers: <span className={disabled ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}>{offer.supplierStats.suppliers_count.toLocaleString()}</span></span>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <span className="whitespace-nowrap text-[var(--color-white-3)]">Total Staked: <span className={disabled ? 'text-[var(--color-white-3)]' : 'text-[var(--color-white-1)]'}>{millify(offer.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                                                <span className="whitespace-nowrap text-[var(--text-tertiary)]">Total Staked: <span className={disabled ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}>{millify(offer.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 {(offer.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
@@ -111,7 +111,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
 
                 {/* Address Groups (Plans) */}
                 {isExpanded && (
-                    <div className="flex flex-col border-t border-[var(--black-dividers)]">
+                    <div className="flex flex-col border-t border-[var(--border-primary)]">
                         {sortedAddressGroups.map((addressGroup, index) => {
                             const shares = calculateShares(addressGroup, delegatorFee)
                             const isSelected = addressGroup.id === selectedAddressGroupId
@@ -124,7 +124,7 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                             return (
                                 <div
                                     key={addressGroup.id}
-                                    className={`flex flex-col gap-1 p-[16px_25px] overflow-visible ${index !== sortedAddressGroups.length - 1 ? 'border-b border-[var(--black-dividers)]' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--color-slate-2)]'} ${isSelected ? 'bg-[var(--color-slate-2)]' : ''}`}
+                                    className={`flex flex-col gap-1 p-[16px_25px] overflow-visible ${index !== sortedAddressGroups.length - 1 ? 'border-b border-[var(--border-primary)]' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--bg-surface)]'} ${isSelected ? 'bg-[var(--bg-surface)]' : ''}`}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         if (!disabled && onSelectAddressGroup) {
@@ -139,16 +139,16 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                             {addressGroup.linkedAddresses && addressGroup.linkedAddresses.length > 0 && addressGroup.linkedAddresses.some((addr: string) => addr.toLowerCase() === userIdentity.toLowerCase()) && (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                        <span className="px-2 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
+                                                        <span className="px-2 py-0.5 text-[11px] font-medium bg-[color:var(--pnf-lavender)]/20 text-pnf-lavender rounded">
                                                             Personal
                                                         </span>
                                                     </TooltipTrigger>
-                                                    <TooltipContent className="flex flex-col w-[260px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
-                                                        <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
+                                                    <TooltipContent className="flex flex-col w-[260px] bg-[var(--bg-surface)] p-0 border-2 border-[var(--border-primary)] shadow-[0_8px_16px_rgba(0,0,0,0.4)]">
+                                                        <span className="text-[14px] font-medium text-[var(--text-primary)] p-[12px_16px]">
                                                             Personal Plan
                                                         </span>
-                                                        <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
-                                                        <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
+                                                        <div className="h-[1px] bg-[var(--border-subtle)]"></div>
+                                                        <span className="text-[13px] text-[var(--text-tertiary)] p-[12px_16px]">
                                                             This plan is exclusively available to you based on your selected owner address being linked to this provider's plan. Other users cannot stake to this plan.
                                                         </span>
                                                     </TooltipContent>
@@ -162,15 +162,15 @@ export function ProviderOfferItem({ selectedAddressGroupId, offer, onSelectAddre
                                     {/* Metrics row */}
                                     <div className="flex flex-row gap-6 mt-1">
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] text-[var(--color-white-3)]">Est. Yield</span>
+                                            <span className="text-[11px] text-[var(--text-tertiary)]">Est. Yield</span>
                                             <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
                                         </div>
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] text-[var(--color-white-3)]">Client Share</span>
+                                            <span className="text-[11px] text-[var(--text-tertiary)]">Client Share</span>
                                             <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
                                         </div>
                                         <div className="flex flex-col gap-0.5">
-                                            <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                                            <span className="text-[11px] text-[var(--text-tertiary)]">APR</span>
                                             <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                                         </div>
                                     </div>

@@ -93,7 +93,7 @@ export interface TransactionDetail {
 function ActionButton({children}: React.PropsWithChildren) {
   return (
     <Button
-      className={'w-full h-[30px] bg-[color:var(--secondary)] border border-[color:var(--button-2-border)] hover:bg-transparent'}
+      className={'w-full h-[30px] bg-bg-elevated border border-border-primary hover:bg-transparent'}
     >
       {children}
     </Button>
@@ -256,8 +256,8 @@ function StakeSummary({operations, status, networkFee}: StakeSummaryProps) {
   return (
     <>
       {status === TransactionStatus.Pending && (
-        <div className={'bg-[color:var(--color-slate-2)] h-[109px] rounded-[8px]'}>
-          <p className={'px-4 py-[11px] text-[color:var(--color-white-3)]'}>
+        <div className={'bg-bg-surface h-[109px] rounded-[8px]'}>
+          <p className={'px-4 py-[11px] text-text-tertiary'}>
             Stake is being processed. Avoid moving funds from your wallet for at least one hour to prevent funding errors.
           </p>
           {/*<hr className={'border-[color:var(--divider)]'} />*/}
@@ -469,7 +469,7 @@ export default function TransactionDetail({
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-[var(--color-white-3)]">
+          <span className="text-[20px] text-text-tertiary">
             {type === TransactionType.OperationalFunds ? 'Amount' : type}
           </span>
           <div className="flex flex-row items-center gap-2">

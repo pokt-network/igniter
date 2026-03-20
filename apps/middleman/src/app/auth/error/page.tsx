@@ -46,7 +46,7 @@ export default async function AuthError({searchParams}: {
     <OverrideSidebar>
       <div className={'h-[calc(100vh-80px)] w-full flex items-center justify-center'}>
         <div
-          className={"flex flex-col items-center justify-center w-full max-w-[400px] gb- py-10 -mt-20 px-4 text-center gap-4 sm:border border-[color:var(--divider)] rounded-lg"}
+          className={"flex flex-col items-center justify-center w-full max-w-[400px] bg-bg-surface py-10 -mt-20 px-4 text-center gap-4 sm:border border-border-primary rounded-lg"}
         >
           {content}
         </div>

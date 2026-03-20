@@ -58,7 +58,7 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
 
     return (
         <div
-            className="flex flex-col w-[580px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 title="Scheduled!"
                 subtitle="Below are the details of your stake operation."
@@ -74,18 +74,18 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                     <div className="relative flex h-[64px] gradient-border-green">
                         <div
                             className={`absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-                        <span className="text-[20px] text-[var(--color-white-3)]">
+                        <span className="text-[20px] text-[var(--text-tertiary)]">
                             Stake
                         </span>
                             <span className="flex flex-row items-center gap-2">
-                            <span className="font-mono text-[20px] text-[var(--color-white-1)]">
+                            <span className="font-mono text-[20px] text-[var(--text-primary)]">
                               <Amount value={amount} />
                             </span>
                         </span>
                         </div>
                     </div>
-                    <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-                        <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+                    <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
+                        <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
                             Stake is being processed. Avoid moving funds from your wallet for at least one hour to prevent funding errors.
                         </span>
                         {/*<div className="h-[1px] bg-[var(--slate-dividers)]"/>*/}
@@ -95,11 +95,11 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                         {/*    </Button>*/}
                         {/*</div>*/}
                     </div>
-                    <div className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
+                    <div className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
                         {applicationSettings?.fee && applicationSettings?.fee > 0 ? (
                             <span
-                                className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                                <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                                className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                                <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                                     <span>
                                         Service Fee
                                     </span>
@@ -109,14 +109,14 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                                         url={''}
                                     />
                                 </span>
-                                <span className="text-[14px] text-[var(--color-white-1)]">
+                                <span className="text-[14px] text-[var(--text-primary)]">
                                     {applicationSettings?.fee}%
                                 </span>
                             </span>
                         ) : null}
                         {/*<span*/}
-                        {/*    className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">*/}
-                        {/*    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">*/}
+                        {/*    className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">*/}
+                        {/*    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">*/}
                         {/*        <span>*/}
                         {/*            Network Fee*/}
                         {/*        </span>*/}
@@ -127,14 +127,14 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                         {/*        />*/}
                         {/*    </span>*/}
                         {/*    <span className="flex flex-row gap-2">*/}
-                        {/*        <span className="font-mono text-[14px] text-[var(--color-white-1)]">*/}
+                        {/*        <span className="font-mono text-[14px] text-[var(--text-primary)]">*/}
                         {/*          <Amount value={totalNetworkFee} />*/}
                         {/*        </span>*/}
                         {/*    </span>*/}
                         {/*</span>*/}
                         <span
-                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                        <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                        <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                             <span>
                                 Operational Funds
                             </span>
@@ -145,30 +145,30 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                             />
                         </span>
                         <span className="flex flex-row gap-2">
-                            <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                            <span className="font-mono text-[14px] text-[var(--text-primary)]">
                               <Amount value={operationalFunds} />
                             </span>
                         </span>
                     </span>
                     </div>
                     <div key="stake-details"
-                         className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
+                         className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
                         <span
-                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="text-[14px] text-[var(--color-white-3)]">
+                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="text-[14px] text-[var(--text-tertiary)]">
                                 Provider
                             </span>
-                            <span className="text-[14px] text-[var(--color-white-1)]">
+                            <span className="text-[14px] text-[var(--text-primary)]">
                                 {selectedOffer.name}
                             </span>
                         </span>
                         {selectedAddressGroup && shares && (
                             <>
-                                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                                    <span className="text-[14px] text-[var(--color-white-3)]">
+                                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                                    <span className="text-[14px] text-[var(--text-tertiary)]">
                                         Plan
                                     </span>
-                                    <span className="text-[14px] text-[var(--color-white-1)]">
+                                    <span className="text-[14px] text-[var(--text-primary)]">
                                         {selectedAddressGroup.name}
                                     </span>
                                 </span>
@@ -184,25 +184,25 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                             </>
                         )}
                         <span
-                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="text-[14px] text-[var(--color-white-3)]">
+                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="text-[14px] text-[var(--text-tertiary)]">
                                 Timestamp
                             </span>
-                            <span className="text-[14px] text-[var(--color-white-1)]">
+                            <span className="text-[14px] text-[var(--text-primary)]">
                                 {toDateFormat(transaction.createdAt)}
                             </span>
                         </span>
                         <span
-                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="text-[14px] text-[var(--color-white-3)]">
+                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="text-[14px] text-[var(--text-tertiary)]">
                                 Status
                             </span>
-                            <span className="text-[14px] text-[var(--color-white-1)]">
+                            <span className="text-[14px] text-[var(--text-primary)]">
                                 {transaction.status}
                             </span>
                         </span>
                         <span
-                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+                            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
                         <span className="flex flex-row items-center gap-2 hover:cursor-pointer"
                           onClick={() => setIsShowingTransactionDetails(!isShowingTransactionDetails)}>
                         {isShowingTransactionDetails && (
@@ -211,7 +211,7 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                         {!isShowingTransactionDetails && (
                             <CaretSmallIcon/>
                         )}
-                        <span className="text-[14px] text-[var(--color-white-3)]">
+                        <span className="text-[14px] text-[var(--text-tertiary)]">
                             {`Operations (${operations.length})`}
                         </span>
                     </span>
@@ -221,12 +221,12 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                         return (
                           <>
                               <span key={`stake-${index}`}
-                                    className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                                  <span className="text-[14px] text-[var(--color-white-3)]">
+                                    className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                                  <span className="text-[14px] text-[var(--text-tertiary)]">
                                       Stake {toCompactFormat(amountToPokt(operation.value.stake.amount))}
                                   </span>
                                   <span className="flex flex-row gap-2">
-                                      <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                                      <span className="font-mono text-[14px] text-[var(--text-primary)]">
                                         <Amount value={amountToPokt(operation.value.stake.amount || 0)} />
                                       </span>
                                   </span>
@@ -234,16 +234,16 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                             {operationalFund && (
                               <span
                                 key={`dependant-tx-${index}`}
-                                className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]"
+                                className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]"
                               >
-                                  <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                                  <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                                       <CornerIcon/>
                                       <span>
                                           Operational Funds
                                       </span>
                                   </span>
                                   <span className="flex flex-row gap-2">
-                                      <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                                      <span className="font-mono text-[14px] text-[var(--text-primary)]">
                                         <Amount value={amountToPokt(operationalFund.value.amount.at(0)!.amount)} />
                                       </span>
                                   </span>

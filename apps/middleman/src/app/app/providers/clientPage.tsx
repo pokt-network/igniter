@@ -88,7 +88,7 @@ export default function ClientProvidersPage() {
           <div className="flex flex-row justify-between items-center">
             <div className="flex flex-col">
               <h1>Providers</h1>
-              <p className="text-muted-foreground">
+              <p className="text-text-secondary">
                 Browse available node runners and their staking plans.
               </p>
             </div>
@@ -100,14 +100,14 @@ export default function ClientProvidersPage() {
         {isLoading || (!data && !isError) && (
           <div className="animate-pulse grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(600px, 1fr))' }}>
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="h-24 bg-[var(--color-slate-2)] rounded-lg" />
+              <div key={i} className="h-24 bg-[var(--bg-surface)] rounded-lg" />
             ))}
           </div>
         )}
 
         {isError && (
           <div className="flex flex-col items-center justify-center py-12 gap-4">
-            <span className="text-[14px] text-[var(--color-white-3)]">
+            <span className="text-[14px] text-[var(--text-tertiary)]">
               Failed to load providers. Please try again.
             </span>
             <Button variant="outline" onClick={() => refetch()}>
@@ -118,7 +118,7 @@ export default function ClientProvidersPage() {
 
         {!isLoading && !isError && !!data && providers.length === 0 && (
           <div className="flex items-center justify-center py-12">
-            <span className="text-[14px] text-[var(--color-white-3)]">
+            <span className="text-[14px] text-[var(--text-tertiary)]">
               No providers available at this time.
             </span>
           </div>
@@ -223,7 +223,7 @@ function ProviderCard({
   });
 
   return (
-    <div className="flex flex-col rounded-[8px] border-[2px] border-[--black-dividers]">
+    <div className="flex flex-col rounded-[8px] border-[2px] border-border-primary">
       <div className="flex flex-col bg-[var(--background)] rounded-[8px]">
         <div
           className="flex flex-row items-center justify-between p-[20px_25px] cursor-pointer hover:opacity-80"
@@ -240,28 +240,28 @@ function ProviderCard({
                   <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
                     <InfoIcon />
                   </PopoverTrigger>
-                  <PopoverContent className="flex flex-col w-[360px] bg-[var(--color-slate-2)] p-0 max-h-[500px] overflow-y-auto">
-                    <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px] sticky top-0 bg-[var(--color-slate-2)] border-b border-[var(--slate-dividers)]">
+                  <PopoverContent className="flex flex-col w-[360px] bg-[var(--bg-surface)] p-0 max-h-[500px] overflow-y-auto">
+                    <span className="text-[14px] font-medium text-[var(--text-primary)] p-[12px_16px] sticky top-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
                       About these metrics
                     </span>
                     <div className="flex flex-col gap-4 p-[12px_16px]">
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[var(--color-white-1)]">Est. Yield</span>
-                        <span className="text-[13px] text-[var(--color-white-3)]">
+                        <span className="font-medium text-[var(--text-primary)]">Est. Yield</span>
+                        <span className="text-[13px] text-[var(--text-tertiary)]">
                           Your estimated earnings per supplier per day, calculated as: Performance × Client Share.
                           This is the net amount you would receive after all fees are applied.
                         </span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[var(--color-white-1)]">Client Share</span>
-                        <span className="text-[13px] text-[var(--color-white-3)]">
+                        <span className="font-medium text-[var(--text-primary)]">Client Share</span>
+                        <span className="text-[13px] text-[var(--text-tertiary)]">
                           The median share of rewards you will receive across all services in this plan.
                           Calculated per service as: 100% − Provider Share − Supplier Share − Delegator Fee, then the median is taken.
                         </span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium text-[var(--color-white-1)]">APR</span>
-                        <span className="text-[13px] text-[var(--color-white-3)]">
+                        <span className="font-medium text-[var(--text-primary)]">APR</span>
+                        <span className="text-[13px] text-[var(--text-tertiary)]">
                           Annual Percentage Rate, estimated from recent performance.
                           Calculated as: (Est. Yield POKT/supplier/day × 365 ÷ minimum stake) × 100.
                         </span>
@@ -270,14 +270,14 @@ function ProviderCard({
                   </PopoverContent>
                 </Popover>
               </span>
-              <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--color-white-3)]">
-                <span className="whitespace-nowrap">Plans: <span className="text-[var(--color-white-1)]">{provider.addressGroups.length}</span></span>
+              <span className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--text-tertiary)]">
+                <span className="whitespace-nowrap">Plans: <span className="text-[var(--text-primary)]">{provider.addressGroups.length}</span></span>
                 {provider.supplierStats && (
                   <>
-                    <span className="whitespace-nowrap">Suppliers: <span className="text-[var(--color-white-1)]">{provider.supplierStats.suppliers_count.toLocaleString()}</span></span>
+                    <span className="whitespace-nowrap">Suppliers: <span className="text-[var(--text-primary)]">{provider.supplierStats.suppliers_count.toLocaleString()}</span></span>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="whitespace-nowrap">Total Staked: <span className="text-[var(--color-white-1)]">{millify(provider.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
+                        <span className="whitespace-nowrap">Total Staked: <span className="text-[var(--text-primary)]">{millify(provider.supplierStats.total_staked_tokens / 1e6, { precision: 1 })} POKT</span></span>
                       </TooltipTrigger>
                       <TooltipContent>
                         {(provider.supplierStats.total_staked_tokens / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })} POKT
@@ -305,7 +305,7 @@ function ProviderCard({
         </div>
 
         {isExpanded && (
-          <div className="flex flex-col border-t border-[var(--black-dividers)]">
+          <div className="flex flex-col border-t border-[var(--border-primary)]">
             {sortedAddressGroups.map((addressGroup, index) => {
               const shares = calculateShares(addressGroup, delegatorFee);
               const linkedAccount = getLinkedAccount(addressGroup.linkedAddresses);
@@ -320,7 +320,7 @@ function ProviderCard({
                   key={addressGroup.id}
                   className={`flex flex-col gap-1 p-[16px_25px] ${
                     index !== sortedAddressGroups.length - 1
-                      ? 'border-b border-[var(--black-dividers)]'
+                      ? 'border-b border-[var(--border-primary)]'
                       : ''
                   }`}
                 >
@@ -331,19 +331,19 @@ function ProviderCard({
                       {linkedAccount && (
                         <Tooltip>
                           <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <span className="flex flex-row items-center h-6 gap-1.5 pr-2 pl-1 py-0.5 text-[11px] font-medium bg-purple-500/20 text-purple-300 rounded">
+                            <span className="flex flex-row items-center h-6 gap-1.5 pr-2 pl-1 py-0.5 text-[11px] font-medium bg-[color:var(--pnf-lavender)]/20 text-pnf-lavender rounded">
                               <AvatarByString string={linkedAccount} size={18} />
                               <span className="font-mono">{getShortAddress(linkedAccount, 5)}</span>
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent className="flex flex-col w-[280px] bg-[var(--color-slate-2)] p-0 border-2 border-[var(--black-dividers)]">
-                            <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[12px_16px]">
+                          <TooltipContent className="flex flex-col w-[280px] bg-[var(--bg-surface)] p-0 border-2 border-[var(--border-primary)]">
+                            <span className="text-[14px] font-medium text-[var(--text-primary)] p-[12px_16px]">
                               Personal Plan
                             </span>
-                            <div className="h-[1px] bg-[var(--slate-dividers)]"></div>
-                            <span className="text-[13px] text-[var(--color-white-3)] p-[12px_16px]">
+                            <div className="h-[1px] bg-[var(--border-subtle)]"></div>
+                            <span className="text-[13px] text-[var(--text-tertiary)] p-[12px_16px]">
                               This plan is exclusively available to you based on your wallet address
-                              <span className="font-mono text-[var(--color-white-1)] inline-flex items-center gap-2 mt-1">
+                              <span className="font-mono text-[var(--text-primary)] inline-flex items-center gap-2 mt-1">
                                 <AvatarByString string={linkedAccount} size={15} />
                                 <span>{getShortAddress(linkedAccount, 5)}</span>
                               </span>.
@@ -366,15 +366,15 @@ function ProviderCard({
                   {/* Metrics row */}
                   <div className="flex flex-row gap-6 mt-1">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--color-white-3)]">Est. Yield</span>
+                      <span className="text-[11px] text-[var(--text-tertiary)]">Est. Yield</span>
                       <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--color-white-3)]">Client Share</span>
+                      <span className="text-[11px] text-[var(--text-tertiary)]">Client Share</span>
                       <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--color-white-3)]">APR</span>
+                      <span className="text-[11px] text-[var(--text-tertiary)]">APR</span>
                       <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
                     </div>
                   </div>

@@ -163,14 +163,14 @@ export default function DataTable<TData extends object, TValue>({
       <TableRow key={index} className={'pointer-events-none'}>
         {columns.map((_, colIndex) => (
           <TableCell key={`${index}-${colIndex}`}>
-            <Skeleton className={'w-4/5 h-4 !bg-[color:#383838]'} />
+            <Skeleton className={'w-4/5 h-4 bg-bg-elevated'} />
           </TableCell>
         ))}
       </TableRow>
     ))
   } else if (isError) {
     tableBody = (
-      <TableRow className={'hover:bg-[color:var(--color-card)]'}>
+      <TableRow className={'hover:bg-bg-surface'}>
         <TableCell colSpan={columns.length} className="h-24 text-center">
           There was an error loading the data.
           {refetch && (
@@ -277,7 +277,7 @@ export default function DataTable<TData extends object, TValue>({
                       key={header.id}
                       className={
                         clsx(
-                          "text-white px-4",
+                          "text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4",
                           align === 'center' && 'text-center',
                           align === 'right' && 'text-right',
                         )

@@ -29,7 +29,7 @@ export function ImportSuccessStep({
   const totalStakedPokt = Number(totalStaked) / 1e6
 
   return (
-    <div className="flex flex-col w-[580px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title="Import Complete!"
         subtitle="Your suppliers have been successfully imported."
@@ -38,11 +38,11 @@ export function ImportSuccessStep({
 
       <div className="relative flex h-[64px] gradient-border-green">
         <div className="absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between">
-          <span className="text-[20px] text-[var(--color-white-3)]">
+          <span className="text-[20px] text-[var(--text-tertiary)]">
             Imported
           </span>
           <span className="flex flex-row items-center gap-2">
-            <span className="font-mono text-[20px] text-[var(--color-white-1)]">
+            <span className="font-mono text-[20px] text-[var(--text-primary)]">
               {importedSuppliers.length} supplier
               {importedSuppliers.length !== 1 ? 's' : ''}
             </span>
@@ -50,43 +50,43 @@ export function ImportSuccessStep({
         </div>
       </div>
 
-      <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-        <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+      <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
+        <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
           Your suppliers have been imported and are now managed by your account.
           You can view them in the Suppliers page.
         </span>
       </div>
 
-      <div className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
-        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-          <span className="text-[14px] text-[var(--color-white-3)]">
+      <div className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
+        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+          <span className="text-[14px] text-[var(--text-tertiary)]">
             Provider
           </span>
-          <span className="text-[14px] text-[var(--color-white-1)]">
+          <span className="text-[14px] text-[var(--text-primary)]">
             {providerName}
           </span>
         </span>
 
-        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-          <span className="text-[14px] text-[var(--color-white-3)]">
+        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+          <span className="text-[14px] text-[var(--text-tertiary)]">
             Total Suppliers
           </span>
-          <span className="text-[14px] text-[var(--color-white-1)]">
+          <span className="text-[14px] text-[var(--text-primary)]">
             {importedSuppliers.length}
           </span>
         </span>
 
-        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-          <span className="text-[14px] text-[var(--color-white-3)]">
+        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+          <span className="text-[14px] text-[var(--text-tertiary)]">
             Total Staked
           </span>
-          <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+          <span className="font-mono text-[14px] text-[var(--text-primary)]">
             <Amount value={totalStakedPokt} />
           </span>
         </span>
 
         <span
-          className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] cursor-pointer"
+          className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] cursor-pointer"
           onClick={() => setIsShowingSuppliers(!isShowingSuppliers)}
         >
           <span className="flex flex-row items-center gap-2">
@@ -95,7 +95,7 @@ export function ImportSuccessStep({
                 isShowingSuppliers ? 'rotate-90' : ''
               }`}
             />
-            <span className="text-[14px] text-[var(--color-white-3)]">
+            <span className="text-[14px] text-[var(--text-tertiary)]">
               Supplier Details ({importedSuppliers.length})
             </span>
           </span>
@@ -105,21 +105,21 @@ export function ImportSuccessStep({
           importedSuppliers.map((supplier, index) => (
             <span
               key={supplier.address}
-              className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]"
+              className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]"
             >
               <span className="flex flex-col gap-1">
-                <span className="text-[14px] text-[var(--color-white-3)]">
+                <span className="text-[14px] text-[var(--text-tertiary)]">
                   Supplier {index + 1}
                 </span>
-                <span className="text-[12px] text-gray-400 font-mono">
+                <span className="text-[12px] text-text-tertiary font-mono">
                   {getShortAddress(supplier.address, 8)}
                 </span>
               </span>
               <span className="flex flex-col items-end gap-1">
-                <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                <span className="font-mono text-[14px] text-[var(--text-primary)]">
                   <Amount value={Number(supplier.stakeAmount) / 1e6} />
                 </span>
-                <span className="text-[10px] text-gray-400">
+                <span className="text-[10px] text-text-tertiary">
                   {supplier.services.length} service
                   {supplier.services.length !== 1 ? 's' : ''}
                 </span>

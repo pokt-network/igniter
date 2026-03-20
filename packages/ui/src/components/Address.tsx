@@ -27,8 +27,8 @@ export default function Address({address, onClick}: AddressProps) {
         variant={'link'}
         className={
           clsx(
-            '!p-0 text-[color:var(--ring)] border-none h-5',
-            !onClick && 'text-[color:var(--color-white-1)] font-thin hover:no-underline !cursor-default'
+            '!p-0 text-accent border-none h-5 font-mono',
+            !onClick && 'text-text-primary font-mono hover:no-underline !cursor-default'
           )
         }
         onClick={onClick ? () => onClick(address) : undefined}

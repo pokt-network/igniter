@@ -18,10 +18,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function Landing() {
     return (
-      <div className={'w-[100dvw] bg-background absolute top-[-72px] left-0 min-w-[100dvw] z-[50]'}>
+      <div className={'w-[100dvw] bg-bg-root absolute top-[-72px] left-0 min-w-[100dvw] z-[50]'}>
         <OverrideSidebar>
-          <div className="flex flex-row justify-center min-h-screen bg-(--black-1)">
-            <div className="h-[100dvh] w-[958px] border-x border-(--black-dividers) overflow-y-scroll scrollbar-hidden">
+          <div className="flex flex-row justify-center min-h-screen bg-bg-root">
+            <div className="h-[100dvh] w-[958px] border-x border-border-primary overflow-y-scroll scrollbar-hidden">
               <Header />
               <Hero />
               <About />

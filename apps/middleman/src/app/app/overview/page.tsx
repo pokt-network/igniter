@@ -31,7 +31,7 @@ export default async function Page() {
           <div className="flex flex-row justify-between items-center">
             <div className="flex flex-col">
               <h1>Overview</h1>
-              <p className="text-muted-foreground">
+              <p className="text-text-secondary">
                 Welcome to your $POKT staking dashboard.
               </p>
             </div>
