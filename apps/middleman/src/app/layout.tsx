@@ -41,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${overpass_mono.variable} ${rubik.variable} overflow-hidden`}
+      className={`${overpass_mono.variable} ${rubik.variable} overflow-x-hidden`}
       suppressHydrationWarning
     >
       <body>
