@@ -13,7 +13,7 @@ export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppT
   return (
     <header
       className={
-        "px-3 lg:px-6 sticky z-[50] border-b border-border-primary top-0 flex flex-row items-center justify-between bg-bg-surface"
+        "px-3 lg:px-6 sticky z-[50] border-b border-border-primary top-0 flex flex-row items-center justify-between bg-bg-surface shrink-0"
       }
     >
       <div

@@ -56,7 +56,7 @@ export default function RootLayout({
               <ApplicationSettingsProvider>
                 <WalletConnectionProvider>
                   <CurrencyContextProvider>
-                    <SidebarProvider className="flex flex-col">
+                    <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
                       <QuickDetailProvider>
                         <NotificationsProvider>
                           <AppTopBar>
@@ -64,11 +64,11 @@ export default function RootLayout({
                             <CurrentUser />
                             <ThemeToggle />
                           </AppTopBar>
-                          <div className="flex flex-1">
+                          <div className="flex flex-1 min-h-0">
                             <Sidebar />
-                            <SidebarInset className={'transition-none'}>
+                            <SidebarInset className={'transition-none !min-h-0'}>
                               <div className={"w-full h-full flex overflow-x-hidden"}>
-                                <div className="flex flex-col gap-6 h-[calc(100vh-72px)] overflow-y-scroll scrollbar-hidden w-full transition-none">
+                                <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-full transition-none">
                                   <RegisterPlugins />
                                   {children}
                                   <Toaster />
