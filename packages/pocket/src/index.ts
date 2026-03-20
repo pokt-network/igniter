@@ -402,6 +402,7 @@ export class PocketBlockchain {
     return await SigningStargateClient.createWithSigner(comet, wallet, {
       registry,
       gasPrice: this.gasPrice,
+      broadcastTimeoutMs: 3 * 60 * 1000,
     })
   }
 }
