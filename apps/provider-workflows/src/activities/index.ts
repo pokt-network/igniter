@@ -1,4 +1,5 @@
 import type {PocketBlockchain, StakeSupplierParams, Supplier} from '@igniter/pocket'
+import {isSequenceMismatchError, parseExpectedSequence} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, KeyWithGroup, Service} from '@igniter/db/provider/schema'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
@@ -451,7 +452,35 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       servicesToStakeCount: stakeParams.services.length,
     })
 
-    const txResult = await pocketRpcClient.stakeSupplier(stakeParams)
+    let txResult = await pocketRpcClient.stakeSupplier(stakeParams)
+
+    // Retry once with the expected sequence if we hit a sequence mismatch error
+    if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
+      const expectedSequence = parseExpectedSequence(txResult.message)
+      log.warn('remediateSupplier: Sequence mismatch detected', {
+        address: params.address,
+        originalError: txResult.message,
+        parsedExpectedSequence: expectedSequence,
+      })
+      if (expectedSequence != null) {
+        log.info('remediateSupplier: Retrying stake transaction with expected sequence', {
+          address: params.address,
+          expectedSequence,
+        })
+        txResult = await pocketRpcClient.stakeSupplier(stakeParams, expectedSequence)
+        log.info('remediateSupplier: Retry stake transaction result', {
+          address: params.address,
+          success: txResult.success,
+          code: txResult.code,
+          message: txResult.message,
+        })
+      } else {
+        log.error('remediateSupplier: Could not parse expected sequence from error message, skipping retry', {
+          address: params.address,
+          originalError: txResult.message,
+        })
+      }
+    }
 
     log.debug('remediateSupplier: Stake transaction result', {txResult})
 

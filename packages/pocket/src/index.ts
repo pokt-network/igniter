@@ -1,5 +1,6 @@
 import {
   BroadcastTxError,
+  calculateFee,
   GasPrice,
   ProtobufRpcClient,
   QueryClient,
@@ -7,6 +8,7 @@ import {
   StargateClient, TimeoutError,
 } from '@cosmjs/stargate'
 import {DirectSecp256k1Wallet, GeneratedType, Registry} from '@cosmjs/proto-signing'
+import {TxRaw} from 'cosmjs-types/cosmos/tx/v1beta1/tx'
 import {
   Comet38Client,
   connectComet,
@@ -36,6 +38,24 @@ import {getLogger, Logger} from '@igniter/logger'
 
 export * from './types'
 export * from './constants';
+
+/**
+ * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.
+ * Error format: "account sequence mismatch, expected X, got Y: incorrect account sequence"
+ * @returns The expected sequence number, or null if the error doesn't match.
+ */
+export function parseExpectedSequence(errorMessage: string): number | null {
+  const match = errorMessage.match(/account sequence mismatch, expected (\d+), got (\d+)/)
+  if (!match) return null
+  return parseInt(match[1]!, 10)
+}
+
+/**
+ * Returns true if the error message indicates a Cosmos SDK account sequence mismatch.
+ */
+export function isSequenceMismatchError(errorMessage: string): boolean {
+  return errorMessage.includes('account sequence mismatch')
+}
 
 /**
  * Creates a Protobuf-based RPC client for querying a blockchain using a QueryClient.
@@ -308,10 +328,10 @@ export class PocketBlockchain {
     }
   }
 
-  async stakeSupplier(params: StakeSupplierParams): Promise<SendTransactionResult> {
+  async stakeSupplier(params: StakeSupplierParams, explicitSequence?: number): Promise<SendTransactionResult> {
     const { signerPrivateKey, signer, ...value } = params
 
-    this.logger.info({ params: { signer, ...value } },'stakeSupplier: Execution started')
+    this.logger.info({ params: { signer, ...value }, explicitSequence },'stakeSupplier: Execution started')
 
     if (!isValidPrivateKey(signerPrivateKey)) throw new Error('Invalid secp256k1 private key')
     if (!signer) throw new Error('`signer` (bech32) is required')
@@ -351,9 +371,29 @@ export class PocketBlockchain {
         signer,
         messages: [msg],
         fee: 'auto',
+        explicitSequence,
       },'stakeSupplier: Signing and broadcasting transaction')
 
-      const result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + 5))
+      let result
+      if (explicitSequence != null) {
+        // Use explicit sequence to avoid sequence mismatch on retry
+        this.logger.info({ signer, explicitSequence }, 'stakeSupplier: Using explicit sequence for signing')
+        const gasEstimation = await signingClient.simulate(signer, [msg], '')
+        const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
+        const { accountNumber } = await signingClient.getSequence(signer)
+        const chainId = await signingClient.getChainId()
+        this.logger.debug({ signer, accountNumber, explicitSequence, chainId }, 'stakeSupplier: Signing with explicit signer data')
+        const txRaw = await signingClient.sign(signer, [msg], fee, '', {
+          accountNumber,
+          sequence: explicitSequence,
+          chainId,
+        }, BigInt(currentHeight + 5))
+        const txBytes = TxRaw.encode(txRaw).finish()
+        this.logger.debug({ signer }, 'stakeSupplier: Broadcasting transaction with explicit sequence')
+        result = await signingClient.broadcastTx(txBytes)
+      } else {
+        result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + 5))
+      }
 
       this.logger.info({ result },'stakeSupplier: Execution ended. Transaction sent.')
 
