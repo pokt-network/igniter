@@ -46,12 +46,21 @@ export default function CurrentUser() {
         return;
       }
 
-      await signIn("siwp", {
+      // Use redirect: false so we can do a hard navigation via
+      // window.location.  A soft (client-side) redirect would keep the
+      // landing-page layout mounted and the sidebar would not appear
+      // until the user manually refreshes.
+      const result = await signIn("siwp", {
         message: JSON.stringify(message),
         signature,
         publicKey,
-        redirectTo: '/admin',
+        redirect: false,
       });
+
+      if (result?.ok) {
+        window.location.href = '/admin';
+        return;
+      }
     } catch (error) {
       if ((error as {message: string})?.message === "The user rejected the request.") {
         clearConnectedIdentity()
