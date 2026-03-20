@@ -10,6 +10,7 @@ import { getApplicationSettings, GetAppName } from '@/actions/ApplicationSetting
 import InitializeHeightContext from '@igniter/ui/context/Height/InitializeContext'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
+import ProviderBreakdown from './ProviderBreakdown'
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,8 @@ async function Rewards() {
           </Suspense>
         </div>
 
+        <ProviderBreakdown />
+
         <Suspense
           key={ownerAddresses.join(',')}
           fallback={
@@ -122,3 +125,4 @@ async function Rewards() {
     </ApolloWrapper>
   )
 }
+

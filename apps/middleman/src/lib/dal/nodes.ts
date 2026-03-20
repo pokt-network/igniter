@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/db";
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, countDistinct, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   nodesTable,
   NodeWithDetails,
@@ -88,4 +88,13 @@ export async function getExistingNodes(addresses: Array<string>, userIdentity: s
       inArray(nodesTable.address, addresses)
     )
   }).then((nodes) => nodes.map((node) => node.address));
+}
+
+export async function getProviderCountByUser(userIdentity: string): Promise<number> {
+  const result = await getDb()
+    .select({ count: countDistinct(nodesTable.providerId) })
+    .from(nodesTable)
+    .where(eq(nodesTable.createdBy, userIdentity))
+
+  return result[0]?.count ?? 0
 }

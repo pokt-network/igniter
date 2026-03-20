@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import React from 'react'
 import NodesTable from '@/app/app/(lists)/nodes/table'
+import ProviderStats from '@/app/app/(lists)/nodes/ProviderStats'
+import ChainOverview from '@/app/app/(lists)/nodes/ChainOverview'
 import { GetAppName } from '@/actions/ApplicationSettings'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
@@ -36,9 +38,6 @@ export default async function Page() {
                 <Link href="/app/import-suppliers">
                   <Button variant="outline">Import Suppliers</Button>
                 </Link>
-                <Link href="/app/unstake">
-                  <Button variant="outline">Unstake</Button>
-                </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>
                 </Link>
@@ -47,7 +46,9 @@ export default async function Page() {
           </div>
         </div>
       </div>
-      <div className="mx-10 pt-10">
+      <div className="mx-10 pt-10 flex flex-col gap-8">
+        <ProviderStats />
+        <ChainOverview />
         <NodesTable />
       </div>
     </>
