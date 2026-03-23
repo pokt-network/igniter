@@ -51,7 +51,7 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
 
     return (
         <div
-            className="flex flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 title="Stake"
                 subtitle={`Use the slider below to pick an amount to stake. The minimum stake is ${toCurrencyFormat(minimumStake)} $POKT.`}
@@ -72,11 +72,10 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
                   onValueChange={setSelectedAmount}
                 />
                 {balance < minimumStake && (
-                    <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
-                        <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+                    <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
+                        <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
                             Token balance is not enough to stake. Transfer more tokens to your wallet to stake $POKT.
                         </span>
-                        {/*<div className="h-[1px] bg-[var(--slate-dividers)]" />*/}
                         {/*<div className="p-2">*/}
                         {/*    <Button variant="secondaryBorder" className="w-full">*/}
                         {/*        About Staking*/}
@@ -91,7 +90,7 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
                   onMaxSelected={() => setSelectedAmount(Math.floor(balance / minimumStake) * minimumStake)}
                 />
                   {applicationSettings?.fee && applicationSettings?.fee > 0 ? (
-                      <div className="flex flex-row items-center justify-between border border-[--black-dividers] rounded-[8px] p-4">
+                      <div className="flex flex-row items-center justify-between border border-border-primary rounded-[8px] p-4">
                     <span className="flex flex-row items-center gap-2">
                         <span>
                             Service Fee
@@ -103,7 +102,7 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
                         />
                     </span>
                           {applicationSettings?.fee && (
-                              <span className="text-[14px] text-[var(--color-white-1)]">{Number(applicationSettings?.fee).toFixed(0)}%</span>
+                              <span className="text-[14px] text-[var(--text-primary)]">{Number(applicationSettings?.fee).toFixed(0)}%</span>
                           )}
                       </div>
                   ) : null}

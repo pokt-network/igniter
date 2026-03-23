@@ -362,7 +362,7 @@ export function ImportProcess({
   }
 
   return (
-    <div className="flex relative flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex relative flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title="Import Suppliers"
         subtitle={`Import staked suppliers from ${provider.name}`}
@@ -374,7 +374,7 @@ export function ImportProcess({
         <div className="bg-[var(--input-bg)] p-4 rounded-lg">
           <h3 className="text-sm font-medium mb-2">Selected Provider</h3>
           <p className="text-lg">{provider.name}</p>
-          <p className="text-xs text-gray-400 font-mono mt-1 truncate">
+          <p className="text-xs text-text-tertiary font-mono mt-1 truncate">
             {provider.identity}
           </p>
         </div>
@@ -389,11 +389,11 @@ export function ImportProcess({
 
         {(errorMessage || processError) && (
           <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg">
-            <p className="text-sm text-red-400">{processError || errorMessage}</p>
+            <p className="text-sm text-error">{processError || errorMessage}</p>
           </div>
         )}
 
-        <div className="text-xs text-gray-400 mt-2">
+        <div className="text-xs text-text-tertiary mt-2">
           <p>Click "Import" to start the import process:</p>
           <ol className="list-decimal list-inside mt-2 space-y-1">
             <li>Request a verification challenge from the provider</li>
@@ -410,7 +410,7 @@ export function ImportProcess({
         <DialogContent
           onInteractOutside={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.preventDefault()}
-          className="gap-0 w-[280px] p-0 rounded-lg bg-[var(--color-slate-2)]"
+          className="gap-0 w-[280px] p-0 rounded-lg bg-[var(--bg-surface)]"
           hideClose
         >
           <DialogTitle asChild>
@@ -419,34 +419,34 @@ export function ImportProcess({
               <LoaderIcon className="animate-spin" />
             </div>
           </DialogTitle>
-          <div className="h-[1px] bg-[var(--slate-dividers)]" />
+          <div className="h-[1px] bg-[var(--border-subtle)]" />
 
           <div className="flex flex-row justify-between items-center py-3 px-4">
             <span className="text-[14px]">Requesting Import</span>
             {stageSucceeded(importStatus.requestImportStatus) && <CheckSuccess />}
             {stageFailed(importStatus.requestImportStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
-          <div className="h-[1px] bg-[var(--slate-dividers)]" />
+          <div className="h-[1px] bg-[var(--border-subtle)]" />
 
           <div className="flex flex-row justify-between items-center py-3 px-4">
             <span className="text-[14px]">Signing Verification</span>
             {stageSucceeded(importStatus.signNonceStatus) && <CheckSuccess />}
             {stageFailed(importStatus.signNonceStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
-          <div className="h-[1px] bg-[var(--slate-dividers)]" />
+          <div className="h-[1px] bg-[var(--border-subtle)]" />
 
           <div className="flex flex-row justify-between items-center py-3 px-4">
             <span className="text-[14px]">Completing Import</span>
             {stageSucceeded(importStatus.submitImportStatus) && <CheckSuccess />}
             {stageFailed(importStatus.submitImportStatus) && (
-              <XIcon className="fill-current text-[var(--color-destructive)]" />
+              <XIcon className="fill-current text-error" />
             )}
           </div>
-          <div className="h-[1px] bg-[var(--slate-dividers)]" />
+          <div className="h-[1px] bg-[var(--border-subtle)]" />
 
           <DialogFooter className="p-2">
             <DialogClose className="w-full" asChild>

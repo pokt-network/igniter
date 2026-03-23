@@ -72,8 +72,8 @@ export default function Sidebar({}: Readonly<AppSidebarProps>) {
       key={route.title}
       className={
         pathname.includes(route.title.toLowerCase())
-          ? "bg-muted rounded-lg font-medium text-foreground"
-          : ""
+          ? "bg-sidebar-active-bg rounded-lg font-medium text-sidebar-active-text"
+          : "text-text-secondary"
       }
     >
       <SidebarMenuButton asChild>

@@ -202,7 +202,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
 
     return (
         <div
-            className="flex flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 onBack={onBack}
                 onClose={onClose}
@@ -212,32 +212,31 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
 
             <div className="relative flex h-[64px] min-h-[64px] gradient-border-slate">
                 <div className={`absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-                    <span className="text-[20px] text-[var(--color-white-3)]">
+                    <span className="text-[20px] text-[var(--text-tertiary)]">
                         Stake
                     </span>
                     <span className="flex flex-row items-center gap-2">
-                        <span className="font-mono text-[20px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[20px] text-[var(--text-primary)]">
                             {toCurrencyFormat(amount, 2, 2)}
                         </span>
-                        <span className="font-mono text-[20px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[20px] text-[var(--text-tertiary)]">
                             $POKT
                         </span>
                     </span>
                 </div>
             </div>
 
-            <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
+            <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
                 {!errorMessage && (
-                  <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+                  <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
                     Upon clicking Stake, you will be prompted to sign transactions with your wallet to finalize the stake operation.
                   </span>
                 )}
                 {errorMessage && (
-                  <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+                  <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
                     {errorMessage}
                   </span>
                 )}
-                {/*<div className="h-[1px] bg-[var(--slate-dividers)]" />*/}
                 {/*<div className="p-2">*/}
                 {/*    <Button variant="secondaryBorder" className="w-full">*/}
                 {/*        About Staking*/}
@@ -245,10 +244,10 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                 {/*</div>*/}
             </div>
 
-            <div className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
+            <div className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
                 {applicationSettings?.fee && applicationSettings?.fee > 0 ? (
-                    <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                        <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                    <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                        <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                             <span>
                                 Service Fee
                             </span>
@@ -258,13 +257,13 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                                 url={''}
                             />
                         </span>
-                        <span className="text-[14px] text-[var(--color-white-1)]">
+                        <span className="text-[14px] text-[var(--text-primary)]">
                             {applicationSettings?.fee}%
                         </span>
                     </span>
                 ) : null}
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                         <span>
                             Network Fee
                         </span>
@@ -275,22 +274,22 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         />
                     </span>
                     {isLoadingFee ? (
-                      <Skeleton className="w-[100px] h-5 bg-gray-700" />
+                      <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
                     ) : errorFee ? (
                       <span className={'text-sm'}>Failed to fetch <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
                     ): (
                       <span className="flex flex-row gap-2">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                             {toCurrencyFormat(networkFee, 6, 2)}
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                             $POKT
                         </span>
                     </span>
                     )}
                 </span>
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                         <span>
                             Operational Funds
                         </span>
@@ -301,16 +300,16 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         />
                     </span>
                     <span className="flex flex-row gap-2">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                             {toCurrencyFormat(operationalFunds, 2, 2)}
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                             $POKT
                         </span>
                     </span>
                 </span>
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                         <span>
                             Total
                         </span>
@@ -321,22 +320,22 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         />
                     </span>
                     {isLoadingFee ? (
-                      <Skeleton className="w-[100px] h-5 bg-gray-700" />
+                      <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
                     ) : errorFee ? (
                         <span className={'text-sm'}>Failed to fetch <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
                     ): (
                       <span className="flex flex-row gap-2">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                             {toCurrencyFormat(networkFee + amount + operationalFunds, 6, 2)}
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                             $POKT
                         </span>
                     </span>
                     )}
                 </span>
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                         <span>
                             Balance
                         </span>
@@ -347,15 +346,15 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         />
                     </span>
                     {isLoadingBalance ? (
-                      <Skeleton className="w-[100px] h-5 bg-gray-700" />
+                      <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
                     ) : errorBalance ? (
                         <span className={'text-sm'}>Failed to fetch <Button onClick={() => refetchBalance()} className={'ml-1 h-[30px]'}>Retry</Button></span>
                     ): (
                       <span className="flex flex-row gap-2">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                             {toCurrencyFormat(balance, 6, 2)}
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                             $POKT
                         </span>
                     </span>
@@ -364,8 +363,8 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
             </div>
 
             {!balanceCoversTotal && !!balance && !!networkFee && (
-              <div className="flex flex-col bg-[#f4424257] p-0 rounded-[8px]">
-                <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[11px_16px]">
+              <div className="flex flex-col bg-error-bg p-0 rounded-[8px]">
+                <span className="text-[14px] font-medium text-[var(--text-primary)] p-[11px_16px]">
                     Oops. It looks like you don't have enough $POKT to cover the total amount of stake.
                     <br/>
                     <br/>
@@ -375,32 +374,32 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
             )}
 
 
-            <div key="stake-details" className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
-                <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+            <div key="stake-details" className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
+                <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         Nodes
                     </span>
                     <span className="flex flex-row gap-1">
-                        <span className={'text-[14px] font-mono text-[var(--color-white-1)]'}>
+                        <span className={'text-[14px] font-mono text-[var(--text-primary)]'}>
                             {nodes}
                         </span>
                     </span>
                 </div>
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         Provider
                     </span>
-                    <span className="text-[14px] text-[var(--color-white-1)]">
+                    <span className="text-[14px] text-[var(--text-primary)]">
                         {selectedOffer.name}
                     </span>
                 </span>
                 {selectedAddressGroup && shares && (
                     <>
-                        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="text-[14px] text-[var(--color-white-3)]">
+                        <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="text-[14px] text-[var(--text-tertiary)]">
                                 Plan
                             </span>
-                            <span className="text-[14px] text-[var(--color-white-1)]">
+                            <span className="text-[14px] text-[var(--text-primary)]">
                                 {selectedAddressGroup.name}
                             </span>
                         </span>
@@ -416,12 +415,12 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     </>
                 )}
                 {/*TODO: Only show this when there are more than one connected identity? or when the owner address is different than the connected identity signed in?*/}
-                <span className="flex flex-col px-4 py-3 border-b border-[var(--black-dividers)]">
+                <span className="flex flex-col px-4 py-3 border-b border-[var(--border-primary)]">
                     <span className="flex flex-row items-center w-full justify-between">
-                        <span className="text-[14px] text-[var(--color-white-3)]">
+                        <span className="text-[14px] text-[var(--text-tertiary)]">
                             Owner Address
                         </span>
-                        <span className="flex flex-row items-center text-[14px] text-[var(--color-white-1)]">
+                        <span className="flex flex-row items-center text-[14px] text-[var(--text-primary)]">
                             <AvatarByString string={ownerAddress} />
                             <span className="ml-2 font-mono">
                                 {getShortAddress(ownerAddress, 5)}
@@ -429,13 +428,13 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         </span>
                     </span>
                     {ownerWasPreselected && (
-                      <span className={'text-xs text-left text-purple-300 opacity-90'}>
+                      <span className={'text-xs text-left text-pnf-lavender opacity-90'}>
                         Preselected because the plan you chose is linked to this wallet.
                       </span>
                     )}
                 </span>
 
-                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+                <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
                     <span className="flex flex-row items-center gap-2 hover:cursor-pointer" onClick={() => setIsShowingTransactionDetails(!isShowingTransactionDetails)}>
                         {isShowingTransactionDetails && (
                             <CaretSmallIcon className="transform rotate-90" />
@@ -443,38 +442,38 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         {!isShowingTransactionDetails && (
                             <CaretSmallIcon />
                         )}
-                        <span className="text-[14px] text-[var(--color-white-3)]">
+                        <span className="text-[14px] text-[var(--text-tertiary)]">
                             {`Operations (${totalTransactionsToSign})`}
                         </span>
                     </span>
                 </span>
                 {isShowingTransactionDetails && prospectTransactions.map((tx, index) => (
                     <React.Fragment key={index}>
-                        <span key={`stake-${index}`} className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="text-[14px] text-[var(--color-white-3)]">
+                        <span key={`stake-${index}`} className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="text-[14px] text-[var(--text-tertiary)]">
                                 {`Stake`}
                             </span>
                             <span className="flex flex-row gap-2">
-                                <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                                <span className="font-mono text-[14px] text-[var(--text-primary)]">
                                     {toCurrencyFormat(tx, 2, 2)}
                                 </span>
-                                <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                                <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                                     $POKT
                                 </span>
                             </span>
                         </span>
-                        <span key={`of-${index}`} className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-                            <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--color-white-3)]">
+                        <span key={`of-${index}`} className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+                            <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
                                 <CornerIcon />
                                 <span>
                                     Operational Funds
                                 </span>
                             </span>
                             <span className="flex flex-row gap-2">
-                                <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                                <span className="font-mono text-[14px] text-[var(--text-primary)]">
                                     {toCurrencyFormat(selectedOffer.operationalFundsAmount, 2, 2)}
                                 </span>
-                                <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                                <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                                     $POKT
                                 </span>
                             </span>

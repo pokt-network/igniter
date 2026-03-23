@@ -5,7 +5,7 @@ import {ActivityContentLoading} from '@/app/app/stake/components/ActivityContent
 export default function Loading() {
   return (
     <div
-      className="h-[305px] flex flex-col w-[480px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8"
+      className="h-[305px] flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8"
     >
       <ActivityHeader
         title="Stake"

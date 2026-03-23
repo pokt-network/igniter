@@ -6,7 +6,7 @@ import {FilterGroup, SortOption} from "@igniter/ui/components/DataTable/index";
 import {Provider} from "@igniter/db/middleman/schema";
 import {useState} from "react";
 import {UpdateEnabled, UpdateVisibility} from "@/actions/Providers";
-import {Button} from "@igniter/ui/components/button";
+import {Switch} from "@igniter/ui/components/switch";
 
 export const columns: ColumnDef<Provider>[] = [
   {
@@ -75,32 +75,32 @@ export const columns: ColumnDef<Provider>[] = [
       )
 
       return (
-        <div className="flex items-center justify-end space-x-2">
-          <Button
-            disabled={!isVisible}
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              setUpdating(true);
-              await UpdateEnabled(provider.identity, !isEnabled);
-              setIsEnabled(!isEnabled);
-              setUpdating(false);
-            }}
-          >
-            {isEnabled ? "Disable" : "Enable"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              setUpdating(true);
-              await UpdateVisibility(provider.identity, !isVisible);
-              setIsVisible(!isVisible);
-              setUpdating(false);
-            }}
-          >
-            {isVisible ? "Hide" : "Show"}
-          </Button>
+        <div className="flex items-center justify-end gap-5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Switch
+              disabled={!isVisible}
+              checked={isEnabled}
+              onCheckedChange={async (checked) => {
+                setUpdating(true);
+                await UpdateEnabled(provider.identity, checked);
+                setIsEnabled(checked);
+                setUpdating(false);
+              }}
+            />
+            <span className="text-sm text-text-secondary">Enable</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Switch
+              checked={isVisible}
+              onCheckedChange={async (checked) => {
+                setUpdating(true);
+                await UpdateVisibility(provider.identity, checked);
+                setIsVisible(checked);
+                setUpdating(false);
+              }}
+            />
+            <span className="text-sm text-text-secondary">Show</span>
+          </label>
         </div>
       );
     },

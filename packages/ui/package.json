@@ -85,8 +85,10 @@
     "./graphql/client": "./src/lib/graphql/client.tsx",
     "./models": "./src/lib/models/index.ts",
     "./components/*": ["./src/components/*.tsx", "./src/components/*.ts"],
+    "./components/PocketBrandLogo": "./src/components/PocketBrandLogo/index.tsx",
     "./hooks/*": "./src/hooks/*.ts",
     "./context/*": "./src/context/*.tsx",
-    "./assets": "./src/assets/index.ts"
+    "./assets": "./src/assets/index.ts",
+    "./theme-toggle": "./src/theme-toggle.tsx"
   }
 }

@@ -455,9 +455,9 @@ const DropZoneArea = forwardRef<HTMLDivElement, DropZoneAreaProps>(
         {...props}
         aria-label="dropzone"
         className={cn(
-          "flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          context.isDragActive && "animate-pulse bg-black/5",
-          context.isInvalid && "border-destructive",
+          "flex items-center justify-center rounded-md border border-border-primary bg-bg-input px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+          context.isDragActive && "animate-pulse bg-bg-hover",
+          context.isInvalid && "border-error",
           className,
         )}
       >
@@ -486,7 +486,7 @@ const DropzoneDescription = forwardRef<
       ref={ref}
       id={context.rootDescriptionId}
       {...rest}
-      className={cn("pb-1 text-sm text-muted-foreground", className)}
+      className={cn("pb-1 text-sm text-text-secondary", className)}
     />
   );
 });
@@ -581,7 +581,7 @@ const DropzoneFileListItem = forwardRef<
         aria-label="dropzone-file-list-item"
         aria-describedby={isInvalid ? messageId : undefined}
         className={cn(
-          "flex flex-col justify-center gap-2 rounded-md bg-muted/40 px-4 py-2",
+          "flex flex-col justify-center gap-2 rounded-md bg-bg-elevated px-4 py-2",
           className,
         )}
       >
@@ -617,7 +617,7 @@ const DropzoneFileMessage = forwardRef<
       id={context.messageId}
       {...rest}
       className={cn(
-        "h-5 text-[0.8rem] font-medium text-destructive",
+        "h-5 text-[0.8rem] font-medium text-error",
         rest.className,
       )}
     >
@@ -644,7 +644,7 @@ const DropzoneMessage = forwardRef<HTMLParagraphElement, DropzoneMessageProps>(
         id={context.rootMessageId}
         {...rest}
         className={cn(
-          "h-5 text-[0.8rem] font-medium text-destructive",
+          "h-5 text-[0.8rem] font-medium text-error",
           rest.className,
         )}
       >
@@ -747,7 +747,7 @@ const DropzoneTrigger = forwardRef<HTMLLabelElement, DropzoneTriggerProps>(
         ref={ref}
         {...props}
         className={cn(
-          "cursor-pointer rounded-sm bg-secondary px-4 py-2 font-medium ring-offset-background transition-colors focus-within:outline-none hover:bg-secondary/80 has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring has-[input:focus-visible]:ring-offset-2",
+          "cursor-pointer rounded-sm bg-bg-elevated text-text-primary border border-border-primary px-4 py-2 font-medium transition-colors focus-within:outline-none hover:bg-bg-hover has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-border-focus",
           className,
         )}
       >
@@ -796,16 +796,16 @@ const InfiniteProgress = forwardRef<HTMLDivElement, InfiniteProgressProps>(
         aria-valuetext={valueTextMap[props.status]}
         {...props}
         className={cn(
-          "relative h-2 w-full overflow-hidden rounded-full bg-muted",
+          "relative h-2 w-full overflow-hidden rounded-full bg-bg-elevated",
           className,
         )}
       >
         <div
           //   TODO: add proper done transition
           className={cn(
-            "h-full w-full rounded-full bg-primary",
+            "h-full w-full rounded-full bg-pnf-blue",
             done ? "translate-x-0" : "animate-infinite-progress",
-            error && "bg-destructive",
+            error && "bg-error",
           )}
         />
       </div>

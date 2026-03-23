@@ -1,4 +1,6 @@
-export { default as PocketLogo } from "./logo/pocket_logo.svg";
+export { default as PocketLogoWhite } from "./logo/pocket-logo-white.svg";
+export { default as PocketLogoBlack } from "./logo/pocket-logo-black.svg";
+export { default as PocketLogo } from "./logo/pocket-logo-white.svg";
 export { default as SootheLogo } from "./logo/soothe_logo_dark.svg";
 export { default as PlaceholderLogo } from "./logo/placeholder_logo.svg";
 export { default as ChangeDownIcon } from "./icons/dark/change_down.svg";

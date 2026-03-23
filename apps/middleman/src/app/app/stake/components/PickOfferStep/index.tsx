@@ -149,7 +149,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
 
     return (
         <div
-            className="flex flex-col w-[580px] border-x border-b border-[--balck-deviders] p-[33px] rounded-b-[12px] gap-8">
+            className="flex flex-col w-[580px] border-x border-b border-border-primary p-[33px] rounded-b-[12px] gap-8">
             <ActivityHeader
                 onClose={onClose}
                 onBack={onBack}
@@ -163,7 +163,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
 
             {!isLoadingOffers && offers.length === 0 && (
                 <div className="flex items-center justify-center pt-12 pb-6">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         No providers available at this time.
                     </span>
                 </div>
@@ -183,8 +183,8 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                 ))}
 
                 {hasUnavailableOffers && (
-                  <div className="-mb-2 p-[11px_16px] bg-[var(--color-slate-2)] rounded-[8px]">
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                  <div className="-mb-2 p-[11px_16px] bg-[var(--bg-surface)] rounded-[8px]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         Some providers are ineligible for the selected stake amount or are currently unavailable.
                     </span>
                   </div>
@@ -194,7 +194,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
             {hasUnavailableOffers && !isShowingUnavailable && (
                 <span className="flex flex-row items-center gap-3 hover:cursor-pointer" onClick={() => setIsShowingUnavailable(true)}>
                     <CaretIcon />
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         Not Available
                     </span>
                 </span>
@@ -203,7 +203,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
             {hasUnavailableOffers && isShowingUnavailable && (
                 <span className="flex flex-row items-center gap-3 hover:cursor-pointer" onClick={() => setIsShowingUnavailable(false)}>
                     <CaretIcon className="transform rotate-90" />
-                    <span className="text-[14px] text-[var(--color-white-3)]">
+                    <span className="text-[14px] text-[var(--text-tertiary)]">
                         Not Available
                     </span>
                 </span>

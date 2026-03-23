@@ -113,7 +113,7 @@ export function ReviewStep({
   const isError = isErrorNodes || isErrorDuration;
 
   return (
-    <div className="flex flex-col w-[480px] border-x border-b border-[--black-dividers] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         onBack={onBack}
         onClose={onClose}
@@ -121,19 +121,19 @@ export function ReviewStep({
         subtitle="Please review the details of your unstake operation."
       />
 
-      <div className="flex flex-col bg-[var(--color-slate-2)] p-0 rounded-[8px]">
+      <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
         {!errorMessage && (
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+          <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
             Upon clicking Unstake, you will be prompted to sign a transaction with your wallet to finalize the unstake operation.
             {formattedDuration && (
               <>
-                {' '}After approximately <span className="font-mono text-[var(--color-white-1)]">{formattedDuration}</span>, your tokens will be returned to the owner address.
+                {' '}After approximately <span className="font-mono text-[var(--text-primary)]">{formattedDuration}</span>, your tokens will be returned to the owner address.
               </>
             )}
           </span>
         )}
         {errorMessage && (
-          <span className="text-[14px] text-[var(--color-white-3)] p-[11px_16px]">
+          <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
             {errorMessage}
           </span>
         )}
@@ -141,18 +141,18 @@ export function ReviewStep({
 
       <div className="relative flex h-[64px] min-h-[64px] gradient-border-slate">
         <div className="absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between">
-          <span className="text-[20px] text-[var(--color-white-3)]">
+          <span className="text-[20px] text-[var(--text-tertiary)]">
             Unstake
           </span>
           <span className="flex flex-row items-center gap-2">
             {isLoadingNodes ? (
-              <Skeleton className="w-[100px] h-6 bg-gray-700" />
+              <Skeleton className="w-[100px] h-6 bg-bg-elevated" />
             ) : (
               <>
-                <span className="font-mono text-[20px] text-[var(--color-white-1)]">
+                <span className="font-mono text-[20px] text-[var(--text-primary)]">
                   {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
                 </span>
-                <span className="font-mono text-[20px] text-[var(--color-white-3)]">
+                <span className="font-mono text-[20px] text-[var(--text-tertiary)]">
                   $POKT
                 </span>
               </>
@@ -162,8 +162,8 @@ export function ReviewStep({
       </div>
 
       {isError && (
-        <div className="flex flex-col bg-[#f4424257] p-0 rounded-[8px]">
-          <span className="text-[14px] font-medium text-[var(--color-white-1)] p-[11px_16px]">
+        <div className="flex flex-col bg-error-bg p-0 rounded-[8px]">
+          <span className="text-[14px] font-medium text-[var(--text-primary)] p-[11px_16px]">
             Failed to load unstake information.
             <div className="flex gap-2 mt-2">
               {isErrorNodes && (
@@ -181,13 +181,13 @@ export function ReviewStep({
         </div>
       )}
 
-      <div className="flex flex-col p-0 rounded-[8px] border border-[var(--black-dividers)]">
+      <div className="flex flex-col p-0 rounded-[8px] border border-[var(--border-primary)]">
         {/* Owner Address Groups */}
         {ownerAddressGroups.map((group, index) => (
           <React.Fragment key={group.ownerAddress}>
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
+            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
               <div className="flex flex-row items-center gap-2">
-                <span className="text-[14px] text-[var(--color-white-3)]">
+                <span className="text-[14px] text-[var(--text-tertiary)]">
                   Owner Address
                 </span>
                 <QuickInfoPopOverIcon
@@ -196,7 +196,7 @@ export function ReviewStep({
                   url=""
                 />
               </div>
-              <span className="flex flex-row items-center text-[14px] text-[var(--color-white-1)]">
+              <span className="flex flex-row items-center text-[14px] text-[var(--text-primary)]">
                 <AvatarByString string={group.ownerAddress} />
                 <span className="ml-2 font-mono">
                   {getShortAddress(group.ownerAddress, 5)}
@@ -204,43 +204,43 @@ export function ReviewStep({
               </span>
             </div>
 
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 Tokens to Receive
               </span>
               {isLoadingNodes ? (
-                <Skeleton className="w-[100px] h-5 bg-gray-700" />
+                <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
               ) : (
                 <span className="flex flex-row gap-2">
-                  <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                  <span className="font-mono text-[14px] text-[var(--text-primary)]">
                     {toCurrencyFormat(group.totalStake / 1e6, 2, 2)}
                   </span>
-                  <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                  <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                     $POKT
                   </span>
                 </span>
               )}
             </div>
 
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-              <span className="text-[14px] text-[var(--color-white-3)]">
+            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 Nodes
               </span>
-              <span className="text-[14px] text-[var(--color-white-1)]">
+              <span className="text-[14px] text-[var(--text-primary)]">
                 {group.nodes.length}
               </span>
             </div>
 
             {index < ownerAddressGroups.length - 1 && (
-              <div className="h-[8px] bg-[var(--black-1)]" />
+              <div className="h-[8px] bg-bg-root" />
             )}
           </React.Fragment>
         ))}
 
         {/* Node Details Expandable */}
-        <div className="border-t-2 border-[var(--black-dividers)]">
+        <div className="border-t-2 border-[var(--border-primary)]">
           <div
-            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)] hover:cursor-pointer"
+            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] hover:cursor-pointer"
             onClick={() => setIsShowingNodeDetails(!isShowingNodeDetails)}
           >
             <span className="flex flex-row items-center gap-2">
@@ -249,7 +249,7 @@ export function ReviewStep({
               ) : (
                 <CaretSmallIcon />
               )}
-              <span className="text-[14px] text-[var(--color-white-3)]">
+              <span className="text-[14px] text-[var(--text-tertiary)]">
                 Node Details ({selectedNodeAddresses.length} nodes)
               </span>
             </span>
@@ -259,8 +259,8 @@ export function ReviewStep({
             <>
               {isLoadingNodes && (
                 <div className="flex flex-col gap-2 p-4">
-                  <Skeleton className="w-full h-12 bg-gray-700" />
-                  <Skeleton className="w-full h-12 bg-gray-700" />
+                  <Skeleton className="w-full h-12 bg-bg-elevated" />
+                  <Skeleton className="w-full h-12 bg-bg-elevated" />
                 </div>
               )}
 
@@ -269,25 +269,25 @@ export function ReviewStep({
                   {group.nodes.map((node, nodeIndex) => (
                     <div
                       key={node.address}
-                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]"
+                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]"
                     >
                       <div className="flex flex-row items-center gap-2">
                         <CornerIcon />
                         <AvatarByString string={node.address} />
                         <div className="flex flex-col">
-                          <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                          <span className="font-mono text-[14px] text-[var(--text-primary)]">
                             {getShortAddress(node.address, 5)}
                           </span>
-                          <span className="text-[12px] text-[var(--color-white-3)]">
+                          <span className="text-[12px] text-[var(--text-tertiary)]">
                             {node.provider?.name || 'Unknown Provider'}
                           </span>
                         </div>
                       </div>
                       <span className="flex flex-row gap-1">
-                        <span className="font-mono text-[14px] text-[var(--color-white-1)]">
+                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
                           {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                           $POKT
                         </span>
                       </span>
@@ -300,18 +300,18 @@ export function ReviewStep({
         </div>
 
         {/* Total */}
-        <div className="flex flex-row items-center justify-between px-4 py-3 bg-[var(--color-slate-2)]">
-          <span className="text-[14px] font-medium text-[var(--color-white-3)]">
+        <div className="flex flex-row items-center justify-between px-4 py-3 bg-[var(--bg-surface)]">
+          <span className="text-[14px] font-medium text-[var(--text-tertiary)]">
             Total
           </span>
           {isLoadingNodes ? (
-            <Skeleton className="w-[100px] h-5 bg-gray-700" />
+            <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
           ) : (
             <span className="flex flex-row gap-2">
-              <span className="font-mono text-[14px] font-medium text-[var(--color-white-1)]">
+              <span className="font-mono text-[14px] font-medium text-[var(--text-primary)]">
                 {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
               </span>
-              <span className="font-mono text-[14px] text-[var(--color-white-3)]">
+              <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
                 $POKT
               </span>
             </span>

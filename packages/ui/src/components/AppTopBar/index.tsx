@@ -1,5 +1,6 @@
 import {ComponentType} from "react";
 import {PlaceholderLogo} from "@igniter/ui/assets";
+import { PocketBrandLogo } from "../PocketBrandLogo";
 
 
 export interface AppTopBarProps {
@@ -12,7 +13,7 @@ export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppT
   return (
     <header
       className={
-        "px-3 lg:px-6 sticky z-[50] border-b border-(--border) top-0 flex flex-row items-center justify-between bg-[color:var(--color-black-1)]"
+        "px-3 lg:px-6 sticky z-[50] border-b border-border-primary top-0 flex flex-row items-center justify-between bg-bg-surface shrink-0"
       }
     >
       <div
@@ -21,7 +22,7 @@ export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppT
         }
       >
         <div>
-          { LogoIcon ? <LogoIcon /> : <PlaceholderLogo /> }
+          { LogoIcon ? <LogoIcon /> : <PocketBrandLogo /> }
         </div>
         <div className="w-full md:w-auto flex flex-row items-center gap-10 justify-end">
           {children}

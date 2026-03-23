@@ -9,13 +9,13 @@ export default function WalletPickerItem({onSelect, ...providerInfo}: Readonly<W
     return (
         <div
           onClick={() => onSelect?.(providerInfo)}
-          className="w-full h-[40px] flex flex-row items-center justify-between gap-2 rounded-lg bg-transparent transition-all duration-200 ease-in-out px-2 hover:bg-[var(--sidebar-accent)] cursor-pointer -ml-2 group"
+          className="w-full h-[40px] flex flex-row items-center justify-between gap-2 rounded-lg bg-transparent transition-all duration-200 ease-in-out px-2 hover:bg-bg-hover cursor-pointer -ml-2 group"
         >
             <div className="flex gap-4 items-center">
                 {providerInfo.icon && (
                   <img src={providerInfo.icon} alt={providerInfo.name} className="h-6 w-6" />
                 )}
-                <span className="font-[var(--font-sans)] text-[14px] text-[var(--color-white-1)]">
+                <span className="text-[14px] text-text-primary">
                     {providerInfo.name}
                 </span>
             </div>

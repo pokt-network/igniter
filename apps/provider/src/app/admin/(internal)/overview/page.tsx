@@ -85,7 +85,7 @@ async function Rewards() {
             <p>
               To see your rewards, please configure your addresses in{' '}
               <Link
-                className={'!text-[color:var(--color-blue-1)] hover:!underline'}
+                className={'!text-pnf-blue hover:!underline'}
                 href={'/admin/groups'}
               >
                 Addresses Group

@@ -105,7 +105,7 @@ export default function ServicesTable() {
           service={updateService}
         />
       )}
-      <div className="py-2 overflow-y-scroll scrollbar-hidden">
+      <div className="py-2">
         {content}
       </div>
       {serviceToDelete && (

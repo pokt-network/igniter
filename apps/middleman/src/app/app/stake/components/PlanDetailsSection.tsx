@@ -40,13 +40,13 @@ export function PlanDetailsSection({
 }: PlanDetailsSectionProps) {
   return (
     <>
-      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--black-dividers)]">
-        <span className="text-[14px] text-[var(--color-white-3)]">Client Share</span>
-        <span className="text-[14px] font-mono text-[var(--color-white-1)] mt-[4px]">
+      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+        <span className="text-[14px] text-[var(--text-tertiary)]">Client Share</span>
+        <span className="text-[14px] font-mono text-[var(--text-primary)] mt-[4px]">
           {shares.clientShare.toFixed(1)}%
         </span>
       </span>
-      <div className="flex flex-row items-center justify-between pl-4 py-3 border-b border-[var(--black-dividers)] text-[14px] w-full [&_p]:text-[14px] [&_p]:font-normal [&_section]:w-full [&_section]:mr-0 ">
+      <div className="flex flex-row items-center justify-between pl-4 py-3 border-b border-[var(--border-primary)] text-[14px] w-full [&_p]:text-[14px] [&_p]:font-normal [&_section]:w-full [&_section]:mr-0 ">
         <ServicesPopover
           addressGroupName={addressGroupName}
           services={services}

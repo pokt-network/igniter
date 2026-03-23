@@ -98,13 +98,13 @@ export function DetailResolver<Item extends ItemBase>({
           >
             {items.length > 1 && (
               <Button variant="icon" className="h-[30px]" onClick={back}>
-                <ArrowBackIcon className="text-[color:var(--foreground)]" />
+                <ArrowBackIcon className="text-text-tertiary hover:text-text-primary" />
               </Button>
             )}
 
             <DrawerClose asChild>
               <Button variant="icon" className="h-[30px]">
-                <XIcon className="text-[color:var(--foreground)]" />
+                <XIcon className="text-text-tertiary hover:text-text-primary" />
               </Button>
             </DrawerClose>
           </div>

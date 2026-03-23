@@ -73,8 +73,8 @@ export function SelectProviderStep({
   const getStatusBadge = (status: ProviderStatus) => {
     const statusColors: Record<ProviderStatus, string> = {
       [ProviderStatus.Healthy]: 'bg-green-500/20 text-green-400',
-      [ProviderStatus.Unhealthy]: 'bg-red-500/20 text-red-400',
-      [ProviderStatus.Unknown]: 'bg-gray-500/20 text-gray-400',
+      [ProviderStatus.Unhealthy]: 'bg-red-500/20 text-error',
+      [ProviderStatus.Unknown]: 'bg-gray-500/20 text-text-tertiary',
       [ProviderStatus.Unreachable]: 'bg-yellow-500/20 text-yellow-400',
     }
 
@@ -88,7 +88,7 @@ export function SelectProviderStep({
   }
 
   return (
-    <div className="flex relative flex-col w-[580px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex relative flex-col w-[580px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
       <ActivityHeader
         title="Import Suppliers"
         subtitle="Select a provider to import your staked suppliers from."
@@ -99,19 +99,19 @@ export function SelectProviderStep({
       <div className="flex flex-col gap-4 h-full overflow-y-auto max-h-[400px]">
         {loading && (
           <div className="flex items-center justify-center py-8">
-            <p className="text-sm text-gray-400">Loading providers...</p>
+            <p className="text-sm text-text-tertiary">Loading providers...</p>
           </div>
         )}
 
         {error && (
           <div className="flex items-center justify-center py-8">
-            <p className="text-sm text-red-400">{error}</p>
+            <p className="text-sm text-error">{error}</p>
           </div>
         )}
 
         {!loading && !error && providers.length === 0 && (
           <div className="flex items-center justify-center py-8">
-            <p className="text-sm text-gray-400">No providers available.</p>
+            <p className="text-sm text-text-tertiary">No providers available.</p>
           </div>
         )}
 
@@ -122,14 +122,14 @@ export function SelectProviderStep({
               key={provider.identity}
               className={`w-full cursor-pointer select-none flex flex-row items-center gap-3 py-3 pl-4 pr-4 bg-(--input-bg) border rounded-lg transition-colors ${
                 selectedProvider?.identity === provider.identity
-                  ? 'border-amber-100'
-                  : 'border-transparent hover:border-gray-600'
+                  ? 'border-border-focus'
+                  : 'border-transparent hover:border-border-subtle'
               }`}
               onClick={() => handleProviderClick(provider)}
             >
               <div className="flex flex-col flex-1 gap-1">
                 <p className="text-sm font-medium">{provider.name}</p>
-                <p className="text-xs text-gray-400 font-mono">
+                <p className="text-xs text-text-tertiary font-mono">
                   {provider.identity.substring(0, 16)}...
                 </p>
               </div>
@@ -141,7 +141,7 @@ export function SelectProviderStep({
           ))}
       </div>
 
-      <div className="text-xs text-gray-400">
+      <div className="text-xs text-text-tertiary">
         <p>
           Importing will allow you to manage the suppliers you have staked with the selected provider here.
           The provider needs to have your suppliers loaded in their provider-side database.

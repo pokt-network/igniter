@@ -1,9 +1,9 @@
 import type {Metadata} from "next";
-import {Jost, Overpass_Mono} from "next/font/google";
+import {Rubik, Overpass_Mono} from "next/font/google";
 
-export const jost = Jost({
-    variable: "--font-jost",
-    weight: ["400", "600", "500", "700"],
+export const rubik = Rubik({
+    variable: "--font-rubik",
+    weight: ["300", "400", "500", "600", "700"],
     style: ["normal", "italic"],
     subsets: ["latin"],
     display: "swap",

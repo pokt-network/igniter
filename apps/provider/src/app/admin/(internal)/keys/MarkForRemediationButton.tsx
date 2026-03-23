@@ -55,11 +55,11 @@ export default function MarkForRemediationButton() {
         )}
       >
         {error && (
-          <div className="px-4 py-2 text-[12px] text-red-400 bg-[color:var(--color-black-1)]">
+          <div className="px-4 py-2 text-[12px] text-red-400 bg-bg-root">
             {error}
           </div>
         )}
-        <div className="py-3 text-[14px] text-[var(--color-white-3)]">
+        <div className="py-3 text-[14px] text-text-secondary">
           This will set all keys with state <span className="font-semibold">AttentionNeeded</span> or <span className="font-semibold">RemediationFailed</span> back to <span className="font-semibold">Staked</span>. The system will re-evaluate and try to remediate where possible.
         </div>
       </ConfirmationDialog>

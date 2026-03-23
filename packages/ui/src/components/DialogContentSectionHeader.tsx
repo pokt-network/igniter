@@ -4,7 +4,7 @@ interface DialogContentSectionHeaderProps {
 
 export default function DialogContentSectionHeader({text}: Readonly<DialogContentSectionHeaderProps>) {
     return (
-        <span className="font-sans text-[10px] text-(--color-white-3) uppercase">
+        <span className="font-sans text-[10px] text-text-tertiary uppercase">
           {text}
         </span>
     );

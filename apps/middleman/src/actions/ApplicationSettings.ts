@@ -62,21 +62,12 @@ const getAppSettings = unstable_cache(
 )
 
 export async function GetAppName() {
-  let appSettings = await getAppSettings()
-
-  if (!appSettings) {
-    appSettings = await fetchApplicationSettings()
-  }
-
+  const appSettings = await getAppSettings()
   return appSettings?.name || 'Stake Igniter'
 }
 
 export async function getApplicationSettings() {
-  const appSettings = await getAppSettings()
-
-  if (appSettings) return appSettings
-
-  return await fetchApplicationSettings()
+  return await getAppSettings()
 }
 
 function ValidateWithSchema(schema: z.ZodSchema, data: Partial<ApplicationSettings>) {

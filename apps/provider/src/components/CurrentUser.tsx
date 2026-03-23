@@ -2,7 +2,7 @@
 
 import React from "react";
 import {getCsrfToken, signIn, useSession, signOut} from "next-auth/react";
-import Link from 'next/link';
+
 import { usePathname } from "next/navigation";
 import type {SiwpMessage} from "@poktscan/vault-siwp";
 import UserMenu from "@igniter/ui/components/UserMenu";
@@ -46,12 +46,21 @@ export default function CurrentUser() {
         return;
       }
 
-      await signIn("siwp", {
+      // Use redirect: false so we can do a hard navigation via
+      // window.location.  A soft (client-side) redirect would keep the
+      // landing-page layout mounted and the sidebar would not appear
+      // until the user manually refreshes.
+      const result = await signIn("siwp", {
         message: JSON.stringify(message),
         signature,
         publicKey,
-        redirectTo: '/admin',
+        redirect: false,
       });
+
+      if (result?.ok) {
+        window.location.href = '/admin';
+        return;
+      }
     } catch (error) {
       if ((error as {message: string})?.message === "The user rejected the request.") {
         clearConnectedIdentity()
@@ -72,7 +81,7 @@ export default function CurrentUser() {
   if (status === "loading") {
     return (
         <div
-            className="flex items-center justify-center w-[150px] h-9 bg-[color:var(--secondary)] rounded-md opacity-50"
+            className="flex items-center justify-center w-[150px] h-9 bg-bg-elevated rounded-md opacity-50"
         >
           <LoaderIcon className="animate-spin" />
         </div>
@@ -83,22 +92,22 @@ export default function CurrentUser() {
     return (
         <UserMenu user={data.user}>
           {!isLanding && (
-              <Link href={Routes.root}>
+              <a href={Routes.root}>
                 <DropdownMenuItem className="max-h-[38px]">
               <span>
                 Go to portal
               </span>
                 </DropdownMenuItem>
-              </Link>
+              </a>
           )}
           {!isApp && (
-              <Link href={Routes.appRoot}>
+              <a href={Routes.appRoot}>
                 <DropdownMenuItem className="max-h-[38px]">
               <span>
                 Go to App
               </span>
                 </DropdownMenuItem>
-              </Link>
+              </a>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => signOut()}>Sign out</DropdownMenuItem>

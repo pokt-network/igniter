@@ -143,10 +143,10 @@ pokt1abc123def456ghi789jkl012mno345pqr678stu
 pokt1xyz789abc123def456ghi789jkl012mno345pqr
 pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                       {...field}
-                      className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-[color:--divider] bg-[color:--background] placeholder:text-[color:--secondary]"
+                      className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-border-primary bg-bg-root placeholder:text-text-tertiary"
                     />
                   </FormControl>
-                  <FormMessage className={cn(!error?.message ? 'text-xs! text-[color:var(--color-white-3)]' : null)}>
+                  <FormMessage className={cn(!error?.message ? 'text-xs! text-text-secondary' : null)}>
                     {error?.message ? error.message : (
                       <>
                         Used by Delegators to fetch your rewards. These must match the revenue‑share address(es) you provided to suppliers to receive rewards in the addresses group.

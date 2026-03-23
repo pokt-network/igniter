@@ -13,7 +13,7 @@ export default function TransactionsTable() {
     const { data, isLoading, isError, refetch } = useQuery({
         queryKey: ["user-transactions"],
         queryFn: GetUserTransactions,
-        refetchInterval: 5000,
+        refetchInterval: 15000,
     });
     const {items, updateItem} = useDetailContext()
 

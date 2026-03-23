@@ -26,7 +26,7 @@ import type { Region } from "@igniter/db/provider/schema";
 import { CreateRegion, UpdateRegion } from "@/actions/Regions";
 
 const Code = ({ children }: { children: React.ReactNode }) => (
-  <code className="rounded-sm border border-[color:var(--color-white-4)] bg-[var(--color-black-2)] px-1 py-0.5 font-mono text-[11px] text-[var(--color-slate-12)]">
+  <code className="rounded-sm border border-border-subtle bg-bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">
     {children}
   </code>
 );
@@ -120,7 +120,7 @@ export function AddOrUpdateRegionDialog({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-[var(--color-slate-2)] !w-[500px] !min-w-none !max-w-none"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none"
         hideClose
       >
         <DialogTitle asChild>
@@ -137,7 +137,7 @@ export function AddOrUpdateRegionDialog({
         )}
         {error && (
             <div
-                className={'flex flex-col items-center bg-[color:var(--color-black-1)]'}
+                className={'flex flex-col items-center bg-bg-root'}
             >
               <div className={'flex items-center'}>
                 <div className={'flex flex-row items-center p-1'}>
@@ -225,7 +225,7 @@ export function AddOrUpdateRegionDialog({
 
         {isCancelling && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
-            <div className="bg-[var(--color-slate-2)] p-4 rounded-lg w-[300px]">
+            <div className="bg-bg-elevated p-4 rounded-lg w-[300px]">
               <h3 className="text-lg font-medium mb-2">Discard changes?</h3>
               <p className="mb-4">
                 You have unsaved changes. Are you sure you want to discard them?

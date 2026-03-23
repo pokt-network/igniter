@@ -1,35 +1,11 @@
 import type { Metadata } from 'next'
-import Hero from "./components/Hero";
-import About from "./components/About";
-import EmptySpace from "./components/EmptySpace";
-import { GetAppName } from '@/actions/ApplicationSettings'
-import Header from '@/app/(landing)/components/Header'
-import Footer from '@/app/(landing)/components/Footer'
-import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
+import LandingPage from './components/LandingPage'
 
-export async function generateMetadata(): Promise<Metadata> {
-  const appName = await GetAppName()
-
-  return {
-    title: `Home - ${appName}`,
-    description: `Light up your earnings with ${appName}`,
-  }
+export const metadata: Metadata = {
+  title: 'Igniter - Pocket Network Supplier Staking',
+  description: 'Non-custodial staking for $POKT — stake across multiple providers without giving up custody of your tokens.',
 }
 
 export default function Landing() {
-    return (
-      <div className={'w-[100dvw] bg-background absolute top-[-72px] left-0 min-w-[100dvw] z-[50]'}>
-        <OverrideSidebar>
-          <div className="flex flex-row justify-center min-h-screen bg-(--black-1)">
-            <div className="h-[100dvh] w-[958px] border-x border-(--black-dividers) overflow-y-scroll scrollbar-hidden">
-              <Header />
-              <Hero />
-              <About />
-              <EmptySpace />
-              <Footer />
-            </div>
-          </div>
-        </OverrideSidebar>
-      </div>
-    );
+    return <LandingPage />;
 }

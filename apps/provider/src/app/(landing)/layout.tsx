@@ -30,15 +30,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${overpass_mono.variable} ${jost.variable} overflow-hidden`}
+      className={`${overpass_mono.variable} ${jost.variable} overflow-x-hidden`}
       suppressHydrationWarning
     >
     <body>
     <SessionProvider>
       <ThemeProvider
-        attribute="class"
+        attribute="data-theme"
         defaultTheme="dark"
-        enableSystem
+        enableSystem={false}
         disableTransitionOnChange
       >
         <ApplicationSettingsProvider>

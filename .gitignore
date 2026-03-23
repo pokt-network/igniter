@@ -63,3 +63,13 @@ tilt/tools/governance/providers.json
 
 # planing from gsd
 .planning
+
+# Brand build artifacts
+PNF-BRAND-BUILD-BRIEF.md
+pocket-staking-component-styleguide.html
+igniter-landing-build-brief.md
+igniter-landing.html
+.branding/
+
+# Claude Code local dev helpers
+.claude/start-middleman.js

@@ -308,7 +308,7 @@ export function AddOrUpdateServiceDialog({
     >
       <DialogContent
         onInteractOutside={(event) => event.preventDefault()}
-        className={`gap-0 p-0 rounded-lg bg-[var(--color-slate-2)] ${serviceOnChain ? '!w-[900px]' : '!w-[350px]'} !min-w-none !max-w-none h-[550px]`}
+        className={`gap-0 p-0 rounded-lg bg-bg-elevated ${serviceOnChain ? '!w-[900px]' : '!w-[350px]'} !min-w-none !max-w-none h-[550px]`}
         hideClose
       >
         <DialogTitle asChild>
@@ -354,31 +354,31 @@ export function AddOrUpdateServiceDialog({
                   )}
 
                   {!serviceOnChain && hasLoadServiceError && (
-                    <div className="flex justify-center items-center bg-[var(--color-slate-3)] p-3 rounded-md">
+                    <div className="flex justify-center items-center bg-bg-input p-3 rounded-md">
                       There was an error loading the service. Does it exist?
                     </div>
                   )}
 
                   {serviceExists && (
-                    <div className="flex justify-center items-center bg-[var(--color-slate-3)] p-3 rounded-md">
+                    <div className="flex justify-center items-center bg-bg-input p-3 rounded-md">
                       This service ID is already registered in your local database. You can edit it from the Services list.
                     </div>
                   )}
 
                   {serviceOnChain && (
                     <>
-                      <div className="bg-[var(--color-slate-3)] p-3 rounded-md">
+                      <div className="bg-bg-input p-3 rounded-md">
                         <div className="flex flex-col gap-2">
                           <div>
-                            <span className="text-[var(--color-slate-9)]">Name:</span>{" "}
+                            <span className="text-text-tertiary">Name:</span>{" "}
                             <span>{serviceOnChain.name}</span>
                           </div>
                           <div>
-                            <span className="text-[var(--color-slate-9)]">Owner:</span>{" "}
+                            <span className="text-text-tertiary">Owner:</span>{" "}
                             <span>{getShortAddress(serviceOnChain.ownerAddress)}</span>
                           </div>
                           <div>
-                            <span className="text-[var(--color-slate-9)]">Compute Units:</span>{" "}
+                            <span className="text-text-tertiary">Compute Units:</span>{" "}
                             <span>{serviceOnChain.computeUnits}</span>
                           </div>
                         </div>
@@ -392,7 +392,7 @@ export function AddOrUpdateServiceDialog({
                     <div className="flex flex-col gap-4">
                       <div className="flex justify-end items-center px-1">
                         <FormLabel
-                          className="text-[var(--color-slate-9)] cursor-pointer hover:underline"
+                          className="text-text-tertiary cursor-pointer hover:underline"
                           onClick={addEndpoint}
                         >
                           Add Protocol
@@ -403,7 +403,7 @@ export function AddOrUpdateServiceDialog({
                         <div key={index} className="grid gap-2 p-3 border border-[var(--slate-dividers)] rounded-md">
                           <div className="flex justify-end px-1">
                             <FormLabel
-                              className={`text-[var(--color-slate-9)] ${endpoints.length > 1 && 'hover:underline cursor-pointer'} ${endpoints.length === 1 && 'opacity-50'}`}
+                              className={`text-text-tertiary ${endpoints.length > 1 && 'hover:underline cursor-pointer'} ${endpoints.length === 1 && 'opacity-50'}`}
                               onClick={() => removeEndpoint(index)}
                             >
                               Remove

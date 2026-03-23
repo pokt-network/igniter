@@ -12,7 +12,7 @@ export default function Amount({value, maxFractionDigits = 2, minimumFractionDig
   return (
     <span className={'text-[inherit] font-mono'}>
       {toCurrencyFormat(value, maxFractionDigits, minimumFractionDigits)}{' '}
-      <span className={'text-[color:var(--muted-foreground)]'}>
+      <span className={'text-text-tertiary'}>
         $POKT
       </span>
     </span>
