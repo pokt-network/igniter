@@ -26,7 +26,7 @@ enum UnstakeActivitySteps {
 }
 
 export default function UnstakePage() {
-  const { connectedIdentity, connectedIdentities, isConnected } = useWalletConnection();
+  const { connectedIdentities, isConnected } = useWalletConnection();
   const [step, setStep] = useState<UnstakeActivitySteps>(UnstakeActivitySteps.Information);
   const [selectedOwnerAddress, setSelectedOwnerAddress] = useState<string>('');
   const [selectedNodeAddresses, setSelectedNodeAddresses] = useState<string[]>([]);
@@ -164,7 +164,7 @@ export default function UnstakePage() {
           {step === UnstakeActivitySteps.Review && (
             <ReviewStep
               selectedNodeAddresses={selectedNodeAddresses}
-              ownerAddress={connectedIdentity!}
+              ownerAddress={selectedOwnerAddress}
               errorMessage={unstakingErrorMessage}
               onUnstakeCompleted={(result, transaction) => {
                 if (allStagesSucceeded(result)) {

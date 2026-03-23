@@ -14,6 +14,7 @@ import { getLatestBlock } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { getValidTime, Time } from '../../lib/dates'
 import { SelectedTimeProvider } from './TimeSelector'
+import { batchArray } from '../../lib/batch'
 
 interface RewardsByAddressesProps {
   addresses: Array<string>
@@ -44,21 +45,41 @@ export default async function ServerRewardsByAddresses({
       chartType = cookiesAwaited?.get(chartTypeCookieKey)?.value === 'bar' ? 'bar' : 'line'
 
       const latestBlock = await getLatestBlock(graphQlUrl)
+      const client = getServerApolloClient(graphQlUrl)
+      const batches = batchArray(supplierAddresses)
 
+      // Use first batch's variables as the canonical variables for client-side refresh
       variables = rewardsByAddressAndTimeGroupByDateVariables(
         addresses,
-        supplierAddresses,
+        batches[0] ?? [],
         latestBlock.timestamp,
         timeSelected,
       )
 
-      const response = await getServerApolloClient(graphQlUrl)
-        .query({
-          query: rewardsByAddressAndTimeGroupByDateDocument,
-          variables,
-        })
+      const results = await Promise.all(
+        batches.map((batch) =>
+          client.query({
+            query: rewardsByAddressAndTimeGroupByDateDocument,
+            variables: rewardsByAddressAndTimeGroupByDateVariables(
+              addresses,
+              batch,
+              latestBlock.timestamp,
+              timeSelected,
+            ),
+          }),
+        ),
+      )
 
-      data = response.data
+      // Aggregate: concatenate the rewards JSON arrays from each batch
+      data = results.reduce(
+        (acc, { data: d }) => {
+          if (!acc) return d
+          const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
+          const dRewards = Array.isArray(d.rewards) ? d.rewards : []
+          return { ...d, rewards: [...accRewards, ...dRewards] }
+        },
+        null as typeof results[0]['data'] | null,
+      )
     } catch {
       error = true
     }

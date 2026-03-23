@@ -896,7 +896,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     `
     const supplierStatsQuery = `
       query SupplierStatsByDomains($domains: [String!]!) {
-        data: getSupplierStatsByDomains(domains: $domains)
+        data: getSupplierStatsByDomains(pDomains: $domains)
       }
     `
 

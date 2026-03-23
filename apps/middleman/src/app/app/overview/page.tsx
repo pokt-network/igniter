@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { NodeWithDetails } from '@igniter/db/src/middleman/schema'
 import React, { Suspense } from 'react';
 import { GetOwnerAddresses, GetUserNodes } from '@/actions/Nodes'
 import ApolloWrapper from '@igniter/ui/graphql/client'
@@ -10,6 +11,7 @@ import { getApplicationSettings, GetAppName } from '@/actions/ApplicationSetting
 import InitializeHeightContext from '@igniter/ui/context/Height/InitializeContext'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
+import ProviderBreakdown from './ProviderBreakdown'
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +85,8 @@ async function Rewards() {
     }
   }
 
-  const supplierAddresses = userNodes.map(n => n.address)
+  const supplierAddresses = userNodes.map((n: NodeWithDetails) => n.address)
+  const providerCount = new Set(userNodes.map((n: NodeWithDetails) => n.providerId).filter(Boolean)).size
 
   return (
     <ApolloWrapper url={graphqlUrl}>
@@ -105,6 +108,8 @@ async function Rewards() {
           </Suspense>
         </div>
 
+        <ProviderBreakdown providerCount={providerCount} />
+
         <Suspense
           key={ownerAddresses.join(',')}
           fallback={
@@ -122,3 +127,4 @@ async function Rewards() {
     </ApolloWrapper>
   )
 }
+

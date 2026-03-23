@@ -60,6 +60,9 @@ export interface DataTableProps<TData extends object, TValue> {
   csvFilename?: string
   refetch?: () => void,
   columnVisibility?: Record<string, boolean>
+  /** Column keys to search across with the global search input */
+  searchableColumns?: (keyof TData)[]
+  searchPlaceholder?: string
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -73,6 +76,8 @@ export default function DataTable<TData extends object, TValue>({
   refetch,
   csvFilename,
   columnVisibility,
+  searchableColumns,
+  searchPlaceholder = 'Search...',
 }: DataTableProps<TData, TValue>) {
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
@@ -82,9 +87,33 @@ export default function DataTable<TData extends object, TValue>({
       desc: defaultSort.direction === "desc",
     }] : []
   );
+
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    filters.flatMap((filterGroup) =>
+      filterGroup.items.flat()
+        .filter((f) => f.isDefault && f.value !== '')
+        .map((f) => ({ id: String(f.column), value: f.value }))
+    )
   );
+  const [globalFilter, setGlobalFilter] = React.useState('')
+  const [searchInput, setSearchInput] = React.useState('')
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const globalFilterFn = React.useMemo(() => {
+    if (!searchableColumns?.length) return undefined
+    return (row: any, _columnId: string, filterValue: string) => {
+      if (!filterValue) return true
+      const q = filterValue.toLowerCase()
+      return searchableColumns.some((col) => {
+        const val = row.getValue(String(col))
+        if (val == null) return false
+        if (typeof val === 'object' && 'name' in val) {
+          return String(val.name).toLowerCase().includes(q)
+        }
+        return String(val).toLowerCase().includes(q)
+      })
+    }
+  }, [searchableColumns])
 
   const table = useReactTable({
     data,
@@ -95,6 +124,8 @@ export default function DataTable<TData extends object, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn,
     autoResetPageIndex: true,
     initialState: {
       pagination: {
@@ -106,6 +137,7 @@ export default function DataTable<TData extends object, TValue>({
     state: {
       columnFilters,
       sorting,
+      globalFilter,
     },
   });
 
@@ -174,8 +206,23 @@ export default function DataTable<TData extends object, TValue>({
 
   return (
     <div>
-      <div className="flex items-center justify-end space-x-2 pb-6">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-6">
+        {searchableColumns?.length ? (
+          <input
+            type="text"
+            placeholder={searchPlaceholder}
+            value={searchInput}
+            onChange={(e) => {
+              const value = e.target.value
+              setSearchInput(value)
+              if (debounceRef.current) clearTimeout(debounceRef.current)
+              debounceRef.current = setTimeout(() => setGlobalFilter(value), 300)
+            }}
+            disabled={isLoading || isError}
+            className="h-9 w-full sm:max-w-sm md:max-w-md rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[color:--color-blue-1] disabled:opacity-50"
+          />
+        ) : <div />}
+        <div className="flex items-center gap-2 flex-wrap">
           {csvFilename && (
             <ExportButton
               columns={columns}

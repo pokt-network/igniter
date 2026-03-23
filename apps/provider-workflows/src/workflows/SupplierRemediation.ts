@@ -42,7 +42,7 @@ export interface SupplierRemediationInput {
 export async function SupplierRemediation(input: SupplierRemediationInput): Promise<{ height: number, minId: number, maxId: number }> {
   const { getLatestBlock, getKeysMinAndMax } =
     proxyActivities<ReturnType<typeof providerActivities>>({
-      startToCloseTimeout: '120s',
+      startToCloseTimeout: '390s',
       retry: {
         maximumAttempts: 3,
       },

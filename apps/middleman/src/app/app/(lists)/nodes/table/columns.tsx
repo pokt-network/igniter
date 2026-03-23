@@ -219,7 +219,6 @@ export const filters: FilterGroup<NodeDetails>[] = [
           label: "All Nodes",
           value: "",
           column: "status",
-          isDefault: true,
         },
         {
           label: "Staked",
@@ -231,7 +230,11 @@ export const filters: FilterGroup<NodeDetails>[] = [
           label: "Unstaking",
           value: "unstaking",
           column: "status",
-          isDefault: true,
+        },
+        {
+          label: "Unstaked",
+          value: "unstaked",
+          column: "status",
         },
       ],
     ],
@@ -258,6 +261,21 @@ export const sorts: SortOption<NodeDetails>[][] = [
       column: "height",
       direction: "desc",
       isDefault: true,
+    },
+    {
+      label: "Stake Amount",
+      column: "stakeAmount",
+      direction: "desc",
+    },
+    {
+      label: "Balance",
+      column: "balance",
+      direction: "desc",
+    },
+    {
+      label: "Created At",
+      column: "createdAt",
+      direction: "desc",
     },
   ],
 ];

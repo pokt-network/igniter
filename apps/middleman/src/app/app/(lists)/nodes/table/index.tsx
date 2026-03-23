@@ -101,6 +101,8 @@ export default function NodesTable() {
       isError={isError}
       refetch={refetch}
       csvFilename={'nodes'}
+      searchableColumns={['address', 'ownerAddress', 'provider']}
+      searchPlaceholder="Search by address or provider..."
     />
   )
 }
