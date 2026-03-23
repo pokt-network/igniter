@@ -378,7 +378,13 @@ export class PocketBlockchain {
       if (explicitSequence != null) {
         // Use explicit sequence to avoid sequence mismatch on retry
         this.logger.info({ signer, explicitSequence }, 'stakeSupplier: Using explicit sequence for signing')
-        const gasEstimation = await signingClient.simulate(signer, [msg], '')
+        let gasEstimation: number
+        try {
+          gasEstimation = await signingClient.simulate(signer, [msg], '')
+        } catch (simErr: any) {
+          this.logger.warn({ signer, error: simErr?.message ? simErr.message : simErr }, 'stakeSupplier: simulate failed in explicit-sequence path, using fallback gas estimate')
+          gasEstimation = 350_000
+        }
         const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
         const { accountNumber } = await signingClient.getSequence(signer)
         const chainId = await signingClient.getChainId()

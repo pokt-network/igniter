@@ -87,18 +87,17 @@ export default function DataTable<TData extends object, TValue>({
       desc: defaultSort.direction === "desc",
     }] : []
   );
-  const initialFilters = React.useMemo(() => {
-    return filters.flatMap((filterGroup) =>
+
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    filters.flatMap((filterGroup) =>
       filterGroup.items.flat()
         .filter((f) => f.isDefault && f.value !== '')
         .map((f) => ({ id: String(f.column), value: f.value }))
     )
-  }, [])
-
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    initialFilters
   );
   const [globalFilter, setGlobalFilter] = React.useState('')
+  const [searchInput, setSearchInput] = React.useState('')
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const globalFilterFn = React.useMemo(() => {
     if (!searchableColumns?.length) return undefined
@@ -212,8 +211,13 @@ export default function DataTable<TData extends object, TValue>({
           <input
             type="text"
             placeholder={searchPlaceholder}
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            value={searchInput}
+            onChange={(e) => {
+              const value = e.target.value
+              setSearchInput(value)
+              if (debounceRef.current) clearTimeout(debounceRef.current)
+              debounceRef.current = setTimeout(() => setGlobalFilter(value), 300)
+            }}
             disabled={isLoading || isError}
             className="h-9 w-full sm:max-w-sm md:max-w-md rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[color:--color-blue-1] disabled:opacity-50"
           />

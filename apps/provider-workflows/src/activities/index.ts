@@ -474,6 +474,14 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           code: txResult.code,
           message: txResult.message,
         })
+        // If the retry also fails with a sequence mismatch, throw so Temporal can re-attempt
+        // with a fresh sequence fetch. This handles cases where the sequence advances by 2+
+        // between attempts (e.g., concurrent remediation activities for the same owner).
+        if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
+          throw ApplicationFailure.retryable(
+            `remediateSupplier: Sequence mismatch persisted after retry for ${params.address}: ${txResult.message}`,
+          )
+        }
       } else {
         log.error('remediateSupplier: Could not parse expected sequence from error message, skipping retry', {
           address: params.address,

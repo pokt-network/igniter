@@ -1,5 +1,6 @@
 'use server'
 
+import type { NodeWithDetails } from '@igniter/db/middleman/schema'
 import { getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
 import {getCurrentUserIdentity} from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
@@ -86,15 +87,15 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
     }
   }
 
-  // Group nodes by provider
-  const providerGroups = new Map<string, { name: string; nodes: typeof userNodes }>()
+  // Group nodes by provider, skipping nodes without a provider
+  const providerGroups = new Map<string, { name: string; nodes: NodeWithDetails[] }>()
   for (const node of userNodes) {
-    const id = node.providerId ?? '__imported__'
-    const name = node.provider?.name ?? 'Imported Node'
-    let group = providerGroups.get(id)
+    if (!node.providerId) continue
+    const name = node.provider?.name ?? node.providerId
+    let group = providerGroups.get(node.providerId)
     if (!group) {
       group = { name, nodes: [] }
-      providerGroups.set(id, group)
+      providerGroups.set(node.providerId, group)
     }
     group.nodes.push(node)
   }
@@ -114,7 +115,7 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
 
   const results = await Promise.allSettled(
     providerEntries.map(async ([, group]) => {
-      const supplierAddresses = group.nodes.map((n) => n.address)
+      const supplierAddresses: Array<string> = group.nodes.map((n) => n.address)
       const batches = batchArray(supplierAddresses)
 
       const batchResults = await Promise.all(

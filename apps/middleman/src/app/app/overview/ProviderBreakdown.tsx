@@ -4,7 +4,7 @@ import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
 import { Download } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import React, { useCallback, useMemo, useState } from 'react'
-import { GetProviderBreakdown, GetProviderCount, type ProviderBreakdownData } from '@/actions/Nodes'
+import { GetProviderBreakdown, type ProviderBreakdownData } from '@/actions/Nodes'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
@@ -47,17 +47,12 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
-export default function ProviderBreakdown() {
-  const { data: providerCount } = useQuery({
-    queryKey: ['providerCount'],
-    queryFn: GetProviderCount,
-  })
-
+export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
   const { data: providers, isLoading, isError, refetch } = useQuery({
     queryKey: ['providerBreakdown'],
     queryFn: GetProviderBreakdown,
     refetchInterval: 60000,
-    enabled: (providerCount ?? 0) > 1,
+    enabled: providerCount > 1,
   })
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')
@@ -106,7 +101,7 @@ export default function ProviderBreakdown() {
     [sortedProviders, rewardsPeriod],
   )
 
-  if ((providerCount ?? 0) <= 1) return null
+  if (providerCount <= 1) return null
 
   if (isLoading) {
     return (
