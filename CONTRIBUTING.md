@@ -15,7 +15,7 @@ igniter/
 ├── apps/           # Provider (operator UI) and Middleman (delegator UI), plus their Temporal workers
 ├── packages/       # Shared libraries: UI components, database, Temporal definitions, Pocket SDK, logging
 ├── docker-compose/ # Deployment compose files (dependencies, provider, middleman)
-├── tilt/           # Tilt configuration for local k8s development
+├── k8s/            # Kubernetes manifests, Tilt config, and deployment overlays
 └── docs/           # Architecture diagrams, guides, and admin workflow documentation
 ```
 

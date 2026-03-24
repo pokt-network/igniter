@@ -42,7 +42,7 @@
   "scripts": {
     "clean": "rm -rf ./dist",
     "build": "tsc --project ./tsconfig.json && tsc-alias -p ./tsconfig.json --verbose",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,9 @@
+{
+  "appName": "middleman-workflows",
+  "userGivenName": "middleman-workflows",
+  "destNamespace": "igniter-mainnet",
+  "destServer": "https://kubernetes.default.svc",
+  "srcPath": "k8s/apps/middleman-workflows/overlays/mainnet",
+  "srcRepoURL": "https://github.com/stake-igniter/igniter.git",
+  "srcTargetRevision": "main"
+}

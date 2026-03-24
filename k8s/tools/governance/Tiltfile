@@ -1,0 +1,186 @@
+# Governance nginx - serves local delegator.json and provider.json files
+# for provider and middleman apps to consume in dev.
+#
+# Env vars (set in .env):
+#   DELEGATOR_JSON      - inline JSON string for delegator file
+#   DELEGATOR_JSON_FILE - local path to a delegator JSON file
+#   PROVIDER_JSON       - inline JSON string for provider file
+#   PROVIDER_JSON_FILE  - local path to a provider JSON file
+#
+# Rules:
+#   - Setting both _JSON and _JSON_FILE for the same type will fail
+#   - If neither is set, defaults to empty array []
+
+# --- Path helpers ---
+# read_file resolves relative to this Tiltfile's directory (k8s/tools/governance/),
+# so we prefix relative paths to resolve from the project root instead.
+ROOT_PREFIX = '../../../'
+
+def resolve_path(path):
+  if path.startswith('/'):
+    return path
+  return ROOT_PREFIX + path
+
+# --- Read and validate env vars ---
+
+delegator_json = os.getenv('DELEGATOR_JSON', '')
+delegator_json_file = os.getenv('DELEGATOR_JSON_FILE', '')
+provider_json = os.getenv('PROVIDER_JSON', '')
+provider_json_file = os.getenv('PROVIDER_JSON_FILE', '')
+
+if delegator_json != '' and delegator_json_file != '':
+  fail('Cannot set both DELEGATOR_JSON and DELEGATOR_JSON_FILE. Use only one.')
+
+if provider_json != '' and provider_json_file != '':
+  fail('Cannot set both PROVIDER_JSON and PROVIDER_JSON_FILE. Use only one.')
+
+# --- Resolve delegator content ---
+
+delegator_content = '[]'
+
+if delegator_json != '':
+  delegator_content = delegator_json
+elif delegator_json_file != '':
+  delegator_content = str(read_file(resolve_path(delegator_json_file)))
+
+# --- Resolve provider content ---
+
+provider_content = '[]'
+
+if provider_json != '':
+  provider_content = provider_json
+elif provider_json_file != '':
+  provider_content = str(read_file(resolve_path(provider_json_file)))
+
+# --- Watch file paths for live reload ---
+
+if delegator_json_file != '':
+  watch_file(resolve_path(delegator_json_file))
+
+if provider_json_file != '':
+  watch_file(resolve_path(provider_json_file))
+
+# --- nginx config ---
+
+nginx_conf = """
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        root /usr/share/nginx/html;
+        default_type application/json;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+}
+"""
+
+# --- Build k8s objects ---
+
+objects = []
+
+# ConfigMap with the JSON files and nginx config
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'ConfigMap',
+  'metadata': {
+    'name': 'governance-data',
+  },
+  'data': {
+    'delegators.json': delegator_content,
+    'providers.json': provider_content,
+    'default.conf': nginx_conf,
+  },
+})
+
+# Deployment
+objects.append({
+  'apiVersion': 'apps/v1',
+  'kind': 'Deployment',
+  'metadata': {
+    'name': 'governance-nginx',
+  },
+  'spec': {
+    'replicas': 1,
+    'selector': {
+      'matchLabels': {
+        'app': 'governance-nginx',
+      },
+    },
+    'template': {
+      'metadata': {
+        'labels': {
+          'app': 'governance-nginx',
+        },
+      },
+      'spec': {
+        'containers': [{
+          'name': 'nginx',
+          'image': 'nginx:alpine',
+          'ports': [{
+            'containerPort': 80,
+          }],
+          'volumeMounts': [
+            {
+              'name': 'data',
+              'mountPath': '/usr/share/nginx/html/delegators.json',
+              'subPath': 'delegators.json',
+            },
+            {
+              'name': 'data',
+              'mountPath': '/usr/share/nginx/html/providers.json',
+              'subPath': 'providers.json',
+            },
+            {
+              'name': 'data',
+              'mountPath': '/etc/nginx/conf.d/default.conf',
+              'subPath': 'default.conf',
+            },
+          ],
+          'readinessProbe': {
+            'httpGet': {
+              'path': '/delegators.json',
+              'port': 80,
+            },
+            'initialDelaySeconds': 5,
+            'periodSeconds': 10,
+          },
+        }],
+        'volumes': [{
+          'name': 'data',
+          'configMap': {
+            'name': 'governance-data',
+          },
+        }],
+      },
+    },
+  },
+})
+
+# Service
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Service',
+  'metadata': {
+    'name': 'governance-nginx',
+  },
+  'spec': {
+    'selector': {
+      'app': 'governance-nginx',
+    },
+    'ports': [{
+      'port': 80,
+      'targetPort': 80,
+    }],
+  },
+})
+
+# --- Apply ---
+
+k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
+
+k8s_resource(
+  'governance-nginx',
+  objects=['governance-data:configmap'],
+  labels=['tooling'],
+)

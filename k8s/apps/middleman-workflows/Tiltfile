@@ -1,0 +1,45 @@
+custom_build(
+    ref='localhost:5001/middleman-workflows',
+    command='./k8s/docker/build.sh middleman-workflows',
+    dir='../../../',
+    deps=['../../../apps/middleman-workflows', '../../../packages'],
+    ignore=[
+      'node_modules',
+      '**/node_modules',
+      'packages/**/node_modules',
+      'apps/**/node_modules',
+      'apps/**/dist',
+      'packages/**/dist'
+    ],
+    live_update=[
+      sync('../../../apps/middleman-workflows', '/app/apps/middleman-workflows'),
+      sync('../../../packages', '/app/packages'),
+      run(
+        'pnpm install',
+        trigger=[
+          '../../../package.json',
+          '../../../apps/**/package.json',
+          '../../../packages/**/package.json'
+        ]
+      ),
+      run(
+        'pnpm exec turbo run build --filter=@igniter/middleman-workflows',
+        trigger=[
+          '../../../apps/middleman-workflows',
+          '../../../packages'
+        ]
+      ),
+      run('echo "last update is: $(date)" > /app/apps/middleman-workflows/trigger.update')
+    ]
+)
+
+# encode it after replace env vars
+k8s_yaml(kustomize("./dev"), allow_duplicates=False)
+
+k8s_resource(
+    "middleman-workflows",
+    extra_pod_selectors=[{"app": "middleman", "component": "workflows"}],
+    objects=['middleman-workflows-config:configmap'],
+    labels=['apps'],
+    resource_deps=["middleman"],
+)

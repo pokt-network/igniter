@@ -1,0 +1,190 @@
+name: Deploy Production
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+        contains(github.event.pull_request.labels.*.name, 'release:major')))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 18.20.3
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          # Get latest semver tag
+          LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
+          echo "Latest tag: $LATEST_TAG"
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Determine bump type from label or workflow_dispatch input
+          BUMP_TYPE=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUMP_TYPE="${{ inputs.bump_type }}"
+          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}; then
+            BUMP_TYPE="major"
+          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}; then
+            BUMP_TYPE="minor"
+          else
+            BUMP_TYPE="patch"
+          fi
+
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "New version: v$NEW_VERSION (bump: $BUMP_TYPE)"
+
+      - name: Prune all apps
+        run: |
+          for APP in middleman middleman-workflows provider provider-workflows; do
+            pnpm exec turbo prune @igniter/$APP --out-dir ./out/$APP --docker
+          done
+
+      - name: Build and push middleman
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/middleman/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/pokt-network/middleman:${{ env.NEW_VERSION }}
+            ghcr.io/pokt-network/middleman:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push middleman-workflows
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/middleman-workflows/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/pokt-network/middleman-workflows:${{ env.NEW_VERSION }}
+            ghcr.io/pokt-network/middleman-workflows:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push provider
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/provider/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/pokt-network/provider:${{ env.NEW_VERSION }}
+            ghcr.io/pokt-network/provider:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push provider-workflows
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/provider-workflows/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/pokt-network/provider-workflows:${{ env.NEW_VERSION }}
+            ghcr.io/pokt-network/provider-workflows:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update production overlays
+        run: |
+          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman/overlays/mainnet/kustomization.yaml
+          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
+
+      - name: Commit, tag, and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
+                  k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
+          git tag "v${NEW_VERSION}"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DOCKER_IMAGES="## 🐳 Docker Images
+
+          **Provider Application:**
+          - Provider: \`ghcr.io/pokt-network/provider:${NEW_VERSION}\`
+          - Provider Workflows: \`ghcr.io/pokt-network/provider-workflows:${NEW_VERSION}\`
+
+          **Delegator (Middleman) Application:**
+          - Middleman: \`ghcr.io/pokt-network/middleman:${NEW_VERSION}\`
+          - Middleman Workflows: \`ghcr.io/pokt-network/middleman-workflows:${NEW_VERSION}\`"
+
+          gh release create "v${NEW_VERSION}" \
+            --title "v${NEW_VERSION}" \
+            --generate-notes \
+            --notes-start-tag "$(git tag -l 'v*.*.*' --sort=-v:refname | sed -n '2p')" \
+            --latest
+
+          # Append docker images section to the auto-generated notes
+          EXISTING_BODY=$(gh release view "v${NEW_VERSION}" --json body --jq '.body')
+          gh release edit "v${NEW_VERSION}" \
+            --notes "${EXISTING_BODY}
+
+          ${DOCKER_IMAGES}"

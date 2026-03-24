@@ -1,0 +1,6 @@
+**/proto/generated/**
+**/*.d.ts
+**/node_modules/**
+**/.next/**
+**/dist/**
+**/out/**

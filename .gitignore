@@ -52,8 +52,8 @@ yarn-error.log*
 *.key
 
 # Governance data files (real copies with actual values)
-tilt/tools/governance/delegators.json
-tilt/tools/governance/providers.json
+k8s/tools/governance/delegators.json
+k8s/tools/governance/providers.json
 
 # deployment files
 /**/*.crt

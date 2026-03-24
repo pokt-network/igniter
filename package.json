@@ -11,11 +11,11 @@
     "middleman:migration:generate": "pnpm exec drizzle-kit generate --config middleman.drizzle.config.ts",
     "middleman:migration:migrate": "pnpm exec drizzle-kit migrate --config middleman.drizzle.config.ts",
     "buf:generate": "buf generate",
-    "build:middleman:docker": "./tilt/docker/build.sh middleman",
-    "build:middleman-workflows:docker": "./tilt/docker/build.sh middleman-workflows",
-    "build:provider-workflows:docker": "./tilt/docker/build.sh provider-workflows",
-    "build:provider:docker": "./tilt/docker/build.sh provider",
-    "create-cluster": "./tilt/docker/cluster.sh"
+    "build:middleman:docker": "./k8s/docker/build.sh middleman",
+    "build:middleman-workflows:docker": "./k8s/docker/build.sh middleman-workflows",
+    "build:provider-workflows:docker": "./k8s/docker/build.sh provider-workflows",
+    "build:provider:docker": "./k8s/docker/build.sh provider",
+    "create-cluster": "./k8s/docker/cluster.sh"
   },
   "workspaces": [
     "apps/*",
@@ -27,6 +27,7 @@
   "devDependencies": {
     "@types/json-bigint": "^1.0.4",
     "@types/node": "^22",
+    "eslint": "^9.19.0",
     "json-bigint": "1.0.0",
     "prettier": "^3.5.3",
     "turbo": "^2.4.4",

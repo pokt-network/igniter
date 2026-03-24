@@ -18,6 +18,9 @@ importers:
       '@types/node':
         specifier: ^22
         version: 22.14.1
+      eslint:
+        specifier: ^9.19.0
+        version: 9.19.0(jiti@2.4.2)
       json-bigint:
         specifier: 1.0.0
         version: 1.0.0
@@ -240,7 +243,7 @@ importers:
         version: 1.11.7
       '@temporalio/worker':
         specifier: 1.11.7
-        version: 1.11.7(@swc/helpers@0.5.15)(esbuild@0.25.9)
+        version: 1.11.7(@swc/helpers@0.5.15)
       '@temporalio/workflow':
         specifier: 1.11.7
         version: 1.11.7
@@ -765,7 +768,7 @@ importers:
         version: 1.11.7
       '@temporalio/worker':
         specifier: ^1.11.7
-        version: 1.11.7(@swc/helpers@0.5.15)(esbuild@0.25.9)
+        version: 1.11.7(@swc/helpers@0.5.15)
     devDependencies:
       '@igniter/eslint-config':
         specifier: workspace:*
@@ -11978,7 +11981,7 @@ snapshots:
   '@cosmjs/socket@0.33.1(bufferutil@4.0.9)':
     dependencies:
       '@cosmjs/stream': 0.33.1
-      isomorphic-ws: 4.0.1(ws@7.5.10(bufferutil@4.0.9))
+      isomorphic-ws: 4.0.1(ws@7.5.10)
       ws: 7.5.10(bufferutil@4.0.9)
       xstream: 11.14.0
     transitivePeerDependencies:
@@ -15019,6 +15022,31 @@ snapshots:
     dependencies:
       long: 5.3.1
       protobufjs: 7.4.0
+
+  '@temporalio/worker@1.11.7(@swc/helpers@0.5.15)':
+    dependencies:
+      '@swc/core': 1.10.16(@swc/helpers@0.5.15)
+      '@temporalio/activity': 1.11.7
+      '@temporalio/client': 1.11.7
+      '@temporalio/common': 1.11.7
+      '@temporalio/core-bridge': 1.11.7
+      '@temporalio/proto': 1.11.7
+      '@temporalio/workflow': 1.11.7
+      abort-controller: 3.0.0
+      heap-js: 2.6.0
+      memfs: 4.17.0
+      rxjs: 7.8.1
+      source-map: 0.7.4
+      source-map-loader: 4.0.2(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15)))
+      supports-color: 8.1.1
+      swc-loader: 0.2.6(@swc/core@1.10.16(@swc/helpers@0.5.15))(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15)))
+      unionfs: 4.5.4
+      webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))
+    transitivePeerDependencies:
+      - '@swc/helpers'
+      - esbuild
+      - uglify-js
+      - webpack-cli
 
   '@temporalio/worker@1.11.7(@swc/helpers@0.5.15)(esbuild@0.25.9)':
     dependencies:
@@ -18307,7 +18335,7 @@ snapshots:
       - expo
       - react-native
 
-  isomorphic-ws@4.0.1(ws@7.5.10(bufferutil@4.0.9)):
+  isomorphic-ws@4.0.1(ws@7.5.10):
     dependencies:
       ws: 7.5.10(bufferutil@4.0.9)
 
@@ -21116,6 +21144,12 @@ snapshots:
       source-map-js: 1.2.1
       webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))(esbuild@0.25.9)
 
+  source-map-loader@4.0.2(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))):
+    dependencies:
+      iconv-lite: 0.6.3
+      source-map-js: 1.2.1
+      webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))
+
   source-map-support@0.5.13:
     dependencies:
       buffer-from: 1.1.2
@@ -21370,6 +21404,12 @@ snapshots:
       '@swc/counter': 0.1.3
       webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))(esbuild@0.25.9)
 
+  swc-loader@0.2.6(@swc/core@1.10.16(@swc/helpers@0.5.15))(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))):
+    dependencies:
+      '@swc/core': 1.10.16(@swc/helpers@0.5.15)
+      '@swc/counter': 0.1.3
+      webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))
+
   symbol-observable@2.0.3: {}
 
   symbol-observable@4.0.0: {}
@@ -21442,6 +21482,17 @@ snapshots:
     optionalDependencies:
       '@swc/core': 1.10.16(@swc/helpers@0.5.15)
       esbuild: 0.25.9
+
+  terser-webpack-plugin@5.3.11(@swc/core@1.10.16(@swc/helpers@0.5.15))(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))):
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.25
+      jest-worker: 27.5.1
+      schema-utils: 4.3.0
+      serialize-javascript: 6.0.2
+      terser: 5.39.0
+      webpack: 5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))
+    optionalDependencies:
+      '@swc/core': 1.10.16(@swc/helpers@0.5.15)
 
   terser@5.39.0:
     dependencies:
@@ -21995,6 +22046,36 @@ snapshots:
   webidl-conversions@7.0.0: {}
 
   webpack-sources@3.2.3: {}
+
+  webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15)):
+    dependencies:
+      '@types/eslint-scope': 3.7.7
+      '@types/estree': 1.0.6
+      '@webassemblyjs/ast': 1.14.1
+      '@webassemblyjs/wasm-edit': 1.14.1
+      '@webassemblyjs/wasm-parser': 1.14.1
+      acorn: 8.14.0
+      browserslist: 4.24.4
+      chrome-trace-event: 1.0.4
+      enhanced-resolve: 5.18.1
+      es-module-lexer: 1.6.0
+      eslint-scope: 5.1.1
+      events: 3.3.0
+      glob-to-regexp: 0.4.1
+      graceful-fs: 4.2.11
+      json-parse-even-better-errors: 2.3.1
+      loader-runner: 4.3.0
+      mime-types: 2.1.35
+      neo-async: 2.6.2
+      schema-utils: 4.3.0
+      tapable: 2.2.1
+      terser-webpack-plugin: 5.3.11(@swc/core@1.10.16(@swc/helpers@0.5.15))(webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15)))
+      watchpack: 2.4.2
+      webpack-sources: 3.2.3
+    transitivePeerDependencies:
+      - '@swc/core'
+      - esbuild
+      - uglify-js
 
   webpack@5.98.0(@swc/core@1.10.16(@swc/helpers@0.5.15))(esbuild@0.25.9):
     dependencies:
