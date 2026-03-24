@@ -302,26 +302,17 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     if (!key) {
       log.warn('remediateSupplier: Key not found', {params})
-      return {
-        success: false,
-        message: 'Key not found'
-      }
+      throw ApplicationFailure.nonRetryable('Key not found', 'not_found')
     }
 
     if (!key.addressGroup) {
       log.warn('remediateSupplier: Address Group not found', {params})
-      return {
-        success: false,
-        message: 'Key address group not found'
-      }
+      throw ApplicationFailure.nonRetryable('Key address group not found', 'not_found')
     }
 
     if (!supplier) {
       log.warn('remediateSupplier: Supplier not found', {params})
-      return {
-        success: false,
-        message: 'Supplier not found'
-      }
+      throw ApplicationFailure.retryable('Supplier not found', 'not_found')
     }
 
     if (key.remediationHistory?.length === 0) {
@@ -406,11 +397,10 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
             params,
             error: e,
           })
-          return {
-            success: false,
-            message: 'Failed while updating the supplier status.',
-            keyUpdate: update,
-          }
+          throw ApplicationFailure.retryable(
+            `Failed while updating the supplier status for ${params.address}.`,
+            'db_update_failed',
+          )
         }
 
         return { success: true, message: 'Supplier already configured; remediation cleared.' }
@@ -446,10 +436,10 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         supportedServicesCount: supportedServices.length,
         addressGroup: key.addressGroup?.id ?? 'unknown',
       })
-      return {
-        success: false,
-        message: 'Refusing to stake with empty services config.',
-      }
+      throw ApplicationFailure.nonRetryable(
+        `Refusing to stake with empty services config for ${params.address}.`,
+        'empty_services',
+      )
     }
 
     log.debug('remediateSupplier: Executing stake transaction', {
@@ -581,20 +571,25 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.debug('remediateSupplier: Update Supplier done!', { params })
     } catch (e) {
       log.warn('remediateSupplier: Update Supplier failed!', { params, error: e })
-      return {
-        success: false,
-        message: 'Failed while updating the supplier status.',
-        keyUpdate: update,
-        stakeTxResult: txResult,
-      }
+      throw ApplicationFailure.retryable(
+        `Failed while updating the supplier status for ${params.address}. Key state: ${update.state}. Stake tx success: ${txResult.success}, message: ${txResult.message}`,
+        'db_update_failed',
+      )
+    }
+
+    if (!txResult.success) {
+      log.warn('remediateSupplier: Stake transaction failed', { params, txResult })
+      throw ApplicationFailure.nonRetryable(
+        `Remediation transaction failed for ${params.address}. Key state: ${update.state}. Tx code: ${txResult.code}, message: ${txResult.message}`,
+        'stake_tx_failed',
+      )
     }
 
     log.info('remediateSupplier: Execution finished', { params })
 
     return {
-      success: txResult.success,
-      message: txResult.success ? 'Remediation completed successfully.' : 'Remediation transaction failed.',
-      stakeTxResult: txResult,
+      success: true,
+      message: 'Remediation completed successfully.',
     }
   }
 })
