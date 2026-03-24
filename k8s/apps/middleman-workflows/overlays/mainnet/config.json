@@ -4,6 +4,6 @@
   "destNamespace": "igniter-mainnet",
   "destServer": "https://kubernetes.default.svc",
   "srcPath": "k8s/apps/middleman-workflows/overlays/mainnet",
-  "srcRepoURL": "https://github.com/stake-igniter/igniter.git",
+  "srcRepoURL": "https://github.com/pokt-network/igniter.git",
   "srcTargetRevision": "main"
 }

@@ -34,7 +34,7 @@ custom_build(
 )
 
 # encode it after replace env vars
-k8s_yaml(kustomize("./dev"), allow_duplicates=False)
+k8s_yaml(kustomize("./overlays/dev"), allow_duplicates=False)
 
 k8s_resource(
     "middleman-workflows",

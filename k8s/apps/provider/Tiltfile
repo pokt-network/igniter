@@ -29,7 +29,7 @@ if APP_IDENTITY == '':
    fail('Missing PROVIDER_APP_IDENTITY env variable')
 
 # read from kustomize build
-objects = decode_yaml_stream(kustomize("./dev"))
+objects = decode_yaml_stream(kustomize("./overlays/dev"))
 
 for o in objects:
   if o['metadata']['name'] == 'provider-config':
