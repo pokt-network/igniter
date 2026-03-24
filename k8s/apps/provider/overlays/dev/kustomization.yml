@@ -1,13 +1,13 @@
 resources:
-  - ../base
+  - ../../base
 patches:
   - target:
       version: v1
       kind: ConfigMap
-      name: middleman-config
+      name: provider-config
     path: ./patch-config.yml
   - target:
       version: v1
       kind: Secret
-      name: middleman-secrets
+      name: provider-secrets
     path: ./patch-secrets.yml

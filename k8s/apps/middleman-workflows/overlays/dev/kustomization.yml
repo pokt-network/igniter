@@ -1,8 +1,8 @@
 resources:
-  - ../base
+  - ../../base
 patches:
   - target:
       version: v1
       kind: ConfigMap
-      name: provider-workflows-config
+      name: middleman-workflows-config
     path: ./patch-config.yml
