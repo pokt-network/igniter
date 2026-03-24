@@ -107,7 +107,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/apps/middleman/overlays/staging/kustomization.yaml
           git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(deploy): update staging image to $IMAGE_TAG [skip ci]"
+          git commit -m "chore(deploy): update staging image to $IMAGE_TAG"
           git push
 
       - name: Create or update PR to main
