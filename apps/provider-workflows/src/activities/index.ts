@@ -26,6 +26,16 @@ export type ProcessSupplierParams = {
   height: number;
 }
 
+export type UpsertSupplierStatusResult = {
+  state: KeyState;
+  remediationReasons: RemediationHistoryEntryReason[];
+  prev?: {
+    state?: KeyState;
+    remediationReasons?: RemediationHistoryEntryReason[];
+  };
+  supplier?: Supplier;
+}
+
 export type RemediateSupplierParams = ProcessSupplierParams & {
   reasons: RemediationHistoryEntryReason[];
 }
@@ -69,7 +79,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * Upserts the supplier status into the database.
    * @param params ProcessSupplierParams
    */
-  async upsertSupplierStatus(params: ProcessSupplierParams): Promise<boolean> {
+  async upsertSupplierStatus(params: ProcessSupplierParams): Promise<UpsertSupplierStatusResult> {
     log.info('upsertSupplierStatus: Querying for keys, settings, balance and supplier', {params})
     const [key, settings, balance, supplier]: [KeyWithGroup, ApplicationSettings, number, Supplier] = await Promise.all([
       dal.keys.loadKey(params.address),
@@ -81,6 +91,9 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     if (!key) {
       throw new ApplicationFailure('key not found', 'not_found', true)
     }
+
+    const prevState = key.state
+    const prevRemediationReasons = (key.remediationHistory ?? []).map((rh) => rh.reason)
 
     const loggerContext = {
       key: key.address,
@@ -279,7 +292,33 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     log.debug('Updating supplier', { params, update })
     await dal.keys.updateKey(params.address, update, params.height)
     log.info('Update Supplier done!', {params})
-    return true
+
+    const currentState = update.state ?? prevState
+    const currentRemediationReasons = (update.remediationHistory ?? key.remediationHistory ?? []).map((rh) => rh.reason)
+
+    const result: UpsertSupplierStatusResult = {
+      state: currentState,
+      remediationReasons: currentRemediationReasons,
+    }
+
+    const prevDiff: UpsertSupplierStatusResult['prev'] = {}
+    if (prevState !== currentState) {
+      prevDiff.state = prevState
+    }
+
+    const addedReasons = currentRemediationReasons.filter((r) => !prevRemediationReasons.includes(r))
+    const removedReasons = prevRemediationReasons.filter((r) => !currentRemediationReasons.includes(r))
+    if (addedReasons.length || removedReasons.length) {
+      prevDiff.remediationReasons = prevRemediationReasons
+    }
+
+    if (Object.keys(prevDiff).length) {
+      result.prev = prevDiff
+    }
+
+    result.supplier = supplier
+
+    return result
   },
 
   /**
