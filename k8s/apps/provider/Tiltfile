@@ -1,6 +1,6 @@
 custom_build(
     ref='localhost:5001/provider',
-    command='./tilt/docker/build.sh provider',
+    command='./k8s/docker/build.sh provider',
     dir='../../../',
     deps=['../../../apps/provider', '../../../packages'],
     ignore=['node_modules', '**/node_modules', 'packages/**/node_modules', 'apps/**/node_modules',  'apps/**/node_modules/dist', 'packages/**/dist'],

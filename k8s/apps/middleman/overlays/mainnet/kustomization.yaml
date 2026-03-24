@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+- ./ingress.yaml
+images:
+  - name: localhost:5001/middleman
+    newName: ghcr.io/pokt-network/middleman
+    newTag: "0.6.0"
+patches:
+  - path: ./patches/configmap.yaml
+  - path: ./patches/middleman-secrets.yaml
+  - path: ./patches/postgres-middleman-connection-secret.yaml
+  - target:
+      kind: Deployment
+      name: middleman
+    patch: |
+      - op: replace
+        path: /spec/template/spec/initContainers/1/imagePullPolicy
+        value: "IfNotPresent"
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: "IfNotPresent"
+      - op: add
+        path: /spec/template/spec/dnsConfig
+        value:
+          options:
+            - name: ndots
+              value: "1"

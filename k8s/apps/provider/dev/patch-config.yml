@@ -1,19 +1,19 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: middleman-config
+  name: provider-config
 data:
-  PROVIDERS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/providers.json"
+  DELEGATORS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/delegators.json"
   AUTH_TRUST_HOST: "true"
-  APP_URL: "http://localhost:3000"
-  AUTH_URL: "http://localhost:3000"
-  CHAIN_ID: "pocket-lego-testnet"
-  BLOCKCHAIN_PROTOCOL: "shannon"
+  APP_URL: "http://localhost:3001"
+  AUTH_URL: "http://localhost:3001"
   OWNER_IDENTITY: "CHANGE_THIS"
+  CHAIN_ID: "pocket"
+  BLOCKCHAIN_PROTOCOL: "shannon"
   OWNER_EMAIL: "CHANGE_THIS"
   TEMPORAL_URL: "temporal-frontend.default.svc.cluster.local:7233"
-  TEMPORAL_NAMESPACE: "middleman"
-  TEMPORAL_TASK_QUEUE: "middleman-operations"
+  TEMPORAL_NAMESPACE: "provider"
+  TEMPORAL_TASK_QUEUE: "provider-operations"
   MAINNET_INDEXER_API_URL: "https://api.poktscan.com/"
   BETA_INDEXER_API_URL: "https://beta-api.poktscan.com/"
   ALPHA_INDEXER_API_URL: "https://alpha-api.poktscan.com/"

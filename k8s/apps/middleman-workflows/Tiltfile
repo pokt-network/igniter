@@ -1,8 +1,8 @@
 custom_build(
-    ref='localhost:5001/provider-workflows',
-    command='./tilt/docker/build.sh provider-workflows',
+    ref='localhost:5001/middleman-workflows',
+    command='./k8s/docker/build.sh middleman-workflows',
     dir='../../../',
-    deps=['../../../apps/provider-workflows', '../../../packages'],
+    deps=['../../../apps/middleman-workflows', '../../../packages'],
     ignore=[
       'node_modules',
       '**/node_modules',
@@ -12,7 +12,7 @@ custom_build(
       'packages/**/dist'
     ],
     live_update=[
-      sync('../../../apps/provider-workflows', '/app/apps/provider-workflows'),
+      sync('../../../apps/middleman-workflows', '/app/apps/middleman-workflows'),
       sync('../../../packages', '/app/packages'),
       run(
         'pnpm install',
@@ -23,13 +23,13 @@ custom_build(
         ]
       ),
       run(
-        'pnpm exec turbo run build --filter=@igniter/provider-workflows',
+        'pnpm exec turbo run build --filter=@igniter/middleman-workflows',
         trigger=[
-          '../../../apps/provider-workflows',
+          '../../../apps/middleman-workflows',
           '../../../packages'
         ]
       ),
-      run('echo "last update is: $(date)" > /app/apps/provider-workflows/trigger.update')
+      run('echo "last update is: $(date)" > /app/apps/middleman-workflows/trigger.update')
     ]
 )
 
@@ -37,9 +37,9 @@ custom_build(
 k8s_yaml(kustomize("./dev"), allow_duplicates=False)
 
 k8s_resource(
-    "provider-workflows",
-    extra_pod_selectors=[{"app": "provider", "component": "workflows"}],
-    objects=['provider-workflows-config:configmap'],
+    "middleman-workflows",
+    extra_pod_selectors=[{"app": "middleman", "component": "workflows"}],
+    objects=['middleman-workflows-config:configmap'],
     labels=['apps'],
-    resource_deps=["provider"],
+    resource_deps=["middleman"],
 )

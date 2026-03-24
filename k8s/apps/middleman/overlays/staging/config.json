@@ -1,0 +1,9 @@
+{
+  "appName": "middleman",
+  "userGivenName": "middleman",
+  "destNamespace": "igniter-staging",
+  "destServer": "https://kubernetes.default.svc",
+  "srcPath": "k8s/apps/middleman/overlays/staging",
+  "srcRepoURL": "https://github.com/stake-igniter/igniter.git",
+  "srcTargetRevision": "staging"
+}

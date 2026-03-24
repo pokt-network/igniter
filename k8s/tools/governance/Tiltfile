@@ -12,7 +12,7 @@
 #   - If neither is set, defaults to empty array []
 
 # --- Path helpers ---
-# read_file resolves relative to this Tiltfile's directory (tilt/tools/governance/),
+# read_file resolves relative to this Tiltfile's directory (k8s/tools/governance/),
 # so we prefix relative paths to resolve from the project root instead.
 ROOT_PREFIX = '../../../'
 

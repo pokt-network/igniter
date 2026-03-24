@@ -46,7 +46,7 @@ echo "[INFO] Turbo prune completed."
 # Build the Docker image
 DOCKER_TAG="${EXPECTED_REF:-igniter/$APP:dev}"
 echo "[INFO] Starting Docker build for app: $APP tag: $DOCKER_TAG"
-docker build . -f tilt/apps/$APP/Dockerfile -t "$DOCKER_TAG"
+docker build . -f k8s/apps/$APP/Dockerfile -t "$DOCKER_TAG"
 echo "[INFO] Docker build completed. Image tagged as: $DOCKER_TAG"
 
 echo "[INFO] Script completed successfully. Exiting..."

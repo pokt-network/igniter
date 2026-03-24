@@ -1,6 +1,6 @@
 custom_build(
     ref='localhost:5001/middleman',
-    command='./tilt/docker/build.sh middleman',
+    command='./k8s/docker/build.sh middleman',
     dir='../../../',
     deps=['../../../apps/middleman', '../../../packages'],
     ignore=['node_modules', '**/node_modules', 'packages/**/node_modules', 'apps/**/node_modules', 'apps/**/node_modules/dist', 'packages/**/dist'],

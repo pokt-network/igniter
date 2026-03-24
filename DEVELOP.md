@@ -69,11 +69,11 @@ Both apps require identity keys to operate. You need a Pocket Network wallet wit
 
 In dev, a local nginx serves governance JSON files so the apps can discover each other (replicating what [igniter-governance](https://github.com/pokt-network/igniter-governance) does in production).
 
-Sample files are provided under `tilt/tools/governance/`. Copy them and update the `identity` fields with your actual public keys:
+Sample files are provided under `k8s/tools/governance/`. Copy them and update the `identity` fields with your actual public keys:
 
 ```bash
-cp tilt/tools/governance/delegators.sample.json tilt/tools/governance/delegators.json
-cp tilt/tools/governance/providers.sample.json tilt/tools/governance/providers.json
+cp k8s/tools/governance/delegators.sample.json k8s/tools/governance/delegators.json
+cp k8s/tools/governance/providers.sample.json k8s/tools/governance/providers.json
 ```
 
 The `.json` files are gitignored, so your local configuration won't be committed.
