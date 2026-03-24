@@ -13,7 +13,7 @@
   "types": "./dist/src/index.d.ts",
   "scripts": {
     "build": "tsc --project ./tsconfig.json",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

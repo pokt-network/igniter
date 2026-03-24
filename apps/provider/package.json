@@ -7,7 +7,7 @@
     "dev": "next dev --turbopack --port 3001",
     "build": "TURBO_TELEMETRY_DISABLED=1 next build --experimental-build-mode compile",
     "start": "next start --port 3001",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint": "next lint",
     "check-types": "tsc --noEmit",
     "test": "jest --runInBand"
   },

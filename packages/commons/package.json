@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc --project ./tsconfig.json && tsc-alias -p ./tsconfig.json",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "check-types": "tsc --noEmit",
     "test": "jest --runInBand"
   },

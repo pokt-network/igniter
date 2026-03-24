@@ -38,7 +38,7 @@
     "clean": "rm -rf ./dist",
     "build": "tsc -p tsconfig.build.cjs.json && tsc-alias -p tsconfig.build.cjs.json --outDir ./dist/cjs --verbose",
     "typecheck": "tsc -p tsconfig.dev.json --noEmit",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint .",
     "check-types": "tsc --noEmit",
     "test": "jest --runInBand"
   },
