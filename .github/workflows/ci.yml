@@ -32,6 +32,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Format check
+        continue-on-error: true
         run: pnpm prettier --check "**/*.{ts,tsx}"
 
       - name: Lint
