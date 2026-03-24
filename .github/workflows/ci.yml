@@ -38,6 +38,9 @@ jobs:
       - name: Lint
         run: pnpm turbo lint
 
+      - name: Build
+        run: pnpm turbo build
+
       - name: Type check
         run: pnpm turbo check-types
 
