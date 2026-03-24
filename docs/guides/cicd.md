@@ -5,23 +5,24 @@ This document describes the complete development, staging, and production releas
 ## Overview
 
 ```
-Feature Branch ──PR──> staging ──PR──> main
-                         │                │
-                    Deploy Staging    Deploy Production
-                    (SHA tags)        (semver tags)
-                         │                │
-                         ▼                ▼
-                   staking-dev.       staking.
-                   pocket.network     pocket.network
+Feature Branch ──PR──> staging ──creates──> release ──PR──> main
+                         │                                    │
+                    Deploy Staging                     Deploy Production
+                    (SHA tags)                         (semver tags)
+                         │                                    │
+                         ▼                                    ▼
+                   staking-dev.                          staking.
+                   pocket.network                        pocket.network
 ```
 
 ## Branches
 
-| Branch | Purpose | Protected |
+| Branch | Purpose | Lifecycle |
 |--------|---------|-----------|
-| `main` | Production-ready code. Deploys to mainnet. | Yes — requires PR + approval |
-| `staging` | Pre-production validation. Deploys to staging. | Yes — requires PR + approval |
-| `feat/*`, `fix/*` | Development branches. Target `staging`. | No |
+| `main` | Production-ready code. Deploys to mainnet. | Long-lived, protected |
+| `staging` | Pre-production validation. Deploys to staging. | Long-lived, protected. Rebased on main after each release |
+| `release` | Disposable branch for release PRs to main. | Created by staging deploy, deleted on merge |
+| `feat/*`, `fix/*` | Development branches. Target `staging`. | Short-lived |
 
 ## Environments
 
@@ -129,17 +130,19 @@ Feature Branch ──PR──> staging ──PR──> main
 3. PR merged to staging with label "release"
    - deploy-staging builds + pushes images with SHA tag
    - Staging overlay updated automatically
-   - PR staging → main auto-created
+   - Creates "release" branch from staging
+   - PR release → main auto-created
 
 4. Team validates on staking-dev.pocket.network
 
-5. Add label "release:patch" (or minor/major) to the staging → main PR
-   - prepare-release computes version, updates mainnet overlays
+5. Add label "release:patch" (or minor/major) to the release → main PR
+   - prepare-release computes version, updates mainnet overlays on release branch
    - PR title updated to "Release v0.6.1"
 
 6. Team reviews version in PR, approves
 
 7. PR merged to main
+   - "release" branch auto-deleted by GitHub (disposable)
    - deploy-production builds + pushes images with semver
    - Git tag v0.6.1 created
    - GitHub Release created
@@ -152,8 +155,8 @@ Feature Branch ──PR──> staging ──PR──> main
 k8s/apps/
 ├── middleman/
 │   ├── base/                          # Shared base (dev + prod)
-│   ├── dev/                           # Tilt local dev patches
 │   └── overlays/
+│       ├── dev/                       # Tilt local dev patches
 │       ├── mainnet/                   # Production overlay
 │       │   ├── config.json            # ArgoCD app config
 │       │   ├── kustomization.yaml     # Image tag managed by CI
@@ -166,8 +169,8 @@ k8s/apps/
 │           └── patches/               # ConfigMap, Secrets (1password)
 └── middleman-workflows/
     ├── base/
-    ├── dev/
     └── overlays/
+        ├── dev/
         └── mainnet/                   # Production only (no staging)
             ├── config.json
             ├── kustomization.yaml     # Image tag managed by CI
