@@ -206,12 +206,24 @@ k8s/apps/
 
 ## Manual Triggers
 
-Both deploy workflows support `workflow_dispatch` for manual triggers:
+All deploy workflows support `workflow_dispatch` for manual triggers:
 
 - **Deploy Staging:** Actions tab → Deploy Staging → Run workflow (branch: staging)
 - **Deploy Production:** Actions tab → Deploy Production → Run workflow (bump_type: patch/minor/major)
+- **Build Image:** Actions tab → Build Image → select branch, app, tag, and whether to push
 
-Manual triggers bypass the label requirement and are useful for:
-- Re-deploying without code changes
-- Recovery from failed deployments
-- Initial setup and testing
+### Build Image (`build-image.yml`)
+
+Ad-hoc image builds from any branch. Useful for:
+- Testing a feature branch image before merging
+- Building release candidates (e.g., `0.7.0-rc1`)
+- Quick dev builds for debugging in a cluster
+
+**Inputs:**
+| Input | Description | Example |
+|-------|-------------|---------|
+| `app` | Which app to build | `middleman` |
+| `tag` | Image tag | `dev-fix-auth`, `0.7.0-rc1` |
+| `push` | Push to GHCR? | `true` / `false` |
+
+Select the branch in the GitHub Actions UI before running. The image is built from that branch's code.
