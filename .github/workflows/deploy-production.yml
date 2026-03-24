@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       bump_type:
-        description: "Version bump type"
+        description: "Version bump type (only for manual trigger)"
         required: true
         type: choice
         options:
@@ -59,38 +59,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine version
-        id: version
         run: |
-          # Get latest semver tag
-          LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0"
-          fi
-          echo "Latest tag: $LATEST_TAG"
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-          # Determine bump type from label or workflow_dispatch input
-          BUMP_TYPE=""
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            BUMP_TYPE="${{ inputs.bump_type }}"
-          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}; then
-            BUMP_TYPE="major"
-          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}; then
-            BUMP_TYPE="minor"
+            # Manual trigger: compute version from latest tag + input
+            LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
+            if [ -z "$LATEST_TAG" ]; then LATEST_TAG="v0.0.0"; fi
+            VERSION=${LATEST_TAG#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+            case "${{ inputs.bump_type }}" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+            # Update overlays since prepare-release didn't run
+            sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman/overlays/mainnet/kustomization.yaml
+            sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
           else
-            BUMP_TYPE="patch"
+            # PR merge: version already set by prepare-release workflow
+            NEW_VERSION=$(grep 'newTag:' k8s/apps/middleman/overlays/mainnet/kustomization.yaml | head -1 | sed 's/.*newTag: "\(.*\)"/\1/')
           fi
 
-          case "$BUMP_TYPE" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "New version: v$NEW_VERSION (bump: $BUMP_TYPE)"
+          echo "Deploying version: v$NEW_VERSION"
 
       - name: Prune all apps
         run: |
@@ -146,19 +140,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update production overlays
-        run: |
-          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman/overlays/mainnet/kustomization.yaml
-          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-
-      - name: Commit, tag, and push
+      - name: Commit overlay changes and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Only needed for workflow_dispatch (PR merge already has overlays updated)
           git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
                   k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-          git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
+          fi
+
           git tag "v${NEW_VERSION}"
           git push origin main --tags
 
@@ -166,7 +159,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          DOCKER_IMAGES="## 🐳 Docker Images
+          PREV_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | sed -n '2p')
+
+          DOCKER_IMAGES="## Docker Images
 
           **Provider Application:**
           - Provider: \`ghcr.io/pokt-network/provider:${NEW_VERSION}\`
@@ -176,13 +171,19 @@ jobs:
           - Middleman: \`ghcr.io/pokt-network/middleman:${NEW_VERSION}\`
           - Middleman Workflows: \`ghcr.io/pokt-network/middleman-workflows:${NEW_VERSION}\`"
 
-          gh release create "v${NEW_VERSION}" \
-            --title "v${NEW_VERSION}" \
-            --generate-notes \
-            --notes-start-tag "$(git tag -l 'v*.*.*' --sort=-v:refname | sed -n '2p')" \
-            --latest
+          if [ -n "$PREV_TAG" ]; then
+            gh release create "v${NEW_VERSION}" \
+              --title "v${NEW_VERSION}" \
+              --generate-notes \
+              --notes-start-tag "$PREV_TAG" \
+              --latest
+          else
+            gh release create "v${NEW_VERSION}" \
+              --title "v${NEW_VERSION}" \
+              --generate-notes \
+              --latest
+          fi
 
-          # Append docker images section to the auto-generated notes
           EXISTING_BODY=$(gh release view "v${NEW_VERSION}" --json body --jq '.body')
           gh release edit "v${NEW_VERSION}" \
             --notes "${EXISTING_BODY}
