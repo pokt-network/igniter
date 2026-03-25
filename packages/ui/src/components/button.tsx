@@ -24,7 +24,7 @@ const buttonVariants = cva(
         secondaryBorder:
               "bg-bg-elevated text-text-primary shadow-xs hover:border-text-tertiary border border-border-primary",
         secondaryStretch: "bg-bg-elevated text-text-primary shadow-xs hover:border-text-tertiary w-full border border-border-primary",
-        ghost: "bg-transparent border-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary",
+        ghost: "bg-transparent border-transparent text-text-secondary hover:bg-bg-elevated hover:text-text-primary hover:border-border-primary",
         link: "text-accent border-transparent underline-offset-4 hover:underline",
       },
       size: {

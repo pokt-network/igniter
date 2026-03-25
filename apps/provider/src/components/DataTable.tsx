@@ -82,7 +82,7 @@ export function DataTable<TData, TValue>({
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow
               key={headerGroup.id}
-              className="bg-[--var(bg-black)] hover:bg-[--var(bg-black)]"
+              className="hover:bg-transparent"
             >
               {headerGroup.headers.map((header) => {
                 return (
@@ -108,11 +108,10 @@ export function DataTable<TData, TValue>({
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() && "selected"}
-                className={`bg-[--var(bg-black)] r group ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`bg-transparent r group ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell
-                    className="px-2 !rounded-bl-none !rounded-tl-none"
                     key={cell.id}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -120,7 +119,7 @@ export function DataTable<TData, TValue>({
                 ))}
                 {actions && <TableCell />}
                 {itemActions && (
-                  <TableCell className="flex flex-row-reverse px-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <TableCell className="flex flex-row-reverse px-2">
                     {itemActions(row.original)}
                   </TableCell>
                 )}

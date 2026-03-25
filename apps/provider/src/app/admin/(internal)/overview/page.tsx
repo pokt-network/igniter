@@ -11,6 +11,11 @@ import { getDistinctRevAddresses } from '@/lib/dal/services'
 import { CircleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { listStakedAddresses } from '@/lib/dal/keys'
+import { ListRegions } from '@/actions/Regions'
+import { ListServices } from '@/actions/Services'
+import { ListAddressGroups } from '@/actions/AddressGroups'
+import { ListRelayMiners } from '@/actions/RelayMiners'
+import { ListDelegators } from '@/actions/Delegators'
 
 export const dynamic = "force-dynamic";
 
@@ -55,8 +60,8 @@ export default async function Page() {
 async function Rewards() {
   const [applicationSettings, addresses, supplierAddresses] = await Promise.all([
     GetApplicationSettings(),
-    getDistinctRevAddresses(),
-    listStakedAddresses()
+    getDistinctRevAddresses().catch(() => []),
+    listStakedAddresses().catch(() => [])
   ]);
 
   let graphqlUrl = applicationSettings.indexerApiUrl
@@ -74,25 +79,59 @@ async function Rewards() {
   let rewardsContent: React.ReactNode
 
   if (addresses.length === 0) {
+    const counts = await Promise.all([
+      ListRegions().then(r => r.success ? r.data.length : 0).catch(() => 0),
+      ListRelayMiners().then(r => r.success ? r.data.length : 0).catch(() => 0),
+      ListServices().then(r => r.success ? r.data.length : 0).catch(() => 0),
+      ListAddressGroups().then(r => r.success ? r.data.length : 0).catch(() => 0),
+      ListDelegators().then(r => r.success ? r.data.length : 0).catch(() => 0),
+    ]);
+    const [regionsCount, relayMinersCount, servicesCount, addressGroupsCount, delegatorsCount] = counts;
+
     rewardsContent = (
       <div className={'flex flex-col p-4 w-full gap-4 md:gap-6 sm:px-3 md:px-6 lg:px-6 xl:px-10'}>
-        <div className={'flex flex-row p-6 gap-2 items-center border rounded-lg'}>
-          <CircleAlert className={'h-16 w-16'} />
-          <div className={'flex flex-col gap-0'}>
-            <p className={'!text-lg font-bold'}>
-              You do not have addresses configured.
-            </p>
-            <p>
-              To see your rewards, please configure your addresses in{' '}
-              <Link
-                className={'!text-pnf-blue hover:!underline'}
-                href={'/admin/groups'}
-              >
-                Addresses Group
-              </Link>
-            </p>
+        <div className="rounded-md p-5 flex flex-col gap-3" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-28 shrink-0">Network</span>
+            <span className="text-sm">{applicationSettings.chainId}</span>
           </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-28 shrink-0">App Identity</span>
+            <span className="text-sm font-mono">{applicationSettings.appIdentity}</span>
+          </div>
+          {applicationSettings.name && (
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-text-tertiary w-28 shrink-0">Provider Name</span>
+              <span className="text-sm">{applicationSettings.name}</span>
+            </div>
+          )}
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-28 shrink-0">Node API</span>
+            <span className="text-sm font-mono truncate">{applicationSettings.rpcUrl}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-28 shrink-0">Indexer API</span>
+            <span className="text-sm font-mono truncate">{applicationSettings.indexerApiUrl}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-28 shrink-0">Min Stake</span>
+            <span className="text-sm">{applicationSettings.minimumStake?.toLocaleString()} uPOKT</span>
+          </div>
+        </div>
 
+        <div className="grid grid-cols-5 gap-3">
+          {[
+            { label: 'Regions', count: regionsCount },
+            { label: 'Relay Miners', count: relayMinersCount },
+            { label: 'Services', count: servicesCount },
+            { label: 'Address Groups', count: addressGroupsCount },
+            { label: 'Delegators', count: delegatorsCount },
+          ].map(({ label, count }) => (
+            <div key={label} className="rounded-md p-3 text-center" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
+              <p className="text-xl font-bold">{count}</p>
+              <p className="text-xs text-text-tertiary mt-1">{label}</p>
+            </div>
+          ))}
         </div>
       </div>
     )

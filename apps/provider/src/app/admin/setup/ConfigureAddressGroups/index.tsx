@@ -1,3 +1,4 @@
+
 'use client';
 
 import {useEffect, useMemo, useState} from "react";
@@ -11,6 +12,7 @@ import {AddOrUpdateAddressGroupDialog} from "@/components/AddOrUpdateAddressGrou
 import {LoaderIcon} from "@igniter/ui/assets";
 import {ListServices} from "@/actions/Services";
 import {PencilIcon, Trash2Icon} from "lucide-react";
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 
 export interface ConfigureAddressGroupsProp {
   goNext: () => void;
@@ -167,8 +169,10 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
       <div className="py-2">
         {content}
       </div>
+      <SetupHelpBar docAnchor="step-6--address-groups" />
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           disabled={isLoading}
           onClick={goBack}>
           Back

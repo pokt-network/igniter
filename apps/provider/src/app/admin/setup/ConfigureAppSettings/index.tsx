@@ -1,3 +1,4 @@
+
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -19,6 +20,7 @@ import type {ApplicationSettings} from "@igniter/db/provider/schema";
 import { Textarea } from '@igniter/ui/components/textarea'
 import { isPoktBech32Address } from '@/lib/crypto'
 import { cn } from '@igniter/ui/lib/utils'
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 
 interface FormProps {
   defaultValues: Partial<ApplicationSettings>;
@@ -104,7 +106,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
                     <Input {...field} placeholder="e.g., My POKT Provider" />
                   </FormControl>
                   <FormDescription>
-                    The public name of your provider. This is displayed to delegators and stakers.
+                    Displayed to delegators and stakers.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -121,48 +123,42 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
                     <Input {...field} placeholder="e.g., support@mycompany.com" />
                   </FormControl>
                   <FormDescription>
-                    Optional. A contact email shown to delegators and stakers who need help.
+                    Optional contact email shown to delegators.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <FormField
-              name="rewardAddresses"
-              control={form.control}
-              render={({ field, fieldState: {error} }) => (
-                <FormItem>
-                  <FormLabel>Reward Addresses</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      id="rewardAddresses"
-                      placeholder={`Enter one or more addresses (separated by new lines, commas, or spaces):
-
-pokt1abc123def456ghi789jkl012mno345pqr678stu
-pokt1xyz789abc123def456ghi789jkl012mno345pqr
-pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
-                      {...field}
-                      className="min-h-[140px] max-h-[260px] font-mono !text-[12px] border-border-primary bg-bg-root placeholder:text-text-tertiary"
-                    />
-                  </FormControl>
-                  <FormMessage className={cn(!error?.message ? 'text-xs! text-text-secondary' : null)}>
-                    {error?.message ? error.message : (
-                      <>
-                        Used by Delegators to fetch your rewards. These must match the revenue‑share address(es) you provided to suppliers to receive rewards in the addresses group.
-                        <br/>
-                        The Delegators are going to validate that the domains staked match the domains you are going to configure. If it does not match, your rewards are not going to be shown to the users that want to stake in the Delegators.
-                      </>
-                    )}
-                  </FormMessage>
-                </FormItem>
-              )}
-            />
           </div>
+
+          <FormField
+            name="rewardAddresses"
+            control={form.control}
+            render={({ field, fieldState: {error} }) => (
+              <FormItem>
+                <FormLabel>Reward Addresses</FormLabel>
+                <FormControl>
+                  <Textarea
+                    id="rewardAddresses"
+                    placeholder={`pokt1abc123def456ghi789jkl012mno345pqr678stu\npokt1xyz789abc123def456ghi789jkl012mno345pqr`}
+                    {...field}
+                    className="min-h-[100px] max-h-[200px] font-mono !text-[12px] border-border-primary bg-bg-root placeholder:text-text-tertiary"
+                  />
+                </FormControl>
+                <FormMessage className={cn(!error?.message ? 'text-xs! text-text-secondary' : null)}>
+                  {error?.message ? error.message : 'One or more pokt1... addresses where you receive relay rewards. Must match your address group rev-share config.'}
+                </FormMessage>
+              </FormItem>
+            )}
+          />
         </form>
       </Form>
+
+      <SetupHelpBar docAnchor="step-2--identity-settings" />
+
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           disabled={isLoading}
           onClick={goBack}>
           Back

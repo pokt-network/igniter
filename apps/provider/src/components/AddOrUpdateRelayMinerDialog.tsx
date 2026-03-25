@@ -20,7 +20,7 @@ import {
     DialogFooter,
     DialogTitle,
 } from "@igniter/ui/components/dialog";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { LoaderIcon } from "@igniter/ui/assets";
 import type { RelayMiner } from "@igniter/db/provider/schema";
 import {CreateRelayMiner, UpdateRelayMiner} from "@/actions/RelayMiners";
@@ -33,6 +33,16 @@ const Code = ({ children }: { children: React.ReactNode }) => (
         {children}
     </code>
 );
+
+function toSlug(value: string): string {
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/[\s]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
 
 const CreateOrUpdateRelayMinerSchema = z.object({
     name: z
@@ -73,9 +83,9 @@ export function AddOrUpdateRelayMinerDialog({
   const [isCancelling, setIsCanceling] = useState(false);
   const [isCreatingRelayMiner, setIsCreatingRelayMiner] = useState(false);
   const [isUpdatingRelayMiner, setIsUpdatingRelayMiner] = useState(false);
+  const [identityManuallyEdited, setIdentityManuallyEdited] = useState(!!relayMiner);
   const [error, setError] = useState<string | null>(null);
 
-  // Add this query to fetch regions
   const { data: regions, isLoading: isLoadingRegions } = useQuery({
     queryKey: ['regions'],
     queryFn: async () => {
@@ -98,6 +108,22 @@ export function AddOrUpdateRelayMinerDialog({
             domain: relayMiner?.domain ?? "",
         },
     });
+
+    const name = form.watch('name');
+
+    // Auto-generate identity from name (only if not manually edited)
+    useEffect(() => {
+        if (!identityManuallyEdited && !relayMiner) {
+            form.setValue('identity', toSlug(name), { shouldValidate: name.length > 0 });
+        }
+    }, [name, identityManuallyEdited, relayMiner]);
+
+    // Auto-select region if only one option
+    useEffect(() => {
+        if (regions.length === 1 && !form.getValues('regionId')) {
+            form.setValue('regionId', regions[0].id, { shouldValidate: true });
+        }
+    }, [regions]);
 
     const handleCancel = useCallback(() => {
         const formValues = form.getValues();
@@ -146,12 +172,13 @@ export function AddOrUpdateRelayMinerDialog({
     }
 
     const isLoading = isCreatingRelayMiner || isUpdatingRelayMiner || isLoadingRegions;
+    const { isValid } = form.formState;
 
     return (
         <Dialog open={true}>
             <DialogContent
                 onInteractOutside={(e) => e.preventDefault()}
-                className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none"
+                className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none max-h-[90vh] overflow-y-auto"
                 hideClose
             >
                 <DialogTitle asChild>
@@ -208,7 +235,14 @@ export function AddOrUpdateRelayMinerDialog({
                                         <FormItem className="flex flex-col gap-2">
                                             <FormLabel className={'mb-0'}>Identity</FormLabel>
                                             <FormControl>
-                                                <Input {...field} placeholder="e.g., rm-us-east-01" />
+                                                <Input
+                                                    {...field}
+                                                    placeholder="e.g., rm-us-east-01"
+                                                    onChange={(e) => {
+                                                        setIdentityManuallyEdited(true);
+                                                        field.onChange(e);
+                                                    }}
+                                                />
                                             </FormControl>
                                             <FormDescription className={'-mt-3'}>
                                                 A unique URL-safe identifier for this relay miner. Used as the <Code>{'{rm}'}</Code> token in service endpoint URLs, must be unique per region.
@@ -235,6 +269,7 @@ export function AddOrUpdateRelayMinerDialog({
                                                     <Select
                                                         onValueChange={field.onChange}
                                                         defaultValue={field.value?.toString()}
+                                                        value={field.value?.toString()}
                                                     >
                                                         <SelectTrigger>
                                                             <SelectValue
@@ -298,7 +333,7 @@ export function AddOrUpdateRelayMinerDialog({
                                 >
                                     Cancel
                                 </Button>
-                                <Button type="submit" disabled={isLoading}>
+                                <Button type="submit" disabled={isLoading || !isValid}>
                                     {isLoading && (
                                         <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
                                     )}

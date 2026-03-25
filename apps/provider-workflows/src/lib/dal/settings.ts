@@ -18,6 +18,14 @@ export default class Settings {
     this.dbClient = dbClient
   }
 
+  async isBootstrapped(): Promise<boolean> {
+    const settings = await this.dbClient.db
+      .select({ isBootstrapped: schema.applicationSettingsTable.isBootstrapped })
+      .from(schema.applicationSettingsTable)
+      .then(r => (r.length ? r[0] : null))
+    return settings?.isBootstrapped ?? false
+  }
+
   async loadSettings(): Promise<ApplicationSettings | null> {
     this.logger.debug('loadSettings: Execution Started')
     const settings = await this.dbClient.db
