@@ -7,12 +7,13 @@ const Table = React.forwardRef<
   React.HTMLAttributes<HTMLTableElement> & {containerClassName?: string;}
 >(({ className, containerClassName, ...props }, ref) => (
   <div
-    className={cn("relative w-full overflow-auto", containerClassName)}
+    className={cn("relative w-full overflow-auto rounded-lg", containerClassName)}
+    style={{ border: '1px solid var(--border-primary)' }}
   >
     <table
       ref={ref}
       className={cn(
-        "w-full caption-bottom text-sm border-separate border-spacing-y-2",
+        "w-full caption-bottom text-sm",
         className
       )}
       {...props}
@@ -25,7 +26,11 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn("", className)}
+    {...props}
+  />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -35,7 +40,7 @@ const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tbody
     ref={ref}
-    className={cn("[&_tr:last-child]:border-0", className)}
+    className={cn("[&_tr:first-child]:border-t [&_tr:first-child]:border-border-primary [&_tr:not(:first-child):last-child]:border-0", className)}
     {...props}
   />
 ));
@@ -60,7 +65,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "transition-colors hover:bg-bg-hover data-[state=selected]:bg-bg-elevated bg-bg-surface border-b border-border-subtle",
+      "transition-colors hover:bg-bg-hover data-[state=selected]:bg-bg-elevated border-b border-border-primary last:border-0",
       className
     )}
     {...props}
@@ -75,7 +80,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 px-2 text-left align-middle font-semibold text-text-tertiary uppercase text-xs tracking-wide [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "h-10 px-4 text-left align-middle font-medium text-text-secondary uppercase text-[11px] tracking-wider [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
     )}
     {...props}

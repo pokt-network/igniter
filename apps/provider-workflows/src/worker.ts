@@ -12,6 +12,26 @@ import DAL from '@/lib/dal/DAL'
 
 const logger = getLogger()
 
+const BOOTSTRAP_POLL_INTERVAL = parseInt(process.env.BOOTSTRAP_POLL_INTERVAL_MS || '5000')
+
+async function waitForAppBootstrap(dal: DAL, logger: Logger) {
+  logger.info('Waiting for application to be bootstrapped...')
+
+  while (true) {
+    try {
+      const bootstrapped = await dal.settings.isBootstrapped()
+      if (bootstrapped) {
+        logger.info('Application is bootstrapped. Proceeding with worker setup.')
+        return
+      }
+      logger.warn('Application is not yet bootstrapped. Retrying...')
+    } catch (error) {
+      logger.warn({ error }, 'Failed to check bootstrap status. Retrying...')
+    }
+    await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_POLL_INTERVAL))
+  }
+}
+
 export const registerGracefulShutdown = (
   disconnect: () => Promise<void>,
   logger: Logger,
@@ -73,6 +93,7 @@ export async function setupTemporalWorker() {
     shutdownGraceTime,
   })
 
+  await waitForAppBootstrap(dal, logger)
   await bootstrap(logger)
 
   registerGracefulShutdown(disconnect, logger, shutdownGraceTime)

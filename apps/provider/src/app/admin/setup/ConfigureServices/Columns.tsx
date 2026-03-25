@@ -26,7 +26,7 @@ export const columns: ColumnDef<Service>[] = [
       return (
         <div className="flex gap-2">
           {endpoints.map((endpoint, index) => (
-            <div key={`protocol-${endpoint.rpcType}-${index}`} title={endpoint.url} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full cursor-pointer">
+            <div key={`protocol-${endpoint.rpcType}-${index}`} title={endpoint.url} className="text-xs px-2 py-1 rounded-full cursor-pointer" style={{ background: 'rgba(2, 90, 242, 0.12)', color: 'var(--pnf-blue-light, #5ba3f5)', border: '1px solid rgba(2, 90, 242, 0.2)' }}>
               {labelByRpcType[endpoint.rpcType] || endpoint.rpcType}
             </div>
           ))}

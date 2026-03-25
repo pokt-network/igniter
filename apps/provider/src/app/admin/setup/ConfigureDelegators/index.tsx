@@ -1,3 +1,4 @@
+
 'use client';
 
 import {useEffect, useMemo, useState} from "react";
@@ -12,6 +13,7 @@ import {
   ListDelegators,
   UpdateDelegatorsFromSource
 } from "@/actions/Delegators";
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 
 export interface ConfigureDelegatorsProp {
   goNext: () => void;
@@ -138,8 +140,10 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
       <div className="py-2">
         {content}
       </div>
+      <SetupHelpBar docAnchor="step-7--delegators" />
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           disabled={isLoading}
           onClick={goBack}>
           Back

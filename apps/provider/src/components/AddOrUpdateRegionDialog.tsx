@@ -20,7 +20,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@igniter/ui/components/dialog";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { LoaderIcon } from "@igniter/ui/assets";
 import type { Region } from "@igniter/db/provider/schema";
 import { CreateRegion, UpdateRegion } from "@/actions/Regions";
@@ -59,6 +59,7 @@ export function AddOrUpdateRegionDialog({
   const [isCancelling, setIsCanceling] = useState(false);
   const [isCreatingRegion, setIsCreatingRegion] = useState(false);
   const [isUpdatingRegion, setIsUpdatingRegion] = useState(false);
+  const [urlValueManuallyEdited, setUrlValueManuallyEdited] = useState(!!region);
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof CreateOrUpdateRegionSchema>>({
@@ -68,6 +69,23 @@ export function AddOrUpdateRegionDialog({
       urlValue: region?.urlValue ?? "",
     },
   });
+
+  const displayName = form.watch('displayName');
+
+  useEffect(() => {
+    if (!urlValueManuallyEdited && !region) {
+      const slug = displayName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/[\s]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      form.setValue('urlValue', slug, { shouldValidate: displayName.length > 0 });
+    }
+  }, [displayName, urlValueManuallyEdited, region]);
+
+  const { isValid } = form.formState;
 
   const handleCancel = useCallback(() => {
     const formValues = form.getValues();
@@ -120,7 +138,7 @@ export function AddOrUpdateRegionDialog({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none max-h-[90vh] overflow-y-auto"
         hideClose
       >
         <DialogTitle asChild>
@@ -177,7 +195,15 @@ export function AddOrUpdateRegionDialog({
                     <FormItem className="flex flex-col gap-2">
                       <FormLabel>URL Value</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="e.g., us-east" maxLength={20} />
+                        <Input
+                          {...field}
+                          placeholder="e.g., us-east"
+                          maxLength={20}
+                          onChange={(e) => {
+                            setUrlValueManuallyEdited(true);
+                            field.onChange(e);
+                          }}
+                        />
                       </FormControl>
                       <FormDescription className={'leading-5'}>
                         This value is used as the <Code>{'{region}'}</Code> token when building service endpoint URLs for suppliers. The URL pattern is:
@@ -212,7 +238,7 @@ export function AddOrUpdateRegionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading || !isValid}>
                   {isLoading && (
                     <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
                   )}
