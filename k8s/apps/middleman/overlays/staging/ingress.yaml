@@ -19,4 +19,4 @@ spec:
   tls:
     - hosts:
         - staking-dev.pocket.network
-      secretName: staking-dev-pocket-tls
+      secretName: staking-pocket-tls
