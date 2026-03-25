@@ -1,3 +1,4 @@
+
 'use client';
 
 import {useEffect, useState} from "react";
@@ -10,6 +11,7 @@ import {columns} from "./Columns";
 import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import {LoaderIcon} from "@igniter/ui/assets";
 import {PencilIcon, Trash2Icon} from "lucide-react";
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 
 export interface ConfigureServicesProp {
   goNext: () => void;
@@ -142,8 +144,10 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
       <div className="py-2">
         {content}
       </div>
+      <SetupHelpBar docAnchor="step-5--select-provided-services" />
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           disabled={isLoading}
           onClick={goBack}>
           Back

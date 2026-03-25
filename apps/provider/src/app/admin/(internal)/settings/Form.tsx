@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -8,6 +8,7 @@ import { Button } from '@igniter/ui/components/button'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -20,7 +21,6 @@ import {
   GetApplicationSettings,
   RetrieveBlockchainSettings,
   UpsertApplicationSettings,
-  ValidateBlockchainRPC,
   ValidateIndexerUrl,
 } from '@/actions/ApplicationSettings'
 import { LoaderIcon } from '@igniter/ui/assets'
@@ -32,71 +32,19 @@ const FormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   supportEmail: z.string().email('Invalid email format').optional(),
   rewardAddresses: z.string().refine((value) => {
-    if (!value) {
-      return true;
-    }
-
-    const lines = value.trim().split(/[\n,\s]+/);
-    const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address);
-
+    if (!value) return true
+    const lines = value.trim().split(/[\n,\s]+/)
+    const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address)
     return addresses.length !== 0
   }, 'There are no addresses in the list.')
     .refine((value) => {
-      if (!value) {
-        return true;
-      }
-
-      const lines = value.trim().split(/[\n,\s]+/);
-      const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address);
-
-      return addresses.length === lines.length;
+      if (!value) return true
+      const lines = value.trim().split(/[\n,\s]+/)
+      const addresses = lines.map((line) => line.trim()).filter(isPoktBech32Address)
+      return addresses.length === lines.length
     }, 'There are invalid addresses in the list.'),
-  rpcUrl: z.string().optional().superRefine(async (url, ctx) => {
-    if (!url) {
-      return // Skip validation if empty
-    }
-
-    try {
-      const response = await ValidateBlockchainRPC(url)
-
-      if (!response.success && response.errors && response.errors.length > 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: response.errors[0],
-        })
-        return false
-      }
-    } catch (error) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Failed to validate RPC URL',
-      })
-      return false
-    }
-  }),
-  indexerApiUrl: z.string().optional().superRefine(async (url, ctx) => {
-    if (!url) {
-      return // Skip validation if empty
-    }
-
-    try {
-      const response = await ValidateIndexerUrl(url)
-
-      if (!response.success && response.errors && response.errors.length > 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: response.errors[0],
-        })
-        return false
-      }
-    } catch (error) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Failed to validate Indexer API URL',
-      })
-      return false
-    }
-  }),
+  rpcUrl: z.string().url('Please enter a valid URL').optional(),
+  indexerApiUrl: z.string().url('Please enter a valid URL').optional(),
   chainId: z.string().optional(),
   minimumStake: z.number().optional(),
   appIdentity: z.string().optional(),
@@ -106,8 +54,13 @@ const FormSchema = z.object({
 type FormValues = z.infer<typeof FormSchema>;
 
 export default function SettingsForm() {
-  const [isReloadingBlockchainSettings, setIsReloadingBlockchainSettings] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isValidatingRpc, setIsValidatingRpc] = useState(false)
+  const [isValidatingIndexer, setIsValidatingIndexer] = useState(false)
+  const [rpcWarning, setRpcWarning] = useState<string | null>(null)
+  const [indexerWarning, setIndexerWarning] = useState<string | null>(null)
+  const rpcDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const indexerDebounceRef = useRef<NodeJS.Timeout | null>(null)
 
   const {
     data: settings,
@@ -147,39 +100,99 @@ export default function SettingsForm() {
   })
 
   const isDirty = form.formState.isDirty
+  const rpcUrl = form.watch('rpcUrl')
+  const indexerApiUrl = form.watch('indexerApiUrl')
 
-  const reloadBlockchainSettings = async () => {
+  const validateRpcUrl = useCallback(async (url: string) => {
+    if (!url) return
     try {
-      setIsReloadingBlockchainSettings(true)
-      const url = form.getValues().rpcUrl
-      const updatedAtHeight = form.getValues().updatedAtHeight
-      if (!url || !updatedAtHeight) {
-        throw new Error('Invalid RPC URL or Updated At Height')
+      setIsValidatingRpc(true)
+      form.clearErrors('rpcUrl')
+      setRpcWarning(null)
+
+      const response = await RetrieveBlockchainSettings(url, null)
+
+      if (!response.success && response.errors) {
+        form.setError('rpcUrl', { type: 'manual', message: response.errors[0] })
+        return
       }
 
-      const response = await RetrieveBlockchainSettings(url, updatedAtHeight)
-
-      if (!response.success) {
-        throw new Error('Failed to retrieve blockchain settings')
+      if (response.network && response.network !== settings?.chainId) {
+        form.setError('rpcUrl', {
+          type: 'manual',
+          message: `This node is on network "${response.network}" but the app is configured for "${settings?.chainId}". Changing the network is not supported.`,
+        })
+        return
       }
 
-      form.setValue('minimumStake', response.minStake)
-      form.setValue('updatedAtHeight', response.height)
-      await form.handleSubmit(onSubmit)()
-    } catch (error) {
-      // TODO: show a transient error
-      console.error('Failed to reload blockchain settings:', error)
+      if (response.height && settings?.updatedAtHeight) {
+        const newHeight = parseInt(response.height, 10)
+        const storedHeight = parseInt(settings.updatedAtHeight, 10)
+        if (newHeight < storedHeight) {
+          setRpcWarning(`This node's height (${newHeight}) is behind the stored height (${storedHeight}). The node may be syncing.`)
+        }
+      }
+
+      if (response.minStake) {
+        form.setValue('minimumStake', response.minStake, { shouldDirty: true })
+      }
+      if (response.height) {
+        form.setValue('updatedAtHeight', response.height, { shouldDirty: true })
+      }
+    } catch (err) {
+      form.setError('rpcUrl', { type: 'manual', message: (err as Error).message })
     } finally {
-      setIsReloadingBlockchainSettings(false)
+      setIsValidatingRpc(false)
     }
-  }
+  }, [settings?.chainId, settings?.updatedAtHeight])
+
+  const validateIndexerUrl = useCallback(async (url: string) => {
+    if (!url) return
+    try {
+      setIsValidatingIndexer(true)
+      form.clearErrors('indexerApiUrl')
+      setIndexerWarning(null)
+
+      const response = await ValidateIndexerUrl(url)
+
+      if (!response.success && response.errors && response.errors.length > 0) {
+        form.setError('indexerApiUrl', { type: 'manual', message: response.errors[0] })
+      }
+    } catch (err) {
+      form.setError('indexerApiUrl', { type: 'manual', message: 'Failed to validate Indexer API URL' })
+    } finally {
+      setIsValidatingIndexer(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!rpcUrl || rpcUrl === settings?.rpcUrl) return
+    form.clearErrors('rpcUrl')
+    setRpcWarning(null)
+
+    if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current)
+    rpcDebounceRef.current = setTimeout(() => validateRpcUrl(rpcUrl), 1000)
+
+    return () => { if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current) }
+  }, [rpcUrl])
+
+  useEffect(() => {
+    if (!indexerApiUrl || indexerApiUrl === settings?.indexerApiUrl) return
+    form.clearErrors('indexerApiUrl')
+    setIndexerWarning(null)
+
+    if (indexerDebounceRef.current) clearTimeout(indexerDebounceRef.current)
+    indexerDebounceRef.current = setTimeout(() => validateIndexerUrl(indexerApiUrl), 1000)
+
+    return () => { if (indexerDebounceRef.current) clearTimeout(indexerDebounceRef.current) }
+  }, [indexerApiUrl])
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true)
     try {
-      const { chainId, rewardAddresses, ...settings } = values
+      const { chainId, rewardAddresses, ...rest } = values
       await UpsertApplicationSettings({
-        ...settings,
+        ...rest,
         chainId: chainId as ChainId,
         rewardAddresses: rewardAddresses?.split(/[\n,\s]+/)?.filter(isPoktBech32Address) || [],
       }, true)
@@ -284,31 +297,27 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         name="rpcUrl"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-text-secondary">RPC URL</FormLabel>
+                            <FormLabel className="text-text-secondary">
+                              Node API URL
+                              {isValidatingRpc && <LoaderIcon className="inline-block animate-spin ml-2 h-3 w-3" />}
+                            </FormLabel>
                             <FormControl>
-                              <Input {...field} className="bg-bg-input"/>
+                              <Input
+                                {...field}
+                                className="bg-bg-input"
+                                placeholder="https://your-shannon-node-api.example.com"
+                              />
                             </FormControl>
                             <FormMessage/>
+                            {rpcWarning && (
+                              <p className="text-sm text-yellow-500">{rpcWarning}</p>
+                            )}
                           </FormItem>
                         )}
                       />
                     </div>
-                    <div className="mt-4 space-y-3 flex justify-between">
+                    <div className="mt-4 space-y-3">
                       <span className="font-medium text-text-secondary">Blockchain Derived Settings</span>
-                      {!isReloadingBlockchainSettings && (
-                        <Button
-                          className={'bg-bg-elevated'}
-                          variant="outline"
-                          type={'button'}
-                          disabled={isSubmitting || form.formState.dirtyFields.rpcUrl}
-                          onClick={reloadBlockchainSettings}
-                        >
-                          Reload
-                        </Button>
-                      )}
-                      {isReloadingBlockchainSettings && (
-                        <LoaderIcon className="animate-spin"/>
-                      )}
                     </div>
                     <div className="mt-2 space-y-3">
                       <FormField
@@ -366,10 +375,19 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                     name="indexerApiUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Indexer API URL</FormLabel>
+                        <FormLabel>
+                          Indexer API URL
+                          {isValidatingIndexer && <LoaderIcon className="inline-block animate-spin ml-2 h-3 w-3" />}
+                        </FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input
+                            {...field}
+                            placeholder="https://api.poktscan.com"
+                          />
                         </FormControl>
+                        <FormDescription>
+                          The GraphQL API URL of the POKTscan indexer. Must match the same network as your node.
+                        </FormDescription>
                         <FormMessage/>
                       </FormItem>
                     )}

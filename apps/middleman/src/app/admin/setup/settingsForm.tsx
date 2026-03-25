@@ -183,6 +183,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
 
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           onClick={goBack}
         >
           Back

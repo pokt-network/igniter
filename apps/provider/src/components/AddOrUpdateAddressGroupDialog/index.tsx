@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm, useFormContext } from 'react-hook-form'
 import { z } from "zod";
 import { Button } from "@igniter/ui/components/button";
+import { Trash2Icon } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -230,23 +231,31 @@ const ServiceItem = ({
       key={service.serviceId}
       className="grid gap-2 p-3 border border-[var(--slate-dividers)] rounded-md"
     >
-      <div className="flex justify-between px-1">
-        <span
-          className={
-            clsx(
-              'text-sm font-medium',
-              !!serviceError && 'text-warning'
-            )
-          }
-        >
-          {service.name} ({service.serviceId})
-        </span>
-        <FormLabel
-          className="text-text-tertiary hover:underline cursor-pointer"
+      <div className="flex justify-between items-start gap-2 px-1">
+        <div className="min-w-0">
+          <span
+            className={
+              clsx(
+                'text-sm font-medium block truncate',
+                !!serviceError && 'text-warning'
+              )
+            }
+            title={service.name}
+          >
+            {service.name}
+          </span>
+          <span className="text-xs text-text-tertiary font-mono">{service.serviceId}</span>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="shrink-0 text-red-500 hover:text-red-400"
           onClick={onRemove}
         >
+          <Trash2Icon className="h-3.5 w-3.5 mr-1" />
           Remove
-        </FormLabel>
+        </Button>
       </div>
 
       {service.endpoints && service.endpoints.length > 0 && (
@@ -323,11 +332,12 @@ const ServiceItem = ({
             />
 
             <Button
+              variant="ghost"
               className="col-span-2"
               onClick={() => handleRemoveRevShare(idx)}
-              size="sm"
+              size="icon"
             >
-              x
+              <Trash2Icon className="h-4 w-4 text-red-500" />
             </Button>
           </div>
 
@@ -406,6 +416,15 @@ export function AddOrUpdateAddressGroupDialog({
   });
 
   const [defaultAddSupplierShare] = form.watch(['defaultRevShare.addSupplierShare'])
+
+  // Auto-select relay miner if only one option
+  useEffect(() => {
+    if (relayMiners.length === 1 && !form.getValues('relayMinerId')) {
+      form.setValue('relayMinerId', relayMiners[0].id, { shouldValidate: true });
+    }
+  }, [relayMiners]);
+
+  const { isValid } = form.formState;
 
   const handleCancel = useCallback(() => {
     const formValues = form.getValues();
@@ -527,7 +546,7 @@ export function AddOrUpdateAddressGroupDialog({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[900px] !min-w-none !max-w-none h-[670px]"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[900px] !min-w-none !max-w-none max-h-[90vh] overflow-y-auto"
         hideClose
       >
         <DialogTitle asChild>
@@ -552,7 +571,7 @@ export function AddOrUpdateAddressGroupDialog({
                       name="name"
                       control={form.control}
                       render={({ field }) => (
-                        <FormItem className="flex flex-col gap-2">
+                        <FormItem>
                           <FormLabel>Name</FormLabel>
                           <FormControl>
                             <Input {...field} />
@@ -601,9 +620,10 @@ export function AddOrUpdateAddressGroupDialog({
                           Default Revenue Shares
                         </span>
                         <Button
-                          variant={'ghost'}
-                          type={'button'}
-                          className="text-text-tertiary hover:underline cursor-pointer p-0 h-auto hover:bg-transparent"
+                          variant="outline"
+                          type="button"
+                          size="sm"
+                          style={{ borderColor: 'var(--pnf-blue-light, #5ba3f5)', color: 'var(--pnf-blue-light, #5ba3f5)' }}
                           onClick={() => {
                             append({
                               address: '',
@@ -616,14 +636,17 @@ export function AddOrUpdateAddressGroupDialog({
                       </div>
 
                       <div
-                        className="grid gap-2 mt-2 p-3 border border-[var(--slate-dividers)] rounded-md"
+                        className="grid gap-2 mt-2"
                       >
                         <div className="grid grid-cols-24 items-center gap-2">
                           <FormField
                             control={form.control}
                             name={'defaultRevShare.addSupplierShare'}
                             render={({field: {value, onChange, ...field}}) => (
-                              <FormItem className={'flex flex-row items-center col-span-19 gap-2'}>
+                              <FormItem className={'flex flex-row items-center justify-between col-span-19'}>
+                                <FormLabel>
+                                  Add Supplier Share
+                                </FormLabel>
                                 <FormControl>
                                   <Switch
                                     {...field}
@@ -638,12 +661,8 @@ export function AddOrUpdateAddressGroupDialog({
                                         }, 0)
                                       }
                                     }}
-                                    className="border-[var(--slate-dividers)] m-0"
                                   />
                                 </FormControl>
-                                <FormLabel>
-                                  Add Supplier Share
-                                </FormLabel>
                               </FormItem>
                             )}
                           />
@@ -716,11 +735,12 @@ export function AddOrUpdateAddressGroupDialog({
                                     )}
                                   />
                                   <Button
+                                    variant="ghost"
                                     className="col-span-2"
                                     onClick={() => remove(idx)}
-                                    size="sm"
+                                    size="icon"
                                   >
-                                    x
+                                    <Trash2Icon className="h-4 w-4 text-red-500" />
                                   </Button>
                                   {errorMessage && (
                                     <p
@@ -771,22 +791,20 @@ export function AddOrUpdateAddressGroupDialog({
                       control={form.control}
                       name="private"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md py-4 pr-4 -mt-2">
+                        <FormItem className="flex flex-row items-center justify-between rounded-md py-3 -mt-2">
+                          <div className="flex flex-col gap-0.5">
+                            <FormLabel>Internal use only</FormLabel>
+                            <FormDescription className={'!text-[12px]'}>
+                              Hidden from delegators.{' '}
+                              <a href="https://github.com/pokt-network/igniter/blob/main/docs/reference/provider/address-groups.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pnf-blue-light, #5ba3f5)' }}>Learn more</a>
+                            </FormDescription>
+                          </div>
                           <FormControl>
                             <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
-                              className="border-[var(--slate-dividers)]"
                             />
                           </FormControl>
-                          <div className="flex flex-col gap-1">
-                            <FormLabel>Internal use only</FormLabel>
-                            <FormDescription className={'-ml-11 mt-2 !text-[12px]'}>
-                              When enabled, this address group is kept private and will not be shared with Delegators.
-                              Users on the Delegators platform will not see it and won't be able to stake through it.
-                              Use this for address groups reserved for internal operations or testing.
-                            </FormDescription>
-                          </div>
                         </FormItem>
                       )}
                     />
@@ -798,15 +816,18 @@ export function AddOrUpdateAddressGroupDialog({
                             <FormItem className="flex flex-col gap-2 -mt-2">
                               <div className="flex justify-between">
                                 <FormLabel>Linked Addresses</FormLabel>
-                                <FormLabel
-                                    className="text-text-tertiary hover:underline cursor-pointer"
+                                <Button
+                                    variant="outline"
+                                    type="button"
+                                    size="sm"
+                                    style={{ borderColor: 'var(--pnf-blue-light, #5ba3f5)', color: 'var(--pnf-blue-light, #5ba3f5)' }}
                                     onClick={() => {
                                       const currentAddresses = form.getValues("linkedAddresses");
                                       form.setValue("linkedAddresses", [...currentAddresses, ""]);
                                     }}
                                 >
                                   Add Address
-                                </FormLabel>
+                                </Button>
                               </div>
                               <FormControl>
                                 <div className="space-y-2">
@@ -823,30 +844,30 @@ export function AddOrUpdateAddressGroupDialog({
                                             placeholder="pokt..."
                                         />
                                         <Button
+                                            variant="ghost"
                                             className="col-span-2"
                                             onClick={() => {
                                               const currentAddresses = [...form.getValues("linkedAddresses")];
                                               currentAddresses.splice(index, 1);
                                               form.setValue("linkedAddresses", currentAddresses);
                                             }}
-                                            size="sm"
+                                            size="icon"
                                         >
-                                          x
+                                          <Trash2Icon className="h-4 w-4 text-red-500" />
                                         </Button>
                                       </div>
                                   ))}
                                   {linkedAddresses && linkedAddresses.length === 0 && (
-                                      <div className="text-muted-foreground text-sm">
-                                        No linked addresses added
+                                      <div className="text-text-tertiary text-xs italic">
+                                        No linked addresses — visible to all delegators
                                       </div>
                                   )}
                                 </div>
                               </FormControl>
                               <FormMessage />
                               <FormDescription className="-mt-1 !text-[12px]">
-                                When one or more addresses are added, only users signed into the Delegators platform
-                                with a matching wallet address will be able to see and stake through this address group.
-                                Leave empty to make it available to all users.
+                                Restrict visibility to specific wallets.{' '}
+                                <a href="https://github.com/pokt-network/igniter/blob/main/docs/reference/provider/address-groups.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pnf-blue-light, #5ba3f5)' }}>Learn more</a>
                               </FormDescription>
                             </FormItem>
                         )}
@@ -957,7 +978,7 @@ export function AddOrUpdateAddressGroupDialog({
           </Button>
           <Button
             onClick={form.handleSubmit(onSubmit)}
-            disabled={isCreatingAddressGroup || isUpdatingAddressGroup}
+            disabled={isCreatingAddressGroup || isUpdatingAddressGroup || !isValid}
           >
             {addressGroup ? "Update Address Group" : "Add Address Group"}
           </Button>

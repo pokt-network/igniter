@@ -94,6 +94,10 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       clearTimeout(debounceTimerRef.current);
     }
 
+    form.clearErrors('rpcUrl');
+    form.clearErrors('indexerApiUrl');
+    form.setValue('updatedAtHeight', null);
+
     debounceTimerRef.current = setTimeout(() => {
       if (rpcUrl && rpcUrl.trim() !== '') {
         retrieveBlockchainParams();
@@ -200,12 +204,16 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shannon API Url</FormLabel>
+                  <FormLabel>Shannon API URL</FormLabel>
                   <FormControl>
-                    <Input {...field} disabled={isLoadingBlockchainParams} />
+                    <Input
+                      {...field}
+                      placeholder="https://your-shannon-rpc.example.com"
+                    />
                   </FormControl>
                   <FormDescription>
-                    The RPC will determine the chainID and minimum stake. The chainID can not be changed later.
+                    A public RPC or gateway URL for the Pocket Network. This is used to auto-detect
+                    the network and minimum stake. The network (chain ID) cannot be changed after setup.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -244,18 +252,26 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
             <FormField
               name="indexerApiUrl"
               control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Indexer API Url</FormLabel>
-                  <FormControl>
-                    <Input {...field} disabled={!chainId || !rpcUrl || isLoadingBlockchainParams} />
-                  </FormControl>
-                  <FormDescription>
-                   This URL will be used to retrieve rewards calculations
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const isDisabled = !chainId || !rpcUrl;
+                return (
+                  <FormItem>
+                    <FormLabel>Indexer API URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        disabled={isDisabled}
+                        placeholder="https://api.poktscan.com"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      The GraphQL API URL of the POKTscan indexer for your network. Used to retrieve rewards calculations.
+                      Must match the same network as your RPC.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
           </div>
         </form>

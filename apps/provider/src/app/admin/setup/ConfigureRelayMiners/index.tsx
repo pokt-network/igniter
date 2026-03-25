@@ -1,3 +1,4 @@
+
 'use client';
 
 import {useEffect, useMemo, useState} from "react";
@@ -10,6 +11,7 @@ import {AddOrUpdateRelayMinerDialog} from "@/components/AddOrUpdateRelayMinerDia
 import {LoaderIcon} from "@igniter/ui/assets";
 import {Trash2Icon, PencilIcon} from 'lucide-react';
 import type {RelayMinerWithDetails} from "@igniter/db/provider/schema";
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 
 export interface ConfigureRelayMinersProp {
   goNext: () => void;
@@ -146,8 +148,10 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
       <div className="py-2">
         {content}
       </div>
+      <SetupHelpBar docAnchor="step-4--configure-relay-miners" />
       <div className="flex justify-end gap-4">
         <Button
+          variant="outline"
           disabled={isLoading}
           onClick={goBack}>
           Back
