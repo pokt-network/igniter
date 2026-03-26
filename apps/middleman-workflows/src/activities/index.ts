@@ -86,7 +86,11 @@ function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] 
       }
     }
   }
-  return Array.from(domains)
+
+  return Array.from(domains).map((d) => {
+    const parts = d.split('.')
+    return parts.length > 2 ? parts.slice(-2).join('.') : d
+  })
 }
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => ({
