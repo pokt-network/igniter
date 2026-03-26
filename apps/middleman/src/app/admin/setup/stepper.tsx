@@ -2,6 +2,7 @@
 import { Button } from "@igniter/ui/components/button";
 import { Progress } from "@igniter/ui/components/progress";
 import {CheckIcon, LoaderIcon} from "@igniter/ui/assets";
+import { Skeleton } from "@igniter/ui/components/skeleton";
 import { defineStepper } from "@stepperize/react";
 import React, {useEffect} from "react";
 import { cn } from "@igniter/ui/lib/utils";
@@ -108,7 +109,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
   }, [currentIndex]);
 
   return (
-    <div className="space-y-6 p-6 border rounded-lg min-h-[400px] flex flex-col justify-between">
+    <div className="space-y-6 p-6 border rounded-lg h-[calc(100vh-120px)] flex flex-col">
         <div className="flex flex-col gap-5">
           <div className="flex justify-between">
             <h2 className="text-lg font-medium">System Setup</h2>
@@ -189,10 +190,30 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
           </nav>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5 flex-1 overflow-y-auto">
           {isLoadingSettings && (
-            <div className="flex justify-center items-center h-fit">
-              <LoaderIcon className="animate-spin" />
+            <div className="flex flex-col gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2.5">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-3 w-64" />
+              </div>
+              <div className="flex justify-end gap-4">
+                <Skeleton className="h-9 w-16 rounded-md" />
+                <Skeleton className="h-9 w-16 rounded-md" />
+              </div>
             </div>
           )}
           {hasError && (

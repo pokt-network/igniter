@@ -67,7 +67,11 @@ These states will not resolve automatically. Check the key detail view for remed
 - **Remediation Failed** — Automatic remediation did not work. Review the remediation history and retry manually.
 - **Attention Needed** — The system detected a condition it cannot resolve. Review the details and take manual action.
 
-To trigger a remediation retry for `RemediationFailed` or `AttentionNeeded` keys, use the **Mark for Remediation** button on the Keys page.
+The Keys page provides three actions for managing remediation:
+
+- **Clear Remediation** — Resets all `RemediationFailed` or `AttentionNeeded` keys back to `Staked`. The system will re-evaluate them on the next status check.
+- **Request Remediation** — Evaluates all staked suppliers for service mismatches and presents a summary. If you confirm, the system marks affected keys for remediation and triggers the remediation workflow immediately.
+- **Auto Stake** toggle — Controls whether the automatic remediation schedule is active. When paused, the system detects issues but does not auto-remediate — you must use Request Remediation to trigger fixes manually. The initial stake workflow (for new suppliers without services) always runs regardless of this toggle.
 
 ---
 
@@ -171,7 +175,7 @@ All 11 key states from the `KeyState` enum, with display names and operator guid
 | `unstaking` | Unstaking | No | Unstake transaction submitted. Resolves automatically. |
 | `unstaked` | Unstaked | No | Key is no longer staked. Available for export or re-use. |
 | `missing_stake` | Missing Stake | **Yes** | Expected stake not found after 24 hours. Investigate with the owner/staker. |
-| `remediation_failed` | Remediation Failed | **Yes** | Auto-remediation failed. Review remediation history, then use Mark for Remediation. |
+| `remediation_failed` | Remediation Failed | **Yes** | Auto-remediation failed. Review remediation history, then use Clear Remediation. |
 | `attention_needed` | Attention Needed | **Yes** | System cannot auto-resolve. Review key details and take manual action. |
 
 ### Transient vs. Stable States

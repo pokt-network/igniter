@@ -27,6 +27,7 @@ import {
   UpsertApplicationSettings,
 } from '@/actions/ApplicationSettings'
 import type { ApplicationSettings } from '@igniter/db/provider/schema'
+import { SetupHelpBar } from '@/components/SetupHelpBar'
 import { ChainId } from '@igniter/db/provider/enums'
 
 interface FormProps {
@@ -97,8 +98,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   ])
 
   const debouncedRetrieveParams = useCallback(() => {
-    // Clear the error immediately so the user gets instant feedback when they start fixing the URL
     form.clearErrors('rpcUrl')
+    form.clearErrors('indexerApiUrl')
+    // Reset height so switching between networks (e.g., mainnet → beta) doesn't
+    // fail the height regression check against the previous network's height.
+    form.setValue('updatedAtHeight', null)
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current)
@@ -135,7 +139,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
     if (!validatedUrl.success) {
       form.setError('rpcUrl', {
         type: 'manual',
-        message: 'Please enter a valid URL (e.g., https://your-node.example.com:26657)',
+        message: 'Please enter a valid URL (e.g., https://your-node-api.example.com)',
       })
       return
     }
@@ -190,8 +194,9 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   return (
     <div className="flex flex-col justify-between gap-4">
       <Form {...form}>
-        <form ref={formRef} onSubmit={form.handleSubmit(submit)} className="grid gap-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form ref={formRef} onSubmit={form.handleSubmit(submit)} className="grid grid-cols-2 gap-x-6 gap-y-5">
+          {/* Left column */}
+          <div className="flex flex-col gap-5">
             <FormField
               name="appIdentity"
               control={form.control}
@@ -201,77 +206,21 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                   <FormControl>
                     <Input {...field} disabled={true}/>
                   </FormControl>
-                  <FormMessage/>
                   <FormDescription>
-                    Your App Identity is the unique public identifier derived from your private key.
+                    Your public identifier, derived from the <code>APP_IDENTITY</code> private key.
+                    Verify it matches the address in your{' '}
+                    <a href="https://github.com/pokt-network/igniter-governance" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pnf-blue-light, #5ba3f5)' }}>governance registration</a>.
                   </FormDescription>
+                  <FormMessage/>
                 </FormItem>
               )}
             />
 
             <FormField
-              name="rpcUrl"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Node API URL</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      disabled={isLoadingBlockchainParams}
-                      placeholder="https://your-shannon-node.example.com:26657"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    The API endpoint of your full node — <strong>not</strong> a public RPC or gateway URL.
-                    This is used to auto-detect the network and minimum stake. The network (chain ID) cannot be changed after setup.
-                    Example: <code>https://shannon-node.mycompany.com:26657</code>
-                  </FormDescription>
-                  <FormMessage/>
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              name="chainId"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Network</FormLabel>
-                  <FormControl>
-                    <Input {...field} disabled={true}/>
-                  </FormControl>
-                  <FormDescription>
-                    Auto-detected from your node. Cannot be changed after setup.
-                  </FormDescription>
-                  <FormMessage/>
-                </FormItem>
-              )}
-            />
-            <FormField
-              name="minimumStake"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Network Minimum Stake</FormLabel>
-                  <FormControl>
-                    <Input {...field} disabled={true}/>
-                  </FormControl>
-                  <FormDescription>
-                    Auto-detected from your node. Suppliers must stake at least this amount (in uPOKT).
-                  </FormDescription>
-                  <FormMessage/>
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
               name="indexerApiUrl"
               control={form.control}
               render={({ field }) => {
-                const isDisabled = !chainId || !rpcUrl || isLoadingBlockchainParams;
+                const isDisabled = !chainId || !rpcUrl;
                 return (
                 <FormItem>
                   <FormLabel>Indexer API URL</FormLabel>
@@ -279,48 +228,12 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                     <Input
                       {...field}
                       disabled={isDisabled}
-                      placeholder="https://shannon-indexer.example.com/graphql"
+                      placeholder="https://api.poktscan.com"
                     />
                   </FormControl>
                   <FormDescription>
-                    The GraphQL API URL of the POKTscan indexer for your network. Used to fetch supplier rewards and on-chain data.
-                    Must match the same network as your node.
-                    <br/>
-                    For example:
-                    <br/>
-                    POKTscan Mainnet:{' '}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <code
-                            className="cursor-pointer underline decoration-dotted hover:text-foreground transition-colors"
-                            onClick={isDisabled ? undefined : () => field.onChange('https://api.poktscan.com')}
-                          >
-                            https://api.poktscan.com
-                          </code>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isDisabled ? 'Fill in the Node API URL first' : 'Click to use this URL'}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <br/>
-                    POKTscan Beta:{' '}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <code
-                            className="cursor-pointer underline decoration-dotted hover:text-foreground transition-colors"
-                            onClick={isDisabled ? undefined : () => field.onChange('https://beta-api.poktscan.com')}
-                          >
-                            https://beta-api.poktscan.com
-                          </code>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isDisabled ? 'Fill in the Node API URL first' : 'Click to use this URL'}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    The POKTscan GraphQL API for your network. Used to fetch supplier rewards and on-chain data.
+                    Must match the same network as your Node API.
                   </FormDescription>
                   <FormMessage/>
                 </FormItem>
@@ -328,8 +241,94 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               }}
             />
           </div>
+
+          {/* Right column */}
+          <div className="flex flex-col gap-5">
+            <FormField
+              name="rpcUrl"
+              control={form.control}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Pocket API URL</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="https://your-pocket-api.example.com"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    The Cosmos SDK REST API of your Pocket Network node (port <code>1317</code>).
+                    <strong> Do not use the Tendermint RPC</strong> (port <code>26657</code>).
+                    This auto-detects your network and minimum stake. The chain ID is locked after setup.
+                  </FormDescription>
+                  <FormMessage/>
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                name="chainId"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Network</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={true}/>
+                    </FormControl>
+                    <FormDescription>
+                      Auto-detected. Locked after setup.
+                    </FormDescription>
+                    <FormMessage/>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                name="minimumStake"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Minimum Stake</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled={true}/>
+                    </FormControl>
+                    <FormDescription>
+                      Auto-detected (uPOKT).
+                    </FormDescription>
+                    <FormMessage/>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
         </form>
       </Form>
+
+      <SetupHelpBar docAnchor="step-1--blockchain-settings">
+        <span className="text-sm text-muted-foreground">Quick fill both URLs:</span>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all hover:brightness-110"
+          style={{ background: 'rgba(72, 229, 194, 0.12)', border: '1px solid rgba(72, 229, 194, 0.25)', color: 'var(--pnf-mint, #48e5c2)' }}
+          onClick={() => {
+            form.setValue('rpcUrl', 'https://sauron-api.infra.pocket.network', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://api.poktscan.com', { shouldDirty: true });
+          }}
+        >
+          Mainnet
+        </button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all hover:brightness-110"
+          style={{ background: 'rgba(255, 197, 71, 0.12)', border: '1px solid rgba(255, 197, 71, 0.25)', color: 'var(--pnf-gold, #ffc547)' }}
+          onClick={() => {
+            form.setValue('rpcUrl', 'https://sauron-api.beta.infra.pocket.network', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://beta-api.poktscan.com', { shouldDirty: true });
+          }}
+        >
+          Beta
+        </button>
+      </SetupHelpBar>
 
       <div className="flex justify-end">
         <Button type="button" onClick={handleGoNext} disabled={isLoading || isValidating || isSubmitting}>

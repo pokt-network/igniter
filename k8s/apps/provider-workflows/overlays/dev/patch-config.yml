@@ -7,4 +7,4 @@ data:
   TEMPORAL_NAMESPACE: "provider"
   TEMPORAL_TASK_QUEUE: "provider-operations"
   TEMPORAL_WORKFLOW_RETENTION: "604800"
-  POKT_RPC_URL: "https://shannon-testnet-grove-rpc.beta.poktroll.com"
+  POKT_RPC_URL: "https://sauron-rpc.beta.infra.pocket.network"

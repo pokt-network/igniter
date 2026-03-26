@@ -22,7 +22,7 @@ Connect the Provider to the Pocket Network by entering the REST API URL of a Poc
 | Field | Description |
 |-------|-------------|
 | **App Identity** | Your provider's public identifier, derived from the `APP_IDENTITY` private key in your environment. Read-only — displayed for reference. Verify that this matches the address you registered in the [governance PR](https://github.com/pokt-network/pocket-network-genesis/pulls). |
-| **Shannon API URL** | The REST API endpoint of a Pocket Network node (e.g., `https://sauron-api.beta.infra.pocket.network`). This is the Cosmos SDK REST interface, typically served on port `1317` for self-hosted nodes. Required. After entering a valid URL, the app fetches chain parameters automatically. |
+| **Pocket API URL** | The REST API endpoint of a Pocket Network node (e.g., `https://sauron-api.beta.infra.pocket.network`). This is the Cosmos SDK REST interface, typically served on port `1317` for self-hosted nodes. Do not use the Tendermint RPC (port `26657`). Required. After entering a valid URL, the app fetches chain parameters automatically. |
 | **Network** | The chain ID detected from the API (e.g., `pocket-beta`). Read-only — auto-populated. Cannot be changed after bootstrap. |
 | **Network Minimum Stake** | The minimum stake required on-chain, in uPOKT. Read-only — auto-populated from the API. |
 | **Indexer API URL** | URL of the blockchain indexer, used to retrieve reward data. Required. The app validates that the indexer's network matches the detected chain ID. Available indexers: `https://api.poktscan.com` (mainnet) and `https://beta-api.poktscan.com` (beta). |

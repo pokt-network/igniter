@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from "react";
@@ -5,6 +6,7 @@ import type { Region } from "@igniter/db/provider/schema";
 import { DeleteRegion, ListRegions } from "@/actions/Regions";
 import { Button } from "@igniter/ui/components/button";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { SetupHelpBar } from "@/components/SetupHelpBar"
 import { DataTable } from "@/components/DataTable";
 import { columns } from "./Columns";
 import { AddOrUpdateRegionDialog } from "@/components/AddOrUpdateRegionDialog";
@@ -146,19 +148,23 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
         {content}
       </div>
       {goNext && goBack && (
-        <div className="flex justify-end gap-4">
-          <Button
-            disabled={isLoading}
-            onClick={goBack}>
-            Back
-          </Button>
-          <Button
-            disabled={isLoading || (regions.length === 0)}
-            onClick={goNext}
-            >
-            Next
-          </Button>
-        </div>
+        <>
+          <SetupHelpBar docAnchor="step-3--configure-regions" />
+          <div className="flex justify-end gap-4">
+            <Button
+          variant="outline"
+          disabled={isLoading}
+          onClick={goBack}>
+              Back
+            </Button>
+            <Button
+              disabled={isLoading || (regions.length === 0)}
+              onClick={goNext}
+              >
+              Next
+            </Button>
+          </div>
+        </>
       )}
       {regionToDelete && (
         <ConfirmationDialog

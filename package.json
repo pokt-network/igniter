@@ -15,7 +15,9 @@
     "build:middleman-workflows:docker": "./k8s/docker/build.sh middleman-workflows",
     "build:provider-workflows:docker": "./k8s/docker/build.sh provider-workflows",
     "build:provider:docker": "./k8s/docker/build.sh provider",
-    "create-cluster": "./k8s/docker/cluster.sh"
+    "middleman:seed": "pnpm exec tsx apps/middleman/src/db/bootstrap-seed.ts",
+    "create-cluster": "./k8s/docker/cluster.sh",
+    "provider:seed": "pnpm exec tsx apps/provider/src/db/bootstrap-seed.ts"
   },
   "workspaces": [
     "apps/*",

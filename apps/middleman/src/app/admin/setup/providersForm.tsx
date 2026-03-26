@@ -9,7 +9,6 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "@igniter/ui/components/form";
 import { Checkbox } from "@igniter/ui/components/checkbox";
@@ -85,55 +84,74 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
             setIsLoading(false);
           }
         })}
-        className="grid gap-4"
+        className="flex flex-col gap-4"
       >
         <FormField
           control={form.control}
           name="providers"
           render={() => (
             <FormItem>
-              {providers.map((item) => (
-                <FormField
-                  key={item.identity}
-                  control={form.control}
-                  name="providers"
-                  render={({ field }) => {
-                    return (
-                      <FormItem
+              <div className="rounded-md border">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b text-left text-sm text-muted-foreground">
+                      <th className="p-3 w-10"></th>
+                      <th className="p-3">Name</th>
+                      <th className="p-3">Identity</th>
+                      <th className="p-3">URL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providers.map((item) => (
+                      <FormField
                         key={item.identity}
-                        className="flex flex-row items-start space-x-3 space-y-0"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(item.identity)}
-                            onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([
-                                  ...field.value,
-                                  item.identity,
-                                ])
-                                : field.onChange(
-                                  field.value?.filter(
-                                    (value) => value !== item.identity
-                                  )
-                                );
+                        control={form.control}
+                        name="providers"
+                        render={({ field }) => (
+                          <tr
+                            key={item.identity}
+                            className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                            onClick={() => {
+                              const checked = field.value?.includes(item.identity);
+                              if (checked) {
+                                field.onChange(field.value?.filter((v) => v !== item.identity));
+                              } else {
+                                field.onChange([...field.value, item.identity]);
+                              }
                             }}
-                          />
-                        </FormControl>
-                        <FormLabel className="text-sm font-normal">
-                          {item.name}
-                        </FormLabel>
-                      </FormItem>
-                    );
-                  }}
-                />
-              ))}
+                          >
+                            <td className="p-3">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(item.identity)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, item.identity])
+                                      : field.onChange(field.value?.filter((v) => v !== item.identity));
+                                  }}
+                                />
+                              </FormControl>
+                            </td>
+                            <td className="p-3 font-medium">{item.name}</td>
+                            <td className="p-3 font-mono text-sm text-muted-foreground">
+                              {item.identity.slice(0, 10)}...{item.identity.slice(-6)}
+                            </td>
+                            <td className="p-3 text-sm text-muted-foreground truncate max-w-[250px]">
+                              {item.url}
+                            </td>
+                          </tr>
+                        )}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <FormMessage />
             </FormItem>
           )}
         />
         <div className="flex justify-end gap-4">
-          <Button onClick={goBack} disabled={isLoading}>
+          <Button variant="outline" onClick={goBack} disabled={isLoading}>
             Back
           </Button>
           <Button type="submit" disabled={isLoading}>

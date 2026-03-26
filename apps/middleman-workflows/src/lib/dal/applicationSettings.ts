@@ -22,4 +22,12 @@ export default class ApplicationSettings {
   async getFirst() {
     return this.dbClient.db.query.applicationSettingsTable.findFirst();
   }
+
+  async isBootstrapped(): Promise<boolean> {
+    const settings = await this.dbClient.db
+      .select({ isBootstrapped: schema.applicationSettingsTable.isBootstrapped })
+      .from(schema.applicationSettingsTable)
+      .then(r => (r.length ? r[0] : null))
+    return settings?.isBootstrapped ?? false
+  }
 }

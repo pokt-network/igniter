@@ -8,6 +8,10 @@ node_modules
 # Local env files
 apps/provider/.env
 .env
+
+# Bootstrap config files (dev uses local copies of *.example.json)
+**/bootstrap.json
+!**/bootstrap.example.json
 .env.local
 .env.development.local
 .env.test.local

@@ -7,19 +7,51 @@ import { Duration } from '@temporalio/common'
 import { Logger } from '@igniter/logger'
 import Long from 'long'
 import { Client } from '@temporalio/client'
-import {RemediationHistoryEntryReason} from "@igniter/db/provider/enums";
+import { RemediationHistoryEntryReason } from "@igniter/db/provider/enums"
 
 enum ScheduledWorkflowType {
   SupplierStatus = 'SupplierStatus',
   SupplierRemediation = 'SupplierRemediation',
+  SupplierInitialStake = 'SupplierInitialStake',
 }
 
 const ScheduledWorkflowConfig: Record<
   ScheduledWorkflowType,
-  { interval: string }
+  { workflowType: string; interval: string; args: any[]; envVar: string }
 > = {
-  [ScheduledWorkflowType.SupplierStatus]: { interval: '2m' },
-  [ScheduledWorkflowType.SupplierRemediation]: { interval: '10s' },
+  [ScheduledWorkflowType.SupplierStatus]: {
+    workflowType: 'SupplierStatus',
+    interval: '2m',
+    args: [],
+    envVar: 'SCHEDULE_SUPPLIER_STATUS_INTERVAL',
+  },
+  [ScheduledWorkflowType.SupplierRemediation]: {
+    workflowType: 'SupplierRemediation',
+    interval: '10s',
+    args: [{
+      reasons: [RemediationHistoryEntryReason.ServiceMismatch]
+    }],
+    envVar: 'SCHEDULE_SUPPLIER_REMEDIATION_INTERVAL',
+  },
+  [ScheduledWorkflowType.SupplierInitialStake]: {
+    workflowType: 'SupplierRemediation',
+    interval: '10s',
+    args: [{
+      reasons: [RemediationHistoryEntryReason.OwnerInitialStake]
+    }],
+    envVar: 'SCHEDULE_SUPPLIER_INITIAL_STAKE_INTERVAL',
+  },
+}
+
+function parseDurationToMs(duration: string): number {
+  const match = duration.match(/^(\d+)(ms|s|m|h|d)$/)
+  if (!match) throw new Error(`Invalid duration: ${duration}`)
+  const value = match[1]!
+  const unit = match[2]!
+  const multipliers: Record<string, number> = {
+    ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000
+  }
+  return parseInt(value) * multipliers[unit]!
 }
 
 async function bootstrapNamespace(client: Client, config: TemporalConfig, logger: Logger) {
@@ -55,43 +87,66 @@ async function bootstrapNamespace(client: Client, config: TemporalConfig, logger
 }
 
 async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfig, logger: Logger) {
-  for (const type of Object.values(ScheduledWorkflowType)) {
-    const workflowType = type
-    const { interval } = ScheduledWorkflowConfig[workflowType]
+  for (const workflowType of Object.values(ScheduledWorkflowType)) {
+    const wfConfig = ScheduledWorkflowConfig[workflowType]
+    const interval = process.env[wfConfig.envVar] || wfConfig.interval
+    const scheduleId = `${workflowType}-scheduled`
+
+    const handle = client.schedule.getHandle(scheduleId)
 
     try {
-      await client.connection.workflowService.describeSchedule({
-        namespace: config.namespace,
-        scheduleId: `${workflowType}-scheduled`,
-      })
-      logger.info({ workflowType }, `Scheduled workflow already exists. Skipping registration...`)
+      const desc = await handle.describe()
+
+      const currentArgs = desc.action.args ?? []
+      const currentIntervalMs = desc.spec.intervals?.[0]?.every
+      const desiredIntervalMs = parseDurationToMs(interval)
+
+      const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(wfConfig.args)
+      const intervalChanged = currentIntervalMs !== desiredIntervalMs
+
+      if (argsChanged || intervalChanged) {
+        logger.warn(
+          { workflowType, argsChanged, intervalChanged, currentIntervalMs, desiredIntervalMs },
+          'Scheduled workflow config changed. Updating...'
+        )
+        await handle.update((prev) => ({
+          ...prev,
+          action: {
+            ...prev.action,
+            args: wfConfig.args,
+          },
+          spec: {
+            intervals: [{ every: interval as Duration }],
+          },
+        }))
+        logger.info({ workflowType }, 'Scheduled workflow updated successfully')
+      } else {
+        logger.info({ workflowType }, 'Scheduled workflow up to date. Skipping...')
+      }
     } catch (error: unknown) {
+      // Schedule doesn't exist, create it
       try {
-        logger.warn({ workflowType }, `Scheduled workflow does not exist. Registering...`)
-
-        const defaultArgsByType: Record<ScheduledWorkflowType, any[]> = {
-          [ScheduledWorkflowType.SupplierStatus]: [], // no args
-          [ScheduledWorkflowType.SupplierRemediation]: [{
-            // TODO: Add other default automatic remediation as we progress. Initially, we'll only support stake completion.
-            reasons: [RemediationHistoryEntryReason.OwnerInitialStake, RemediationHistoryEntryReason.ServiceMismatch]
-          }],
-        }
-
+        logger.warn({ workflowType }, 'Scheduled workflow does not exist. Registering...')
         await client.schedule.create({
           action: {
             type: 'startWorkflow',
-            workflowType,
+            workflowType: wfConfig.workflowType,
             taskQueue: config.taskQueue!,
-            args: defaultArgsByType[workflowType],
+            args: wfConfig.args,
           },
-          scheduleId: `${workflowType}-scheduled`,
+          scheduleId,
           spec: {
             intervals: [{ every: interval as Duration }],
           },
         })
-      } catch (error) {
-        logger.error({ error, workflowType }, 'Error scheduling scheduled workflow')
-        throw error
+        logger.info({ workflowType, interval }, 'Scheduled workflow created successfully')
+      } catch (createError: any) {
+        if (createError?.code === 6 || createError?.message?.match(/already exists/i)) {
+          logger.info({ workflowType }, 'Scheduled workflow already exists. Skipping registration...')
+        } else {
+          logger.error({ error: createError, workflowType }, 'Error scheduling scheduled workflow')
+          throw createError
+        }
       }
     }
   }

@@ -136,7 +136,7 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
       setShowConfirm(false)
       router.refresh()
     } catch (e) {
-      console.error('Failed to mark for remediation', e)
+      console.error('Failed to clear remediation state', e)
       setError(e instanceof Error ? e.message : 'Failed to update key state. Please try again.')
     } finally {
       setIsSubmitting(false)
@@ -147,12 +147,12 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
     <div className="flex flex-col gap-2">
       {[KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(keyState) && (
         <ActionButton onClick={onRequestRemediation} disabled={isSubmitting}>
-          Mark for remediation
+          Clear remediation
         </ActionButton>
       )}
 
       <ConfirmationDialog
-        title="Mark for remediation"
+        title="Clear remediation"
         open={showConfirm}
         onClose={() => { if (!isSubmitting) setShowConfirm(false) }}
         footerActions={(
@@ -172,7 +172,7 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
           </div>
         )}
         <div className="py-3 text-[14px] text-text-secondary">
-          This will set the key state back to <span className="font-semibold">Staked</span>. Prompting the system to re-evaluate it.
+          This will reset the key state back to <span className="font-semibold">Staked</span>. The system will re-evaluate it on the next status check.
         </div>
       </ConfirmationDialog>
 

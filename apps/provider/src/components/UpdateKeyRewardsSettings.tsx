@@ -101,7 +101,7 @@ export function UpdateKeyRewardsSettings({
     <Dialog open={true}>
       <DialogContent
         onInteractOutside={(e) => e.preventDefault()}
-        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none"
+        className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[500px] !min-w-none !max-w-none max-h-[90vh] overflow-y-auto"
         hideClose
       >
         <DialogTitle asChild>
