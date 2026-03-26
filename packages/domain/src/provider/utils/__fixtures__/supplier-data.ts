@@ -8,7 +8,7 @@ import type { Supplier, ServiceConfigUpdate } from '@igniter/pocket/proto/pocket
 import type { SupplierServiceConfig } from '@igniter/pocket/proto/pocket/shared/service';
 import { RPCType } from '@igniter/pocket/proto/pocket/shared/service';
 import type { KeyWithGroup } from '@igniter/db/provider/schema';
-import { KeyState } from '@igniter/db/provider/schema/enums';
+import { KeyState } from '@igniter/db/provider/enums';
 
 // ---------------------------------------------------------------------------
 // Shared addresses

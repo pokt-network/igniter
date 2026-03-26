@@ -11,6 +11,7 @@ const config: Config = {
         '^@igniter/pocket/proto/(.*)$': '<rootDir>/../pocket/src/proto/generated/$1',
         '^@igniter/pocket/(.*)$': '<rootDir>/../pocket/src/$1',
         '^@igniter/pocket$': '<rootDir>/../pocket/src/index.ts',
+        '^@igniter/db/provider/enums$': '<rootDir>/../db/src/provider/schema/enums',
         '^@igniter/db/(.*)$': '<rootDir>/../db/src/$1',
         '^@igniter/logger$': '<rootDir>/../logger/src/index.ts',
         '^@pocket/(.*)$': '<rootDir>/../pocket/src/$1',

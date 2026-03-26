@@ -3,7 +3,7 @@ custom_build(
     command='./k8s/docker/build.sh middleman',
     dir='../../../',
     deps=['../../../apps/middleman', '../../../packages'],
-    ignore=['node_modules', '**/node_modules', 'packages/**/node_modules', 'apps/**/node_modules', 'apps/**/node_modules/dist', 'packages/**/dist'],
+    ignore=['node_modules', '**/node_modules', '**/dist', '**/*.test.ts', '**/__fixtures__'],
     live_update=[
       sync('../../../apps/middleman', '/app/apps/middleman'),
       sync('../../../packages', '/app/packages'),
