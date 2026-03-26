@@ -1,6 +1,7 @@
 import type {
   InsertKey,
-  Key, KeyWithRelations,
+  Key, KeyWithRelations, KeyWithGroup,
+  RemediationHistoryEntry,
 } from '@igniter/db/provider/schema'
 import * as schema from '@igniter/db/provider/schema'
 import { getDbClient } from '@/db'
@@ -11,6 +12,7 @@ import {
   count,
   eq,
   inArray,
+  sql,
 } from 'drizzle-orm'
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres'
 
@@ -274,4 +276,132 @@ export async function updateKeysStateWhereCurrentStateIn(currentStates: KeyState
       state: newState,
     })
     .where(inArray(keysTable.state, currentStates))
+}
+
+/**
+ * Lists all keys in `Staked` state with deep address group relations,
+ * including addressGroupServices (with service and endpoints),
+ * and relayMiner (with region).
+ *
+ * This mirrors the deep loading pattern from the workflow DAL's `loadKey` function.
+ */
+export async function listStakedKeysWithDetails(): Promise<KeyWithGroup[]> {
+  const dbClient = getDbClient()
+  return dbClient.db.query.keysTable.findMany({
+    where: eq(keysTable.state, KeyState.Staked),
+    with: {
+      addressGroup: {
+        with: {
+          relayMiner: {
+            columns: {
+              id: true,
+              name: true,
+              identity: true,
+              regionId: true,
+              domain: true,
+              createdAt: true,
+              updatedAt: true,
+              createdBy: true,
+              updatedBy: true,
+            },
+            with: {
+              region: true,
+            },
+          },
+          addressGroupServices: {
+            with: {
+              service: {
+                columns: {
+                  name: true,
+                  endpoints: true,
+                },
+              },
+            },
+          },
+        },
+        extras: {
+          keysCount: sql<number>`
+            CAST(
+              (
+                SELECT COUNT(*)
+                FROM ${keysTable}
+                WHERE ${keysTable}."address_group_id" = ${schema.addressGroupTable.id}
+              ) AS INTEGER
+            )
+          `.as('keys_count'),
+        },
+      },
+    },
+  })
+}
+
+/**
+ * Batch update remediationHistory for multiple keys by address.
+ */
+export async function batchUpdateRemediationHistory(
+  updates: Array<{ address: string; remediationHistory: RemediationHistoryEntry[] }>,
+): Promise<void> {
+  const dbClient = getDbClient()
+  await Promise.all(
+    updates.map((update) =>
+      dbClient.db
+        .update(keysTable)
+        .set({ remediationHistory: update.remediationHistory })
+        .where(eq(keysTable.address, update.address)),
+    ),
+  )
+}
+
+/**
+ * Load keys by addresses with deep address group relations.
+ */
+export async function listKeysByAddresses(addresses: string[]): Promise<KeyWithGroup[]> {
+  if (addresses.length === 0) return []
+  const dbClient = getDbClient()
+  return dbClient.db.query.keysTable.findMany({
+    where: inArray(keysTable.address, addresses),
+    with: {
+      addressGroup: {
+        with: {
+          relayMiner: {
+            columns: {
+              id: true,
+              name: true,
+              identity: true,
+              regionId: true,
+              domain: true,
+              createdAt: true,
+              updatedAt: true,
+              createdBy: true,
+              updatedBy: true,
+            },
+            with: {
+              region: true,
+            },
+          },
+          addressGroupServices: {
+            with: {
+              service: {
+                columns: {
+                  name: true,
+                  endpoints: true,
+                },
+              },
+            },
+          },
+        },
+        extras: {
+          keysCount: sql<number>`
+            CAST(
+              (
+                SELECT COUNT(*)
+                FROM ${keysTable}
+                WHERE ${keysTable}."address_group_id" = ${schema.addressGroupTable.id}
+              ) AS INTEGER
+            )
+          `.as('keys_count'),
+        },
+      },
+    },
+  })
 }

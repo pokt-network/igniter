@@ -12,26 +12,34 @@ import { RemediationHistoryEntryReason } from "@igniter/db/provider/enums"
 enum ScheduledWorkflowType {
   SupplierStatus = 'SupplierStatus',
   SupplierRemediation = 'SupplierRemediation',
+  SupplierInitialStake = 'SupplierInitialStake',
 }
 
 const ScheduledWorkflowConfig: Record<
   ScheduledWorkflowType,
-  { interval: string; args: any[]; envVar: string }
+  { workflowType: string; interval: string; args: any[]; envVar: string }
 > = {
   [ScheduledWorkflowType.SupplierStatus]: {
+    workflowType: 'SupplierStatus',
     interval: '2m',
     args: [],
     envVar: 'SCHEDULE_SUPPLIER_STATUS_INTERVAL',
   },
   [ScheduledWorkflowType.SupplierRemediation]: {
+    workflowType: 'SupplierRemediation',
     interval: '10s',
     args: [{
-      reasons: [
-        RemediationHistoryEntryReason.OwnerInitialStake,
-        RemediationHistoryEntryReason.ServiceMismatch,
-      ]
+      reasons: [RemediationHistoryEntryReason.ServiceMismatch]
     }],
     envVar: 'SCHEDULE_SUPPLIER_REMEDIATION_INTERVAL',
+  },
+  [ScheduledWorkflowType.SupplierInitialStake]: {
+    workflowType: 'SupplierRemediation',
+    interval: '10s',
+    args: [{
+      reasons: [RemediationHistoryEntryReason.OwnerInitialStake]
+    }],
+    envVar: 'SCHEDULE_SUPPLIER_INITIAL_STAKE_INTERVAL',
   },
 }
 
@@ -89,7 +97,7 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
     try {
       const desc = await handle.describe()
 
-      const currentArgs = (desc as any).action.args || []
+      const currentArgs = desc.action.args ?? []
       const currentIntervalMs = desc.spec.intervals?.[0]?.every
       const desiredIntervalMs = parseDurationToMs(interval)
 
@@ -122,7 +130,7 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
         await client.schedule.create({
           action: {
             type: 'startWorkflow',
-            workflowType,
+            workflowType: wfConfig.workflowType,
             taskQueue: config.taskQueue!,
             args: wfConfig.args,
           },

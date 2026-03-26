@@ -95,7 +95,7 @@ export async function UpdateKeysState(ids: number[], state: KeyState): Promise<A
   })
 }
 
-export async function MarkKeysForRemediation(): Promise<ActionResult<void>> {
+export async function ClearKeysRemediation(): Promise<ActionResult<void>> {
   return withRequireOwner(async () => {
     await updateKeysStateWhereCurrentStateIn([
       KeyState.AttentionNeeded,

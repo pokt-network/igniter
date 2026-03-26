@@ -4,7 +4,9 @@ import KeysTable from '@/app/admin/(internal)/keys/table'
 import { Button } from '@igniter/ui/components/button'
 import Link from 'next/link'
 import { GetAppName } from '@/actions/ApplicationSettings'
-import MarkForRemediationButton from '@/app/admin/(internal)/keys/MarkForRemediationButton'
+import ClearRemediationButton from '@/app/admin/(internal)/keys/ClearRemediationButton'
+import AutoStakeToggle from '@/app/admin/(internal)/keys/AutoStakeToggle'
+import RequestRemediationButton from '@/app/admin/(internal)/keys/RequestRemediationButton'
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,9 @@ export default async function AddressesPage() {
               Export
             </Button>
           </Link>
-          <MarkForRemediationButton />
+          <ClearRemediationButton />
+          <RequestRemediationButton />
+          <AutoStakeToggle />
         </div>
         <KeysTable />
       </div>

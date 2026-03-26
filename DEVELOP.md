@@ -87,11 +87,46 @@ The `.env.sample` already points to these file paths by default. You can alterna
 | `PROVIDER_JSON` | Inline JSON array of providers (consumed by Middleman) |
 | `PROVIDER_JSON_FILE` | Path to a provider JSON file (consumed by Middleman) |
 
+### Auto-bootstrap (optional)
+
+By default, both apps require completing a setup wizard on first launch. For faster dev iterations, you can skip the wizard by providing a bootstrap config file.
+
+1. Copy the example config and adjust values:
+
+```bash
+# Provider
+cp k8s/apps/provider/overlays/dev/bootstrap.example.json \
+   k8s/apps/provider/overlays/dev/bootstrap.json
+
+# Middleman
+cp k8s/apps/middleman/overlays/dev/bootstrap.example.json \
+   k8s/apps/middleman/overlays/dev/bootstrap.json
+```
+
+2. Add the bootstrap paths to your `.env`:
+
+```bash
+PROVIDER_BOOTSTRAP_CONFIG_PATH=../overlays/dev/bootstrap.json
+MIDDLEMAN_BOOTSTRAP_CONFIG_PATH=../overlays/dev/bootstrap.json
+```
+
+When these variables are set, Tilt injects an init container that seeds the database before the app starts. The seed script:
+- Is **idempotent** — if the app is already bootstrapped, it skips
+- Fetches **minimum stake** and **current height** from the Pocket API at runtime (not hardcoded)
+- Fetches **delegators** (for Provider) and **providers** (for Middleman) from the governance CDN
+- Derives the **app identity** (compressed public key) from the `APP_IDENTITY` private key
+
+The `bootstrap.json` files are gitignored. The `.example.json` files are committed as templates.
+
+> **Important:** The governance files (`k8s/tools/governance/providers.json` and `delegators.json`) must be configured first — the bootstrap seed fetches from them via the governance nginx CDN.
+
 ### Other variables
 
 | Variable | Description |
 |----------|-------------|
-| `MINIMUM_STAKE_BUFFER` | Buffer in uPOKT removed from minimum stake to allow operation after slashes (default: `500000000`) |
+| `MINIMUM_STAKE_BUFFER` | Buffer in uPOKT added to on-chain minimum stake (default: `500000000`) |
+| `PROVIDER_BOOTSTRAP_CONFIG_PATH` | Path to provider bootstrap JSON (relative to Tiltfile). Enables auto-bootstrap when set |
+| `MIDDLEMAN_BOOTSTRAP_CONFIG_PATH` | Path to middleman bootstrap JSON (relative to Tiltfile). Enables auto-bootstrap when set |
 
 ---
 

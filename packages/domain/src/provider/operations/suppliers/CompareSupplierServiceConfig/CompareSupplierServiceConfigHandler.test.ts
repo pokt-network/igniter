@@ -6,6 +6,16 @@ import type {
     SupplierEndpoint,
     ConfigOption,
 } from '@igniter/pocket';
+import { RPCType } from '@igniter/pocket/proto/pocket/shared/service';
+import {
+    matchingSupplierAndKey,
+    mismatchedSupplierAndKey,
+    pristineSupplier,
+    OWNER_ADDRESS,
+    PROVIDER_ADDRESS,
+    DELEGATOR_ADDRESS,
+} from '@igniter/domain/provider/utils/__fixtures__/supplier-data';
+import { getExpectedServicesFromKey } from '@igniter/domain/provider/utils/suppliers';
 
 const rs = (address: string): ServiceRevenueShare => ({ address });
 const co = (key: number, value: string): ConfigOption => ({ key, value });
@@ -75,5 +85,101 @@ describe('CompareSupplierServiceConfigHandler', () => {
 
         expect(result.isEqual).toBe(false);
         expect(result.diff.length).toBeGreaterThan(0);
+    });
+});
+
+// ── Fixture-based comparison tests ──────────────────────────────────────
+describe('CompareSupplierServiceConfigHandler with fixtures', () => {
+    let handler: CompareSupplierServiceConfigHandler;
+
+    beforeAll(() => {
+        handler = new CompareSupplierServiceConfigHandler();
+    });
+
+    it('returns isEqual true when supplier services match expected from key', () => {
+        const expected = getExpectedServicesFromKey(matchingSupplierAndKey.key);
+        const actual = matchingSupplierAndKey.supplier.services;
+
+        const result = handler.execute({
+            serviceConfigSetA: expected,
+            serviceConfigSetB: actual,
+        });
+
+        expect(result.isEqual).toBe(true);
+        expect(result.diff).toEqual([]);
+    });
+
+    it('returns isEqual false when supplier services differ from expected', () => {
+        const expected = getExpectedServicesFromKey(mismatchedSupplierAndKey.key);
+        const actual = mismatchedSupplierAndKey.supplier.services;
+
+        const result = handler.execute({
+            serviceConfigSetA: expected,
+            serviceConfigSetB: actual,
+        });
+
+        expect(result.isEqual).toBe(false);
+        expect(result.diff.length).toBeGreaterThan(0);
+    });
+
+    it('returns isEqual true when services are in different order but semantically equal', () => {
+        const expected = getExpectedServicesFromKey(matchingSupplierAndKey.key);
+        // Reverse the order of services
+        const actual = [...matchingSupplierAndKey.supplier.services].reverse();
+
+        const result = handler.execute({
+            serviceConfigSetA: expected,
+            serviceConfigSetB: actual,
+        });
+
+        expect(result.isEqual).toBe(true);
+    });
+
+    it('returns isEqual false when comparing empty services against populated', () => {
+        const expected = getExpectedServicesFromKey(matchingSupplierAndKey.key);
+
+        const result = handler.execute({
+            serviceConfigSetA: expected,
+            serviceConfigSetB: pristineSupplier.services,
+        });
+
+        expect(result.isEqual).toBe(false);
+        expect(result.diff.length).toBeGreaterThan(0);
+    });
+
+    it('returns isEqual true when both sides are empty', () => {
+        const result = handler.execute({
+            serviceConfigSetA: [],
+            serviceConfigSetB: [],
+        });
+
+        expect(result.isEqual).toBe(true);
+        expect(result.diff).toEqual([]);
+    });
+
+    it('returns isEqual true when revShare entries are in different order', () => {
+        const serviceA: SupplierServiceConfig[] = [{
+            serviceId: 'anvil',
+            endpoints: [{ url: 'https://test.example.com', rpcType: RPCType.JSON_RPC, configs: [] }],
+            revShare: [
+                { address: OWNER_ADDRESS, revSharePercentage: 80 },
+                { address: PROVIDER_ADDRESS, revSharePercentage: 20 },
+            ],
+        }];
+        const serviceB: SupplierServiceConfig[] = [{
+            serviceId: 'anvil',
+            endpoints: [{ url: 'https://test.example.com', rpcType: RPCType.JSON_RPC, configs: [] }],
+            revShare: [
+                { address: PROVIDER_ADDRESS, revSharePercentage: 20 },
+                { address: OWNER_ADDRESS, revSharePercentage: 80 },
+            ],
+        }];
+
+        const result = handler.execute({
+            serviceConfigSetA: serviceA,
+            serviceConfigSetB: serviceB,
+        });
+
+        expect(result.isEqual).toBe(true);
     });
 });
