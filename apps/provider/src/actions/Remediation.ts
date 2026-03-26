@@ -87,9 +87,25 @@ export async function RequestRemediation(addresses: string[]): Promise<ActionRes
       throw new Error('No keys found for the provided addresses')
     }
 
+    const comparer = new CompareSupplierServiceConfigHandler()
     const updates: Array<{ address: string; remediationHistory: RemediationHistoryEntry[] }> = []
 
     for (const key of keys) {
+      // Only mark keys that actually have a service mismatch
+      if (!key.services || key.services.length === 0 || !key.addressGroup) {
+        continue
+      }
+
+      const expectedServices = getExpectedServicesFromKey(key)
+      if (expectedServices.length === 0) continue
+
+      const comparison = comparer.execute({
+        serviceConfigSetA: key.services,
+        serviceConfigSetB: expectedServices,
+      })
+
+      if (comparison.isEqual) continue
+
       const entry: RemediationHistoryEntry = {
         message: 'Service mismatch detected — remediation requested by operator',
         reason: RemediationHistoryEntryReason.ServiceMismatch,
@@ -110,6 +126,10 @@ export async function RequestRemediation(addresses: string[]): Promise<ActionRes
         address: key.address,
         remediationHistory: history,
       })
+    }
+
+    if (updates.length === 0) {
+      return // No keys actually have mismatches
     }
 
     await batchUpdateRemediationHistory(updates)
