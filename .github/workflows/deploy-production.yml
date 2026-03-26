@@ -150,15 +150,5 @@ jobs:
 
           ${DOCKER_IMAGES}"
 
-      - name: Rebase staging on main
-        continue-on-error: true
-        run: |
-          if git ls-remote --exit-code --heads origin staging >/dev/null 2>&1; then
-            git fetch origin staging
-            git checkout staging
-            git rebase origin/main
-            git push --force-with-lease origin staging
-            echo "Staging rebased on main"
-          else
-            echo "Staging branch not found, skipping rebase"
-          fi
+      - name: Sync staging with main
+        run: git push origin main:staging --force
