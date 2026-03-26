@@ -204,16 +204,17 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shannon API URL</FormLabel>
+                  <FormLabel>Pocket API URL</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="https://your-shannon-rpc.example.com"
+                      placeholder="https://your-pocket-api.example.com"
                     />
                   </FormControl>
                   <FormDescription>
-                    A public RPC or gateway URL for the Pocket Network. This is used to auto-detect
-                    the network and minimum stake. The network (chain ID) cannot be changed after setup.
+                    The Cosmos SDK REST API of your Pocket Network node (port <code>1317</code>).
+                    <strong> Do not use the Tendermint RPC</strong> (port <code>26657</code>).
+                    This auto-detects your network and minimum stake. The chain ID is locked after setup.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -44,7 +44,7 @@
    | **Unstaked** | No longer staked — available for export or re-use. |
    | **Stake Failed** | Staking transaction failed. Operator action required. |
    | **Missing Stake** | Expected stake not found after 24 hours. Investigate with the owner/staker. |
-   | **Remediation Failed** | Auto-remediation did not work. Use Mark for Remediation to retry. |
+   | **Remediation Failed** | Auto-remediation did not work. Use Clear Remediation to retry. |
    | **Attention Needed** | System cannot auto-resolve this. Review the key details and take action. |
 
    > Keys progress through states automatically as staking operations proceed. See the [Key Management reference](../../reference/provider/key-management.md) for the full lifecycle diagram and all 11 state definitions.

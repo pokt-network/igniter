@@ -136,6 +136,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           // means the key is imported and is already staked, let's set it to the owner address
           update.ownerAddress = supplier.ownerAddress
         }
+
+        // Backfill for legacy keys with empty owner address
+        if (!key.ownerAddress && supplier.ownerAddress) {
+          update.ownerAddress = supplier.ownerAddress
+        }
       }
 
       log.debug('remediateSupplier: Checking if is owner initial stake remediation needed', {

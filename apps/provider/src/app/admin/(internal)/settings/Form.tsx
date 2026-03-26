@@ -82,7 +82,7 @@ export default function SettingsForm() {
       rpcUrl: settings?.rpcUrl || '',
       indexerApiUrl: settings?.indexerApiUrl || '',
       chainId: settings?.chainId || '',
-      minimumStake: settings?.minimumStake,
+      minimumStake: settings?.minimumStake ?? 0,
       appIdentity: settings?.appIdentity || '',
       updatedAtHeight: settings?.updatedAtHeight || '',
     },
@@ -298,7 +298,7 @@ pokt1def456ghi789jkl012mno345pqr678stu901vwx`}
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-text-secondary">
-                              Node API URL
+                              Pocket API URL
                               {isValidatingRpc && <LoaderIcon className="inline-block animate-spin ml-2 h-3 w-3" />}
                             </FormLabel>
                             <FormControl>

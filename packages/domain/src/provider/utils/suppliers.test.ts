@@ -8,6 +8,16 @@ import {
   getSupplierActiveServices,
   getExpectedServicesFromKey,
 } from './suppliers';
+import {
+  matchingSupplierAndKey,
+  zeroRevShareKey,
+  multiGenerationHistory,
+  deactivatedServicesSupplier,
+  emptyOwnerKey,
+  OWNER_ADDRESS,
+  PROVIDER_ADDRESS,
+  DELEGATOR_ADDRESS,
+} from './__fixtures__/supplier-data';
 
 // ── getSchemeForRpcType ─────────────────────────────────────────────
 describe('getSchemeForRpcType', () => {
@@ -310,5 +320,119 @@ describe('getExpectedServicesFromKey', () => {
     } as any;
 
     expect(getExpectedServicesFromKey(key)).toEqual([]);
+  });
+});
+
+// ── Fixture-based tests ─────────────────────────────────────────────────
+describe('with realistic fixtures', () => {
+  describe('getSupplierActiveServices', () => {
+    it('returns correct active services for multi-generation history at height 250', () => {
+      // At height 250: anvil active, eth-mainnet (new) active,
+      // solana-mainnet pending (activationHeight 300 > 250)
+      const result = getSupplierActiveServices(multiGenerationHistory, 250);
+      const ids = result.map((s) => s.serviceId).sort();
+
+      // anvil and eth-mainnet are in services[], solana-mainnet is pending activation
+      expect(ids).toEqual(['anvil', 'eth-mainnet', 'solana-mainnet']);
+    });
+
+    it('excludes deactivated services at current height', () => {
+      // deactivatedServicesSupplier has eth-mainnet deactivation at 250
+      // At height 200, deactivationHeight 250 > 200 means it's scheduled for removal
+      const result = getSupplierActiveServices(deactivatedServicesSupplier, 200);
+      const ids = result.map((s) => s.serviceId);
+
+      expect(ids).toContain('anvil');
+      expect(ids).not.toContain('eth-mainnet');
+    });
+
+    it('includes services pending activation from history', () => {
+      // At height 150, solana-mainnet has activationHeight 300 > 150 and deactivationHeight 0
+      const result = getSupplierActiveServices(multiGenerationHistory, 150);
+      const ids = result.map((s) => s.serviceId);
+
+      expect(ids).toContain('solana-mainnet');
+    });
+
+    it('returns empty services for pristine supplier', () => {
+      const pristine: Supplier = {
+        ownerAddress: OWNER_ADDRESS,
+        operatorAddress: 'pokt1oper8k2g4jd6h7m9w1c3f5n0b6v4r8q2s7t1e',
+        stake: { denom: 'upokt', amount: '100000000' },
+        services: [],
+        unstakeSessionEndHeight: 0,
+        serviceConfigHistory: [],
+      };
+
+      const result = getSupplierActiveServices(pristine, 100);
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('getExpectedServicesFromKey', () => {
+    it('produces config matching a correctly staked supplier', () => {
+      const expected = getExpectedServicesFromKey(matchingSupplierAndKey.key);
+
+      // Should produce 2 services: anvil and eth-mainnet
+      expect(expected).toHaveLength(2);
+
+      const anvilExpected = expected.find((s) => s.serviceId === 'anvil');
+      const ethExpected = expected.find((s) => s.serviceId === 'eth-mainnet');
+
+      expect(anvilExpected).toBeDefined();
+      expect(ethExpected).toBeDefined();
+
+      // anvil: 1 endpoint (JSON_RPC), revShare: provider 20% + owner 80%
+      expect(anvilExpected!.endpoints).toHaveLength(1);
+      expect(anvilExpected!.endpoints[0]!.rpcType).toBe(RPCType.JSON_RPC);
+      expect(anvilExpected!.revShare).toEqual(
+        expect.arrayContaining([
+          { address: PROVIDER_ADDRESS, revSharePercentage: 20 },
+          { address: OWNER_ADDRESS, revSharePercentage: 80 },
+        ]),
+      );
+
+      // eth-mainnet: 2 endpoints (JSON_RPC + REST)
+      expect(ethExpected!.endpoints).toHaveLength(2);
+    });
+
+    it('includes 0% revShare entry when delegatorRewardsAddress is set with 0% share', () => {
+      // This documents the CURRENT behavior of getExpectedServicesFromKey:
+      // it includes the 0% delegator entry. The re-staking loop bug occurs
+      // because BuildSupplierServiceConfigHandler filters these out.
+      const expected = getExpectedServicesFromKey(zeroRevShareKey);
+
+      expect(expected).toHaveLength(1);
+      const svc = expected[0]!;
+
+      // The 0% delegator entry IS included by getExpectedServicesFromKey
+      const delegatorEntry = svc.revShare.find((r) => r.address === DELEGATOR_ADDRESS);
+      expect(delegatorEntry).toBeDefined();
+      expect(delegatorEntry!.revSharePercentage).toBe(0);
+    });
+
+    it('calculates correct owner remainder after filtering when delegator has 0%', () => {
+      const expected = getExpectedServicesFromKey(zeroRevShareKey);
+      const svc = expected[0]!;
+
+      // delegator=0%, provider=20%, total non-owner = 20%
+      // owner should get 80% remainder
+      const ownerEntry = svc.revShare.find((r) => r.address === OWNER_ADDRESS);
+      expect(ownerEntry).toBeDefined();
+      expect(ownerEntry!.revSharePercentage).toBe(80);
+    });
+
+    it('does not add owner remainder when ownerAddress is empty', () => {
+      const expected = getExpectedServicesFromKey(emptyOwnerKey);
+
+      expect(expected).toHaveLength(1);
+      const svc = expected[0]!;
+
+      // ownerAddress is '' so the condition `revShareSum < 100 && key.ownerAddress` is falsy
+      // Only provider revShare should be present
+      expect(svc.revShare).toHaveLength(1);
+      expect(svc.revShare[0]!.address).toBe(PROVIDER_ADDRESS);
+      expect(svc.revShare[0]!.revSharePercentage).toBe(20);
+    });
   });
 });

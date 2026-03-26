@@ -3,7 +3,7 @@ custom_build(
     command='./k8s/docker/build.sh middleman',
     dir='../../../',
     deps=['../../../apps/middleman', '../../../packages'],
-    ignore=['node_modules', '**/node_modules', 'packages/**/node_modules', 'apps/**/node_modules', 'apps/**/node_modules/dist', 'packages/**/dist'],
+    ignore=['node_modules', '**/node_modules', '**/dist', '**/*.test.ts', '**/__fixtures__'],
     live_update=[
       sync('../../../apps/middleman', '/app/apps/middleman'),
       sync('../../../packages', '/app/packages'),
@@ -41,6 +41,45 @@ for o in objects:
   if o['metadata']['name'] == 'middleman-secrets':
     o['stringData']['APP_IDENTITY'] = APP_IDENTITY
     break
+
+# Auto-bootstrap: if MIDDLEMAN_BOOTSTRAP_CONFIG_PATH points to a local JSON file,
+# read it, create a ConfigMap, mount it in an init container, and seed the DB.
+BOOTSTRAP_LOCAL_PATH=os.getenv('MIDDLEMAN_BOOTSTRAP_CONFIG_PATH', '')
+
+if BOOTSTRAP_LOCAL_PATH != '':
+  bootstrap_content = read_file(BOOTSTRAP_LOCAL_PATH)
+  bootstrap_configmap = {
+    'apiVersion': 'v1',
+    'kind': 'ConfigMap',
+    'metadata': {'name': 'middleman-bootstrap-config'},
+    'data': {'bootstrap.json': str(bootstrap_content)},
+  }
+  objects.append(bootstrap_configmap)
+
+  for o in objects:
+    if o['kind'] == 'Deployment' and o['metadata']['name'] == 'middleman':
+      init_containers = o['spec']['template']['spec'].get('initContainers', [])
+      init_containers.append({
+        'name': 'db-bootstrap-seed',
+        'image': 'localhost:5001/middleman',
+        'workingDir': '/app',
+        'command': ['sh', '-c', 'pnpm exec turbo run build --filter=@igniter/db && cd apps/middleman && pnpm exec tsx src/db/bootstrap-seed.ts'],
+        'env': [{'name': 'BOOTSTRAP_CONFIG_PATH', 'value': '/bootstrap/bootstrap.json'}],
+        'envFrom': [
+          {'configMapRef': {'name': 'middleman-config'}},
+          {'secretRef': {'name': 'middleman-secrets'}},
+          {'secretRef': {'name': 'postgres-middleman-connection'}},
+        ],
+        'volumeMounts': [{'name': 'bootstrap-config', 'mountPath': '/bootstrap', 'readOnly': True}],
+      })
+      o['spec']['template']['spec']['initContainers'] = init_containers
+      volumes = o['spec']['template']['spec'].get('volumes', [])
+      volumes.append({
+        'name': 'bootstrap-config',
+        'configMap': {'name': 'middleman-bootstrap-config'},
+      })
+      o['spec']['template']['spec']['volumes'] = volumes
+      break
 
 # encode it after replace env vars
 k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)

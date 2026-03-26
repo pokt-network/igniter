@@ -3,14 +3,7 @@ custom_build(
     command='./k8s/docker/build.sh middleman-workflows',
     dir='../../../',
     deps=['../../../apps/middleman-workflows', '../../../packages'],
-    ignore=[
-      'node_modules',
-      '**/node_modules',
-      'packages/**/node_modules',
-      'apps/**/node_modules',
-      'apps/**/dist',
-      'packages/**/dist'
-    ],
+    ignore=['node_modules', '**/node_modules', '**/dist', '**/*.test.ts', '**/__fixtures__'],
     live_update=[
       sync('../../../apps/middleman-workflows', '/app/apps/middleman-workflows'),
       sync('../../../packages', '/app/packages'),
