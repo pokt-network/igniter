@@ -74,11 +74,11 @@ export function StakeSuccessStep({amount, selectedOffer, selectedAddressGroupId,
                     <div className="relative flex h-[64px] gradient-border-green">
                         <div
                             className={`absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-                        <span className="text-[20px] text-[var(--text-tertiary)]">
+                        <span className="text-[20px] text-white">
                             Stake
                         </span>
                             <span className="flex flex-row items-center gap-2">
-                            <span className="font-mono text-[20px] text-[var(--text-primary)]">
+                            <span className="font-mono text-[20px] text-white">
                               <Amount value={amount} />
                             </span>
                         </span>
