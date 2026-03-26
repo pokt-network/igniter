@@ -4,16 +4,6 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      bump_type:
-        description: "Version bump type (only for manual trigger)"
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 concurrency:
   group: deploy-production
@@ -26,11 +16,10 @@ permissions:
 jobs:
   deploy:
     if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
-        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
-        contains(github.event.pull_request.labels.*.name, 'release:major')))
+      github.event.pull_request.merged == true &&
+      (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+       contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+       contains(github.event.pull_request.labels.*.name, 'release:major'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,29 +49,8 @@ jobs:
 
       - name: Determine version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger: compute version from latest tag + input
-            LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
-            if [ -z "$LATEST_TAG" ]; then LATEST_TAG="v0.0.0"; fi
-            VERSION=${LATEST_TAG#v}
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-
-            case "${{ inputs.bump_type }}" in
-              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-              patch) PATCH=$((PATCH + 1)) ;;
-            esac
-
-            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
-            # Update overlays since prepare-release didn't run
-            sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman/overlays/mainnet/kustomization.yaml
-            sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-          else
-            # PR merge: version already set by prepare-release workflow
-            NEW_VERSION=$(grep 'newTag:' k8s/apps/middleman/overlays/mainnet/kustomization.yaml | head -1 | sed 's/.*newTag: "\(.*\)"/\1/')
-          fi
-
+          # Version already set by prepare-release workflow in mainnet overlays
+          NEW_VERSION=$(grep 'newTag:' k8s/apps/middleman/overlays/mainnet/kustomization.yaml | head -1 | sed 's/.*newTag: "\(.*\)"/\1/')
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "Deploying version: v$NEW_VERSION"
 
@@ -140,25 +108,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Commit overlay changes and tag
+      - name: Create and push version tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git tag "v${NEW_VERSION}"
-
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual trigger: overlays were updated by the version step, commit and push
-            git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
-                    k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-            if ! git diff --staged --quiet; then
-              git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
-            fi
-            git push origin main --tags
-          else
-            # PR merge: overlays already in main via prepare-release, just push the tag
-            git push origin "v${NEW_VERSION}"
-          fi
+          git push origin "v${NEW_VERSION}"
 
       - name: Create GitHub Release
         env:
