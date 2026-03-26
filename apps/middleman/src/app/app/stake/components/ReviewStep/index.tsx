@@ -212,14 +212,14 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
 
             <div className="relative flex h-[64px] min-h-[64px] gradient-border-slate">
                 <div className={`absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-                    <span className="text-[20px] text-[var(--text-tertiary)]">
+                    <span className="text-[20px] text-white">
                         Stake
                     </span>
                     <span className="flex flex-row items-center gap-2">
-                        <span className="font-mono text-[20px] text-[var(--text-primary)]">
+                        <span className="font-mono text-[20px] text-white">
                             {toCurrencyFormat(amount, 2, 2)}
                         </span>
-                        <span className="font-mono text-[20px] text-[var(--text-tertiary)]">
+                        <span className="font-mono text-[20px] text-white/60">
                             $POKT
                         </span>
                     </span>
