@@ -145,15 +145,20 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Only needed for workflow_dispatch (PR merge already has overlays updated)
-          git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
-                  k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
-          fi
-
           git tag "v${NEW_VERSION}"
-          git push origin main --tags
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger: overlays were updated by the version step, commit and push
+            git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
+                    k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
+            if ! git diff --staged --quiet; then
+              git commit -m "chore(deploy): release v${NEW_VERSION} [skip ci]"
+            fi
+            git push origin main --tags
+          else
+            # PR merge: overlays already in main via prepare-release, just push the tag
+            git push origin "v${NEW_VERSION}"
+          fi
 
       - name: Create GitHub Release
         env:
