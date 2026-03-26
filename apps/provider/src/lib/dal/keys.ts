@@ -342,14 +342,14 @@ export async function batchUpdateRemediationHistory(
   updates: Array<{ address: string; remediationHistory: RemediationHistoryEntry[] }>,
 ): Promise<void> {
   const dbClient = getDbClient()
-  await Promise.all(
-    updates.map((update) =>
-      dbClient.db
+  await dbClient.db.transaction(async (tx) => {
+    for (const update of updates) {
+      await tx
         .update(keysTable)
         .set({ remediationHistory: update.remediationHistory })
-        .where(eq(keysTable.address, update.address)),
-    ),
-  )
+        .where(eq(keysTable.address, update.address))
+    }
+  })
 }
 
 /**

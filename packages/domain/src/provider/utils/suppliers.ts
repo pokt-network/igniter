@@ -3,6 +3,7 @@ import {Supplier, ServiceConfigUpdate} from "@igniter/pocket/proto/pocket/shared
 import {RPCType, SupplierEndpoint, SupplierServiceConfig} from '@igniter/pocket/proto/pocket/shared/service'
 import {PROTOCOL_DEFAULT_URL} from "@igniter/domain/provider/constants";
 import {KeyWithGroup} from "@igniter/db/provider/schema";
+import {RPCTypeMap} from '@igniter/pocket/constants';
 
 export function getSchemeForRpcType(rpcType: RPCType) {
     switch (rpcType) {
@@ -118,14 +119,14 @@ export function getSupplierActiveServices(
 export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierServiceConfig> {
   const expectedServices: Array<SupplierServiceConfig> = []
 
-  for (const addressGroupService of key?.addressGroup?.addressGroupServices || []) {
-    let revShareSum = 0
+  // Use stakeOwner (from chain) as the authoritative owner address,
+  // falling back to ownerAddress (from DB) for backwards compatibility.
+  const ownerAddress = key.stakeOwner || key.ownerAddress
 
+  for (const addressGroupService of key?.addressGroup?.addressGroupServices || []) {
     const revShare: SupplierServiceConfig['revShare'] = []
 
     if (key.delegatorRewardsAddress) {
-      revShareSum += key.delegatorRevSharePercentage ?? 0
-
       revShare.push({
         address: key.delegatorRewardsAddress,
         revSharePercentage: key.delegatorRevSharePercentage ?? 0,
@@ -133,8 +134,6 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
     }
 
     if (addressGroupService.addSupplierShare) {
-      revShareSum += addressGroupService.supplierShare ?? 0
-
       revShare.push({
         address: key.address,
         revSharePercentage: addressGroupService.supplierShare ?? 0,
@@ -142,17 +141,20 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
     }
 
     for (const revShareElement of addressGroupService.revShare) {
-      revShareSum += revShareElement.share
-
       revShare.push({
         address: revShareElement.address,
         revSharePercentage: revShareElement.share,
       })
     }
 
-    if (revShareSum < 100 && key.ownerAddress) {
-      revShare.push({
-        address: key.ownerAddress,
+    // Filter out 0% entries to match BuildSupplierServiceConfigHandler behavior
+    const filteredRevShare = revShare.filter(r => r.revSharePercentage > 0)
+
+    // Calculate owner remainder from filtered sum (not pre-filter)
+    const revShareSum = filteredRevShare.reduce((sum, r) => sum + r.revSharePercentage, 0)
+    if (revShareSum < 100 && ownerAddress) {
+      filteredRevShare.push({
+        address: ownerAddress,
         revSharePercentage: 100 - revShareSum,
       })
     }
@@ -166,10 +168,13 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
           region: key.addressGroup?.relayMiner?.region?.urlValue || '',
           domain: key.addressGroup?.relayMiner?.domain || '',
         }),
-        rpcType: endpoint.rpcType,
+        // Normalize rpcType to numeric to match BuildSupplierServiceConfigHandler
+        rpcType: typeof endpoint.rpcType === 'string'
+          ? (RPCTypeMap[endpoint.rpcType as keyof typeof RPCTypeMap] ?? -1)
+          : endpoint.rpcType,
         configs: []
       })),
-      revShare,
+      revShare: filteredRevShare,
     }
 
     expectedServices.push(newExpectedService)

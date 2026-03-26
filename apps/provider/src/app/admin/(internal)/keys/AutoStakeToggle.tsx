@@ -4,33 +4,26 @@ import React from 'react'
 import { Button } from '@igniter/ui/components/button'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { GetRemediationScheduleStatus, ToggleRemediationSchedule } from '@/actions/Schedules'
 
 export default function AutoStakeToggle() {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
-  const [isLoading, setIsLoading] = React.useState(true)
-  const [paused, setPaused] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
-    let cancelled = false
-    GetRemediationScheduleStatus().then((result) => {
-      if (cancelled) return
-      if (result.success) {
-        setPaused(result.data.paused)
-      } else {
-        setError(result.error.message)
-      }
-    }).catch((e) => {
-      if (cancelled) return
-      setError(e instanceof Error ? e.message : 'Failed to fetch schedule status')
-    }).finally(() => {
-      if (!cancelled) setIsLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [])
+  const { data, isLoading } = useQuery({
+    queryKey: ['remediation-schedule-status'],
+    queryFn: async () => {
+      const result = await GetRemediationScheduleStatus()
+      if (!result.success) throw new Error(result.error.message)
+      return result.data
+    },
+    refetchInterval: 30000,
+  })
+
+  const paused = data?.paused ?? false
 
   const onClick = () => setOpen(true)
 
@@ -47,7 +40,6 @@ export default function AutoStakeToggle() {
         setError(result.error.message)
         return
       }
-      setPaused(!paused)
       setOpen(false)
       router.refresh()
     } catch (e) {

@@ -396,43 +396,43 @@ describe('with realistic fixtures', () => {
       expect(ethExpected!.endpoints).toHaveLength(2);
     });
 
-    it('includes 0% revShare entry when delegatorRewardsAddress is set with 0% share', () => {
-      // This documents the CURRENT behavior of getExpectedServicesFromKey:
-      // it includes the 0% delegator entry. The re-staking loop bug occurs
-      // because BuildSupplierServiceConfigHandler filters these out.
+    it('filters out 0% revShare entries to match BuildSupplierServiceConfigHandler', () => {
       const expected = getExpectedServicesFromKey(zeroRevShareKey);
 
       expect(expected).toHaveLength(1);
       const svc = expected[0]!;
 
-      // The 0% delegator entry IS included by getExpectedServicesFromKey
+      // 0% delegator entry should be filtered out (fixes re-staking loop bug)
       const delegatorEntry = svc.revShare.find((r) => r.address === DELEGATOR_ADDRESS);
-      expect(delegatorEntry).toBeDefined();
-      expect(delegatorEntry!.revSharePercentage).toBe(0);
+      expect(delegatorEntry).toBeUndefined();
     });
 
-    it('calculates correct owner remainder after filtering when delegator has 0%', () => {
+    it('calculates owner remainder from filtered revShare sum', () => {
       const expected = getExpectedServicesFromKey(zeroRevShareKey);
       const svc = expected[0]!;
 
-      // delegator=0%, provider=20%, total non-owner = 20%
-      // owner should get 80% remainder
+      // delegator=0% (filtered out), provider=20%
+      // owner should get 100 - 20 = 80% remainder
       const ownerEntry = svc.revShare.find((r) => r.address === OWNER_ADDRESS);
       expect(ownerEntry).toBeDefined();
       expect(ownerEntry!.revSharePercentage).toBe(80);
     });
 
-    it('does not add owner remainder when ownerAddress is empty', () => {
+    it('uses stakeOwner as owner address when ownerAddress is empty', () => {
       const expected = getExpectedServicesFromKey(emptyOwnerKey);
 
       expect(expected).toHaveLength(1);
       const svc = expected[0]!;
 
-      // ownerAddress is '' so the condition `revShareSum < 100 && key.ownerAddress` is falsy
-      // Only provider revShare should be present
-      expect(svc.revShare).toHaveLength(1);
-      expect(svc.revShare[0]!.address).toBe(PROVIDER_ADDRESS);
-      expect(svc.revShare[0]!.revSharePercentage).toBe(20);
+      // ownerAddress is '' but stakeOwner has a value — should use stakeOwner
+      // provider=20%, owner (from stakeOwner)=80%
+      expect(svc.revShare).toHaveLength(2);
+      expect(svc.revShare).toEqual(
+        expect.arrayContaining([
+          { address: PROVIDER_ADDRESS, revSharePercentage: 20 },
+          { address: OWNER_ADDRESS, revSharePercentage: 80 },
+        ]),
+      );
     });
   });
 });
