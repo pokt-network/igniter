@@ -258,11 +258,11 @@ export default function NodeDetail({
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-text-tertiary">
+          <span className="text-[20px] text-white">
             {status.slice(0, 1).toUpperCase() + status.slice(1)}
           </span>
           <div className="flex flex-row items-center gap-2">
-            <p className="font-mono !text-[20px]">
+            <p className="font-mono !text-[20px] text-white">
               <Amount value={amountToPokt(stakeAmount)} />
             </p>
           </div>

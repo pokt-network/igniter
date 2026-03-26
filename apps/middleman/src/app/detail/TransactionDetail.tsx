@@ -469,11 +469,11 @@ export default function TransactionDetail({
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
-          <span className="text-[20px] text-text-tertiary">
+          <span className="text-[20px] text-white">
             {type === TransactionType.OperationalFunds ? 'Amount' : type}
           </span>
           <div className="flex flex-row items-center gap-2">
-            <p className="font-mono !text-[20px]">
+            <p className="font-mono !text-[20px] text-white">
               <Amount value={totalValue} maxFractionDigits={0} minimumFractionDigits={0} />
             </p>
           </div>
