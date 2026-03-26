@@ -249,11 +249,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               control={form.control}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Node API URL</FormLabel>
+                  <FormLabel>Pocket API URL</FormLabel>
                   <FormControl>
                     <Input
                       {...field}
-                      placeholder="https://your-shannon-node-api.example.com"
+                      placeholder="https://your-pocket-api.example.com"
                     />
                   </FormControl>
                   <FormDescription>

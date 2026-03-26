@@ -4,9 +4,9 @@ import React from 'react'
 import { Button } from '@igniter/ui/components/button'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { useRouter } from 'next/navigation'
-import { MarkKeysForRemediation } from '@/actions/Keys'
+import { ClearKeysRemediation } from '@/actions/Keys'
 
-export default function MarkForRemediationButton() {
+export default function ClearRemediationButton() {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -22,11 +22,11 @@ export default function MarkForRemediationButton() {
     setError(null)
     setIsSubmitting(true)
     try {
-      await MarkKeysForRemediation()
+      await ClearKeysRemediation()
       setOpen(false)
       router.refresh()
     } catch (e) {
-      console.error('Failed to mark keys for remediation', e)
+      console.error('Failed to clear remediation state', e)
       setError(e instanceof Error ? e.message : 'Failed to update keys state. Please try again.')
     } finally {
       setIsSubmitting(false)
@@ -36,11 +36,11 @@ export default function MarkForRemediationButton() {
   return (
     <>
       <Button className={'h-8'} variant={'outline'} onClick={onClick} disabled={isSubmitting}>
-        Mark for remediation
+        Clear remediation
       </Button>
 
       <ConfirmationDialog
-        title="Mark for remediation"
+        title="Clear remediation"
         open={open}
         onClose={onClose}
         footerActions={(
@@ -60,7 +60,7 @@ export default function MarkForRemediationButton() {
           </div>
         )}
         <div className="py-3 text-[14px] text-text-secondary">
-          This will set all keys with state <span className="font-semibold">AttentionNeeded</span> or <span className="font-semibold">RemediationFailed</span> back to <span className="font-semibold">Staked</span>. The system will re-evaluate and try to remediate where possible.
+          This will reset all keys with state <span className="font-semibold">AttentionNeeded</span> or <span className="font-semibold">RemediationFailed</span> back to <span className="font-semibold">Staked</span>. The system will re-evaluate them on the next status check.
         </div>
       </ConfirmationDialog>
     </>

@@ -59,6 +59,11 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
     getKeysMinAndMax(),
   ])
 
+  if (minId == null || maxId == null) {
+    log.info('SupplierStatus: No keys found, nothing to check.')
+    return { height, minId: 0, maxId: 0 }
+  }
+
   const loggerContext = {
     height,
     minId,

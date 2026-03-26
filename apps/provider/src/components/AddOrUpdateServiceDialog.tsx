@@ -358,7 +358,7 @@ export function AddOrUpdateServiceDialog({
 
               {!serviceOnChain && hasLoadServiceError && (
                 <div className="text-sm text-center py-4 px-3 rounded-md" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
-                  Failed to load services from chain. Check your Node API URL.
+                  Failed to load services from chain. Check your Pocket API URL.
                 </div>
               )}
 

@@ -15,8 +15,8 @@ function makeClient(): Client {
 
 export function getTemporalConfig() {
   return {
-    namespace: process.env.TEMPORAL_NAMESPACE || "middleman",
-    taskQueue: process.env.TEMPORAL_TASK_QUEUE || "middleman-operations",
+    namespace: process.env.TEMPORAL_NAMESPACE || "provider",
+    taskQueue: process.env.TEMPORAL_TASK_QUEUE || "provider-operations",
   };
 }
 

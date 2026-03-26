@@ -1,0 +1,54 @@
+{
+  "settings": {
+    "name": "Igniter Provider (Dev)",
+    "rpcUrl": "https://sauron-api.beta.infra.pocket.network",
+    "indexerApiUrl": "https://beta-api.poktscan.com/",
+    "chainId": "pocket-lego-testnet",
+    "rewardAddresses": [],
+    "initialOperationalFunds": 5,
+    "minimumOperationalFunds": 2
+  },
+  "regions": [
+    {
+      "displayName": "US East",
+      "urlValue": "us-east"
+    }
+  ],
+  "relayMiners": [
+    {
+      "name": "RM 01",
+      "identity": "rm-01",
+      "regionName": "US East",
+      "domain": "relay.dev.example.com"
+    }
+  ],
+  "services": [
+    {
+      "serviceId": "pnf-anvil",
+      "name": "Anvil (PNF)",
+      "ownerAddress": "",
+      "computeUnits": 1,
+      "endpoints": [
+        {
+          "url": "",
+          "rpcType": 3
+        }
+      ]
+    }
+  ],
+  "addressGroups": [
+    {
+      "name": "Default Group",
+      "relayMinerName": "RM 01",
+      "private": false,
+      "services": [
+        {
+          "serviceId": "pnf-anvil",
+          "addSupplierShare": false,
+          "supplierShare": 0,
+          "revShare": []
+        }
+      ]
+    }
+  ]
+}

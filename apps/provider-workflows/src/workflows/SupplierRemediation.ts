@@ -55,6 +55,11 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
     getKeysMinAndMax(),
   ])
 
+  if (minId == null || maxId == null) {
+    log.info('SupplierRemediation: No keys found, nothing to remediate.')
+    return { height, minId: 0, maxId: 0 }
+  }
+
   const loggerContext = {
     height,
     minId,
