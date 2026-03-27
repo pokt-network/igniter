@@ -13,7 +13,7 @@ interface FilterDropdownProps<TData> {
   filterGroup: {
     group: string;
     items: Array<{
-      label: string;
+      label: React.ReactNode;
       value: string | number | boolean;
       column: keyof TData;
       isDefault?: boolean;
@@ -21,7 +21,7 @@ interface FilterDropdownProps<TData> {
   };
   columnFilters: ColumnFiltersState;
   table: Table<TData>;
-  defaultLabel: string;
+  defaultLabel: React.ReactNode;
   disabled?: boolean;
 }
 
@@ -32,8 +32,11 @@ export default function FilterDropdown<TData>({
   defaultLabel,
   disabled
                                               }: FilterDropdownProps<TData>) {
+  const columnId = String(filterGroup.items.flat()[0]?.column ?? '');
+
   const isFilterActive = (filterValue: string | number | boolean) => {
     return columnFilters.some((activeFilter) => {
+      if (activeFilter.id !== columnId) return false;
       if (typeof filterValue === "boolean") {
         const activeValue = activeFilter.value === "true" ? true :
           activeFilter.value === "false" ? false :
@@ -44,15 +47,16 @@ export default function FilterDropdown<TData>({
     });
   };
 
-  const activeFilterLabel = filterGroup.items
-    .flat()
-    .find((filter) => isFilterActive(filter.value))?.label || defaultLabel;
+  const activeFilter = columnFilters.find((f) => f.id === columnId);
+  const activeFilterLabel = activeFilter
+    ? filterGroup.items.flat().find((filter) => filter.value === activeFilter.value)?.label || defaultLabel
+    : defaultLabel;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger disabled={disabled}>
         <div className="flex items-center gap-2 py-2 px-4">
-          <span className="text-sm">{activeFilterLabel}</span>
+          <span className="text-sm flex items-center gap-2">{activeFilterLabel}</span>
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top">
@@ -63,19 +67,14 @@ export default function FilterDropdown<TData>({
                 key={String(filter.value)}
                 className="min-w-[130px] px-4 py-2 cursor-pointer rounded-lg flex items-center justify-between hover:bg-bg-hover"
                 onClick={() => {
-                  if (filter.value === "") {
-                    table.resetColumnFilters();
-                  } else {
-                    table.setColumnFilters((_) => [
-                      {
-                        id: String(filter.column),
-                        value: filter.value,
-                      },
-                    ]);
-                  }
+                  table.setColumnFilters((prev) => {
+                    const without = prev.filter((f) => f.id !== columnId);
+                    if (filter.value === "") return without;
+                    return [...without, { id: columnId, value: filter.value }];
+                  });
                 }}
               >
-                <span className="text-sm">{filter.label}</span>
+                <span className="text-sm flex items-center gap-2">{filter.label}</span>
                 {isFilterActive(filter.value) && <CheckSmallIcon />}
               </DropdownMenuItem>
             ))}

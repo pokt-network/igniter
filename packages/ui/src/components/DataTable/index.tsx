@@ -31,7 +31,7 @@ import ExportButton from '../ExportButton'
 import RowsPerPage from './RowsPerPage'
 
 export interface FilterItem<TData> {
-  label: string;
+  label: React.ReactNode;
   value: string | number | boolean;
   column: keyof TData;
   isDefault?: boolean;
@@ -67,6 +67,8 @@ export interface DataTableProps<TData extends object, TValue> {
   headerLeft?: React.ReactNode
   /** Label for the auto-generated count chip (e.g. "txs", "keys"). If set, shows a count chip with filtered row count. */
   countLabel?: string
+  /** Render a status line showing filtered/total counts */
+  renderStatus?: (filteredCount: number, totalCount: number) => React.ReactNode
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -84,6 +86,7 @@ export default function DataTable<TData extends object, TValue>({
   searchPlaceholder = 'Search...',
   headerLeft,
   countLabel,
+  renderStatus,
 }: DataTableProps<TData, TValue>) {
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
@@ -116,8 +119,10 @@ export default function DataTable<TData extends object, TValue>({
         if (Array.isArray(val)) {
           return val.some((v) => String(v).toLowerCase().includes(q))
         }
-        if (typeof val === 'object' && 'name' in val) {
-          return String(val.name).toLowerCase().includes(q)
+        if (typeof val === 'object' && val !== null) {
+          const fields = Object.values(val).filter(v => typeof v === 'string')
+          if (fields.some(f => f.toLowerCase().includes(q))) return true
+          return false
         }
         if (typeof val === 'object' && 'identity' in val) {
           return String(val.identity).toLowerCase().includes(q) || ('name' in val && String(val.name).toLowerCase().includes(q))
@@ -218,6 +223,11 @@ export default function DataTable<TData extends object, TValue>({
 
   return (
     <div>
+      {renderStatus && !isLoading && !isError && (
+        <div className="pb-2">
+          {renderStatus(table.getFilteredRowModel().rows.length, data.length)}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-6">
         <div className="flex items-center gap-3">
           {searchableColumns?.length ? (

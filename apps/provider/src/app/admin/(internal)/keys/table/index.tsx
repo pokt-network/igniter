@@ -67,13 +67,13 @@ export default function KeysTable() {
     <DataTable
       columns={columns}
       data={keys}
-      filters={getFilters(data?.addressesGroup || [])}
+      filters={getFilters(data?.addressesGroup || [], keys)}
       sorts={sorts}
       isLoading={isLoading}
       isError={isError}
       refetch={refetch}
-      searchableColumns={['address', 'ownerAddress']}
-      searchPlaceholder="Search by address or owner..."
+      searchableColumns={['address', 'ownerAddress', 'delegator']}
+      searchPlaceholder="Search by address, owner, or delegator..."
       countLabel="keys"
       headerLeft={
         newCount > 0 ? (

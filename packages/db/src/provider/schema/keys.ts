@@ -128,6 +128,8 @@ export const keysTable = pgTable('keys', {
   stakeAmountUpokt: bigint({ mode: 'bigint' }).default(0n),
   balanceUpokt: bigint({ mode: 'bigint' }).default(0n),
   services: json('services').$type<SupplierServiceConfig[]>().default([]),
+  exportedAt: timestamp(),
+  exportCount: integer().default(0),
 })
 
 /**
@@ -158,7 +160,11 @@ export const keysRelations = relations(keysTable, ({ one }) => ({
  *
  * This type is generated dynamically based on the schema of `keysTable`.
  */
-export type Key = typeof keysTable.$inferSelect;
+type KeyBase = typeof keysTable.$inferSelect;
+export type Key = Omit<KeyBase, 'exportedAt' | 'exportCount'> & {
+  exportedAt?: Date | null;
+  exportCount?: number | null;
+};
 
 /**
  * Type alias representing the inferred type for inserting data into the keys table.

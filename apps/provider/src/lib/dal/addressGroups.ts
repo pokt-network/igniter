@@ -183,3 +183,10 @@ export async function simpleList() {
   const dbClient = getDbClient()
   return dbClient.db.query.addressGroupTable.findMany()
 }
+
+export async function findById(id: number): Promise<AddressGroup | undefined> {
+  const dbClient = getDbClient()
+  return dbClient.db.query.addressGroupTable.findFirst({
+    where: eq(addressGroupTable.id, id),
+  })
+}

@@ -37,6 +37,9 @@ export default async function AddressesPage() {
               <Link href={'/admin/keys/export'}>
                 <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Export</Button>
               </Link>
+              <Link href={'/admin/keys/generate'}>
+                <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Generate</Button>
+              </Link>
               <RequestRemediationButton />
               <ClearRemediationButton />
               <div className="w-px h-6 bg-border-primary" />
