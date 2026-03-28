@@ -17,4 +17,4 @@ data:
   MAINNET_INDEXER_API_URL: "https://api.poktscan.com/"
   BETA_INDEXER_API_URL: "https://beta-api.poktscan.com/"
   ALPHA_INDEXER_API_URL: "https://alpha-api.poktscan.com/"
-  MINIMUM_STAKE_BUFFER: "500000000"
+  MINIMUM_STAKE_BUFFER: "2000000"

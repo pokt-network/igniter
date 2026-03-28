@@ -50,7 +50,7 @@ export function AmountPickerSlider({amount, onValueChange, balance, minimumStake
                             style={{ left: `${(interval / balance) * 100}%` }}
                         />
                     ))}
-                    <SliderPrimitive.Range className="absolute h-full rounded-[3px] bg-gradient-to-l from-[#d781f6] to-[#a868bf]" />
+                    <SliderPrimitive.Range className="absolute h-full rounded-[3px] bg-pnf-blue" />
                 </SliderPrimitive.Track>
                 <SliderPrimitive.Thumb className="h-6 w-6 flex items-center justify-center" asChild>
                     <span className="w-[12px] h-[26px] p-[8px_2px] rounded-[4px] bg-text-primary hover:cursor-pointer">

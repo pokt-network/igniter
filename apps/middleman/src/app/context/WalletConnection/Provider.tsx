@@ -24,7 +24,7 @@ export default async function WalletConnectionProvider({children}: React.PropsWi
         wallet: cookiesAwaited.get(WALLET_COOKIE_KEY)?.value
       }}
       settings={{
-        apiUrl: appSettings.rpcUrl || '',
+        apiUrl: '/api/rpc',
         chainId: appSettings.chainId
       }}
     >

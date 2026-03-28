@@ -126,6 +126,10 @@ export const addressGroupServicesTable = pgTable(
       .$type<{ address: string; share: number }[]>()
       .notNull()
       .default([]),
+
+    endpointOverrides: json('endpointOverrides')
+      .$type<Record<string, string>>()
+      .default({}),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.addressGroupId, table.serviceId] }),

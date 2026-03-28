@@ -41,7 +41,8 @@ export async function insert(
         serviceId: s.serviceId,
         addSupplierShare: s.addSupplierShare ?? false,
         supplierShare: s.supplierShare ?? null,
-        revShare: s.revShare ?? [], // revShare is JSON‐typed, defaults to [] if undefined
+        revShare: s.revShare ?? [],
+        endpointOverrides: s.endpointOverrides ?? {},
       }))
 
       await tx.insert(addressGroupServicesTable).values(toInsert)
@@ -79,6 +80,7 @@ export async function update(
         addSupplierShare: s.addSupplierShare ?? false,
         supplierShare: s.supplierShare ?? null,
         revShare: s.revShare ?? [],
+        endpointOverrides: s.endpointOverrides ?? {},
       }))
       await tx.insert(addressGroupServicesTable).values(toInsert)
     }

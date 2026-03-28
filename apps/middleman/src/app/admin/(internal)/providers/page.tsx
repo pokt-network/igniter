@@ -14,14 +14,25 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function ProvidersPage() {
   return (
-    <div className="flex flex-col gap-10">
-      <div className="mx-30 pt-10">
-        <div className={'flex flex-row items-center gap-4'}>
-          <h1>Providers</h1>
-          <RefreshProviders />
+    <>
+      <div className="border-b-1">
+        <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-6">
+          <div className="flex flex-row justify-between items-center">
+            <div className="flex flex-col">
+              <h1>Providers</h1>
+              <p className="text-text-secondary">
+                Manage the providers delegating through your gateway.
+              </p>
+            </div>
+            <div className="flex flex-row gap-3">
+              <RefreshProviders />
+            </div>
+          </div>
         </div>
+      </div>
+      <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 pt-6">
         <ProvidersTable />
       </div>
-    </div>
+    </>
   )
 }

@@ -1,4 +1,5 @@
 export * from "./ExecuteTransaction";
+export * from './GovernanceSync'
 export * from "./ProviderStatus";
 export * from './ExecutePendingTransactions';
 export * from './SupplierStatus'

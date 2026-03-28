@@ -272,6 +272,37 @@ export enum TransactionResult {
  * - Cancelled: The request was cancelled by the user (e.g., abort and retry).
  * - Failed: The request failed due to invalid signature or other error.
  */
+/**
+ * Represents the types of transactions tracked by the provider.
+ */
+export enum TransactionType {
+  Stake = 'stake',
+  Unstake = 'unstake',
+}
+
+export const transactionTypeEnum = pgEnum('tx_type', enumToPgEnum(TransactionType))
+
+/**
+ * Represents the status of a tracked transaction.
+ */
+export enum TransactionStatus {
+  Pending = 'pending',
+  Success = 'success',
+  Failure = 'failure',
+}
+
+/**
+ * What triggered the transaction.
+ */
+export enum TransactionTrigger {
+  Manual = 'manual',
+  Automatic = 'automatic',
+}
+
+export const transactionTriggerEnum = pgEnum('tx_trigger', enumToPgEnum(TransactionTrigger))
+
+export const transactionStatusEnum = pgEnum('tx_status', enumToPgEnum(TransactionStatus))
+
 export enum ImportRequestStatus {
   Pending = 'pending',
   Completed = 'completed',

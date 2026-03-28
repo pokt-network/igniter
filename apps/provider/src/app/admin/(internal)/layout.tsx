@@ -5,13 +5,12 @@ import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import { ApplicationSettingsProvider } from "@/app/context/ApplicationSettings";
 import { SidebarInset, SidebarProvider } from "@igniter/ui/components/sidebar";
 import { AppTopBar } from "@igniter/ui/components/AppTopBar/index";
-import PriceWidget from "@/components/PriceWidget";
 import CurrentUser from "@/components/CurrentUser";
-import { CurrencyContextProvider } from "@igniter/ui/context/currency";
 import Sidebar from "@/components/Sidebar";
 import QueryClientProvider from '@/app/context/QueryClientProvider'
 import NotificationsProvider from '@igniter/ui/context/Notifications/index'
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins'
+import { ThemeToggle } from '@igniter/ui/theme-toggle'
 import QuickDetailProvider from "@/app/admin/details/QuickDetailProviderBridge"
 
 export default function RootLayout({
@@ -30,14 +29,13 @@ export default function RootLayout({
         >
           <ApplicationSettingsProvider>
             <WalletConnectionProvider>
-              <CurrencyContextProvider>
-                <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
-                  <QuickDetailProvider>
-                    <NotificationsProvider>
-                      <AppTopBar>
-                        <PriceWidget />
-                        <CurrentUser />
-                      </AppTopBar>
+              <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
+                <QuickDetailProvider>
+                  <NotificationsProvider>
+                    <AppTopBar>
+                      <CurrentUser />
+                      <ThemeToggle />
+                    </AppTopBar>
                       <div className="flex flex-1 min-h-0">
                         <Sidebar />
                         <SidebarInset className="!min-h-0">
@@ -49,10 +47,9 @@ export default function RootLayout({
                           </div>
                         </SidebarInset>
                       </div>
-                    </NotificationsProvider>
-                  </QuickDetailProvider>
-                </SidebarProvider>
-              </CurrencyContextProvider>
+                  </NotificationsProvider>
+                </QuickDetailProvider>
+              </SidebarProvider>
             </WalletConnectionProvider>
           </ApplicationSettingsProvider>
         </ThemeProvider>

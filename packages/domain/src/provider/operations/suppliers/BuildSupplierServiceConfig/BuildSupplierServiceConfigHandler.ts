@@ -34,19 +34,26 @@ export class BuildSupplierServiceConfigHandler {
                 throw new RevenueShareOverflowError(totalRevShare);
             }
 
+            const overrides = cfg.endpointOverrides ?? {};
+
             return {
                 serviceId: cfg.serviceId,
                 revShare,
-                endpoints: svc.endpoints.map((ep) => ({
-                    url: getEndpointInterpolatedUrl(ep, {
-                        sid: svc.serviceId,
-                        rm: addressGroup.relayMiner.identity,
-                        region: addressGroup.relayMiner.region.urlValue,
-                        domain: addressGroup.relayMiner.domain,
-                    }),
-                    rpcType: RPCTypeMap[ep.rpcType] ?? -1,
-                    configs: [],
-                })),
+                endpoints: svc.endpoints.map((ep) => {
+                    const rpcKey = String(ep.rpcType);
+                    const overrideUrl = overrides[rpcKey];
+
+                    return {
+                        url: overrideUrl || getEndpointInterpolatedUrl(ep, {
+                            sid: svc.serviceId,
+                            rm: addressGroup.relayMiner.identity,
+                            region: addressGroup.relayMiner.region.urlValue,
+                            domain: addressGroup.relayMiner.domain,
+                        }),
+                        rpcType: RPCTypeMap[ep.rpcType] ?? -1,
+                        configs: [],
+                    };
+                }),
             };
         });
     }

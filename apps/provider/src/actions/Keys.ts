@@ -5,6 +5,7 @@ import type { InsertKey } from '@igniter/db/provider/schema'
 import { KeyState } from '@igniter/db/provider/enums'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
 import {
+  countKeys,
   countPrivateKeysByAddressGroup,
   insertMany,
   listKeysWithPk,
@@ -17,6 +18,10 @@ import {
   type ActionResult,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
+
+export async function CountKeys(): Promise<ActionResult<number>> {
+  return withRequireOwner(async () => countKeys())
+}
 
 export async function ListKeys() {
   return withRequireOwner(async () => {

@@ -9,6 +9,7 @@ import {
 import { Logger } from '@igniter/logger'
 
 enum ScheduledWorkflowType {
+  GovernanceSync = 'GovernanceSync',
   ProviderStatus = "ProviderStatus",
   ExecutePendingTransaction = "ExecutePendingTransactions",
   SupplierStatus = 'SupplierStatus',
@@ -19,6 +20,11 @@ const ScheduledWorkflowConfig: Record<
   ScheduledWorkflowType,
   { interval: string; args: any[]; envVar: string }
 > = {
+  [ScheduledWorkflowType.GovernanceSync]: {
+    interval: '5m',
+    args: [],
+    envVar: 'SCHEDULE_GOVERNANCE_SYNC_INTERVAL',
+  },
   [ScheduledWorkflowType.ProviderStatus]: {
     interval: "1m",
     args: [],

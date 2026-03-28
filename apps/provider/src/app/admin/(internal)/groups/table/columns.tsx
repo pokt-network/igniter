@@ -28,29 +28,15 @@ export const columns: Array<ColumnDef<AddressGroupWithDetails> & CsvColumnDef<Ad
   {
     accessorKey: 'addressGroupServices',
     header: 'Services',
+    meta: { headerAlign: 'center' },
     cell: ({ row }) => {
       const addressGroupServices = row.getValue('addressGroupServices') as AddressGroupWithDetails['addressGroupServices']
-      const services = addressGroupServices.map((as) => as.service.name)
-
-      if (!services || services.length === 0) {
-        return '-'
-      }
+      const count = addressGroupServices?.length ?? 0
 
       return (
-        <div className="flex gap-2">
-          {services.slice(0, 3).map((service) => (
-            <div key={service} className="bg-blue-100 flex items-center px-2 h-[24px] rounded-[4px]">
-              <p className={'text-blue-800 !text-[13px]'}>
-                {service}
-              </p>
-            </div>
-          ))}
-          {services.length > 3 && (
-            <span className="py-1 rounded-full">
-              + {services.length - 3}
-            </span>
-          )}
-        </div>
+        <span className="flex justify-center text-slightly-muted-foreground">
+          {count > 0 ? `${count} service${count !== 1 ? 's' : ''}` : '-'}
+        </span>
       )
     },
   },

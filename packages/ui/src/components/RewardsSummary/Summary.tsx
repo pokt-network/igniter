@@ -44,10 +44,10 @@ function aggregateSummaryResults(results: SummaryData[]): SummaryData {
   }) as SummaryData
 }
 
-function Value({value}: {value: string}) {
+function Value({value, tooltip}: {value: string, tooltip?: string}) {
   return (
-    <p className={'mt-1 sm:text-lg font-medium'}>
-      {value}
+    <p className={'mt-1 sm:text-lg font-medium'} title={tooltip}>
+      {value}{tooltip && <span className="inline-block ml-1 text-xs text-text-tertiary cursor-help" title={tooltip}>&#9432;</span>}
     </p>
   )
 }
@@ -169,25 +169,21 @@ export default function Summary({
             3: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    amountToPokt(
-                      data?.last24h
-                    ),
-                    2,
-                  )
+                  data?.last24h != null
+                    ? toCurrencyFormat(amountToPokt(data.last24h), 2)
+                    : 'N/A'
                 }
+                tooltip={data?.last24h == null ? 'Indexer data unavailable' : undefined}
               />
             ),
             4: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    amountToPokt(
-                      data?.last48h
-                    ),
-                    2,
-                  )
+                  data?.last48h != null
+                    ? toCurrencyFormat(amountToPokt(data.last48h), 2)
+                    : 'N/A'
                 }
+                tooltip={data?.last48h == null ? 'Indexer data unavailable' : undefined}
               />
             ),
           }

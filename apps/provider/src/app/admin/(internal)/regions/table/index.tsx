@@ -72,6 +72,9 @@ export default function RegionsTable() {
             data={regions}
             filters={[]}
             sorts={[]}
+            searchableColumns={['displayName']}
+            searchPlaceholder="Search by name..."
+            countLabel="regions"
         />
     );
 

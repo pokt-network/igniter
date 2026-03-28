@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/db";
-import { and, countDistinct, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   nodesTable,
   NodeWithDetails,
@@ -94,4 +94,39 @@ export async function getProviderCountByUser(userIdentity: string): Promise<numb
     .where(eq(nodesTable.createdBy, userIdentity))
 
   return result[0]?.count ?? 0
+}
+
+export async function getAllNodes(): Promise<NodeWithDetails[]> {
+  return getDb().query.nodesTable.findMany({
+    with: {
+      provider: true,
+      transactionsToNodes: {
+        with: {
+          transaction: true,
+        },
+        limit: 1,
+        orderBy: (t) => [desc(t.transactionId)]
+      },
+    },
+    orderBy: [desc(nodesTable.updatedAt)],
+  })
+}
+
+export async function countAllNodes(): Promise<number> {
+  const [{ value }] = await getDb().select({ value: count() }).from(nodesTable)
+  return value
+}
+
+export async function getAllNodesSummary(): Promise<{ count: number; totalStaked: number }> {
+  const result = await getDb()
+    .select({
+      count: count(),
+      totalStaked: sql<string>`coalesce(sum("stakeAmount"::numeric), 0)`,
+    })
+    .from(nodesTable)
+
+  return {
+    count: result[0]?.count ?? 0,
+    totalStaked: Number(result[0]?.totalStaked ?? 0),
+  }
 }

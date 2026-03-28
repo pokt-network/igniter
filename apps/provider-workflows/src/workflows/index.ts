@@ -1,3 +1,4 @@
+export * from './GovernanceSync'
 export * from './SupplierRemediation'
 export * from './SupplierRemediationRange'
 export * from './SupplierStatus'

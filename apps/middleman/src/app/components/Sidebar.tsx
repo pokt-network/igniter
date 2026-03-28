@@ -32,7 +32,7 @@ const mainRoutes = [
   },
   {
     title: "Suppliers",
-    url: "/app/nodes",
+    url: "/app/suppliers",
     icon: NodesDark,
   },
 ];
@@ -47,6 +47,11 @@ const adminRoutes = [
     title: "Providers",
     url: "/admin/providers",
     icon: ProvidersDark,
+  },
+  {
+    title: "Suppliers",
+    url: "/admin/suppliers",
+    icon: NodesDark,
   },
   {
     title: "Transactions",
@@ -71,7 +76,7 @@ export default function Sidebar({}: Readonly<AppSidebarProps>) {
     <SidebarMenuItem
       key={route.title}
       className={
-        pathname.includes(route.title.toLowerCase())
+        pathname.startsWith(route.url)
           ? "bg-sidebar-active-bg rounded-lg font-medium text-sidebar-active-text"
           : "text-text-secondary"
       }

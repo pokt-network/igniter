@@ -70,6 +70,9 @@ export default function ServicesTable() {
       data={services}
       filters={[]}
       sorts={[]}
+      searchableColumns={['name', 'serviceId']}
+      searchPlaceholder="Search by name or service ID..."
+      countLabel="services"
     />
   );
 

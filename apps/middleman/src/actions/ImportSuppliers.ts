@@ -10,6 +10,21 @@ import * as importAttemptsDal from '@/lib/dal/importSupplierAttempts'
 import { getDb } from '@/db'
 import { ImportedSupplier } from '@/lib/services/importSuppliers'
 import { getExistingNodes, getNodeAddressesByOwnerAndProvider } from '@/lib/dal/nodes'
+import { getApplicationSettings } from '@/lib/dal/applicationSettings'
+
+async function getCurrentHeight(): Promise<number> {
+  try {
+    const settings = await getApplicationSettings()
+    const rpcUrl = settings.rpcUrl?.replace(/\/$/, '')
+    if (!rpcUrl) return 0
+    const res = await fetch(`${rpcUrl}/cosmos/base/node/v1beta1/status`)
+    if (!res.ok) return 0
+    const data = await res.json()
+    return parseInt(data.height, 10) || 0
+  } catch {
+    return 0
+  }
+}
 
 /**
  * Fetches an import attempt and asserts it exists and is owned by the user.
@@ -84,6 +99,7 @@ export async function CompleteImportAttempt(
   const db = getDb()
   const supplierAddresses = suppliers.map((s) => s.address)
   const existingSuppliers = await getExistingNodes(supplierAddresses, userIdentity)
+  const height = await getCurrentHeight()
 
   const nodesToInsert: Array<InsertNode> = []
 
@@ -100,6 +116,7 @@ export async function CompleteImportAttempt(
       providerId: providerIdentity,
       createdBy: attempt.userIdentity,
       balance: BigInt(0),
+      lastUpdatedHeight: height,
     })
   }
 

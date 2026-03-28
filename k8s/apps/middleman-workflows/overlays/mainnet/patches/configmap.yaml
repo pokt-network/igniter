@@ -8,3 +8,4 @@ data:
   TEMPORAL_TASK_QUEUE: "operations"
   TEMPORAL_WORKFLOW_RETENTION: "604800"
   POKT_RPC_URL: "https://sauron-rpc.infra.pocket.network"
+  PROVIDERS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/providers.json"

@@ -22,10 +22,9 @@ export default function AddNewRegion() {
         />
       )}
       <Button
-        variant={"outline"}
         onClick={() => setIsAddingRegion(true)}
       >
-        Add New
+        Add Region
       </Button>
     </>
   )

@@ -1,6 +1,11 @@
 import { getDb } from '@/db'
 import {InsertTransaction, Transaction, transactionsTable} from "@igniter/db/middleman/schema";
-import {eq} from "drizzle-orm";
+import {count, eq} from "drizzle-orm";
+
+export async function countTransactions(): Promise<number> {
+  const [{ value }] = await getDb().select({ value: count() }).from(transactionsTable)
+  return value
+}
 
 export async function getTransactionsByUser(userIdentity: string) {
   return getDb().query.transactionsTable.findMany({

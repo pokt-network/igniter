@@ -135,7 +135,7 @@ async function main() {
         minimumStake,
         isBootstrapped: false,
         chainId: config.settings.chainId,
-        delegatorRewardsAddress: config.settings.delegatorRewardsAddress,
+        delegatorRewardsAddress: config.settings.delegatorRewardsAddress || ownerIdentity,
         rpcUrl: config.settings.rpcUrl,
         indexerApiUrl: config.settings.indexerApiUrl,
         updatedAtHeight,

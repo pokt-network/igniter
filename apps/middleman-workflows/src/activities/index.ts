@@ -93,6 +93,56 @@ function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] 
   })
 }
 
+export type GovernanceSyncResult = {
+  inserted: number;
+  updated: number;
+  disabled: number;
+}
+
+export const governanceActivities = (dal: DAL) => ({
+  async syncProvidersFromGovernance(): Promise<GovernanceSyncResult> {
+    const settings = await dal.appSettings.getFirst()
+    if (!settings) {
+      throw ApplicationFailure.nonRetryable('Application settings not found', 'settings_not_found')
+    }
+
+    const cdnUrlTemplate = process.env.PROVIDERS_CDN_URL
+    if (!cdnUrlTemplate) {
+      throw ApplicationFailure.nonRetryable('PROVIDERS_CDN_URL environment variable is not defined', 'missing_env')
+    }
+
+    const cdnUrl = cdnUrlTemplate.replace(
+      '{chainId}',
+      settings.chainId.replace('lego-testnet', 'beta'),
+    )
+
+    log.info('syncProvidersFromGovernance: Fetching from CDN', { cdnUrl })
+
+    const response = await fetch(cdnUrl)
+    if (!response.ok) {
+      throw ApplicationFailure.retryable(`Failed to fetch providers: ${response.statusText}`, 'fetch_failed')
+    }
+
+    type CdnProvider = {
+      name: string;
+      identity: string;
+      identityHistory: string[];
+      url: string;
+    }
+
+    const providersFromCdn = (await response.json()) as CdnProvider[]
+    log.info('syncProvidersFromGovernance: Fetched providers', { count: providersFromCdn.length })
+
+    const result = await dal.provider.upsertFromGovernance(
+      providersFromCdn,
+      settings.ownerIdentity,
+    )
+
+    log.info('syncProvidersFromGovernance: Done', result)
+    return result
+  },
+})
+
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => ({
   /**
    * Returns the latest block height from the blockchain.

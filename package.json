@@ -17,7 +17,8 @@
     "build:provider:docker": "./k8s/docker/build.sh provider",
     "middleman:seed": "pnpm exec tsx apps/middleman/src/db/bootstrap-seed.ts",
     "create-cluster": "./k8s/docker/cluster.sh",
-    "provider:seed": "pnpm exec tsx apps/provider/src/db/bootstrap-seed.ts"
+    "provider:seed": "pnpm exec tsx apps/provider/src/db/bootstrap-seed.ts",
+    "generate:localnet-keys": "./apps/provider/node_modules/.bin/tsx tools/generate-localnet-keys.ts"
   },
   "workspaces": [
     "apps/*",

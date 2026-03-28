@@ -1,7 +1,12 @@
 import "server-only";
 import { getDb } from "@/db";
 import { Provider, providersTable } from "@igniter/db/middleman/schema";
-import {and, eq, sql} from "drizzle-orm";
+import {and, count, eq, sql} from "drizzle-orm";
+
+export async function countProviders(): Promise<number> {
+  const [{ value }] = await getDb().select({ value: count() }).from(providersTable)
+  return value
+}
 
 export async function upsertProviders(
   providers: Pick<Provider, "name" | "identity" | "url" | "enabled" | "visible" | "createdBy" | "updatedBy">[],
