@@ -2,6 +2,7 @@
 import { Button } from './button'
 import CopyIcon from '../assets/icons/dark/copy.svg'
 import CheckIcon from '../assets/icons/dark/check_success.svg'
+import AvatarByString from './AvatarByString'
 import React from 'react'
 import { getShortAddress } from '../lib/utils'
 import { clsx } from 'clsx'
@@ -9,9 +10,10 @@ import { clsx } from 'clsx'
 interface AddressProps {
   address: string;
   onClick?: (address: string) => void;
+  showAvatar?: boolean;
 }
 
-export default function Address({address, onClick}: AddressProps) {
+export default function Address({address, onClick, showAvatar}: AddressProps) {
   const [isCopied, setIsCopied] = React.useState(false);
 
   const handleCopy = () => {
@@ -23,6 +25,7 @@ export default function Address({address, onClick}: AddressProps) {
 
   return (
     <div className={'flex items-center gap-3'}>
+      {showAvatar && <AvatarByString string={address} size={18} />}
       <Button
         variant={'link'}
         className={

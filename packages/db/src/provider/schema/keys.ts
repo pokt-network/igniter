@@ -128,6 +128,8 @@ export const keysTable = pgTable('keys', {
   stakeAmountUpokt: bigint({ mode: 'bigint' }).default(0n),
   balanceUpokt: bigint({ mode: 'bigint' }).default(0n),
   services: json('services').$type<SupplierServiceConfig[]>().default([]),
+  exportedAt: timestamp(),
+  exportCount: integer().default(0),
 })
 
 /**

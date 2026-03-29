@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
 import React from 'react'
 import KeysTable from '@/app/admin/(internal)/keys/table'
-import { Button } from '@igniter/ui/components/button'
-import Link from 'next/link'
 import { GetAppName } from '@/actions/ApplicationSettings'
 import ClearRemediationButton from '@/app/admin/(internal)/keys/ClearRemediationButton'
 import AutoStakeToggle from '@/app/admin/(internal)/keys/AutoStakeToggle'
 import RequestRemediationButton from '@/app/admin/(internal)/keys/RequestRemediationButton'
+import KeyActions from '@/app/admin/(internal)/keys/KeyActions'
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +30,7 @@ export default async function AddressesPage() {
               </p>
             </div>
             <div className="flex flex-row gap-3 items-center">
-              <Link href={'/admin/keys/import'}>
-                <Button>Import</Button>
-              </Link>
-              <Link href={'/admin/keys/export'}>
-                <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Export</Button>
-              </Link>
+              <KeyActions />
               <RequestRemediationButton />
               <ClearRemediationButton />
               <div className="w-px h-6 bg-border-primary" />
