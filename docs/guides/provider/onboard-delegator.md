@@ -5,7 +5,7 @@
 > **Before you start**
 >
 > - Your Provider instance must be deployed and fully bootstrapped. See the [Provider setup guide](../../../apps/provider/README.md) if you haven't done this yet.
-> - You need to know whether you'll be importing delegators from the governance CDN or adding them manually. Most operators use the CDN — check that `DELEGATORS_CDN_URL` is set in your `.env` file if so.
+> - Delegators are automatically synced from the governance CDN every 5 minutes via the `GovernanceSync` Temporal workflow. Ensure `DELEGATORS_CDN_URL` is set in your provider-workflows configuration.
 > - You should be logged in to the Provider admin UI (`/admin`) with your owner wallet.
 
 ---
@@ -15,27 +15,19 @@
    ![Navigate to Delegators page](screenshots/step-01-delegators-page.png)
    <!-- Capture: The Delegators page showing the table with Name, Identity, Created At, and Enable/Disable columns. Include the Reload button in the top-right area. -->
 
-2. **Set up your CDN URL (if you haven't already).** If you plan to import delegators from the governance CDN, confirm that `DELEGATORS_CDN_URL` is set in your environment file. The default value (`https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/middleman.json`) works for most setups — the `{chainId}` placeholder is replaced automatically at runtime with your configured chain. For full details on the CDN format, see the [Delegators reference](../../reference/provider/delegators.md).
-
-   ![Environment configuration for CDN URL](screenshots/step-02-cdn-url-config.png)
-   <!-- Capture: A terminal or text editor showing the .env file with DELEGATORS_CDN_URL set. Blur or redact any sensitive values. -->
-
-3. **Click Reload to sync delegators from the CDN.** On the Delegators page, click the **Reload** button next to the page heading. The Provider fetches the governance JSON, compares it with your existing list, and inserts any new entries. You should see the table refresh automatically when the import completes.
+2. **Check that delegators have synced.** The `GovernanceSync` workflow runs every 5 minutes and automatically imports delegators from the governance CDN. New delegators arrive as **enabled** by default. If you need to force an immediate sync, click the **Reload** button next to the page heading — this triggers the workflow manually.
 
    ![Reload button on Delegators page](screenshots/step-03-reload-button.png)
-   <!-- Capture: The Delegators page with the Reload button highlighted. Ideally capture the moment the table refreshes with new entries. -->
+   <!-- Capture: The Delegators page with the Reload button highlighted. -->
 
-4. **Find your newly imported delegator.** New delegators from the CDN always arrive as **disabled** — this is intentional so you control which ones you accept. Use the filter bar at the top of the table and select **Disabled** to quickly surface the entries that need your attention.
+3. **Review the delegator list.** Use the filter bar at the top of the table to show **All**, **Enabled**, or **Disabled** delegators. Verify that the delegators you expect are present.
 
-   ![Filter to Disabled delegators](screenshots/step-04-filter-disabled.png)
-   <!-- Capture: The Delegators table with the Disabled filter active, showing one or more newly imported delegators with the Disabled toggle visible in their row. -->
-
-5. **Enable the delegator.** Find the delegator you want to onboard and click **Enable** in the rightmost column of their row. The button updates immediately on success — you should see it switch to **Disable**, confirming the delegator is now active. Enabling a delegator allows their Middleman instance to request supplier addresses from your Provider and initiate stake transactions that the owner signs. No private keys are ever transferred — the owner always retains custody and signs on their side.
+4. **Toggle delegator status if needed.** Delegators synced from governance are enabled by default. To disable one, find it and click **Disable** in the rightmost column. The button updates immediately on success — you should see it switch to **Disable**, confirming the delegator is now active. Enabling a delegator allows their Middleman instance to request supplier addresses from your Provider and initiate stake transactions that the owner signs. No private keys are ever transferred — the owner always retains custody and signs on their side.
 
    ![Enable delegator toggle](screenshots/step-05-enable-delegator.png)
    <!-- Capture: The Delegators page immediately after enabling a delegator, showing the toggle in the enabled state for that row. -->
 
-6. **Confirm the delegator is enabled with correct configuration.** Switch the filter back to **All** (or **Enabled**) and locate the delegator you just activated. Verify that their name and identity look correct. You can click the copy icon next to their identity to grab the full public key if you need it for verification.
+5. **Confirm the delegator is enabled with correct configuration.** Switch the filter back to **All** (or **Enabled**) and locate the delegator you just activated. Verify that their name and identity look correct. You can click the copy icon next to their identity to grab the full public key if you need it for verification.
 
    ![Enabled delegator in list](screenshots/step-06-verify-enabled.png)
    <!-- Capture: The Delegators table filtered to Enabled, showing the newly enabled delegator's row with the Disable button visible and the identity copy icon. -->

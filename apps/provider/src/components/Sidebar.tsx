@@ -34,6 +34,18 @@ const mainRoutes = [
     icon: NodesDark,
   },
   {
+    id: "transactions",
+    title: "Transactions",
+    url: "/admin/transactions",
+    icon: ActivityDark,
+  },
+  {
+    id: "groups",
+    title: "Address Groups",
+    url: "/admin/groups",
+    icon: ActivityDark,
+  },
+  {
     title: "Services",
     url: "/admin/services",
     icon: ProvidersDark,
@@ -51,12 +63,6 @@ const mainRoutes = [
     icon: ActivityDark,
   },
   {
-    id: "groups",
-    title: "Address Groups",
-    url: "/admin/groups",
-    icon: ActivityDark,
-  },
-  {
     title: "Delegators",
     url: "/admin/delegators",
     icon: SettingsDark,
@@ -65,7 +71,7 @@ const mainRoutes = [
     title: "Settings",
     url: "/admin/settings",
     icon: SettingsDark,
-  }
+  },
 ];
 
 export const dynamic = "force-dynamic";
@@ -77,9 +83,9 @@ export default function Sidebar({}: Readonly<AppSidebarProps>) {
     <SidebarMenuItem
       key={route.title}
       className={
-        pathname.includes((route.id || route.title).toLowerCase())
-          ? "bg-muted rounded-lg font-medium text-foreground"
-          : ""
+        pathname.startsWith(route.url)
+          ? "bg-sidebar-active-bg rounded-lg font-medium text-sidebar-active-text"
+          : "text-text-secondary"
       }
     >
       <SidebarMenuButton asChild>

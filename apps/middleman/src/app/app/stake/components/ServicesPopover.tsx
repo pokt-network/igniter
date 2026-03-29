@@ -47,19 +47,7 @@ export interface ServicesPopoverProps {
 }
 
 const CHIP_COLORS = [
-  'bg-blue-500/15 text-blue-300 border-blue-500/30 group-hover:bg-blue-500/25 group-hover:text-blue-200 group-hover:border-blue-400/50',
-  'bg-teal-500/15 text-teal-300 border-teal-500/30 group-hover:bg-teal-500/25 group-hover:text-teal-200 group-hover:border-teal-400/50',
-  'bg-[color:var(--pnf-lavender)]/15 text-pnf-lavender border-[color:var(--pnf-lavender)]/30 group-hover:bg-[color:var(--pnf-lavender)]/25 group-hover:border-[color:var(--pnf-lavender)]/50',
-  'bg-cyan-500/15 text-cyan-300 border-cyan-500/30 group-hover:bg-cyan-500/25 group-hover:text-cyan-200 group-hover:border-cyan-400/50',
-  'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 group-hover:bg-indigo-500/25 group-hover:text-indigo-200 group-hover:border-indigo-400/50',
-  'bg-amber-500/15 text-amber-300 border-amber-500/30 group-hover:bg-amber-500/25 group-hover:text-amber-200 group-hover:border-amber-400/50',
-  'bg-rose-500/15 text-rose-300 border-rose-500/30 group-hover:bg-rose-500/25 group-hover:text-rose-200 group-hover:border-rose-400/50',
-  'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 group-hover:bg-emerald-500/25 group-hover:text-emerald-200 group-hover:border-emerald-400/50',
-  'bg-sky-500/15 text-sky-300 border-sky-500/30 group-hover:bg-sky-500/25 group-hover:text-sky-200 group-hover:border-sky-400/50',
-  'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30 group-hover:bg-fuchsia-500/25 group-hover:text-fuchsia-200 group-hover:border-fuchsia-400/50',
-  'bg-lime-500/15 text-lime-300 border-lime-500/30 group-hover:bg-lime-500/25 group-hover:text-lime-200 group-hover:border-lime-400/50',
-  'bg-warning/15 text-warning border-warning/30 group-hover:bg-warning/25 group-hover:border-warning/50',
-  'bg-violet-500/15 text-violet-300 border-violet-500/30 group-hover:bg-violet-500/25 group-hover:text-violet-200 group-hover:border-violet-400/50',
+  'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-primary)]',
 ];
 
 function hashString(str: string): number {

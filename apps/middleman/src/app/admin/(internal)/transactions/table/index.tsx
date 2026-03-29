@@ -1,22 +1,47 @@
 'use client'
+import React from 'react'
 import DataTable from '@igniter/ui/components/DataTable/index'
 import { columns, filters, sorts } from './columns'
 import {ItemBase, useDetailContext} from '@igniter/ui/components/QuickDetails/Provider'
 import { MessageType } from '@/lib/constants'
-import { useQuery } from '@tanstack/react-query'
-import {GetTransactions} from '@/actions/Transactions'
-import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { GetTransactions, CountTransactions } from '@/actions/Transactions'
 import {Operation} from "@/app/detail/TransactionDetail";
 
 export default function TransactionsTable() {
+  const queryClient = useQueryClient()
+  const [acknowledgedCount, setAcknowledgedCount] = React.useState<number | null>(null)
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-transactions"],
     queryFn: GetTransactions,
-    refetchInterval: 15000,
+    refetchOnWindowFocus: false,
   });
   const {items, updateItem} = useDetailContext()
 
-  useEffect(() => {
+  const { data: totalCount } = useQuery({
+    queryKey: ['admin-transactions-count'],
+    queryFn: CountTransactions,
+    refetchInterval: 10000,
+  })
+
+  React.useEffect(() => {
+    if (totalCount !== undefined && acknowledgedCount === null) {
+      setAcknowledgedCount(totalCount)
+    }
+  }, [totalCount, acknowledgedCount])
+
+  const newCount = acknowledgedCount !== null && totalCount !== undefined
+    ? Math.max(0, totalCount - acknowledgedCount)
+    : 0
+
+  const handleLoadNew = async () => {
+    await refetch()
+    await queryClient.invalidateQueries({ queryKey: ['admin-transactions-count'] })
+    setAcknowledgedCount(totalCount ?? 0)
+  }
+
+  React.useEffect(() => {
     const updateTxDetail = (item: ItemBase, index: number) => {
       if (item.type === 'transaction') {
         const newTx = data?.find((tx) => tx.id === item.body.id)
@@ -45,8 +70,6 @@ export default function TransactionsTable() {
     for (let i = 0; i < items.length; i++) {
       const item = items[i]!
 
-      // in theory, this promise is already awaited because when we push a new item,
-      // it shows to the user so if it was a promise, it will be awaited
       if ('then' in item) {
         item.then((awaitedItem) => updateTxDetail(awaitedItem, i))
       } else {
@@ -95,6 +118,20 @@ export default function TransactionsTable() {
       isError={isError}
       refetch={refetch}
       csvFilename={'admin_transactions'}
+      searchableColumns={['hash', 'provider']}
+      searchPlaceholder="Search by hash or provider..."
+      countLabel="transactions"
+      headerLeft={
+        newCount > 0 ? (
+          <button
+            onClick={handleLoadNew}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap h-9 px-4 rounded-lg text-sm font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors cursor-pointer"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            +{newCount} new
+          </button>
+        ) : undefined
+      }
     />
   )
 }

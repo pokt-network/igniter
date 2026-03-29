@@ -1,0 +1,614 @@
+# Localnet Tiltfile - Deploys a Pocket Network validator for local development
+#
+# Provides:
+#   - Single-node pocketd validator (chain_id: pocket)
+#   - Account initialization job (registers pubkeys on-chain)
+#   - Owner funding job (sends POKT to provider/middleman owner addresses)
+#
+# Genesis includes:
+#   - 15 pre-staked suppliers (supplier1-15) with 4 services each
+#   - 4 services: develop-http, develop-websocket, develop-stream, develop-grpc
+#   - 28 funded accounts (1M POKT each)
+#
+# Activated via LOCALNET_ENABLED=true in .env
+
+POCKETD_IMAGE = 'ghcr.io/pokt-network/pocketd'
+POCKETD_TAG = '0.1.30'
+CHAIN_ID = 'pocket'
+
+PROVIDER_OWNER = os.getenv('PROVIDER_OWNER_IDENTITY', '')
+MIDDLEMAN_OWNER = os.getenv('MIDDLEMAN_OWNER_IDENTITY', '')
+
+# Faucet mnemonic (from genesis, not a secret — localnet only)
+FAUCET_MNEMONIC = 'baby advance work soap slow exclude blur humble lucky rough teach wide chuckle captain rack laundry butter main very cannon donate armor dress follow'
+
+# ============================================================================
+# ConfigMaps and Secrets
+# ============================================================================
+
+genesis_content = str(read_file('./config/genesis.json'))
+all_keys_content = str(read_file('./config/all-keys.yaml'))
+priv_validator_key_content = str(read_file('./config/priv_validator_key.json'))
+node_key_content = str(read_file('./config/node_key.json'))
+app_toml_content = str(read_file('./config/app.toml'))
+config_toml_content = str(read_file('./config/config.toml'))
+client_toml_content = str(read_file('./config/client.toml'))
+
+objects = []
+
+# Genesis ConfigMap
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'ConfigMap',
+  'metadata': {'name': 'genesis-config'},
+  'data': {'genesis.json': genesis_content},
+})
+
+# All keys ConfigMap
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'ConfigMap',
+  'metadata': {'name': 'all-keys-config'},
+  'data': {'all-keys.yaml': all_keys_content},
+})
+
+# Validator keys Secret
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Secret',
+  'metadata': {'name': 'validator-keys'},
+  'type': 'Opaque',
+  'stringData': {
+    'priv_validator_key.json': priv_validator_key_content,
+    'node_key.json': node_key_content,
+    'app.toml': app_toml_content,
+    'config.toml': config_toml_content,
+    'client.toml': client_toml_content,
+  },
+})
+
+# ============================================================================
+# Validator Deployment + Service
+# ============================================================================
+
+validator_yaml = """
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator
+  labels:
+    app: validator
+spec:
+  ports:
+  - port: 26657
+    targetPort: 26657
+    name: rpc
+  - port: 9090
+    targetPort: 9090
+    name: grpc
+  - port: 1317
+    targetPort: 1317
+    name: rest
+  selector:
+    app: validator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator
+  labels:
+    app: validator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: validator
+  template:
+    metadata:
+      labels:
+        app: validator
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      initContainers:
+      - name: init-validator
+        image: {image}:{tag}
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          pocketd init validator --home=/home/pocket/.pocket --chain-id={chain_id} > /dev/null 2>&1 && \\
+          echo "Validator initialized" || \\
+          echo "Validator already initialized"
+        volumeMounts:
+        - name: validator-data
+          mountPath: /home/pocket/.pocket
+      - name: copy-genesis
+        image: busybox
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          if [ -f /genesis/genesis.json ]; then
+            cp /genesis/genesis.json /home/pocket/.pocket/config/genesis.json
+            echo "Genesis loaded from ConfigMap"
+          else
+            echo "No genesis ConfigMap found, using default"
+          fi
+        volumeMounts:
+        - name: validator-data
+          mountPath: /home/pocket/.pocket
+        - name: genesis-config
+          mountPath: /genesis
+      containers:
+      - name: validator
+        image: {image}:{tag}
+        command:
+        - pocketd
+        - start
+        - --home=/home/pocket/.pocket
+        - --log_level=info
+        ports:
+        - containerPort: 26657
+          name: rpc
+        - containerPort: 9090
+          name: grpc
+        - containerPort: 1317
+          name: rest
+        volumeMounts:
+        - name: validator-data
+          mountPath: /home/pocket/.pocket
+        - name: validator-keys
+          mountPath: /home/pocket/.pocket/config/priv_validator_key.json
+          subPath: priv_validator_key.json
+          readOnly: true
+        - name: validator-keys
+          mountPath: /home/pocket/.pocket/config/node_key.json
+          subPath: node_key.json
+          readOnly: true
+        - name: validator-keys
+          mountPath: /home/pocket/.pocket/config/app.toml
+          subPath: app.toml
+          readOnly: true
+        - name: validator-keys
+          mountPath: /home/pocket/.pocket/config/config.toml
+          subPath: config.toml
+          readOnly: true
+        - name: validator-keys
+          mountPath: /home/pocket/.pocket/config/client.toml
+          subPath: client.toml
+          readOnly: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 26657
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 26657
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: validator-data
+        emptyDir: {{}}
+      - name: genesis-config
+        configMap:
+          name: genesis-config
+          optional: true
+      - name: validator-keys
+        secret:
+          secretName: validator-keys
+          optional: true
+          defaultMode: 0644
+""".format(
+  image=POCKETD_IMAGE,
+  tag=POCKETD_TAG,
+  chain_id=CHAIN_ID,
+)
+
+k8s_yaml(blob(validator_yaml))
+
+# ============================================================================
+# Account Init Job
+# ============================================================================
+
+account_init_yaml = """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: account-init
+  labels:
+    app: account-init
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      initContainers:
+      - name: wait-for-block-2
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for validator to reach block 2..."
+          while true; do
+            HEIGHT=$(curl -s http://validator:26657/status 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+            if [ "$HEIGHT" -ge 2 ] 2>/dev/null; then
+              echo "Validator at block $HEIGHT, proceeding..."
+              break
+            fi
+            echo "Current block: $HEIGHT, waiting..."
+            sleep 1
+          done
+      containers:
+      - name: init-accounts
+        image: {image}:{tag}
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          VALIDATOR_RPC="http://validator:26657"
+          PNF_ADDRESS="pokt1eeeksh2tvkh7wzmfrljnhw4wrhs55lcuvmekkw"
+
+          mkdir -p /tmp/pocket/data
+          chmod 777 /tmp/pocket/data
+          cd /keys
+
+          ACCOUNTS="app1 app2 app3 app4 supplier1 supplier2 supplier3 supplier4 supplier5 supplier6 supplier7 supplier8 supplier9 supplier10 supplier11 supplier12 supplier13 supplier14 supplier15 gateway1 faucet source_owner_develop"
+
+          echo "================================================"
+          echo "PHASE 1: Importing all accounts to keyring"
+          echo "================================================"
+
+          for ACC_NAME in $ACCOUNTS; do
+            ADDR=$(grep -A 4 "name: $ACC_NAME$" all-keys.yaml | grep "address:" | awk '{{print $2}}')
+            MNEMONIC=$(grep -A 4 "name: $ACC_NAME$" all-keys.yaml | grep "mnemonic:" | cut -d'"' -f2)
+
+            if [ -z "$ADDR" ] || [ -z "$MNEMONIC" ]; then
+              echo "Warning: Could not find address or mnemonic for $ACC_NAME"
+              continue
+            fi
+
+            echo "$MNEMONIC" | pocketd keys add "$ACC_NAME" --recover --keyring-backend test --home /tmp/pocket 2>/dev/null || true
+            echo "Imported $ACC_NAME ($ADDR)"
+          done
+
+          echo ""
+          echo "================================================"
+          echo "PHASE 2: Sending ALL transactions in PARALLEL"
+          echo "================================================"
+
+          export VALIDATOR_RPC PNF_ADDRESS
+          PIDS=""
+          for ACC_NAME in $ACCOUNTS; do
+            (
+              ADDR=$(grep -A 4 "name: $ACC_NAME$" /keys/all-keys.yaml | grep "address:" | awk '{{print $2}}')
+              if [ -z "$ADDR" ]; then
+                echo "[$ACC_NAME] No address found" > /tmp/result_$ACC_NAME.log
+                exit 1
+              fi
+
+              ACCOUNT_INFO=$(timeout 5 pocketd query auth account "$ADDR" --node "$VALIDATOR_RPC" --chain-id pocket --output json 2>&1 || echo "{{}}")
+              if echo "$ACCOUNT_INFO" | grep -q '"public_key"'; then
+                echo "[$ACC_NAME] Already has pubkey" > /tmp/result_$ACC_NAME.log
+                exit 0
+              fi
+
+              pocketd tx bank send \
+                "$ADDR" \
+                "$PNF_ADDRESS" \
+                1upokt \
+                --from="$ACC_NAME" \
+                --gas=1000000 \
+                --fees=1upokt \
+                --yes \
+                --broadcast-mode=sync \
+                --home=/tmp/pocket \
+                --keyring-backend=test \
+                --node="$VALIDATOR_RPC" \
+                --chain-id=pocket \
+                --output=json 2>&1 > /tmp/tx_$ACC_NAME.log
+
+              if grep -q '"code":0' /tmp/tx_$ACC_NAME.log 2>/dev/null; then
+                echo "[$ACC_NAME] TX submitted" > /tmp/result_$ACC_NAME.log
+              else
+                echo "[$ACC_NAME] TX failed" > /tmp/result_$ACC_NAME.log
+              fi
+            ) &
+            PIDS="$PIDS $!"
+          done
+
+          echo "Waiting for all transactions..."
+          for PID in $PIDS; do
+            wait $PID 2>/dev/null || true
+          done
+
+          echo ""
+          echo "================================================"
+          echo "PHASE 3: Results"
+          echo "================================================"
+          for ACC_NAME in $ACCOUNTS; do
+            if [ -f /tmp/result_$ACC_NAME.log ]; then
+              cat /tmp/result_$ACC_NAME.log
+            fi
+          done
+
+          echo ""
+          echo "Waiting for block confirmation..."
+          START_HEIGHT=$(curl -s http://validator:26657/status 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+          TARGET_HEIGHT=$((START_HEIGHT + 3))
+          TIMEOUT=30
+          ELAPSED=0
+          while true; do
+            CURRENT_HEIGHT=$(curl -s http://validator:26657/status 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+            if [ "$CURRENT_HEIGHT" -ge "$TARGET_HEIGHT" ] 2>/dev/null; then
+              echo "Reached block $CURRENT_HEIGHT"
+              break
+            fi
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "Timeout, continuing..."
+              break
+            fi
+            sleep 2
+            ELAPSED=$((ELAPSED + 2))
+          done
+
+          sleep 2
+
+          echo ""
+          echo "================================================"
+          echo "PHASE 4: Verifying pubkeys"
+          echo "================================================"
+          SUCCESS=0
+          FAILED=0
+          for ACC_NAME in $ACCOUNTS; do
+            ADDR=$(grep -A 4 "name: $ACC_NAME$" all-keys.yaml | grep "address:" | awk '{{print $2}}')
+            if [ -z "$ADDR" ]; then continue; fi
+
+            VERIFY_INFO=$(timeout 5 pocketd query auth account "$ADDR" --node "$VALIDATOR_RPC" --chain-id pocket --output json 2>&1 || echo "{{}}")
+            if echo "$VERIFY_INFO" | grep -q '"public_key"'; then
+              echo "[$ACC_NAME] Pubkey verified"
+              SUCCESS=$((SUCCESS + 1))
+            else
+              echo "[$ACC_NAME] Pubkey NOT found"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          echo ""
+          echo "================================================"
+          echo "SUMMARY: $SUCCESS successful, $FAILED failed"
+          echo "================================================"
+          echo "Account initialization complete!"
+        volumeMounts:
+        - name: all-keys
+          mountPath: /keys
+          readOnly: true
+        - name: pocket-home
+          mountPath: /tmp/pocket
+        - name: client-config
+          mountPath: /tmp/pocket/config/client.toml
+          subPath: client.toml
+          readOnly: true
+      volumes:
+      - name: all-keys
+        configMap:
+          name: all-keys-config
+      - name: pocket-home
+        emptyDir: {{}}
+      - name: client-config
+        secret:
+          secretName: validator-keys
+          items:
+          - key: client.toml
+            path: client.toml
+""".format(
+  image=POCKETD_IMAGE,
+  tag=POCKETD_TAG,
+)
+
+k8s_yaml(blob(account_init_yaml))
+
+# ============================================================================
+# Owner Fund Job
+# ============================================================================
+
+owner_fund_yaml = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owner-fund
+  labels:
+    app: owner-fund
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: owner-fund
+  template:
+    metadata:
+      labels:
+        app: owner-fund
+    spec:
+      restartPolicy: Always
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      initContainers:
+      - name: wait-for-accounts
+        image: curlimages/curl:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for account-init to complete (block > 5)..."
+          while true; do
+            HEIGHT=$(curl -s http://validator:26657/status 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+            if [ "$HEIGHT" -ge 5 ] 2>/dev/null; then
+              echo "Block $HEIGHT reached, proceeding with owner funding..."
+              break
+            fi
+            echo "Current block: $HEIGHT, waiting..."
+            sleep 2
+          done
+      containers:
+      - name: fund-owners
+        image: {image}:{tag}
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pocketd status --node http://validator:26657 > /dev/null 2>&1
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        env:
+        - name: PROVIDER_OWNER_ADDRESS
+          value: "{provider_owner}"
+        - name: MIDDLEMAN_OWNER_ADDRESS
+          value: "{middleman_owner}"
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          VALIDATOR_RPC="http://validator:26657"
+          FUND_AMOUNT="100000000000upokt"
+
+          mkdir -p /tmp/pocket/data /tmp/pocket/config
+          chmod 777 /tmp/pocket/data
+
+          # Copy client.toml
+          cp /client-config/client.toml /tmp/pocket/config/client.toml
+
+          # Import faucet account
+          echo "{faucet_mnemonic}" | pocketd keys add faucet --recover --keyring-backend test --home /tmp/pocket 2>/dev/null || true
+          echo "Faucet imported"
+
+          POCKETD="pocketd --home=/tmp/pocket --keyring-backend=test --node=$VALIDATOR_RPC --chain-id=pocket"
+          TX_FLAGS="--from=faucet --gas=1000000 --fees=1upokt --yes --broadcast-mode=sync --unordered --timeout-duration=300s --output=json"
+
+          # Fund provider owner
+          if [ -n "$PROVIDER_OWNER_ADDRESS" ]; then
+            echo "Funding provider owner: $PROVIDER_OWNER_ADDRESS"
+            $POCKETD tx bank send faucet "$PROVIDER_OWNER_ADDRESS" $FUND_AMOUNT $TX_FLAGS 2>&1 | tail -1
+          fi
+
+          # Fund middleman owner (skip if same as provider)
+          if [ -n "$MIDDLEMAN_OWNER_ADDRESS" ] && [ "$MIDDLEMAN_OWNER_ADDRESS" != "$PROVIDER_OWNER_ADDRESS" ]; then
+            echo "Funding middleman owner: $MIDDLEMAN_OWNER_ADDRESS"
+            $POCKETD tx bank send faucet "$MIDDLEMAN_OWNER_ADDRESS" $FUND_AMOUNT $TX_FLAGS 2>&1 | tail -1
+          else
+            echo "Middleman owner same as provider or empty, skipping"
+          fi
+
+          # Wait for 2 blocks to confirm
+          NODE_FLAG="--node=$VALIDATOR_RPC"
+          echo "Waiting for confirmation..."
+          H=$(pocketd status $NODE_FLAG 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+          TGT=$((H + 2))
+          for _ in $(seq 1 20); do
+            sleep 1
+            N=$(pocketd status $NODE_FLAG 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+            if [ "$N" -ge "$TGT" ] 2>/dev/null; then
+              echo "Block $N reached"
+              break
+            fi
+          done
+
+          # Verify and monitor
+          echo ""
+          echo "================================================"
+          echo "Monitoring owner balances (every 30s)"
+          echo "================================================"
+          while true; do
+            echo ""
+            HEIGHT=$(pocketd status $NODE_FLAG 2>/dev/null | grep -o '"latest_block_height":"[0-9]*"' | grep -o '[0-9]*' || echo "?")
+            echo "--- Block $HEIGHT | $(date -u '+%H:%M:%S UTC') ---"
+            if [ -n "$PROVIDER_OWNER_ADDRESS" ]; then
+              UBAL=$(pocketd query bank balance "$PROVIDER_OWNER_ADDRESS" upokt $NODE_FLAG --chain-id=pocket --output json 2>/dev/null | tr -d '[:space:]' | grep -o '"amount":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+              POKT=$((UBAL / 1000000))
+              echo "Provider  ($PROVIDER_OWNER_ADDRESS): $POKT POKT"
+            fi
+            if [ -n "$MIDDLEMAN_OWNER_ADDRESS" ]; then
+              UBAL=$(pocketd query bank balance "$MIDDLEMAN_OWNER_ADDRESS" upokt $NODE_FLAG --chain-id=pocket --output json 2>/dev/null | tr -d '[:space:]' | grep -o '"amount":"[0-9]*"' | grep -o '[0-9]*' || echo "0")
+              POKT=$((UBAL / 1000000))
+              echo "Middleman ($MIDDLEMAN_OWNER_ADDRESS): $POKT POKT"
+            fi
+            sleep 30
+          done
+        volumeMounts:
+        - name: pocket-home
+          mountPath: /tmp/pocket
+        - name: client-config
+          mountPath: /client-config
+          readOnly: true
+      volumes:
+      - name: pocket-home
+        emptyDir: {{}}
+      - name: client-config
+        secret:
+          secretName: validator-keys
+          items:
+          - key: client.toml
+            path: client.toml
+""".format(
+  image=POCKETD_IMAGE,
+  tag=POCKETD_TAG,
+  provider_owner=PROVIDER_OWNER,
+  middleman_owner=MIDDLEMAN_OWNER,
+  faucet_mnemonic=FAUCET_MNEMONIC,
+)
+
+k8s_yaml(blob(owner_fund_yaml))
+
+# ============================================================================
+# Apply ConfigMaps/Secrets and Resource Declarations
+# ============================================================================
+
+k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
+
+k8s_resource(
+  'validator',
+  labels=['localnet'],
+  objects=[
+    'genesis-config:configmap',
+    'all-keys-config:configmap',
+    'validator-keys:secret',
+  ],
+  port_forwards=['26657:26657', '9090:9090', '1317:1317'],
+)
+
+k8s_resource(
+  'account-init',
+  labels=['localnet'],
+  resource_deps=['validator'],
+)
+
+k8s_resource(
+  'owner-fund',
+  labels=['localnet'],
+  resource_deps=['account-init'],
+  extra_pod_selectors=[{'app': 'owner-fund'}],
+)

@@ -17,10 +17,7 @@ import urlJoin from 'url-join'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { indexerStatusDocument } from '@igniter/graphql'
 import { env } from '@/config/env'
-import {
-  revalidateTag,
-  unstable_cache,
-} from 'next/cache'
+import { revalidatePath } from 'next/cache'
 
 const UrlSchema = z.string().url('Please enter a valid URL').min(1, 'URL is required')
 
@@ -51,15 +48,9 @@ const CreateSettingsSchema = z.object({
 
 const appSettingsCacheTag = 'appSettings';
 
-const getAppSettings = unstable_cache(
-  async () => {
-    return await fetchApplicationSettings()
-  },
-  undefined,
-  {
-    tags: [appSettingsCacheTag],
-  },
-)
+async function getAppSettings() {
+  return await fetchApplicationSettings()
+}
 
 export async function GetAppName() {
   const appSettings = await getAppSettings()
@@ -106,7 +97,7 @@ export async function UpsertApplicationSettings(
     })
   }
 
-  revalidateTag(appSettingsCacheTag)
+  revalidatePath('/', 'layout')
 }
 
 export async function completeSetup() {

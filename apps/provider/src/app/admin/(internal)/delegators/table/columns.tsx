@@ -5,7 +5,7 @@ import { ColumnDef } from '@igniter/ui/components/table'
 import { CopyIcon } from '@igniter/ui/assets'
 import { useState } from 'react'
 import { UpdateDelegator } from '@/actions/Delegators'
-import { Button } from '@igniter/ui/components/button'
+import { Switch } from '@igniter/ui/components/switch'
 import {
   FilterGroup,
   SortOption,
@@ -56,25 +56,12 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
   },
   {
     id: 'enabled',
+    header: 'Enabled',
+    meta: { headerAlign: 'right' },
     cell: ({ row }) => {
       const delegator = row.original
       const [isEnabled, setIsEnabled] = useState(delegator.enabled)
       const [isUpdating, setUpdating] = useState(false)
-
-      const handleToggle = async () => {
-        setUpdating(true)
-        try {
-          const result = await UpdateDelegator(delegator.identity, { enabled: !isEnabled })
-          if (!result.success) {
-            throw new Error(result.error.message)
-          }
-          setIsEnabled(!isEnabled)
-        } catch (error) {
-          console.error('Error updating delegator status:', error)
-        } finally {
-          setUpdating(false)
-        }
-      }
 
       if (isUpdating) return (
         <div className="flex items-center justify-end px-4">
@@ -83,14 +70,24 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
       )
 
       return (
-        <div className="flex items-center justify-end px-4">
-          <Button
-            className="bg-bg-elevated border-0"
-            variant={'outline'}
-            onClick={handleToggle}
-          >
-            {isEnabled ? 'Disable' : 'Enable'}
-          </Button>
+        <div className="flex items-center justify-end gap-2">
+          <label className="flex items-center justify-end cursor-pointer">
+            <Switch
+              checked={isEnabled}
+              onCheckedChange={async (checked) => {
+                setUpdating(true)
+                try {
+                  const result = await UpdateDelegator(delegator.identity, { enabled: checked })
+                  if (!result.success) throw new Error(result.error.message)
+                  setIsEnabled(checked)
+                } catch (error) {
+                  console.error('Error updating delegator status:', error)
+                } finally {
+                  setUpdating(false)
+                }
+              }}
+            />
+          </label>
         </div>
       )
     },

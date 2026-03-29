@@ -355,6 +355,31 @@ export async function batchUpdateRemediationHistory(
 /**
  * Load keys by addresses with deep address group relations.
  */
+export async function countKeys(): Promise<number> {
+  const dbClient = getDbClient()
+  const [{ value }] = await dbClient.db.select({ value: count() }).from(keysTable)
+  return value
+}
+
+export async function getKeysSummary(): Promise<{ totalKeys: number; stakedKeys: number; availableKeys: number; totalStakedUpokt: number }> {
+  const dbClient = getDbClient()
+  const result = await dbClient.db
+    .select({
+      totalKeys: count(),
+      stakedKeys: sql<number>`count(*) filter (where state = ${KeyState.Staked})`,
+      availableKeys: sql<number>`count(*) filter (where state = ${KeyState.Available} or state = ${KeyState.Imported})`,
+      totalStakedUpokt: sql<number>`coalesce(sum("stakeAmountUpokt") filter (where state = ${KeyState.Staked}), 0)`,
+    })
+    .from(keysTable)
+
+  return {
+    totalKeys: result[0]?.totalKeys ?? 0,
+    stakedKeys: result[0]?.stakedKeys ?? 0,
+    availableKeys: result[0]?.availableKeys ?? 0,
+    totalStakedUpokt: Number(result[0]?.totalStakedUpokt ?? 0),
+  }
+}
+
 export async function listKeysByAddresses(addresses: string[]): Promise<KeyWithGroup[]> {
   if (addresses.length === 0) return []
   const dbClient = getDbClient()

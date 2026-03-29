@@ -22,10 +22,9 @@ export default function AddNewRelayMiner() {
         />
       )}
       <Button
-        variant={"outline"}
         onClick={() => setIsAddingMiner(true) }
       >
-        Add New
+        Add Relay Miner
       </Button>
     </>
   )

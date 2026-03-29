@@ -162,6 +162,7 @@ export default function ChainOverview() {
                 type="text"
                 placeholder="Search by service or provider..."
                 disabled
+                value=""
                 className="w-full max-w-sm rounded-md border border-[color:--divider] bg-[color:--main-background] px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
               />
               <Button variant="outline" size="sm" disabled className="gap-1.5 shrink-0">

@@ -88,6 +88,7 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
                   amount={selectedAmount}
                   minimumStake={minimumStake}
                   onMaxSelected={() => setSelectedAmount(Math.floor(balance / minimumStake) * minimumStake)}
+                  onAmountChange={setSelectedAmount}
                 />
                   {applicationSettings?.fee && applicationSettings?.fee > 0 ? (
                       <div className="flex flex-row items-center justify-between border border-border-primary rounded-[8px] p-4">

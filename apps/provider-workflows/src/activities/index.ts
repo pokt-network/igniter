@@ -4,7 +4,7 @@ import type {ApplicationSettings, InsertKey, KeyWithGroup, Service} from '@ignit
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
 import {KeysMinMax} from '@/lib/dal/keys'
-import {KeyState, RemediationHistoryEntryReason} from '@igniter/db/provider/enums'
+import {KeyState, RemediationHistoryEntryReason, TransactionType, TransactionStatus, TransactionTrigger} from '@igniter/db/provider/enums'
 import {BuildSupplierServiceConfigHandler, CompareSupplierServiceConfigHandler} from '@igniter/domain/provider/operations';
 import {addOrUpdateRemediationHistory} from "@/lib/utils";
 import {redactStakeSupplierParams} from "@/lib/redactors";
@@ -40,7 +40,54 @@ export type RemediateSupplierParams = ProcessSupplierParams & {
   reasons: RemediationHistoryEntryReason[];
 }
 
+export type GovernanceSyncResult = {
+  inserted: number;
+  updated: number;
+  disabled: number;
+}
+
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => ({
+  async syncDelegatorsFromGovernance(): Promise<GovernanceSyncResult> {
+    const settings = await dal.settings.loadSettings()
+    if (!settings) {
+      throw ApplicationFailure.nonRetryable('Application settings not found', 'settings_not_found')
+    }
+
+    const cdnUrlTemplate = process.env.DELEGATORS_CDN_URL
+    if (!cdnUrlTemplate) {
+      throw ApplicationFailure.nonRetryable('DELEGATORS_CDN_URL environment variable is not defined', 'missing_env')
+    }
+
+    const cdnUrl = cdnUrlTemplate.replace(
+      '{chainId}',
+      settings.chainId.replace('lego-testnet', 'beta'),
+    )
+
+    log.info('syncDelegatorsFromGovernance: Fetching from CDN', { cdnUrl })
+
+    const response = await fetch(cdnUrl)
+    if (!response.ok) {
+      throw ApplicationFailure.retryable(`Failed to fetch delegators: ${response.statusText}`, 'fetch_failed')
+    }
+
+    type CdnDelegator = {
+      name: string;
+      identity: string;
+      identityHistory: string[];
+    }
+
+    const delegatorsFromCdn = (await response.json()) as CdnDelegator[]
+    log.info('syncDelegatorsFromGovernance: Fetched delegators', { count: delegatorsFromCdn.length })
+
+    const result = await dal.delegators.upsertFromGovernance(
+      delegatorsFromCdn,
+      settings.ownerIdentity,
+    )
+
+    log.info('syncDelegatorsFromGovernance: Done', result)
+    return result
+  },
+
   /**
    * Mock activity.
    */
@@ -267,7 +314,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
             key.remediationHistory ?? []
           )
         } else {
-          log.debug(`upsertSupplierStatus: The key ${key.address} have the expected services configured in the service config history. No further action needed.`)
+          // Services match — clear any stale ServiceMismatch entry
+          const currentHistory = update.remediationHistory ?? key.remediationHistory ?? []
+          const hasStaleEntry = currentHistory.some((rh) => rh.reason === RemediationHistoryEntryReason.ServiceMismatch)
+          if (hasStaleEntry) {
+            log.info(`upsertSupplierStatus: The key ${key.address} services now match. Clearing stale ServiceMismatch entry.`)
+            update.remediationHistory = currentHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.ServiceMismatch)
+          }
         }
       }
 
@@ -526,6 +579,28 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     log.debug('remediateSupplier: Stake transaction result', {txResult})
 
+    // Record the transaction
+    try {
+      const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry
+      const isManual = activeEntry?.message?.includes('requested by operator') ?? false
+
+      await dal.transactions.insert({
+        keyId: key.id,
+        keyAddress: key.address,
+        type: TransactionType.Stake,
+        status: txResult.success ? TransactionStatus.Success : TransactionStatus.Failure,
+        reason: activeEntry?.reason ?? null,
+        trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
+        hash: txResult.transactionHash ?? null,
+        code: txResult.code ?? null,
+        message: txResult.message ?? null,
+        executionHeight: params.height,
+      })
+    } catch (e) {
+      // Transaction recording is best-effort — don't fail remediation if it errors
+      log.warn('remediateSupplier: Failed to record transaction', { address: params.address, error: e })
+    }
+
     const update: Partial<InsertKey> = {
       lastUpdatedHeight: params.height,
       balanceUpokt: BigInt(balance),
@@ -534,73 +609,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     if (!txResult.success) {
       log.debug(`remediateSupplier: Stake transaction failed for: ${key.address} ${JSON.stringify(txResult)}`)
       update.state = KeyState.RemediationFailed
-      update.remediationHistory = addOrUpdateRemediationHistory(
-        {
-          ...(ownerInitialStakeEntry || serviceMismatchEntry)!,
-          timestamp: Date.now(),
-          txResult: txResult.code,
-          txResultDetails: txResult.message,
-        },
-        remediationHistory
-      )
+      // Keep the remediation entry so the next cycle can retry
     } else {
-      let supplierAfter: Supplier | null = null
-      try {
-        supplierAfter = await pocketRpcClient.getSupplier(params.address)
-      } catch (e) {
-        log.warn('remediateSupplier: Failed to re-fetch supplier after stake; keeping remediation entry for verification.', {
-          params,
-          error: e,
-        })
-      }
-
-      if (ownerInitialStakeEntry) {
-        const nowConfigured =
-          supplierAfter
-            ? ((supplierAfter.services?.length ?? 0) > 0 || (supplierAfter.serviceConfigHistory?.length ?? 0) > 0)
-            : false
-
-        update.state = KeyState.Staked
-
-        if (nowConfigured) {
-          update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake)
-        } else {
-          update.remediationHistory = addOrUpdateRemediationHistory(
-            {
-              ...ownerInitialStakeEntry,
-              timestamp: Date.now(),
-              txResult: txResult.code,
-              txResultDetails: txResult.message,
-            },
-            remediationHistory
-          )
-        }
-      } else if (serviceMismatchEntry) {
-        update.state = KeyState.Staked
-
-        const expectedServices = getExpectedServicesFromKey(key)
-
-        const activeServicesFromHistory = supplierAfter?.serviceConfigHistory?.filter((sc: ServiceConfigUpdate) => !sc.deactivationHeight && !!sc.service).map((sc: ServiceConfigUpdate) => sc.service) || []
-
-        const compareHandler = new CompareSupplierServiceConfigHandler()
-        const { isEqual: activeServicesEquals } = compareHandler.execute({
-          serviceConfigSetA: activeServicesFromHistory,
-          serviceConfigSetB: expectedServices,
-        })
-
-        if (!activeServicesEquals) {
-          update.remediationHistory = addOrUpdateRemediationHistory(
-            {
-              ...serviceMismatchEntry,
-              timestamp: Date.now(),
-              txResult: txResult.code,
-              txResultDetails: txResult.message,
-            },
-            remediationHistory
-          )
-        } else {
-          update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.ServiceMismatch)
-        }
+      update.state = KeyState.Staked
+      // Tx succeeded — clear the remediation entry that triggered this
+      const reasonToClear = ownerInitialStakeEntry?.reason || serviceMismatchEntry?.reason
+      if (reasonToClear) {
+        update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== reasonToClear)
       }
     }
 

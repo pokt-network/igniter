@@ -1,7 +1,13 @@
 import { getDbClient } from "@/db";
 import type {Delegator} from "@igniter/db/provider/schema";
 import {delegatorsTable} from "@igniter/db/provider/schema";
-import {sql} from "drizzle-orm";
+import {count, sql} from "drizzle-orm";
+
+export async function countDelegators(): Promise<number> {
+  const dbClient = getDbClient()
+  const [{ value }] = await dbClient.db.select({ value: count() }).from(delegatorsTable)
+  return value
+}
 
 export async function getDelegatorByIdentity(identity: string) {
   const dbClient = getDbClient()

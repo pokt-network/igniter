@@ -83,9 +83,9 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | `OWNER_EMAIL` | Required | Email address for the owner account | `delegator@example.com` |
 | `APP_IDENTITY` | Required | Hex-encoded private key used by Middleman for governance signing | *(your private key hex)* |
 | `MINIMUM_STAKE_BUFFER` | Optional | Buffer subtracted from minimum on-chain stake to allow nodes to operate after slashes, in uPOKT | `500000000` |
-| `PROVIDERS_CDN_URL` | Optional | CDN URL template for fetching the list of available providers. `{chainId}` is replaced at runtime with `CHAIN_ID` | `https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/provider.json` |
+| `PROVIDERS_CDN_URL` | Optional | CDN URL template for fetching the list of available providers. Used by bootstrap-seed and the `GovernanceSync` Temporal workflow (in middleman-workflows). `{chainId}` is replaced at runtime with `CHAIN_ID` | `https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/provider.json` |
 
-> **Note:** `PROVIDERS_CDN_URL` uses `{chainId}` template substitution — the runtime replaces it with the value of `CHAIN_ID`. This URL points to the governance repository where providers register themselves to be discoverable by Middleman instances.
+> **Note:** `PROVIDERS_CDN_URL` must be set in both the middleman app (for bootstrap) and middleman-workflows (for the scheduled GovernanceSync workflow). In local Tilt development, both are automatically overridden to use the local `governance-nginx` service.
 
 ### Application
 
@@ -230,7 +230,7 @@ After completing all 4 steps and clicking **Complete**, you are redirected to `/
 
 Middleman discovers available providers via the `PROVIDERS_CDN_URL`. This URL points to a governance repository JSON file that lists providers who have registered themselves as available for staking.
 
-At runtime, `{chainId}` in `PROVIDERS_CDN_URL` is replaced with the value of `CHAIN_ID` to fetch the provider list for the correct network. The providers fetched from this URL are what appear in Step 3 of the bootstrap wizard (Configure Providers) and in the staking flow.
+At runtime, `{chainId}` in `PROVIDERS_CDN_URL` is replaced with the value of `CHAIN_ID` to fetch the provider list for the correct network. The providers fetched from this URL are used during bootstrap (initial setup) and by the `GovernanceSync` Temporal workflow that runs every 5 minutes in middleman-workflows. The **Reload** button on the Providers admin page triggers this workflow manually. New providers are added as enabled and visible by default; providers removed from governance are disabled and hidden.
 
 When a user stakes through Middleman, the application communicates directly with the selected Provider's API to request supplier addresses, and the owner signs the stake transaction locally. Middleman discovers which providers are available via the governance JSON, but the staking and import-suppliers flows require direct network access between Middleman and Provider instances.
 

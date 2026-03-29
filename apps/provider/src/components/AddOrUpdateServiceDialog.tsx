@@ -85,7 +85,6 @@ const endpointSchema = z.object({
 const CreateServiceFormSchema = z.object({
   serviceId: z.string().min(1, "Service ID is required"),
   revSharePercentage: z.coerce.number().min(0).max(100).nullable(),
-  // TODO: refine to prevent duplicate rpc types
   endpoints: z.array(endpointSchema).min(1, "At least one endpoint is required"),
 });
 
@@ -132,7 +131,7 @@ export function AddOrUpdateServiceDialog({
       if (!appSettings?.rpcUrl) { setIsLoadingAllServices(false); return; }
 
       try {
-        const baseUrl = urlJoin(appSettings.rpcUrl, '/pokt-network/poktroll/service/service');
+        const baseUrl = '/api/rpc/pokt-network/poktroll/service/service';
         let allServices: ServiceOnChain[] = [];
         let nextKey: string | null = null;
 
@@ -236,15 +235,22 @@ export function AddOrUpdateServiceDialog({
     setEndpoints([...endpointsOnForm]);
   }, [JSON.stringify(endpointsOnForm)]);
 
+  const hasDuplicateRpcTypes = useMemo(() => {
+    const rpcTypes = endpoints.map(e => Number(e.rpcType));
+    return new Set(rpcTypes).size !== rpcTypes.length;
+  }, [endpoints]);
+
   const addEndpoint = () => {
-    form.setValue("endpoints", [...endpoints, { url: "", rpcType: Number(PROTOCOL_DEFAULT_TYPE) }]);
+    const usedTypes = new Set(endpoints.map(e => String(e.rpcType)));
+    const nextType = validRpcTypes.find(t => !usedTypes.has(t)) || PROTOCOL_DEFAULT_TYPE;
+    form.setValue("endpoints", [...endpoints, { url: "", rpcType: Number(nextType) }], { shouldDirty: true });
   };
 
   const removeEndpoint = (index: number) => {
     if (endpoints.length > 1) {
       const newEndpoints = [...endpoints];
       newEndpoints.splice(index, 1);
-      form.setValue("endpoints", newEndpoints);
+      form.setValue("endpoints", newEndpoints, { shouldDirty: true });
     }
   };
 
@@ -296,6 +302,7 @@ export function AddOrUpdateServiceDialog({
         onInteractOutside={(event) => event.preventDefault()}
         className="gap-0 p-0 rounded-lg bg-bg-elevated !w-[700px] !min-w-none !max-w-none max-h-[90vh] overflow-y-auto overflow-x-hidden"
         hideClose
+        aria-describedby={undefined}
       >
         <DialogTitle asChild>
           <div className="flex flex-row justify-between items-center py-4 px-4">
@@ -368,45 +375,52 @@ export function AddOrUpdateServiceDialog({
                 </div>
               )}
 
-              {/* Service details (shown after selection) */}
-              {serviceOnChain && (
+              {/* Service details (shown after selection or in edit mode) */}
+              {(serviceOnChain || service) && (
                 <>
-                  <div className="flex flex-col gap-2 rounded-md p-3 overflow-hidden" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs text-text-tertiary shrink-0 w-24">Name</span>
-                      <span className="text-sm break-all">{serviceOnChain.name}</span>
+                  {serviceOnChain && (
+                    <div className="flex flex-col gap-2 rounded-md p-3 overflow-hidden" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-text-tertiary shrink-0 w-24">Name</span>
+                        <span className="text-sm break-all">{serviceOnChain.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-tertiary shrink-0 w-24">Owner</span>
+                        <span className="text-sm font-mono">{getShortAddress(serviceOnChain.ownerAddress)}</span>
+                        <button
+                          type="button"
+                          className="text-text-tertiary hover:text-text-primary transition-colors"
+                          onClick={() => navigator.clipboard.writeText(serviceOnChain.ownerAddress)}
+                          title="Copy address"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-text-tertiary shrink-0 w-24">Compute Units</span>
+                        <span className="text-sm font-medium">{serviceOnChain.computeUnits.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-tertiary shrink-0 w-24">Owner</span>
-                      <span className="text-sm font-mono">{getShortAddress(serviceOnChain.ownerAddress)}</span>
-                      <button
-                        type="button"
-                        className="text-text-tertiary hover:text-text-primary transition-colors"
-                        onClick={() => navigator.clipboard.writeText(serviceOnChain.ownerAddress)}
-                        title="Copy address"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                      </button>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs text-text-tertiary shrink-0 w-24">Compute Units</span>
-                      <span className="text-sm font-medium">{serviceOnChain.computeUnits.toLocaleString()}</span>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Endpoints / Protocols */}
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Protocols</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addEndpoint}
-                      style={{ borderColor: 'var(--pnf-blue-light, #5ba3f5)', color: 'var(--pnf-blue-light, #5ba3f5)' }}
-                    >
-                      Add Protocol
-                    </Button>
+                    {endpoints.length < validRpcTypes.length && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addEndpoint}
+                        style={{ borderColor: 'var(--pnf-blue-light, #5ba3f5)', color: 'var(--pnf-blue-light, #5ba3f5)' }}
+                      >
+                        Add Protocol
+                      </Button>
+                    )}
                   </div>
+                  {hasDuplicateRpcTypes && (
+                    <p className="text-sm text-red-500">Each protocol type can only be used once.</p>
+                  )}
 
                   <div className="flex flex-col gap-3">
                     {endpoints.map((_, index) => (
@@ -427,11 +441,14 @@ export function AddOrUpdateServiceDialog({
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {validRpcTypes.map((type) => (
-                                      <SelectItem key={`type-${type}`} value={type}>
-                                        {labelByRpcType[type] || type}
-                                      </SelectItem>
-                                    ))}
+                                    {validRpcTypes.map((type) => {
+                                      const usedByOther = endpoints.some((ep, i) => i !== index && String(ep.rpcType) === type);
+                                      return (
+                                        <SelectItem key={`type-${type}`} value={type} disabled={usedByOther}>
+                                          {labelByRpcType[type] || type}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -510,7 +527,7 @@ export function AddOrUpdateServiceDialog({
           </Button>
           <Button
             onClick={form.handleSubmit(onSubmit)}
-            disabled={isCreatingService || isUpdatingService || !serviceOnChain}
+            disabled={isCreatingService || isUpdatingService || (!serviceOnChain && !service) || (!!service && !isDirty) || hasDuplicateRpcTypes}
           >
             {service ? "Update Service" : "Add Service"}
           </Button>
@@ -587,9 +604,14 @@ export function AddOrUpdateServiceDialog({
           </div>
         )}
         {(isCreatingService || isUpdatingService) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background animate-fade-in z-10">
-            <LoaderIcon className="animate-spin" />
-            <p className="mt-4">Saving &#34;{serviceOnChain?.name}&#34;</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background animate-fade-in z-10 gap-4">
+            <div className="w-12 h-12 rounded-xl bg-pnf-blue/10 flex items-center justify-center">
+              <LoaderIcon className="animate-spin w-6 h-6 text-pnf-blue" />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-sm font-medium">{service ? 'Updating Service' : 'Adding Service'}</p>
+              <p className="text-xs text-text-tertiary font-mono">{service?.serviceId || serviceOnChain?.serviceId}</p>
+            </div>
           </div>
         )}
       </DialogContent>

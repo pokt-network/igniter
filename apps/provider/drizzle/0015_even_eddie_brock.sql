@@ -1,0 +1,1 @@
+ALTER TABLE "address_group_services" ADD COLUMN "endpointOverrides" json DEFAULT '{}'::json;

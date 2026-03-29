@@ -27,7 +27,7 @@ export default async function Page() {
   return (
     <>
       <div className={"border-b-1"}>
-        <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-10">
+        <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-6">
           <div className="flex flex-row justify-between items-center">
             <div className="flex flex-col">
               <h1>Overview</h1>
@@ -37,11 +37,11 @@ export default async function Page() {
             </div>
             <div className="flex flex-col">
               <div className="flex flex-row gap-3">
-                <Link href="/app/import-suppliers">
-                  <Button variant="outline">Import Suppliers</Button>
-                </Link>
                 <Link href="/app/stake">
                   <Button>New Stake</Button>
+                </Link>
+                <Link href="/app/import-suppliers">
+                  <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Import Suppliers</Button>
                 </Link>
               </div>
             </div>
@@ -87,6 +87,9 @@ async function Rewards() {
 
   const supplierAddresses = userNodes.map((n: NodeWithDetails) => n.address)
   const providerCount = new Set(userNodes.map((n: NodeWithDetails) => n.providerId).filter(Boolean)).size
+  const dbSuppliersCount = userNodes.length
+  const dbStakedTokens = userNodes.reduce((sum: number, n: NodeWithDetails) => sum + Number(n.stakeAmount || 0), 0)
+
 
   return (
     <ApolloWrapper url={graphqlUrl}>
@@ -104,6 +107,8 @@ async function Rewards() {
               isOwners={true}
               graphQlUrl={graphqlUrl}
               noDataMessage={'You do not have any stake yet. Stake to start getting rewards.'}
+              dbSuppliersCount={dbSuppliersCount}
+              dbStakedTokens={dbStakedTokens}
             />
           </Suspense>
         </div>

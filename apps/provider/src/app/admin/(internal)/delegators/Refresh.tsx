@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import React from 'react'
-import { UpdateDelegatorsFromSource } from '@/actions/Delegators'
+import { TriggerGovernanceSync } from '@/actions/Delegators'
 import { Button } from '@igniter/ui/components/button'
 import { LoaderIcon } from '@igniter/ui/assets'
 
@@ -14,10 +14,12 @@ export default function RefreshDelegators() {
     // TODO: Error handling and display
     try {
       setIsUpdatingDelegators(true);
-      const result = await UpdateDelegatorsFromSource();
+      const result = await TriggerGovernanceSync();
       if (!result.success) {
         throw new Error(result.error.message);
       }
+      // Give the workflow a moment to complete before refreshing
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await queryClient.invalidateQueries({ queryKey: ['delegators'] });
     } catch (error) {
       console.error("Failed to update delegators from source:", error);

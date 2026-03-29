@@ -22,10 +22,9 @@ export default function AddNewAddressGroup() {
         />
       )}
       <Button
-        variant={"outline"}
         onClick={() => setIsAddingGroup(true) }
       >
-        Add New
+        Add Group
       </Button>
     </>
   )

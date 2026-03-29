@@ -106,11 +106,11 @@ export class PocketWalletConnection extends WalletConnection {
 
   getBalance = async (address: string): Promise<number> => {
     try {
-      const { balance } = await this.provider.send(
-        PocketMethod.BALANCE,
-        [{ address }]
-      );
-      return balance / 1e6;
+      const response = await fetch(
+        `${this._apiUrl}/cosmos/bank/v1beta1/balances/${address}/by_denom?denom=upokt`,
+      )
+      const data = await response.json()
+      return ((data.balance?.amount || 0) / 1e6)
     } catch (err) {
       console.error(err);
       throw err;

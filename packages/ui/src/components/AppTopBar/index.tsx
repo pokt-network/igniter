@@ -24,7 +24,7 @@ export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppT
         <div>
           { LogoIcon ? <LogoIcon /> : <PocketBrandLogo /> }
         </div>
-        <div className="w-full md:w-auto flex flex-row items-center gap-10 justify-end">
+        <div className="w-full md:w-auto flex flex-row items-center gap-3 justify-end">
           {children}
         </div>
       </div>

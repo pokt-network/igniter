@@ -1,6 +1,5 @@
 import { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { bootstrapStatus } from "@/lib/services/bootstrap";
 import {SiwpMessage} from "@poktscan/vault-siwp";
 import {env} from "@/config/env";
 import {normalizeIdentityToAddress} from "@/lib/crypto";
@@ -21,8 +20,6 @@ const authConfig: NextAuthConfig = {
   providers: [Credentials],
   callbacks: {
     async signIn({ credentials }) {
-      const isBootstrapped = await bootstrapStatus();
-
       const { address } = new SiwpMessage(
         JSON.parse((credentials?.message || "{}") as string)
       );
@@ -30,8 +27,8 @@ const authConfig: NextAuthConfig = {
       // Normalize OWNER_IDENTITY in case it was configured as a hex public key (legacy)
       const normalizedOwnerIdentity = normalizeIdentityToAddress(env.OWNER_IDENTITY);
 
-      if (!isBootstrapped && address !== normalizedOwnerIdentity) {
-        return '/auth/error?error=OwnerOnly';
+      if (address !== normalizedOwnerIdentity) {
+        return false;
       }
 
       return true;

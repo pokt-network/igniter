@@ -51,7 +51,7 @@ export function ConfirmationDialog({
                                    }: Readonly<ConfirmationDialogProps>) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className={className}>
+      <DialogContent className={className} aria-describedby={undefined}>
         <DialogTitle>{title}</DialogTitle>
 
         {children}

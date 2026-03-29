@@ -16,15 +16,16 @@ permissions:
 
 jobs:
   branch-gate:
-    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Only release branch can target main
-        if: github.head_ref != 'release'
+        if: github.base_ref == 'main' && github.head_ref != 'release'
         run: |
           echo "::error::PRs to main must come from the 'release' branch, not '${{ github.head_ref }}'."
           echo "Flow: feature → staging → release → main"
           exit 1
+      - name: Gate passed
+        run: echo "OK"
 
   quality:
     runs-on: ubuntu-latest
