@@ -4,6 +4,7 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-production
@@ -16,10 +17,11 @@ permissions:
 jobs:
   deploy:
     if: >
-      github.event.pull_request.merged == true &&
-      (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
-       contains(github.event.pull_request.labels.*.name, 'release:minor') ||
-       contains(github.event.pull_request.labels.*.name, 'release:major'))
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+        contains(github.event.pull_request.labels.*.name, 'release:major')))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
