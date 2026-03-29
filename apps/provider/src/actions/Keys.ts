@@ -5,18 +5,29 @@ import type { InsertKey } from '@igniter/db/provider/schema'
 import { KeyState } from '@igniter/db/provider/enums'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
 import {
+  countKeys,
   countPrivateKeysByAddressGroup,
+  countKeysForExport,
   insertMany,
+  listDistinctOwnerAddresses,
+  listKeysForExport,
   listKeysWithPk,
   listPrivateKeysByAddressGroup,
+  markKeysExported,
   updateKeysState,
   updateRewardsSettings,
   updateKeysStateWhereCurrentStateIn,
+  type KeyExportFilters,
 } from '@/lib/dal/keys'
 import {
   type ActionResult,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
+import { findById as findAddressGroupById } from '@/lib/dal/addressGroups'
+
+export async function CountKeys(): Promise<ActionResult<number>> {
+  return withRequireOwner(async () => countKeys())
+}
 
 export async function ListKeys() {
   return withRequireOwner(async () => {
@@ -101,5 +112,89 @@ export async function ClearKeysRemediation(): Promise<ActionResult<void>> {
       KeyState.AttentionNeeded,
       KeyState.RemediationFailed,
     ], KeyState.Staked)
+  })
+}
+
+const KeyExportFiltersSchema = z.object({
+  addressGroupId: z.number().int().positive().optional(),
+  states: z.array(z.nativeEnum(KeyState)).optional(),
+  ownerAddress: z.string().optional(),
+  delegatorIdentity: z.string().optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+  dateField: z.enum(['createdAt', 'deliveredAt']).optional(),
+  exportStatus: z.enum(['not_exported', 'previously_exported', 'all']).optional(),
+})
+
+export async function CountKeysForExport(filters: KeyExportFilters) {
+  return withRequireOwner(async () => {
+    const parsed = KeyExportFiltersSchema.parse(filters)
+    return countKeysForExport(parsed)
+  })
+}
+
+export async function ExportKeys(filters: KeyExportFilters) {
+  return withRequireOwner(async () => {
+    const parsed = KeyExportFiltersSchema.parse(filters)
+
+    if (parsed.addressGroupId !== undefined) {
+      const group = await findAddressGroupById(parsed.addressGroupId)
+      if (!group) throw new Error(`Invalid address group id: ${parsed.addressGroupId}`)
+    }
+
+    const keys = await listKeysForExport(parsed)
+    if (keys.length > 0) {
+      await markKeysExported(keys.map(k => k.id))
+    }
+    return keys.map(k => ({ hex: k.privateKey }))
+  })
+}
+
+export async function ListDistinctOwnerAddresses() {
+  return withRequireOwner(async () => {
+    return listDistinctOwnerAddresses()
+  })
+}
+
+export async function GenerateKeys(addressGroupId: number, count: number) {
+  return withRequireOwner(async () => {
+    const parsed = z.object({
+      addressGroupId: z.number().int().positive(),
+      count: z.number().int().min(1).max(10000),
+    }).parse({ addressGroupId, count })
+
+    const group = await findAddressGroupById(parsed.addressGroupId)
+    if (!group) throw new Error(`Invalid address group id: ${parsed.addressGroupId}`)
+
+    const { Random } = await import('@cosmjs/crypto')
+
+    const keysToInsert: InsertKey[] = []
+    const privateKeys: string[] = []
+
+    for (let i = 0; i < parsed.count; i++) {
+      const privateKeyBytes = Random.getBytes(32)
+      const wallet = await DirectSecp256k1Wallet.fromKey(privateKeyBytes, 'pokt')
+      const [account] = await wallet.getAccounts()
+
+      if (!account) {
+        throw new Error('Failed to create account')
+      }
+
+      const privateKeyHex = Buffer.from(privateKeyBytes).toString('hex')
+      privateKeys.push(privateKeyHex)
+
+      keysToInsert.push({
+        publicKey: Buffer.from(account.pubkey).toString('hex'),
+        privateKey: privateKeyHex,
+        address: account.address,
+        addressGroupId: parsed.addressGroupId,
+        state: KeyState.Available,
+        createdAt: new Date(),
+      })
+    }
+
+    await insertMany(keysToInsert)
+
+    return privateKeys.map(pk => ({ hex: pk }))
   })
 }

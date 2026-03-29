@@ -102,15 +102,8 @@ export default function ClientImportSuppliersPage() {
       )?.[0] as keyof ImportProcessStatus | undefined
 
       if (failedStage) {
-        // Use the specific error message from the child component if provided
         const displayError = errorMessage || errorsMap[failedStage]
         setImportErrorMessage(displayError)
-        addNotification({
-          id: `import-process-${failedStage}-error`,
-          type: 'error',
-          showTypeIcon: true,
-          content: displayError,
-        })
       }
     }
   }
@@ -201,7 +194,7 @@ export default function ClientImportSuppliersPage() {
             <ImportSuccessStep
               importedSuppliers={importedSuppliers}
               providerName={selectedProvider?.name || 'Provider'}
-              onClose={() => router.push('/app/nodes')}
+              onClose={() => router.push('/app/suppliers')}
             />
           )}
         </div>

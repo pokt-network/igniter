@@ -64,7 +64,9 @@ if BOOTSTRAP_LOCAL_PATH != '':
         'image': 'localhost:5001/middleman',
         'workingDir': '/app',
         'command': ['sh', '-c', 'pnpm exec turbo run build --filter=@igniter/db && cd apps/middleman && pnpm exec tsx src/db/bootstrap-seed.ts'],
-        'env': [{'name': 'BOOTSTRAP_CONFIG_PATH', 'value': '/bootstrap/bootstrap.json'}],
+        'env': [
+          {'name': 'BOOTSTRAP_CONFIG_PATH', 'value': '/bootstrap/bootstrap.json'},
+        ],
         'envFrom': [
           {'configMapRef': {'name': 'middleman-config'}},
           {'secretRef': {'name': 'middleman-secrets'}},
@@ -84,6 +86,12 @@ if BOOTSTRAP_LOCAL_PATH != '':
 # encode it after replace env vars
 k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
 
+LOCALNET_ENABLED = os.getenv('LOCALNET_ENABLED', '') == 'true'
+
+middleman_deps = ["postgresql", "temporal", "governance-nginx"]
+if LOCALNET_ENABLED:
+    middleman_deps.append("owner-fund")
+
 k8s_resource(
     "middleman",
     port_forwards=["3000:3000"],
@@ -94,5 +102,5 @@ k8s_resource(
       'postgres-middleman-connection:secret',
     ],
     labels=['apps'],
-    resource_deps=["postgresql", "temporal", "governance-nginx"],
+    resource_deps=middleman_deps,
 )

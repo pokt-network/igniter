@@ -8,6 +8,17 @@ import { KeplrWalletConnection } from './KeplrWalletConnection';
 import {PocketWalletConnection} from "./PocketWalletConnection";
 import { setCookie } from '../../lib/cookies'
 
+const WALLET_TIMEOUT_MS = 15_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number = WALLET_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Wallet is locked or not responding. Please unlock your wallet and try again.')), ms)
+    ),
+  ])
+}
+
 export interface Provider {
   send: (method: string, params?: any[]) => Promise<any>;
   addListener?: (type: 'accountsChanged', listener: (data: Array<string>) => void) => void;
@@ -225,12 +236,12 @@ export const WalletConnectionProvider = ({
     setAccountListener(connection.provider!)
 
     if (!reconnected) {
-    //   if (onDisconnect) {
-    //     onDisconnect();
-    //     return false;
-    //   } else {
-      throw new Error('Failed to reconnect');
-      // }
+      if (onDisconnect) {
+        onDisconnect();
+        return false;
+      } else {
+        throw new Error('Failed to reconnect');
+      }
     } else {
       setConnection(connection)
     }
@@ -299,7 +310,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await connection.getPublicKey(address);
+    return await withTimeout(connection.getPublicKey(address));
   }, [connection])
 
   const getBalance = useCallback(async (address: string) => {
@@ -307,7 +318,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await connection.getBalance(address);
+    return await withTimeout(connection.getBalance(address));
   }, [connection])
 
   const switchChain = useCallback(async (chain: string) => {
@@ -315,7 +326,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await connection.switchChain(chain);
+    return await withTimeout(connection.switchChain(chain));
   }, [connection])
 
   const signMessage = useCallback(async (message: string, address: string) => {
@@ -323,7 +334,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await connection.signMessage(message, address);
+    return await withTimeout(connection.signMessage(message, address));
   }, [connection])
 
   const signTransaction = useCallback(async (messages: TransactionMessage[], signer?: string, memo?: SignedMemo) => {
@@ -331,7 +342,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await connection.signTransaction(messages, signer, memo);
+    return await withTimeout(connection.signTransaction(messages, signer, memo), 60_000);
   }, [connection])
 
   const clearConnectedIdentity = useCallback(() => {

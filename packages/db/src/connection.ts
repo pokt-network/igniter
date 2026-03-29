@@ -53,6 +53,10 @@ export const setup = <TSchema extends Record<string, unknown>>(options: SetupOpt
     connectionTimeoutMillis: parseEnvInt(PG_POOL_CONN_TIMEOUT_MS, 5000),
   })
 
+  pool.on('error', (err) => {
+    logger.error('Database pool error (connection will be retried on next query)', { error: err.message })
+  })
+
   logger.info('Preparing database schema')
   const db = drizzle<TSchema>(pool, {
     schema,

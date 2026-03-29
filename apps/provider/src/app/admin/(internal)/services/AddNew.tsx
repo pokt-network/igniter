@@ -22,10 +22,9 @@ export default function AddNewService() {
         />
       )}
       <Button
-        variant={"outline"}
         onClick={() => setIsAddingService(true) }
       >
-        Add New
+        Add Service
       </Button>
     </>
   )

@@ -10,6 +10,7 @@ import { Client } from '@temporalio/client'
 import { RemediationHistoryEntryReason } from "@igniter/db/provider/enums"
 
 enum ScheduledWorkflowType {
+  GovernanceSync = 'GovernanceSync',
   SupplierStatus = 'SupplierStatus',
   SupplierRemediation = 'SupplierRemediation',
   SupplierInitialStake = 'SupplierInitialStake',
@@ -19,6 +20,12 @@ const ScheduledWorkflowConfig: Record<
   ScheduledWorkflowType,
   { workflowType: string; interval: string; args: any[]; envVar: string }
 > = {
+  [ScheduledWorkflowType.GovernanceSync]: {
+    workflowType: 'GovernanceSync',
+    interval: '5m',
+    args: [],
+    envVar: 'SCHEDULE_GOVERNANCE_SYNC_INTERVAL',
+  },
   [ScheduledWorkflowType.SupplierStatus]: {
     workflowType: 'SupplierStatus',
     interval: '2m',

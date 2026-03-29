@@ -4,11 +4,12 @@ import React from 'react'
 import { Button } from '@igniter/ui/components/button'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetRemediationScheduleStatus, ToggleRemediationSchedule } from '@/actions/Schedules'
 
 export default function AutoStakeToggle() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -40,8 +41,8 @@ export default function AutoStakeToggle() {
         setError(result.error.message)
         return
       }
+      await queryClient.invalidateQueries({ queryKey: ['remediation-schedule-status'] })
       setOpen(false)
-      router.refresh()
     } catch (e) {
       console.error('Failed to toggle remediation schedule', e)
       setError(e instanceof Error ? e.message : 'Failed to toggle schedule. Please try again.')
@@ -50,19 +51,34 @@ export default function AutoStakeToggle() {
     }
   }
 
+  const isActive = !paused
+
   if (isLoading) {
     return (
-      <Button className={'h-8'} variant={'outline'} disabled>
+      <button
+        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium border border-border-primary text-text-secondary opacity-50 cursor-default"
+        disabled
+      >
+        <span className="h-2 w-2 rounded-full bg-text-secondary" />
         Auto Stake: …
-      </Button>
+      </button>
     )
   }
 
   return (
     <>
-      <Button className={'h-8'} variant={'outline'} onClick={onClick} disabled={isSubmitting}>
-        Auto Stake: {paused ? 'OFF' : 'ON'}
-      </Button>
+      <button
+        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+          isActive
+            ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+            : 'border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20'
+        }`}
+        onClick={onClick}
+        disabled={isSubmitting}
+      >
+        <span className={`h-2 w-2 rounded-full ${isActive ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]' : 'bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]'}`} />
+        Auto Stake: {isActive ? 'ON' : 'OFF'}
+      </button>
 
       <ConfirmationDialog
         title={paused ? 'Enable Auto Stake' : 'Disable Auto Stake'}

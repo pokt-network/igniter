@@ -13,10 +13,7 @@ import urlJoin from 'url-join'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { indexerStatusDocument } from '@igniter/graphql'
 import { env } from '@/config/env'
-import {
-  revalidateTag,
-  unstable_cache,
-} from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import {
   type ActionResult,
   withRequireOwner,
@@ -48,32 +45,19 @@ const CreateSettingsSchema = z.object({
 
 const appSettingsCacheTag = 'appSettings';
 
-const getAppSettings = unstable_cache(
-  async () => {
-    return await fetchApplicationSettings()
-  },
-  undefined,
-  { tags: [appSettingsCacheTag] },
-)
+async function getAppSettings() {
+  return await fetchApplicationSettings()
+}
 
 // Public endpoint - no auth required (used for app name display)
 export async function GetAppName() {
-  let appSettings = await getAppSettings()
-
-  if (!appSettings) {
-    appSettings = await fetchApplicationSettings()
-  }
-
+  const appSettings = await getAppSettings()
   return appSettings?.name || 'Stake Igniter Provider'
 }
 
 // Public endpoint - no auth required (used during bootstrap)
 export async function GetApplicationSettings() {
-  const appSettings = await getAppSettings()
-
-  if (appSettings) return appSettings
-
-  return await fetchApplicationSettings()
+  return await getAppSettings()
 }
 
 function ValidateWithSchema(schema: z.ZodSchema<any>, data: Partial<ApplicationSettings>) {
@@ -106,7 +90,7 @@ export async function UpsertApplicationSettings(
       })
     }
 
-    revalidateTag(appSettingsCacheTag)
+    revalidatePath('/', 'layout')
   })
 }
 

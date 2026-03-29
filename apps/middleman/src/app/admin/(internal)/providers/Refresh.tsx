@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import React from 'react'
-import { UpdateProvidersFromSource } from '@/actions/Providers'
+import { TriggerGovernanceSync } from '@/actions/Providers'
 import { Button } from '@igniter/ui/components/button'
 import { LoaderIcon } from '@igniter/ui/assets'
 
@@ -14,8 +14,10 @@ export default function RefreshProviders() {
     // TODO: Error handling and display
     try {
       setIsUpdatingProviders(true);
-      await UpdateProvidersFromSource();
-      await queryClient.invalidateQueries({ queryKey: ['delegators'] });
+      await TriggerGovernanceSync();
+      // Give the workflow a moment to complete before refreshing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } catch (error) {
       console.error("Failed to update providers from source:", error);
     } finally {

@@ -1,0 +1,343 @@
+/* ============================================================
+   PROVIDER LANDING — ANIMATED BACKGROUND
+   ============================================================ */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bg-canvas .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  animation: orbFloat 20s ease-in-out infinite;
+}
+
+.bg-canvas .orb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(2,90,242,0.25), transparent 70%);
+  top: -10%; left: -5%;
+  animation-delay: 0s;
+}
+
+.bg-canvas .orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(255,197,71,0.12), transparent 70%);
+  bottom: 10%; right: -5%;
+  animation-delay: -7s;
+}
+
+.bg-canvas .orb-3 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(72,229,194,0.08), transparent 70%);
+  top: 50%; left: 40%;
+  animation-delay: -14s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+/* Particle canvas */
+#particles-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.landing-dot-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--border-primary) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.4;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+/* ============================================================
+   PROVIDER LANDING — LAYOUT
+   ============================================================ */
+.provider-login-wrapper {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 40px 20px;
+  gap: 20px;
+}
+
+/* ============================================================
+   BADGE
+   ============================================================ */
+.provider-login-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(2, 90, 242, 0.08);
+  border: 1px solid rgba(2, 90, 242, 0.2);
+  color: var(--pnf-blue-light);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  animation: providerFadeIn 0.5s ease-out both;
+}
+
+.provider-login-badge .pulse {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--pnf-mint);
+  animation: providerPulse 2s ease-in-out infinite;
+}
+
+@keyframes providerPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.5); }
+}
+
+/* ============================================================
+   SIGN-IN CARD
+   ============================================================ */
+.provider-login-card {
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(
+    170deg,
+    rgba(var(--bg-surface-rgb, 20, 24, 30), 0.85),
+    rgba(var(--bg-surface-rgb, 20, 24, 30), 0.95)
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-xl);
+  padding: 44px 36px 36px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  animation: providerFadeIn 0.5s ease-out 0.1s both;
+  box-shadow:
+    0 0 0 1px rgba(2, 90, 242, 0.08),
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+/* Top accent line */
+.provider-login-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 10%,
+    rgba(2, 90, 242, 0.6) 30%,
+    rgba(72, 229, 194, 0.4) 50%,
+    rgba(2, 90, 242, 0.6) 70%,
+    transparent 90%
+  );
+}
+
+/* Subtle inner glow */
+.provider-login-card::after {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    rgba(2, 90, 242, 0.06) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+}
+
+/* ============================================================
+   ICON WITH GLOW RING
+   ============================================================ */
+.provider-login-icon-wrapper {
+  position: relative;
+  z-index: 1;
+  width: 64px; height: 64px;
+  margin: 0 auto 24px;
+}
+
+.provider-login-icon-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--radius-xl);
+  background: conic-gradient(
+    from 0deg,
+    rgba(2, 90, 242, 0.3),
+    rgba(72, 229, 194, 0.2),
+    rgba(255, 197, 71, 0.15),
+    rgba(2, 90, 242, 0.3)
+  );
+  animation: ringRotate 8s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes ringRotate {
+  to { transform: rotate(360deg); }
+}
+
+.provider-login-icon-ring::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: var(--bg-surface);
+}
+
+.provider-login-icon {
+  position: relative;
+  z-index: 1;
+  width: 64px; height: 64px;
+  border-radius: var(--radius-xl);
+  background: rgba(2, 90, 242, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pnf-blue-light);
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+.provider-login-card h1 {
+  position: relative;
+  z-index: 1;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.provider-login-card .subtitle {
+  position: relative;
+  z-index: 1;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 340px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ============================================================
+   CONNECT BUTTON AREA
+   ============================================================ */
+.provider-login-card .connect-area {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+}
+
+/* ============================================================
+   HINT
+   ============================================================ */
+.provider-login-card .hint {
+  position: relative;
+  z-index: 1;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ============================================================
+   FEATURE PILLS
+   ============================================================ */
+.provider-features {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: providerFadeIn 0.5s ease-out 0.25s both;
+}
+
+.provider-feature-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.provider-feature-pill svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.provider-feature-pill:nth-child(1) svg { color: var(--pnf-blue-light); }
+.provider-feature-pill:nth-child(2) svg { color: var(--pnf-mint); }
+.provider-feature-pill:nth-child(3) svg { color: var(--pnf-gold); }
+
+a.provider-help-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.provider-help-link:hover {
+  border-color: var(--pnf-blue-light);
+  color: var(--text-primary);
+  background: rgba(2, 90, 242, 0.06);
+}
+
+a.provider-help-link svg {
+  color: var(--text-tertiary) !important;
+}
+
+a.provider-help-link:hover svg {
+  color: var(--pnf-blue-light) !important;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes providerFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   ACCESSIBILITY
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .bg-canvas .orb { animation: none; }
+  .provider-login-badge,
+  .provider-login-card,
+  .provider-features { animation: none; }
+  .provider-login-badge .pulse { animation: none; }
+  .provider-login-icon-ring { animation: none; }
+}

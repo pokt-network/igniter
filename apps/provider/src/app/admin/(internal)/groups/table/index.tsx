@@ -99,6 +99,9 @@ export default function AddressGroupsTable() {
       data={addressGroups}
       filters={filters}
       sorts={sorts}
+      searchableColumns={['name', 'relayMiner', 'linkedAddresses']}
+      searchPlaceholder="Search by name, relay miner, or linked address..."
+      countLabel="groups"
     />
   )
 

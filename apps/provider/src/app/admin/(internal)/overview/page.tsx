@@ -10,7 +10,7 @@ import ServerRewardsByAddresses from '@igniter/ui/components/RewardsByAddresses/
 import { getDistinctRevAddresses } from '@/lib/dal/services'
 import { CircleAlert } from 'lucide-react'
 import Link from 'next/link'
-import { listStakedAddresses } from '@/lib/dal/keys'
+import { listStakedAddresses, getKeysSummary } from '@/lib/dal/keys'
 import { ListRegions } from '@/actions/Regions'
 import { ListServices } from '@/actions/Services'
 import { ListAddressGroups } from '@/actions/AddressGroups'
@@ -31,10 +31,13 @@ export default async function Page() {
   return (
     <>
         <div className="border-b-1">
-          <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-10">
+          <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-6">
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-col">
-                <h1>Admin Overview</h1>
+                <h1>Overview</h1>
+                <p className="text-text-secondary">
+                  Your provider dashboard at a glance.
+                </p>
               </div>
             </div>
           </div>
@@ -58,10 +61,11 @@ export default async function Page() {
 }
 
 async function Rewards() {
-  const [applicationSettings, addresses, supplierAddresses] = await Promise.all([
+  const [applicationSettings, addresses, supplierAddresses, keysSummary] = await Promise.all([
     GetApplicationSettings(),
     getDistinctRevAddresses().catch(() => []),
-    listStakedAddresses().catch(() => [])
+    listStakedAddresses().catch(() => []),
+    getKeysSummary().catch(() => ({ totalKeys: 0, stakedKeys: 0, availableKeys: 0, totalStakedUpokt: 0 })),
   ]);
 
   let graphqlUrl = applicationSettings.indexerApiUrl
@@ -121,11 +125,11 @@ async function Rewards() {
 
         <div className="grid grid-cols-5 gap-3">
           {[
-            { label: 'Regions', count: regionsCount },
-            { label: 'Relay Miners', count: relayMinersCount },
+            { label: 'Total Keys', count: keysSummary.totalKeys },
+            { label: 'Staked Suppliers', count: keysSummary.stakedKeys },
+            { label: 'Available Keys', count: keysSummary.availableKeys },
+            { label: 'Staked Tokens', count: `${(keysSummary.totalStakedUpokt / 1e6).toLocaleString('en-US', { maximumFractionDigits: 0 })} POKT` },
             { label: 'Services', count: servicesCount },
-            { label: 'Address Groups', count: addressGroupsCount },
-            { label: 'Delegators', count: delegatorsCount },
           ].map(({ label, count }) => (
             <div key={label} className="rounded-md p-3 text-center" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
               <p className="text-xl font-bold">{count}</p>
@@ -150,6 +154,8 @@ async function Rewards() {
               supplierAddresses={supplierAddresses}
               isOwners={false}
               graphQlUrl={graphqlUrl}
+              dbSuppliersCount={keysSummary.stakedKeys}
+              dbStakedTokens={keysSummary.totalStakedUpokt}
             />
           </Suspense>
         </div>

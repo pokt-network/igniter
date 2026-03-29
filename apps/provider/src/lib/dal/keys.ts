@@ -11,8 +11,14 @@ import {
   and,
   count,
   eq,
+  gte,
   inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
   sql,
+  type SQL,
 } from 'drizzle-orm'
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres'
 
@@ -355,6 +361,31 @@ export async function batchUpdateRemediationHistory(
 /**
  * Load keys by addresses with deep address group relations.
  */
+export async function countKeys(): Promise<number> {
+  const dbClient = getDbClient()
+  const [{ value }] = await dbClient.db.select({ value: count() }).from(keysTable)
+  return value
+}
+
+export async function getKeysSummary(): Promise<{ totalKeys: number; stakedKeys: number; availableKeys: number; totalStakedUpokt: number }> {
+  const dbClient = getDbClient()
+  const result = await dbClient.db
+    .select({
+      totalKeys: count(),
+      stakedKeys: sql<number>`count(*) filter (where state = ${KeyState.Staked})`,
+      availableKeys: sql<number>`count(*) filter (where state = ${KeyState.Available} or state = ${KeyState.Imported})`,
+      totalStakedUpokt: sql<number>`coalesce(sum("stakeAmountUpokt") filter (where state = ${KeyState.Staked}), 0)`,
+    })
+    .from(keysTable)
+
+  return {
+    totalKeys: result[0]?.totalKeys ?? 0,
+    stakedKeys: result[0]?.stakedKeys ?? 0,
+    availableKeys: result[0]?.availableKeys ?? 0,
+    totalStakedUpokt: Number(result[0]?.totalStakedUpokt ?? 0),
+  }
+}
+
 export async function listKeysByAddresses(addresses: string[]): Promise<KeyWithGroup[]> {
   if (addresses.length === 0) return []
   const dbClient = getDbClient()
@@ -404,4 +435,100 @@ export async function listKeysByAddresses(addresses: string[]): Promise<KeyWithG
       },
     },
   })
+}
+
+export interface KeyExportFilters {
+  addressGroupId?: number
+  states?: KeyState[]
+  ownerAddress?: string
+  delegatorIdentity?: string
+  dateFrom?: Date
+  dateTo?: Date
+  dateField?: 'createdAt' | 'deliveredAt'
+  exportStatus?: 'not_exported' | 'previously_exported' | 'all'
+}
+
+function buildExportFilterConditions(filters: KeyExportFilters): SQL[] {
+  const conditions: SQL[] = []
+
+  if (filters.addressGroupId) {
+    conditions.push(eq(keysTable.addressGroupId, filters.addressGroupId))
+  }
+
+  if (filters.states && filters.states.length > 0) {
+    conditions.push(inArray(keysTable.state, filters.states))
+  }
+
+  if (filters.ownerAddress) {
+    conditions.push(eq(keysTable.ownerAddress, filters.ownerAddress))
+  }
+
+  if (filters.delegatorIdentity) {
+    conditions.push(eq(keysTable.deliveredTo, filters.delegatorIdentity))
+  }
+
+  const dateColumn = filters.dateField === 'deliveredAt' ? keysTable.deliveredAt : keysTable.createdAt
+
+  if (filters.dateFrom) {
+    conditions.push(gte(dateColumn, filters.dateFrom))
+  }
+
+  if (filters.dateTo) {
+    conditions.push(lte(dateColumn, filters.dateTo))
+  }
+
+  if (filters.exportStatus === 'not_exported') {
+    conditions.push(isNull(keysTable.exportedAt))
+  } else if (filters.exportStatus === 'previously_exported') {
+    conditions.push(isNotNull(keysTable.exportedAt))
+  }
+
+  return conditions
+}
+
+export async function countKeysForExport(filters: KeyExportFilters): Promise<number> {
+  const dbClient = getDbClient()
+  const conditions = buildExportFilterConditions(filters)
+
+  const [result] = await dbClient.db.select({ count: count() })
+    .from(keysTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+
+  return Number(result?.count || 0)
+}
+
+export async function listKeysForExport(filters: KeyExportFilters) {
+  const dbClient = getDbClient()
+  const conditions = buildExportFilterConditions(filters)
+
+  return dbClient.db.query.keysTable.findMany({
+    ...(conditions.length > 0 && { where: and(...conditions) }),
+    columns: {
+      id: true,
+      privateKey: true,
+    },
+  })
+}
+
+export async function markKeysExported(keyIds: number[]): Promise<void> {
+  if (keyIds.length === 0) return
+  const dbClient = getDbClient()
+  await dbClient.db.update(keysTable)
+    .set({
+      exportedAt: new Date(),
+      exportCount: sql`COALESCE(${keysTable.exportCount}, 0) + 1`,
+    })
+    .where(inArray(keysTable.id, keyIds))
+}
+
+export async function listDistinctOwnerAddresses(): Promise<string[]> {
+  const dbClient = getDbClient()
+  const results = await dbClient.db
+    .selectDistinct({ ownerAddress: keysTable.ownerAddress })
+    .from(keysTable)
+    .where(and(isNotNull(keysTable.ownerAddress), ne(keysTable.ownerAddress, '')))
+
+  return results
+    .map(r => r.ownerAddress)
+    .filter((addr): addr is string => Boolean(addr))
 }

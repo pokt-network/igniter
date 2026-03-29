@@ -51,7 +51,7 @@ export default function KeyDetail(key: KeyWithRelations) {
     },
     isStakedKey && {
       label: 'Owner',
-      value: ownerAddress ? <Address address={ownerAddress ?? ''} /> : 'N/A',
+      value: ownerAddress ? <Address address={ownerAddress} showAvatar /> : 'N/A',
     },
     delegator && {
       label: 'Delivered To',

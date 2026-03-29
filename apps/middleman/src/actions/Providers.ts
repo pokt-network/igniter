@@ -1,14 +1,10 @@
 "use server";
 
-import {list, upsertProviders, getByIdentity, update} from "@/lib/dal/providers";
+import {countProviders, list, upsertProviders, getByIdentity, update} from "@/lib/dal/providers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {requireAuth} from "@/lib/utils/actions";
-import { getApplicationSettings } from '@/actions/ApplicationSettings'
-import {providersTable} from "@igniter/db/middleman/schema";
 import {ProviderStatus} from "@igniter/db/middleman/enums";
-import { getDb} from "@/db";
-import {eq} from "drizzle-orm";
 
 export interface Provider {
   id: number;
@@ -23,134 +19,28 @@ const updateProvidersSchema = z.object({
   }),
 });
 
-export async function UpdateProvidersFromSource(): Promise<{ success: boolean, error?: string, data: Provider[] }> {
-  const userIdentity = await requireAuth()
-  const appSettings = await getApplicationSettings();
+const GOVERNANCE_SYNC_SCHEDULE_ID = 'GovernanceSync-scheduled'
 
-  const providersCdnUrl = process.env.PROVIDERS_CDN_URL!.replace(
-    "{chainId}",
-    // workaround until the repo has the file for this chain id
-    appSettings.chainId.replace('lego-testnet', 'beta'),
-  );
-
-  if (!providersCdnUrl) {
-    throw new Error("PROVIDERS_CDN_URL environment variable is not defined");
-  }
-
-  console.log(`[Providers] Starting update from ${providersCdnUrl}`);
-
+export async function TriggerGovernanceSync(): Promise<{ success: boolean, error?: string }> {
   try {
-    const response = await fetch(providersCdnUrl);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch providers: ${response.statusText}`);
-    }
-
-    type CdnProvider = {
-      name: string;
-      identity: string;
-      identityHistory: string[];
-      url: string;
-    };
-
-    const providersFromCdn = (await response.json()) as CdnProvider[];
-    console.log(
-      `[Providers] Fetched ${providersFromCdn.length} providers from CDN`,
-    );
-
-    const currentProviders = await list(true);
-    const currentProvidersMap = new Map(
-      currentProviders.map((p) => [p.identity, p]),
-    );
-
-    const allCdnIdentities = new Set<string>();
-    for (const p of providersFromCdn) {
-      allCdnIdentities.add(p.identity);
-      p.identityHistory.forEach((h) => allCdnIdentities.add(h));
-    }
-
-    const { inserted, updated, disabled } = await getDb().transaction(
-      async (tx) => {
-        let inserted = 0;
-        let updated = 0;
-        let disabled = 0;
-
-        for (const cdnProvider of providersFromCdn) {
-          const possibleIds = [
-            cdnProvider.identity,
-            ...cdnProvider.identityHistory,
-          ];
-
-          const matchingCurrent =
-            possibleIds.map((id) => currentProvidersMap.get(id)).find(Boolean) ??
-            null;
-
-          if (matchingCurrent) {
-            const shouldUpdateIdentity =
-              matchingCurrent.identity !== cdnProvider.identity;
-            const shouldUpdateName = matchingCurrent.name !== cdnProvider.name;
-            const shouldUpdateUrl = matchingCurrent.url !== cdnProvider.url;
-
-            if (shouldUpdateIdentity || shouldUpdateName || shouldUpdateUrl) {
-              await tx
-                .update(providersTable)
-                .set({
-                  identity: cdnProvider.identity,
-                  name: cdnProvider.name,
-                  url: cdnProvider.url,
-                  updatedBy: userIdentity,
-                })
-                .where(eq(providersTable.id, matchingCurrent.id));
-              updated += 1;
-            }
-          } else {
-            await tx.insert(providersTable).values({
-              name: cdnProvider.name,
-              identity: cdnProvider.identity,
-              url: cdnProvider.url,
-              enabled: false,
-              visible: false,
-              createdBy: userIdentity,
-              updatedBy: userIdentity,
-            });
-            inserted += 1;
-          }
-        }
-
-        for (const provider of currentProviders) {
-          if (
-            !allCdnIdentities.has(provider.identity) &&
-            (provider.enabled || provider.visible)
-          ) {
-            await tx
-              .update(providersTable)
-              .set({
-                enabled: false,
-                visible: false,
-                updatedAt: new Date(),
-                updatedBy: userIdentity,
-              })
-              .where(eq(providersTable.identity, provider.identity));
-            disabled += 1;
-          }
-        }
-
-        return { inserted, updated, disabled };
-      },
-    );
-    console.log(
-      `[Providers] Done. Inserted: ${inserted}, Updated: ${updated}, Disabled: ${disabled}`,
-    );
-
-    return { success: true, data: currentProviders };
+    await requireAuth()
+    const { getTemporalClient } = await import('@/lib/temporal')
+    const client = getTemporalClient()
+    const handle = client.schedule.getHandle(GOVERNANCE_SYNC_SCHEDULE_ID)
+    await handle.trigger()
+    return { success: true }
   } catch (error) {
-    console.error("Error updating providers:", error);
+    console.error('Error triggering GovernanceSync:', error)
     return {
       success: false,
-      data: [],
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    };
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    }
   }
+}
+
+/** @deprecated Use TriggerGovernanceSync instead */
+export async function UpdateProvidersFromSource() {
+  return TriggerGovernanceSync()
 }
 
 interface SubmitProvidersValues {
@@ -184,6 +74,10 @@ export async function submitProviders(
   await upsertProviders(updatedProviders);
 
   revalidatePath("/admin/setup");
+}
+
+export async function CountProviders() {
+  return countProviders()
 }
 
 export async function ListProviders(all?: boolean) {

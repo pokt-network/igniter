@@ -15,7 +15,6 @@ import {
 import { Button } from '@igniter/ui/components/button'
 import { CheckSuccess, LoaderIcon, XIcon } from '@igniter/ui/assets'
 import { FileWarning } from 'lucide-react'
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
 import {isValidPrivateKey} from '@igniter/pocket/utils';
 type StageStatus = 'pending' | 'success' | 'error' | 'invalid';
 
@@ -47,7 +46,7 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
     importKeys: 'pending',
   });
   const [keys, setKeys] = useState<Array<string>>([]);
-  const { addNotification } = useNotifications();
+
 
   function handleOpenChanged(open: boolean) {
     setOpen(open);
@@ -74,15 +73,6 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
         handleOpenChanged(false);
         return currentStatus;
       });
-
-      if (message) {
-        addNotification({
-          id: `import-keys-process-${stageName}-error`,
-          type: 'error',
-          showTypeIcon: true,
-          content: message,
-        });
-      }
     }, 1000);
   }
 
@@ -184,7 +174,7 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
   return (
     <Dialog open={open} onOpenChange={handleOpenChanged}>
       <DialogTrigger asChild>
-        <Button>Import Keys</Button>
+        <Button disabled={!addressGroupId || !file}>Import Keys</Button>
       </DialogTrigger>
       <DialogContent
         onInteractOutside={(event) => event.preventDefault()}

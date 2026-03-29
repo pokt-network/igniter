@@ -105,6 +105,7 @@ function useBalanceAndNetworkFee(
         data: simulateFee,
         isLoading: isLoadingSimulateFee,
         isError: errorSimulateFee,
+        error: simulateFeeError,
         refetch: refetchSimulateFee,
     } = useSimulateFee(selectedOffer, selectedAddressGroupId, ownerAddress)
     const {
@@ -128,9 +129,26 @@ function useBalanceAndNetworkFee(
 
     const balanceCoversTotal = (balance || 0) > amount + totalNetworkFee + operationalFunds
 
+    const errorStr = simulateFeeError?.message?.toLowerCase() || ''
+    const isWalletError = simulateFeeError && (
+      errorStr.includes('locked') ||
+      errorStr.includes('rejected') ||
+      errorStr.includes('not initialized') ||
+      errorStr.includes('wallet connection') ||
+      errorStr.includes('keplr') ||
+      errorStr.includes('not found') && errorStr.includes('extension')
+    )
+
+    const feeErrorMessage = isWalletError
+      ? 'Wallet is locked or unavailable. Please unlock it and retry.'
+      : errorSimulateFee || errorStakeSupplierFee
+        ? 'Failed to estimate fees'
+        : undefined
+
     return {
         isLoadingFee: isLoadingSimulateFee || isLoadingStakeSupplierFee,
         errorFee: errorSimulateFee || errorStakeSupplierFee,
+        feeErrorMessage,
         refetchFee: () => {
             if (errorSimulateFee) {
                 refetchSimulateFee()
@@ -166,6 +184,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
     const {
         isLoadingFee,
         errorFee,
+        feeErrorMessage,
         networkFee,
         refetchFee,
         balance,
@@ -276,7 +295,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     {isLoadingFee ? (
                       <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
                     ) : errorFee ? (
-                      <span className={'text-sm'}>Failed to fetch <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
+                      <span className={'text-sm'}>{feeErrorMessage} <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
                     ): (
                       <span className="flex flex-row gap-2">
                         <span className="font-mono text-[14px] text-[var(--text-primary)]">
@@ -322,7 +341,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     {isLoadingFee ? (
                       <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
                     ) : errorFee ? (
-                        <span className={'text-sm'}>Failed to fetch <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
+                        <span className={'text-sm'}>{feeErrorMessage} <Button onClick={refetchFee} className={'ml-1 h-[30px]'}>Retry</Button></span>
                     ): (
                       <span className="flex flex-row gap-2">
                         <span className="font-mono text-[14px] text-[var(--text-primary)]">

@@ -13,16 +13,26 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function DelegatorsPage() {
-
   return (
-    <div className="flex flex-col gap-10">
-      <div className="mx-30 pt-10">
-        <div className={'flex flex-row items-center gap-4'}>
-          <h1>Delegators</h1>
-          <RefreshDelegators />
+    <>
+      <div className="border-b-1">
+        <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-6">
+          <div className="flex flex-row justify-between items-center">
+            <div className="flex flex-col">
+              <h1>Delegators</h1>
+              <p className="text-text-secondary">
+                View and manage delegators using your provider.
+              </p>
+            </div>
+            <div className="flex flex-row gap-3 items-center">
+              <RefreshDelegators />
+            </div>
+          </div>
         </div>
+      </div>
+      <div className="flex flex-col p-4 w-full gap-4 md:gap-6 sm:px-3 md:px-6 lg:px-6 xl:px-10">
         <DelegatorsTable />
       </div>
-    </div>
+    </>
   )
 }

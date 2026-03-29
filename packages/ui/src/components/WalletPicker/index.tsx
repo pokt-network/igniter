@@ -724,7 +724,7 @@ export function WalletPicker({ onSignIn, getCsrfToken }: Readonly<WalletPickerPr
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant={"secondary"}>Connect Wallet</Button>
+                <Button>Connect Wallet</Button>
             </DialogTrigger>
             <DialogContent className="w-[340px] pt-[20px] pb-[8px] px-[8px] rounded-lg shadow-lg bg-bg-surface border-border-primary" hideClose>
                 {content}

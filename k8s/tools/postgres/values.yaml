@@ -8,6 +8,13 @@ image:
   repository: bitnamilegacy/postgresql
 
 primary:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   persistentVolumeClaimRetentionPolicy:
     enabled: true
     whenDeleted: Delete

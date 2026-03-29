@@ -35,7 +35,7 @@ export default function ClearRemediationButton() {
 
   return (
     <>
-      <Button className={'h-8'} variant={'outline'} onClick={onClick} disabled={isSubmitting}>
+      <Button className="border-red-500/50 text-red-400 hover:bg-red-500/10" variant="outline" onClick={onClick} disabled={isSubmitting}>
         Clear remediation
       </Button>
 

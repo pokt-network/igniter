@@ -26,13 +26,28 @@ custom_build(
     ]
 )
 
-# encode it after replace env vars
-k8s_yaml(kustomize("./overlays/dev"), allow_duplicates=False)
+# decode kustomize output so we can patch env vars when localnet is enabled
+objects = decode_yaml_stream(kustomize("./overlays/dev"))
+
+LOCALNET_ENABLED = os.getenv('LOCALNET_ENABLED', '') == 'true'
+
+for o in objects:
+    if o['metadata']['name'] == 'middleman-workflows-config':
+        o['data']['PROVIDERS_CDN_URL'] = 'http://governance-nginx.default.svc.cluster.local/providers.json'
+        if LOCALNET_ENABLED:
+            o['data']['POKT_RPC_URL'] = 'http://validator:26657'
+        break
+
+k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
+
+deps = ["middleman", "governance-nginx"]
+if LOCALNET_ENABLED:
+    deps.append("owner-fund")
 
 k8s_resource(
     "middleman-workflows",
     extra_pod_selectors=[{"app": "middleman", "component": "workflows"}],
     objects=['middleman-workflows-config:configmap'],
     labels=['apps'],
-    resource_deps=["middleman"],
+    resource_deps=deps,
 )

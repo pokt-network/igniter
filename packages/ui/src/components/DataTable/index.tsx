@@ -31,7 +31,7 @@ import ExportButton from '../ExportButton'
 import RowsPerPage from './RowsPerPage'
 
 export interface FilterItem<TData> {
-  label: string;
+  label: React.ReactNode;
   value: string | number | boolean;
   column: keyof TData;
   isDefault?: boolean;
@@ -63,6 +63,12 @@ export interface DataTableProps<TData extends object, TValue> {
   /** Column keys to search across with the global search input */
   searchableColumns?: (keyof TData)[]
   searchPlaceholder?: string
+  /** Optional content to render at the left of the toolbar, before filters */
+  headerLeft?: React.ReactNode
+  /** Label for the auto-generated count chip (e.g. "txs", "keys"). If set, shows a count chip with filtered row count. */
+  countLabel?: string
+  /** Render a status line showing filtered/total counts */
+  renderStatus?: (filteredCount: number, totalCount: number) => React.ReactNode
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -78,6 +84,9 @@ export default function DataTable<TData extends object, TValue>({
   columnVisibility,
   searchableColumns,
   searchPlaceholder = 'Search...',
+  headerLeft,
+  countLabel,
+  renderStatus,
 }: DataTableProps<TData, TValue>) {
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
@@ -107,8 +116,16 @@ export default function DataTable<TData extends object, TValue>({
       return searchableColumns.some((col) => {
         const val = row.getValue(String(col))
         if (val == null) return false
-        if (typeof val === 'object' && 'name' in val) {
-          return String(val.name).toLowerCase().includes(q)
+        if (Array.isArray(val)) {
+          return val.some((v) => String(v).toLowerCase().includes(q))
+        }
+        if (typeof val === 'object' && val !== null) {
+          const fields = Object.values(val).filter(v => typeof v === 'string')
+          if (fields.some(f => f.toLowerCase().includes(q))) return true
+          return false
+        }
+        if (typeof val === 'object' && 'identity' in val) {
+          return String(val.identity).toLowerCase().includes(q) || ('name' in val && String(val.name).toLowerCase().includes(q))
         }
         return String(val).toLowerCase().includes(q)
       })
@@ -206,22 +223,50 @@ export default function DataTable<TData extends object, TValue>({
 
   return (
     <div>
+      {renderStatus && !isLoading && !isError && (
+        <div className="pb-2">
+          {renderStatus(table.getFilteredRowModel().rows.length, data.length)}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-6">
-        {searchableColumns?.length ? (
-          <input
-            type="text"
-            placeholder={searchPlaceholder}
-            value={searchInput}
-            onChange={(e) => {
-              const value = e.target.value
-              setSearchInput(value)
-              if (debounceRef.current) clearTimeout(debounceRef.current)
-              debounceRef.current = setTimeout(() => setGlobalFilter(value), 300)
-            }}
-            disabled={isLoading || isError}
-            className="h-9 w-full sm:max-w-sm md:max-w-md rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[color:--color-blue-1] disabled:opacity-50"
-          />
-        ) : <div />}
+        <div className="flex items-center gap-3">
+          {searchableColumns?.length ? (
+            <div className="relative min-w-[280px] sm:min-w-[320px] md:min-w-[380px]">
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={searchInput}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setSearchInput(value)
+                  if (debounceRef.current) clearTimeout(debounceRef.current)
+                  debounceRef.current = setTimeout(() => setGlobalFilter(value), 300)
+                }}
+                disabled={isLoading || isError}
+                className="h-9 w-full rounded-lg border bg-(--input-bg) px-3 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[color:--color-blue-1] disabled:opacity-50"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput('')
+                    setGlobalFilter('')
+                    if (debounceRef.current) clearTimeout(debounceRef.current)
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                </button>
+              )}
+            </div>
+          ) : null}
+          {countLabel && !isLoading && (
+            <span className="inline-flex items-center whitespace-nowrap h-9 px-4 rounded-lg text-sm font-medium bg-bg-elevated text-text-secondary border border-border-primary">
+              {table.getFilteredRowModel().rows.length} {countLabel}
+            </span>
+          )}
+          {headerLeft}
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {csvFilename && (
             <ExportButton

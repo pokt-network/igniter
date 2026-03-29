@@ -40,25 +40,19 @@ Enabling a delegator allows their Middleman instance to request supplier address
 
 ---
 
-## Import from CDN
+## Governance Sync
 
-The Pocket Network governance repository maintains a public JSON file listing approved delegator addresses for each chain. Importing from this CDN adds new delegators to your Provider and updates or disables any that have changed identity — keeping your list in sync with the ecosystem.
+The Pocket Network governance repository maintains a public JSON file listing approved delegator addresses for each chain. A scheduled Temporal workflow (`GovernanceSync`) automatically fetches this list every 5 minutes and syncs it with your Provider's database — keeping your delegator list up to date with the ecosystem.
 
 ### Configure the CDN URL
 
-Before importing, ensure the `DELEGATORS_CDN_URL` environment variable is set in your environment file. The default value points to the governance repository:
+Ensure the `DELEGATORS_CDN_URL` environment variable is set in the **provider-workflows** configuration. The default value points to the governance repository:
 
 ```
 DELEGATORS_CDN_URL="https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/middleman.json"
 ```
 
-The `{chainId}` placeholder is automatically replaced at runtime with your configured chain ID (e.g., `pocket`, `pocket-beta`, `pocket-alpha`). You do not need to edit the URL template — just set it and the Provider substitutes the correct chain at import time.
-
-To find the raw JSON endpoint for your chain:
-
-1. Go to the [pokt-network/igniter-governance](https://github.com/pokt-network/igniter-governance) repository on GitHub.
-2. Navigate to the folder named after your chain ID (e.g., `pocket-beta/`).
-3. Open `middleman.json`. The raw URL to this file is what goes into `DELEGATORS_CDN_URL` (with `{chainId}` as the template).
+The `{chainId}` placeholder is automatically replaced at runtime with your configured chain ID (e.g., `pocket`, `pocket-beta`). In local development with Tilt, this is overridden to point to the local `governance-nginx` service.
 
 ### What the JSON contains
 
@@ -78,36 +72,27 @@ The CDN JSON is an array of delegator entries:
 - `identity` — the delegator's current Pocket Network address.
 - `identityHistory` — previous addresses, used to match delegators that have rotated their identity.
 
-### Trigger the import
+### How the sync works
 
-1. Navigate to **Delegators**.
-2. Click the **Reload** button next to the page heading.
-3. The Provider fetches the CDN JSON, compares it with existing delegators, and applies changes:
-   - **New delegators** are inserted as **disabled** — you control which ones you accept.
-   - **Existing delegators** with an updated name or identity are updated in place.
-   - **Delegators no longer in the CDN** that are currently enabled are disabled automatically.
-4. The table refreshes automatically after the import completes.
-
-### What happens during import
-
-The `UpdateDelegatorsFromSource` action performs the sync in a single database transaction:
+The `GovernanceSync` workflow runs as a Temporal scheduled workflow every 5 minutes. On each run it:
 
 1. Fetches the CDN JSON over HTTPS.
 2. Matches each CDN entry to existing delegators by identity and identity history.
-3. Inserts new delegators (disabled by default).
+3. Inserts new delegators as **enabled** by default.
 4. Updates name or identity for delegators that have changed.
 5. Disables any previously-enabled delegator no longer present in the CDN.
 
-> **New delegators are always imported as disabled.** After importing, review the list and enable the delegators you want to accept.
+### Manual trigger
 
-### Verify the import succeeded
+1. Navigate to **Delegators**.
+2. Click the **Reload** button next to the page heading.
+3. This triggers the `GovernanceSync` Temporal workflow immediately.
+4. The table refreshes automatically after a short delay.
 
-1. After clicking Reload, the table refreshes. Look for new entries.
-2. Filter by **Disabled** to see newly imported delegators that need to be enabled.
-3. Enable the delegators you want to accept by clicking **Enable** in their row.
+### Verify the sync
 
-<!-- SCREENSHOT: Capture the Delegators page with the Reload button highlighted. Then capture the table immediately after import showing newly added disabled delegators. -->
-<!-- ![Screenshot: Delegators CDN import](../screenshots/delegators-cdn-import.png) -->
+1. After clicking Reload or waiting for the scheduled run, check the table for new entries.
+2. Filter by **Enabled** or **Disabled** to review the current state.
 
 ---
 

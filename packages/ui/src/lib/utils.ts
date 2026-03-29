@@ -13,7 +13,7 @@ export const roundAndSeparate = (
   defaultValue: string | number = "-"
 ) => {
   return value
-    ? parseFloat(value.toFixed(decimalPlaces)).toLocaleString(undefined, {
+    ? parseFloat(value.toFixed(decimalPlaces)).toLocaleString('en-US', {
         maximumFractionDigits: decimalPlaces,
       })
     : (defaultValue as string);

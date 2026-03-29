@@ -80,6 +80,9 @@ export default function RelayMinersTable() {
       data={relayMiners}
       filters={getFilters(relayMiners)}
       sorts={[]}
+      searchableColumns={['name', 'identity', 'domain']}
+      searchPlaceholder="Search by name, identity or domain..."
+      countLabel="miners"
     />
   )
 

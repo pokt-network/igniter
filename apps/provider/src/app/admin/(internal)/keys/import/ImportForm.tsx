@@ -1,10 +1,9 @@
 'use client'
 
 import type {AddressGroupWithDetails} from '@igniter/db/provider/schema'
-import { ActivityHeader } from '@igniter/ui/components/ActivityHeader'
-import { useRouter } from 'next/navigation'
-import { AbortConfirmationDialog } from '@igniter/ui/components/AbortConfirmationDialog'
-import React, { useState } from 'react'
+import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@igniter/ui/components/dialog'
+import React, { useEffect, useState } from 'react'
+import { ListAddressGroups } from '@/actions/AddressGroups'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@igniter/ui/components/select'
 import { Dropzone, DropZoneArea, DropzoneTrigger, useDropzone } from '@igniter/ui/components/dropzone'
 import { CloudUploadIcon, FileWarning } from 'lucide-react'
@@ -12,7 +11,6 @@ import ImportProcess, { ImportProcessStatus } from '@/app/admin/(internal)/keys/
 import { Button } from '@igniter/ui/components/button'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { LoaderIcon } from '@igniter/ui/assets'
-import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
 
 const errorsMap: Record<keyof ImportProcessStatus, string> = {
   validateFile: 'There was an error trying to validate the file. Please try again.',
@@ -20,13 +18,12 @@ const errorsMap: Record<keyof ImportProcessStatus, string> = {
 };
 
 interface ImportFormProps {
-  addressesGroup: AddressGroupWithDetails[]
+  onClose: () => void
 }
 
-export default function ImportForm({addressesGroup}: ImportFormProps) {
-  const router = useRouter()
-  const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
-  const [isAbortDialogOpen, setAbortDialogOpen] = useState(false)
+export default function ImportForm({onClose}: ImportFormProps) {
+  const [addressesGroup, setAddressesGroup] = useState<AddressGroupWithDetails[]>([])
+  const [isDataLoading, setIsDataLoading] = useState(true)
   const [status, setStatus] = useState<'form' | 'success'>('form')
   const [addressGroup, setAddressGroup] = useState<string>('')
   const [file, setFile] = useState<File | null>(null)
@@ -34,6 +31,13 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
   const [showInvalidFileMessage, setShowInvalidFileMessage] = useState(false)
   const [showKeysAlreadyExistsMessage, setShowKeysAlreadyExistsMessage] = useState(false)
   const [importErrorMessage, setImportErrorMessage] = useState('')
+
+  useEffect(() => {
+    ListAddressGroups().then(result => {
+      if (result.success) setAddressesGroup(result.data)
+      setIsDataLoading(false)
+    })
+  }, [])
 
   const dropzone = useDropzone({
     validation: {
@@ -71,9 +75,17 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
     }
   }
 
+  const hasError = showInvalidFileMessage || showKeysAlreadyExistsMessage
+
   let content: React.ReactNode;
 
-  if (status === 'form') {
+  if (isDataLoading) {
+    content = (
+      <div className="flex items-center justify-center py-12">
+        <LoaderIcon className="size-6 animate-spin text-text-tertiary" />
+      </div>
+    )
+  } else if (status === 'form') {
     content = (
       <>
         {importErrorMessage && (
@@ -84,76 +96,92 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
           </div>
         )}
 
-        <Select value={addressGroup} onValueChange={setAddressGroup}>
-          <SelectTrigger className={'w-full'}>
-            <SelectValue placeholder={'Select an address group'} />
-          </SelectTrigger>
-          <SelectContent>
-            {addressesGroup.map((addressGroup) => (
-              <SelectItem value={addressGroup.id.toString()} key={addressGroup.id.toString()}>
-                {addressGroup.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-row items-center gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Address Group</label>
+          <Select value={addressGroup} onValueChange={setAddressGroup}>
+            <SelectTrigger className={'w-full'}>
+              <SelectValue placeholder={'Select an address group'} />
+            </SelectTrigger>
+            <SelectContent>
+              {addressesGroup.map((addressGroup) => (
+                <SelectItem value={addressGroup.id.toString()} key={addressGroup.id.toString()}>
+                  {addressGroup.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {addressGroup && (
-          <div className="p-4 rounded-md bg-bg-elevated">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-text-secondary">Name</span>
-                <span className="text-sm">
-          {addressesGroup.find(group => group.id.toString() === addressGroup)?.name}
-        </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-text-secondary">Visibility</span>
-                <span className="text-sm">
-          {addressesGroup.find(group => group.id.toString() === addressGroup)?.private ? 'Private' : 'Public'}
-        </span>
-              </div>
+          <div className="rounded-md border border-border-primary bg-bg-elevated">
+            <div className="flex flex-row items-center gap-3 px-4 py-2.5 border-b border-border-primary">
+              <span className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Name</span>
+              <span className="text-sm">
+                {addressesGroup.find(group => group.id.toString() === addressGroup)?.name}
+              </span>
+            </div>
+            <div className="flex flex-row items-center gap-3 px-4 py-2.5">
+              <span className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Visibility</span>
+              <span className="text-sm">
+                {addressesGroup.find(group => group.id.toString() === addressGroup)?.private ? 'Private' : 'Public'}
+              </span>
             </div>
           </div>
         )}
 
         <Dropzone {...dropzone}>
-          <DropZoneArea>
+          <DropZoneArea className="w-full !border-0 bg-transparent p-0">
             <DropzoneTrigger
-              className={'flex flex-col items-center gap-4 bg-transparent p-10 text-center text-sm'}
+              className={`flex flex-col items-center gap-2 w-full py-8 text-center text-sm cursor-pointer rounded-lg border border-dashed transition-colors ${
+                hasError
+                  ? 'border-red-500/50 bg-red-500/5'
+                  : file
+                    ? 'border-blue-500/50 bg-blue-500/5'
+                    : 'border-border bg-bg-surface/50 hover:bg-bg-hover/50'
+              }`}
             >
-              <CloudUploadIcon className="size-8" />
-              <div>
-                <p className="font-semibold">
-                  {file ? (<span>
-                    Uploaded file: <span className={'bg-bg-elevated px-2 py-0.5 rounded-[8px]'}>
-                      {file.name}
-                    </span>
-                  </span>) : 'Upload your keys json file'}
-                </p>
-                <p className="!text-xs text-muted-foreground mt-2">
-                  This file must be a json containing an array of hex private keys.
-                </p>
+              <div className={`flex items-center justify-center w-10 h-10 rounded-full mb-1 ${
+                hasError
+                  ? 'bg-red-500/10'
+                  : 'bg-blue-500/10'
+              }`}>
+                {hasError ? (
+                  <FileWarning className="size-5 text-red-400" />
+                ) : (
+                  <CloudUploadIcon className="size-5 text-blue-400" />
+                )}
               </div>
+              {hasError ? (
+                <div>
+                  <p className="text-sm font-medium text-red-400">
+                    {showInvalidFileMessage ? 'Invalid file format' : 'Keys already exist'}
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-1">
+                    {showInvalidFileMessage
+                      ? 'Must be a JSON array of hex private keys'
+                      : 'This file contains keys that are already saved'}
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-2">Click or drag to try another file</p>
+                </div>
+              ) : file ? (
+                <div>
+                  <p className="text-sm font-medium text-blue-400">{file.name}</p>
+                  <p className="text-xs text-text-tertiary mt-1">Click or drag to replace</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-1">
+                    JSON file containing an array of hex private keys
+                  </p>
+                </div>
+              )}
             </DropzoneTrigger>
           </DropZoneArea>
         </Dropzone>
-        {(showInvalidFileMessage || showKeysAlreadyExistsMessage) && (
-          <div className={'flex flex-row items-center gap-2 mt-[-24px]'}>
-            <FileWarning className={'text-[color:var(--warning)]'} />
-            <p className={'!text-xs'}>
-              {showInvalidFileMessage ?
-                'The file you uploaded is not valid. It must be a json containing an array of hex private keys.' :
-                'The file you uploaded contains keys that are already saved. Please select a different file.'
-              }
-            </p>
-          </div>
-        )}
 
-        <ImportProcess
-          addressGroupId={addressGroup}
-          file={file!}
-          onImportCompleted={onImportCompleted}
-        />
       </>
     )
   } else {
@@ -181,51 +209,49 @@ export default function ImportForm({addressesGroup}: ImportFormProps) {
           }".
           </span>
         </div>
-
-        <Button
-          className="w-full h-[40px]"
-          onClick={() => {
-            setIsRedirecting(true)
-            router.push('/admin/keys')
-          }}
-        >
-          {isRedirecting && (
-            <LoaderIcon className="animate-spin"/>
-          )}
-          {!isRedirecting && 'Close'}
-        </Button>
       </>
     )
   }
 
   return (
-    <>
-      <OverrideSidebar>
-        <div className="flex flex-row justify-center w-full">
-          <div
-            className="flex flex-col w-[480px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8"
-          >
-            <ActivityHeader
-              title="Import Addresses"
-              subtitle={status === 'success' ? '' : 'Select the address group and import your keys json file.'}
-              onClose={() => setAbortDialogOpen(true)}
-              isDisabled={status === 'success'}
-            />
-
-            {content}
+    <Dialog open={true}>
+      <DialogContent
+        onInteractOutside={(e) => e.preventDefault()}
+        hideClose
+        className="gap-0 p-0 rounded-lg bg-bg-elevated sm:max-w-xl max-h-[85vh] overflow-hidden"
+      >
+        <DialogTitle asChild>
+          <div className="py-3 px-5">
+            <span className="text-sm font-semibold">
+              {status === 'success' ? 'Import Complete' : 'Import Addresses'}
+            </span>
           </div>
+        </DialogTitle>
+
+        <div className="h-px bg-border-primary" />
+
+        <div className="flex flex-col gap-5 p-6 overflow-y-auto max-h-[calc(85vh-110px)]">
+          {content}
         </div>
-      </OverrideSidebar>
-      <AbortConfirmationDialog
-        type={'import'}
-        isOpen={isAbortDialogOpen}
-        onResponse={(abort) => {
-          setAbortDialogOpen(false);
-          if (abort) {
-            router.push('/admin/keys')
-          }
-        }}
-      />
-    </>
+
+        <div className="h-px bg-border-primary" />
+        <DialogFooter className="px-5 py-3 flex flex-row items-center gap-2">
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            onClick={onClose}
+          >
+            {status === 'success' ? 'Close' : 'Cancel'}
+          </Button>
+          {status === 'form' && (
+            <ImportProcess
+              addressGroupId={addressGroup}
+              file={file!}
+              onImportCompleted={onImportCompleted}
+            />
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

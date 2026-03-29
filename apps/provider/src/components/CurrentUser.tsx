@@ -57,6 +57,16 @@ export default function CurrentUser() {
         redirect: false,
       });
 
+      if (result?.error) {
+        clearConnectedIdentity()
+        addNotification({
+          id: 'sign-in-not-owner',
+          type: 'error',
+          content: 'Access denied. Only the owner can sign in to this application.',
+        });
+        return;
+      }
+
       if (result?.ok) {
         window.location.href = '/admin';
         return;

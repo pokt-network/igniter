@@ -1,8 +1,8 @@
 'use server'
 
 import type { NodeWithDetails } from '@igniter/db/middleman/schema'
-import { getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
-import { requireAuth, assertOwnership } from "@/lib/utils/actions";
+import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
+import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { normalizeIdentityToAddress } from '@/lib/crypto'
 import { summaryDocument, StakeStatus } from '@igniter/graphql'
@@ -10,6 +10,16 @@ import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
+
+export async function GetAllNodes() {
+  await requireAdmin()
+  return getAllNodes()
+}
+
+export async function CountAllNodes() {
+  await requireAdmin()
+  return countAllNodes()
+}
 
 export async function GetUserNodes() {
   const userIdentity = await requireAuth()

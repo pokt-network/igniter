@@ -11,6 +11,13 @@ export const columns: Array<ColumnDef<Service> & CsvColumnDef<Service>> = [
     header: "Name",
   },
   {
+    accessorKey: "serviceId",
+    header: "Service ID",
+    cell: ({ row }) => (
+      <span className="font-mono text-text-secondary text-xs">{row.getValue("serviceId")}</span>
+    ),
+  },
+  {
     accessorKey: "endpoints",
     header: "Protocols",
     meta: {
@@ -26,9 +33,9 @@ export const columns: Array<ColumnDef<Service> & CsvColumnDef<Service>> = [
       return (
         <div className="flex gap-2 justify-center">
           {endpoints.map((endpoint, index) => (
-            <div key={`protocol-${endpoint.rpcType}-${index}`} title={endpoint.url} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full cursor-pointer">
+            <span key={`protocol-${endpoint.rpcType}-${index}`} title={endpoint.url} className="text-xs px-2.5 py-0.5 rounded-md bg-bg-elevated text-text-secondary border border-border-primary cursor-default">
               {labelByRpcType[endpoint.rpcType.toString()] || endpoint.rpcType}
-            </div>
+            </span>
           ))}
         </div>
       );
