@@ -82,6 +82,8 @@ function makeKeyWithGroup(overrides: Record<string, unknown>): KeyWithGroup {
     stakeAmountUpokt: 100000000n,
     balanceUpokt: 50000000n,
     services: [],
+    exportedAt: null,
+    exportCount: null,
     addressGroup: {
       id: 1,
       name: 'default-group',

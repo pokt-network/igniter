@@ -160,11 +160,7 @@ export const keysRelations = relations(keysTable, ({ one }) => ({
  *
  * This type is generated dynamically based on the schema of `keysTable`.
  */
-type KeyBase = typeof keysTable.$inferSelect;
-export type Key = Omit<KeyBase, 'exportedAt' | 'exportCount'> & {
-  exportedAt?: Date | null;
-  exportCount?: number | null;
-};
+export type Key = typeof keysTable.$inferSelect;
 
 /**
  * Type alias representing the inferred type for inserting data into the keys table.

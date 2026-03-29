@@ -115,20 +115,34 @@ export async function ClearKeysRemediation(): Promise<ActionResult<void>> {
   })
 }
 
+const KeyExportFiltersSchema = z.object({
+  addressGroupId: z.number().int().positive().optional(),
+  states: z.array(z.nativeEnum(KeyState)).optional(),
+  ownerAddress: z.string().optional(),
+  delegatorIdentity: z.string().optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+  dateField: z.enum(['createdAt', 'deliveredAt']).optional(),
+  exportStatus: z.enum(['not_exported', 'previously_exported', 'all']).optional(),
+})
+
 export async function CountKeysForExport(filters: KeyExportFilters) {
   return withRequireOwner(async () => {
-    return countKeysForExport(filters)
+    const parsed = KeyExportFiltersSchema.parse(filters)
+    return countKeysForExport(parsed)
   })
 }
 
 export async function ExportKeys(filters: KeyExportFilters) {
   return withRequireOwner(async () => {
-    if (filters.addressGroupId !== undefined) {
-      const group = await findAddressGroupById(filters.addressGroupId)
-      if (!group) throw new Error(`Invalid address group id: ${filters.addressGroupId}`)
+    const parsed = KeyExportFiltersSchema.parse(filters)
+
+    if (parsed.addressGroupId !== undefined) {
+      const group = await findAddressGroupById(parsed.addressGroupId)
+      if (!group) throw new Error(`Invalid address group id: ${parsed.addressGroupId}`)
     }
 
-    const keys = await listKeysForExport(filters)
+    const keys = await listKeysForExport(parsed)
     if (keys.length > 0) {
       await markKeysExported(keys.map(k => k.id))
     }

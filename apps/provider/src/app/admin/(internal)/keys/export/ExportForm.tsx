@@ -1,26 +1,23 @@
 'use client'
 import type {AddressGroupWithDetails, Delegator} from '@igniter/db/provider/schema'
 import type {KeyExportFilters} from '@/lib/dal/keys'
-import {useRouter} from 'next/navigation'
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import {useForm, useWatch} from 'react-hook-form'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@igniter/ui/components/select'
-import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
-import {ActivityHeader} from '@igniter/ui/components/ActivityHeader'
-import {AbortConfirmationDialog} from '@igniter/ui/components/AbortConfirmationDialog'
+import {Dialog, DialogContent, DialogTitle, DialogFooter} from '@igniter/ui/components/dialog'
 import {Button} from '@igniter/ui/components/button'
 import {LoaderIcon} from '@igniter/ui/assets'
 import {toCurrencyFormat} from '@igniter/ui/lib/utils'
-import {CountKeysForExport, ExportKeys} from '@/actions/Keys'
+import {CountKeysForExport, ExportKeys, ListDistinctOwnerAddresses} from '@/actions/Keys'
+import {ListAddressGroups} from '@/actions/AddressGroups'
+import {ListDelegators} from '@/actions/Delegators'
 import {exportToJson} from '@/app/admin/(internal)/keys/exportUtils'
 import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants"
 import {KeyState} from "@igniter/db/provider/enums"
 
 
 interface ExportFormProps {
-  addressesGroup: AddressGroupWithDetails[]
-  delegators: Delegator[]
-  ownerAddresses: string[]
+  onClose: () => void
 }
 
 type ExportStatus = 'not_exported' | 'previously_exported' | 'all'
@@ -52,14 +49,24 @@ function buildFilters(values: FilterFormValues): KeyExportFilters {
   return filters
 }
 
-export default function ExportForm({addressesGroup, delegators, ownerAddresses}: ExportFormProps) {
-  const router = useRouter()
-  const [isRedirecting, setIsRedirecting] = useState(false)
-  const [isAbortDialogOpen, setAbortDialogOpen] = useState(false)
+export default function ExportForm({onClose}: ExportFormProps) {
+  const [addressesGroup, setAddressesGroup] = useState<AddressGroupWithDetails[]>([])
+  const [delegators, setDelegators] = useState<Delegator[]>([])
+  const [ownerAddresses, setOwnerAddresses] = useState<string[]>([])
+  const [isDataLoading, setIsDataLoading] = useState(true)
   const [status, setStatus] = useState<'form' | 'success' | 'loading' | 'error'>('form')
   const [keysExported, setKeysExported] = useState(0)
   const [totalKeysCount, setTotalKeysCount] = useState<number | null>(null)
   const [isLoadingKeyCount, setIsLoadingKeyCount] = useState(false)
+
+  useEffect(() => {
+    Promise.all([ListAddressGroups(), ListDelegators(), ListDistinctOwnerAddresses()]).then(([ag, del, own]) => {
+      if (ag.success) setAddressesGroup(ag.data)
+      if (del.success) setDelegators(del.data)
+      if (own.success) setOwnerAddresses(own.data)
+      setIsDataLoading(false)
+    })
+  }, [])
 
   const {register, setValue, setError, formState: {errors}, control} = useForm<FilterFormValues>({
     defaultValues: {
@@ -85,8 +92,12 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
   const dateTo = values.dateTo ?? ''
   const exportStatus = values.exportStatus ?? 'all'
 
+  const statesKey = JSON.stringify(selectedStates)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+
   useEffect(() => {
-    const fetchCount = async () => {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
       setIsLoadingKeyCount(true)
       try {
         const result = await CountKeysForExport(buildFilters(values as FilterFormValues))
@@ -97,9 +108,9 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
       } finally {
         setIsLoadingKeyCount(false)
       }
-    }
-    fetchCount()
-  }, [addressGroupId, selectedStates, ownerAddress, delegatorIdentity, dateFrom, dateTo, dateField, exportStatus])
+    }, 300)
+    return () => clearTimeout(debounceRef.current)
+  }, [addressGroupId, statesKey, ownerAddress, delegatorIdentity, dateFrom, dateTo, dateField, exportStatus])
 
   const handleStateToggle = (state: KeyState) => {
     const next = selectedStates.includes(state)
@@ -165,34 +176,44 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
 
   let content: React.ReactNode
 
-  if (status === 'form' || status === 'loading') {
+  if (isDataLoading) {
+    content = (
+      <div className="flex items-center justify-center py-12">
+        <LoaderIcon className="animate-spin h-6 w-6 text-text-secondary" />
+      </div>
+    )
+  } else if (status === 'form' || status === 'loading') {
     content = (
       <>
         {/* Address Group */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-text-secondary">Address Group</label>
-          <Select value={addressGroupId} onValueChange={(v) => setValue('addressGroupId', v === '__all__' ? '' : v, {shouldValidate: true})}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="All Groups"/>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Groups</SelectItem>
-              {addressesGroup.map(group => (
-                <SelectItem value={group.id.toString()} key={group.id}>
-                  {group.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div>
+          <div className="flex flex-row items-center gap-3">
+            <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Address Group</label>
+            <div className="flex-1">
+              <Select value={addressGroupId} onValueChange={(v) => setValue('addressGroupId', v === '__all__' ? '' : v, {shouldValidate: true})}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Groups"/>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Groups</SelectItem>
+                  {addressesGroup.map(group => (
+                    <SelectItem value={group.id.toString()} key={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {errors.addressGroupId && (
             <p className="text-xs text-red-500">{errors.addressGroupId.message}</p>
           )}
         </div>
 
         {/* Key States */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-text-secondary">Key State</label>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-row items-start gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary pt-1">Key State</label>
+          <div className="flex flex-wrap gap-2 flex-1">
             {Object.entries(KeyStateLabels).map(([value, label]) => {
               const state = value as KeyState
               const isSelected = selectedStates.includes(state)
@@ -216,88 +237,94 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
 
         {/* Owner Address */}
         {ownerAddresses.length > 0 && (
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-text-secondary">Owner Address</label>
-            <Select value={ownerAddress} onValueChange={(v) => setValue('ownerAddress', v === '__all__' ? '' : v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All Owners"/>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Owners</SelectItem>
-                {ownerAddresses.map(addr => (
-                  <SelectItem value={addr} key={addr}>
-                    {addr.slice(0, 12)}...{addr.slice(-6)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-row items-center gap-3">
+            <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Owner Address</label>
+            <div className="flex-1">
+              <Select value={ownerAddress} onValueChange={(v) => setValue('ownerAddress', v === '__all__' ? '' : v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Owners"/>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Owners</SelectItem>
+                  {ownerAddresses.map(addr => (
+                    <SelectItem value={addr} key={addr}>
+                      {addr.slice(0, 12)}...{addr.slice(-6)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 
         {/* Delegator */}
         {delegators.length > 0 && (
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-text-secondary">Delegator</label>
-            <Select value={delegatorIdentity} onValueChange={(v) => setValue('delegatorIdentity', v === '__all__' ? '' : v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="All Delegators"/>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Delegators</SelectItem>
-                {delegators.map(d => (
-                  <SelectItem value={d.identity} key={d.identity}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-row items-center gap-3">
+            <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Delegator</label>
+            <div className="flex-1">
+              <Select value={delegatorIdentity} onValueChange={(v) => setValue('delegatorIdentity', v === '__all__' ? '' : v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Delegators"/>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Delegators</SelectItem>
+                  {delegators.map(d => (
+                    <SelectItem value={d.identity} key={d.identity}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 
         {/* Date Range */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-text-secondary">Date Range</label>
-          <div className="flex items-center gap-4 mb-2">
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+        <div className="flex flex-row items-start gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary pt-1">Date Range</label>
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  value="createdAt"
+                  checked={dateField === 'createdAt'}
+                  {...register('dateField')}
+                  className="accent-blue-600"
+                />
+                Created
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  value="deliveredAt"
+                  checked={dateField === 'deliveredAt'}
+                  {...register('dateField')}
+                  className="accent-blue-600"
+                />
+                Delivered
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
               <input
-                type="radio"
-                value="createdAt"
-                checked={dateField === 'createdAt'}
-                {...register('dateField')}
-                className="accent-blue-600"
+                type="date"
+                {...register('dateFrom')}
+                className="flex-1 h-9 rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground"
               />
-              Created
-            </label>
-            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <span className="text-sm text-text-secondary">to</span>
               <input
-                type="radio"
-                value="deliveredAt"
-                checked={dateField === 'deliveredAt'}
-                {...register('dateField')}
-                className="accent-blue-600"
+                type="date"
+                {...register('dateTo')}
+                className="flex-1 h-9 rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground"
               />
-              Delivered
-            </label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              {...register('dateFrom')}
-              className="flex-1 h-9 rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground"
-            />
-            <span className="text-sm text-text-secondary">to</span>
-            <input
-              type="date"
-              {...register('dateTo')}
-              className="flex-1 h-9 rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground"
-            />
+            </div>
           </div>
         </div>
 
         {/* Export Status */}
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-text-secondary">Export Status</label>
-          <div className="flex items-center gap-4">
+        <div className="flex flex-row items-start gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary pt-1">Export Status</label>
+          <div className="flex items-center gap-4 flex-1">
             {([
               ['all', 'All'],
               ['not_exported', 'Not yet exported'],
@@ -318,14 +345,22 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
         </div>
 
         {/* Summary */}
-        <div className="p-4 rounded-md bg-bg-elevated">
+        <div className={`p-4 rounded-md border transition-colors ${
+          isLoadingKeyCount
+            ? 'bg-bg-elevated border-border'
+            : totalKeysCount && totalKeysCount > 0
+              ? 'bg-emerald-500/5 border-emerald-500/30'
+              : 'bg-yellow-500/5 border-yellow-500/30'
+        }`}>
           <div className="space-y-2">
             <div className="text-xs text-text-tertiary">
               {getFilterSummary()}
             </div>
             <div className="flex items-center justify-between">
               <span className="font-medium text-text-secondary">Keys to Export</span>
-              <span className="text-sm">
+              <span className={`text-sm font-medium ${
+                isLoadingKeyCount ? '' : totalKeysCount && totalKeysCount > 0 ? 'text-emerald-400' : 'text-yellow-500'
+              }`}>
                 {isLoadingKeyCount ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500" />
                 ) : totalKeysCount !== null ? (
@@ -338,22 +373,22 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
           </div>
         </div>
 
-        <p>
-          Example output:
-          <br/>
-          <div className="p-4 rounded-md bg-bg-elevated mt-2">
-            <pre className="whitespace-pre-wrap">{JSON.stringify([{hex: '<pk1>'}, {hex: '<pk2>'}], null, 2)}</pre>
+        {/* Example output — collapsible */}
+        <details className="group">
+          <summary className="text-sm text-text-secondary cursor-pointer select-none hover:text-text-primary transition-colors">
+            Example output
+          </summary>
+          <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+            <span className="text-[#8b949e]">{'['}</span>{'\n'}
+            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
+            {'  '}<span className="text-[#8b949e]">{'}'}</span><span className="text-[#8b949e]">,</span>{'\n'}
+            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>{'\n'}
+            {'  '}<span className="text-[#8b949e]">{'}'}</span>{'\n'}
+            <span className="text-[#8b949e]">{']'}</span>
           </div>
-        </p>
-
-        <Button
-          className="w-full h-[40px]"
-          onClick={exportKeys}
-          disabled={status === 'loading' || !totalKeysCount || totalKeysCount <= 0}
-        >
-          {status === 'loading' && <LoaderIcon className="animate-spin"/>}
-          {status === 'form' && 'Export Keys'}
-        </Button>
+        </details>
       </>
     )
   } else if (status === 'success') {
@@ -373,17 +408,6 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
             You have successfully exported {keysExported} keys.
           </span>
         </div>
-
-        <Button
-          className="w-full h-[40px]"
-          onClick={() => {
-            setIsRedirecting(true)
-            router.push('/admin/keys')
-          }}
-        >
-          {isRedirecting && <LoaderIcon className="animate-spin"/>}
-          {!isRedirecting && 'Close'}
-        </Button>
       </>
     )
   } else if (status === 'error') {
@@ -395,43 +419,66 @@ export default function ExportForm({addressesGroup, delegators, ownerAddresses}:
           </div>
         </div>
 
-        <Button
-          disabled={!totalKeysCount || totalKeysCount <= 0}
-          className="w-full h-[40px]"
-          onClick={exportKeys}
-        >
-          Try Again
-        </Button>
       </>
     )
   }
 
   return (
-    <>
-      <OverrideSidebar>
-        <div className="flex flex-row justify-center w-full">
-          <div className="flex flex-col w-[480px] border-x border-b border-[--balck-deviders] bg-[--black-1] p-[33px] rounded-b-[12px] gap-8">
-            <ActivityHeader
-              title="Export Keys"
-              subtitle={status === 'success' ? '' : 'Configure filters and export your keys as a JSON file.'}
-              onClose={() => setAbortDialogOpen(true)}
-              isDisabled={status === 'success'}
-            />
-            {content}
+    <Dialog open={true}>
+      <DialogContent
+        onInteractOutside={(e) => e.preventDefault()}
+        hideClose
+        className="gap-0 p-0 rounded-lg bg-bg-elevated sm:max-w-xl max-h-[85vh] overflow-hidden"
+      >
+        <DialogTitle asChild>
+          <div className="flex flex-row justify-between items-center py-3 px-5">
+            <span className="text-sm font-semibold">Export Keys</span>
           </div>
+        </DialogTitle>
+        <div className="h-px bg-border-primary" />
+
+        <div className="flex flex-col gap-5 p-6 overflow-y-auto max-h-[calc(85vh-110px)]">
+          {content}
         </div>
-      </OverrideSidebar>
-      <AbortConfirmationDialog
-        type="export"
-        isOpen={isAbortDialogOpen}
-        onResponse={(abort) => {
-          setAbortDialogOpen(false)
-          if (abort) {
-            setIsRedirecting(true)
-            router.push('/admin/keys')
-          }
-        }}
-      />
-    </>
+
+        <div className="h-px bg-border-primary" />
+        <DialogFooter className="px-5 py-3 flex flex-row items-center gap-2">
+          {(status === 'form' || status === 'loading') && (
+            <>
+              <div className="flex-1" />
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={exportKeys}
+                disabled={status === 'loading' || !totalKeysCount || totalKeysCount <= 0}
+              >
+                {status === 'loading' && <LoaderIcon className="animate-spin"/>}
+                {status === 'form' && 'Export Keys'}
+              </Button>
+            </>
+          )}
+          {status === 'success' && (
+            <>
+              <div className="flex-1" />
+              <Button onClick={onClose}>
+                Close
+              </Button>
+            </>
+          )}
+          {status === 'error' && (
+            <>
+              <div className="flex-1" />
+              <Button
+                disabled={!totalKeysCount || totalKeysCount <= 0}
+                onClick={exportKeys}
+              >
+                Try Again
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

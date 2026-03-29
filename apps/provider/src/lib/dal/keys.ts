@@ -16,6 +16,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  ne,
   sql,
   type SQL,
 } from 'drizzle-orm'
@@ -525,9 +526,9 @@ export async function listDistinctOwnerAddresses(): Promise<string[]> {
   const results = await dbClient.db
     .selectDistinct({ ownerAddress: keysTable.ownerAddress })
     .from(keysTable)
-    .where(isNotNull(keysTable.ownerAddress))
+    .where(and(isNotNull(keysTable.ownerAddress), ne(keysTable.ownerAddress, '')))
 
   return results
     .map(r => r.ownerAddress)
-    .filter((addr): addr is string => Boolean(addr)) as string[]
+    .filter((addr): addr is string => Boolean(addr))
 }
