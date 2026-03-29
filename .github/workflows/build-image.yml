@@ -21,6 +21,11 @@ on:
         required: true
         type: boolean
         default: false
+      no-cache:
+        description: "Build without cache?"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   packages: write
@@ -63,5 +68,6 @@ jobs:
           file: ./apps/${{ inputs.app }}/Dockerfile
           push: ${{ inputs.push }}
           tags: ghcr.io/pokt-network/${{ inputs.app }}:${{ inputs.tag }}
-          cache-from: type=gha
+          no-cache: ${{ inputs.no-cache }}
+          cache-from: ${{ inputs.no-cache && ' ' || 'type=gha' }}
           cache-to: type=gha,mode=max

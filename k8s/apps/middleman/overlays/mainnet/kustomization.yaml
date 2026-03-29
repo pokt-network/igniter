@@ -17,10 +17,10 @@ patches:
     patch: |
       - op: replace
         path: /spec/template/spec/initContainers/1/imagePullPolicy
-        value: "IfNotPresent"
+        value: "Always"
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
-        value: "IfNotPresent"
+        value: "Always"
       - op: add
         path: /spec/template/spec/dnsConfig
         value:
