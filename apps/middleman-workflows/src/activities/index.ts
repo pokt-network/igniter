@@ -291,6 +291,8 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       hash: transaction.hash,
       status: transaction.status,
       type: transaction.type,
+      executionHeight: transaction.executionHeight,
+      unsignedPayload: transaction.unsignedPayload,
     }
   },
   /**

@@ -57,8 +57,6 @@ export async function GetAccountSequence(address: string): Promise<{
 
   const apiUrl = applicationSettings.pocketApiUrl;
 
-  console.log(applicationSettings)
-
   if (!apiUrl) {
     throw new Error('API URL not found');
   }

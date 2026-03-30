@@ -2,6 +2,7 @@ import type {Logger} from '@igniter/logger'
 import * as schema from "@igniter/db/provider/schema";
 import type {DBClient} from '@igniter/db/connection'
 import {ApplicationSettings} from "@igniter/db/provider/schema";
+import { eq } from 'drizzle-orm'
 
 export default class Settings {
   logger: Logger
@@ -19,9 +20,15 @@ export default class Settings {
   }
 
   async update(data: Partial<{ pocketRpcUrl: string; pocketApiUrl: string }>) {
+    const settings = await this.loadSettings()
+    if (!settings) {
+      this.logger.warn({ data }, 'Cannot update settings — no settings row exists')
+      return
+    }
     await this.dbClient.db
       .update(schema.applicationSettingsTable)
       .set(data)
+      .where(eq(schema.applicationSettingsTable.id, settings.id))
     this.logger.info({ data }, 'Updated application settings')
   }
 

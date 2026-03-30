@@ -157,6 +157,10 @@ export class Blockchain implements IBlockchain {
               if (hash === txHash.toUpperCase()) {
                 const results = await comet.blockResults(h);
                 const txData = results.results[i];
+                if (!txData) {
+                  console.warn(`Block results missing entry at index ${i} for height ${h}`);
+                  return null;
+                }
                 return {
                   hash: txHash,
                   height: h,

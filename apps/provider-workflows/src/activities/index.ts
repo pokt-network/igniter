@@ -102,7 +102,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           result.available++
         }
 
-        await dal.keys.updateKey(key.address, update)
+        await dal.keys.updateKey(key.address, update, Number.MAX_SAFE_INTEGER)
         result.recovered++
       } catch (err) {
         log.warn('recoverStaleDeliveredKeys: Error recovering key', { address: key.address, error: err })

@@ -13,6 +13,8 @@ import {
   Comet38Client,
   connectComet,
 } from '@cosmjs/tendermint-rpc'
+import { sha256 } from '@cosmjs/crypto'
+import { toHex } from '@cosmjs/encoding'
 import {
   QueryAllBalancesRequest,
   QueryBalanceRequest,
@@ -311,7 +313,7 @@ export class PocketBlockchain {
     }
 
     // Tier 2: REST API
-    this.logger.info({ txHash }, 'Tier 1 returned null, trying REST API fallback')
+    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
     const apiResult = await this.getTransactionViaApi(txHash)
     if (apiResult) return apiResult
 
@@ -351,9 +353,8 @@ export class PocketBlockchain {
   }
 
   private async getTransactionFromBlock(txHash: string, startHeight: number, maxBlocks = 30): Promise<TransactionResult | null> {
-    const { sha256 } = await import('@cosmjs/crypto')
-    const { toHex } = await import('@cosmjs/encoding')
     const comet = await this.getCometClient()
+    const normalizedHash = txHash.toUpperCase()
 
     for (let h = startHeight; h < startHeight + maxBlocks; h++) {
       try {
@@ -361,9 +362,13 @@ export class PocketBlockchain {
         const txs = block.block.txs
         for (let i = 0; i < txs.length; i++) {
           const hash = toHex(sha256(txs[i])).toUpperCase()
-          if (hash === txHash.toUpperCase()) {
+          if (hash === normalizedHash) {
             const results = await comet.blockResults(h)
             const txData = results.results[i]
+            if (!txData) {
+              this.logger.warn({ txHash, height: h, index: i }, 'Block results missing entry for matched TX')
+              return null
+            }
             return {
               hash: txHash,
               height: h,
