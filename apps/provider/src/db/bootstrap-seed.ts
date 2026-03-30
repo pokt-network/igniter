@@ -26,7 +26,8 @@ interface BootstrapConfig {
   settings: {
     name: string
     supportEmail?: string
-    rpcUrl: string
+    pocketApiUrl: string
+    pocketRpcUrl: string
     indexerApiUrl: string
     chainId: string
     rewardAddresses?: string[]
@@ -137,7 +138,7 @@ async function main() {
     console.log('[bootstrap-seed] Starting bootstrap...')
 
     // 0. Fetch blockchain params from RPC (minimumStake + current height)
-    const rpcBase = config.settings.rpcUrl.replace(/\/$/, '')
+    const rpcBase = config.settings.pocketApiUrl.replace(/\/$/, '')
     const stakeBuffer = parseInt(process.env.MINIMUM_STAKE_BUFFER || '0', 10)
     let minimumStake = 0
     let updatedAtHeight = '0'
@@ -190,7 +191,8 @@ async function main() {
       initialOperationalFunds: config.settings.initialOperationalFunds,
       minimumOperationalFunds: config.settings.minimumOperationalFunds,
       isBootstrapped: false, // will set to true at the end
-      rpcUrl: config.settings.rpcUrl,
+      pocketApiUrl: config.settings.pocketApiUrl,
+      pocketRpcUrl: config.settings.pocketRpcUrl,
       indexerApiUrl: config.settings.indexerApiUrl,
       updatedAtHeight,
       rewardAddresses: config.settings.rewardAddresses ?? [],

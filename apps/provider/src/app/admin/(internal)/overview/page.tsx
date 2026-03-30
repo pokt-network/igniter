@@ -111,7 +111,7 @@ async function Rewards() {
           )}
           <div className="flex items-baseline gap-2">
             <span className="text-xs text-text-tertiary w-28 shrink-0">Node API</span>
-            <span className="text-sm font-mono truncate">{applicationSettings.rpcUrl}</span>
+            <span className="text-sm font-mono truncate">{applicationSettings.pocketApiUrl}</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-xs text-text-tertiary w-28 shrink-0">Indexer API</span>

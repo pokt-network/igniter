@@ -128,7 +128,7 @@ export function AddOrUpdateServiceDialog({
     (async () => {
       const appSettings = await GetApplicationSettings();
       setSettings(appSettings);
-      if (!appSettings?.rpcUrl) { setIsLoadingAllServices(false); return; }
+      if (!appSettings?.pocketApiUrl) { setIsLoadingAllServices(false); return; }
 
       try {
         const baseUrl = '/api/rpc/pokt-network/poktroll/service/service';

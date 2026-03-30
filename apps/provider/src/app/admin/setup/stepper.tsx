@@ -99,7 +99,7 @@ const BootstrapSummary = ({ settings }: { settings?: ApplicationSettings }) => {
           )}
           <div className="flex items-baseline gap-2">
             <span className="text-xs text-text-tertiary w-28 shrink-0">Node API</span>
-            <span className="text-sm font-mono truncate">{settings.rpcUrl}</span>
+            <span className="text-sm font-mono truncate">{settings.pocketApiUrl}</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-xs text-text-tertiary w-28 shrink-0">Indexer API</span>

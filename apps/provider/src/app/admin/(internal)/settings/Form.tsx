@@ -38,7 +38,8 @@ const FormSchema = z.object({
     'Invalid email format'
   ),
   rewardAddresses: z.array(z.string()).default([]),
-  rpcUrl: z.string().url('Please enter a valid URL').optional(),
+  pocketApiUrl: z.string().url('Please enter a valid URL').optional(),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').optional(),
   indexerApiUrl: z.string().optional().refine(
     (v) => !v || /^https?:\/\/.+/.test(v),
     'Please enter a valid URL'
@@ -81,7 +82,8 @@ export default function SettingsForm() {
       supportEmail: settings?.supportEmail || '',
       ownerEmail: settings?.ownerEmail || '',
       rewardAddresses: settings?.rewardAddresses || [],
-      rpcUrl: settings?.rpcUrl || '',
+      pocketApiUrl: settings?.pocketApiUrl || '',
+      pocketRpcUrl: settings?.pocketRpcUrl || '',
       indexerApiUrl: settings?.indexerApiUrl || '',
       initialOperationalFunds: settings?.initialOperationalFunds ?? 5,
       minimumOperationalFunds: settings?.minimumOperationalFunds ?? 2,
@@ -96,7 +98,8 @@ export default function SettingsForm() {
       supportEmail: settings.supportEmail || '',
       ownerEmail: settings.ownerEmail || '',
       rewardAddresses: settings.rewardAddresses || [],
-      rpcUrl: settings.rpcUrl || '',
+      pocketApiUrl: settings.pocketApiUrl || '',
+      pocketRpcUrl: settings.pocketRpcUrl || '',
       indexerApiUrl: settings.indexerApiUrl || '',
       initialOperationalFunds: settings.initialOperationalFunds ?? 5,
       minimumOperationalFunds: settings.minimumOperationalFunds ?? 2,
@@ -109,7 +112,7 @@ export default function SettingsForm() {
   })
 
   const allValues = form.watch()
-  const rpcUrl = allValues.rpcUrl
+  const pocketApiUrl = allValues.pocketApiUrl
   const indexerApiUrl = allValues.indexerApiUrl
   const rewardAddresses = allValues.rewardAddresses ?? []
   const isDirty = JSON.stringify(allValues) !== JSON.stringify(form.formState.defaultValues)
@@ -137,18 +140,18 @@ export default function SettingsForm() {
     if (!url) return
     try {
       setIsValidatingRpc(true)
-      form.clearErrors('rpcUrl')
+      form.clearErrors('pocketApiUrl')
       setRpcWarning(null)
 
       const response = await RetrieveBlockchainSettings(url, null)
 
       if (!response.success && response.errors) {
-        form.setError('rpcUrl', { type: 'manual', message: response.errors[0] })
+        form.setError('pocketApiUrl', { type: 'manual', message: response.errors[0] })
         return
       }
 
       if (response.network && response.network !== settings?.chainId) {
-        form.setError('rpcUrl', {
+        form.setError('pocketApiUrl', {
           type: 'manual',
           message: `This node is on network "${response.network}" but the app is configured for "${settings?.chainId}".`,
         })
@@ -166,7 +169,7 @@ export default function SettingsForm() {
       if (response.minStake) form.setValue('minimumStake', response.minStake, { shouldDirty: true })
       if (response.height) form.setValue('updatedAtHeight', response.height, { shouldDirty: true })
     } catch (err) {
-      form.setError('rpcUrl', { type: 'manual', message: (err as Error).message })
+      form.setError('pocketApiUrl', { type: 'manual', message: (err as Error).message })
     } finally {
       setIsValidatingRpc(false)
     }
@@ -191,13 +194,13 @@ export default function SettingsForm() {
   }, [])
 
   useEffect(() => {
-    if (!rpcUrl || rpcUrl === settings?.rpcUrl) return
-    form.clearErrors('rpcUrl')
+    if (!pocketApiUrl || pocketApiUrl === settings?.pocketApiUrl) return
+    form.clearErrors('pocketApiUrl')
     setRpcWarning(null)
     if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current)
-    rpcDebounceRef.current = setTimeout(() => validateRpcUrl(rpcUrl), 1000)
+    rpcDebounceRef.current = setTimeout(() => validateRpcUrl(pocketApiUrl), 1000)
     return () => { if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current) }
-  }, [rpcUrl])
+  }, [pocketApiUrl])
 
   useEffect(() => {
     if (!indexerApiUrl || indexerApiUrl === settings?.indexerApiUrl) return
@@ -385,7 +388,7 @@ export default function SettingsForm() {
         <div className="flex flex-col gap-4">
           <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Blockchain</span>
 
-          <FormField control={form.control} name="rpcUrl" render={({ field }) => (
+          <FormField control={form.control} name="pocketApiUrl" render={({ field }) => (
             <FormItem className="flex flex-row items-start gap-4">
               <FormLabel className="text-sm shrink-0 w-28 mt-2.5">
                 Pocket API URL
@@ -395,6 +398,18 @@ export default function SettingsForm() {
                 <FormControl><Input {...field} className="h-9 text-sm" placeholder="https://your-node-api.example.com" /></FormControl>
                 <FormMessage className="mt-1" />
                 {rpcWarning && <p className="text-[11px] text-yellow-500 mt-1">{rpcWarning}</p>}
+              </div>
+            </FormItem>
+          )} />
+
+          <FormField control={form.control} name="pocketRpcUrl" render={({ field }) => (
+            <FormItem className="flex flex-row items-start gap-4">
+              <FormLabel className="text-sm shrink-0 w-28 mt-2.5">
+                Pocket RPC URL
+              </FormLabel>
+              <div className="flex-1">
+                <FormControl><Input {...field} className="h-9 text-sm" placeholder="https://your-node-rpc.example.com" /></FormControl>
+                <FormMessage className="mt-1" />
               </div>
             </FormItem>
           )} />

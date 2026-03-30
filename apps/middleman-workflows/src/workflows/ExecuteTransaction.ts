@@ -6,9 +6,34 @@ import { delegatorActivities } from "@/activities";
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import {SendTransactionResult} from "@/lib/blockchain";
 
+const TX_EXPIRATION_BLOCKS = 30
 
 interface TransactionArgs {
   transactionId: number;
+}
+
+/**
+ * Extracts the operator address from a transaction's unsigned payload.
+ * Used for Tier 4 fallback (supplier state check) when TX lookup fails.
+ */
+function extractOperatorAddress(transaction: { unsignedPayload?: string | null }): string | undefined {
+  try {
+    if (!transaction.unsignedPayload) return undefined
+    const payload = JSON.parse(transaction.unsignedPayload)
+    const messages = payload?.body?.messages
+    if (!Array.isArray(messages)) return undefined
+    for (const msg of messages) {
+      if (
+        msg.typeUrl === '/pocket.supplier.MsgStakeSupplier' &&
+        typeof msg.value?.operatorAddress === 'string'
+      ) {
+        return msg.value.operatorAddress
+      }
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function ExecuteTransaction(args: TransactionArgs) {
@@ -41,8 +66,21 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   const txHeight = await getBlockHeight();
 
   let result: SendTransactionResult | null = null;
+  let skipWait = false;
 
+  // If TX has NO hash and is expired, mark as failed immediately
   if (!transaction.hash) {
+    if (transaction.executionHeight && txHeight - transaction.executionHeight > TX_EXPIRATION_BLOCKS) {
+      await updateTransaction(transactionId, {
+        status: TransactionStatus.Failure,
+        log: 'TX expired before broadcast',
+      });
+      if (transaction.type === TransactionType.Stake) {
+        await notifyProviderOfFailedStakes(transaction.id);
+      }
+      return { ...transaction, status: TransactionStatus.Failure, newNodes: [], unstakingNodes: [] };
+    }
+
     result = await executeTransaction(
       transaction.id,
     );
@@ -70,6 +108,9 @@ export async function ExecuteTransaction(args: TransactionArgs) {
       executionHeight: txHeight,
       hash: result.transactionHash,
     });
+  } else if (transaction.executionHeight && txHeight - transaction.executionHeight > TX_EXPIRATION_BLOCKS) {
+    // TX has a hash but is expired — skip wait, go straight to verification (will use Tier 4 supplier check)
+    skipWait = true;
   }
 
   const { waitForNextBlock } = proxyActivities<
@@ -82,9 +123,15 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     },
   });
 
-  await waitForNextBlock(txHeight);
+  if (!skipWait) {
+    await waitForNextBlock(txHeight);
+  }
 
-  const [success, code, gasUsed] = await verifyTransaction(result?.transactionHash || transaction.hash!);
+  const [success, code, gasUsed] = await verifyTransaction(
+    result?.transactionHash || transaction.hash!,
+    transaction.executionHeight || txHeight,
+    extractOperatorAddress(transaction),
+  );
 
   const txStatus = success ? TransactionStatus.Success : TransactionStatus.Failure;
 

@@ -15,9 +15,9 @@ import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 async function getCurrentHeight(): Promise<number> {
   try {
     const settings = await getApplicationSettings()
-    const rpcUrl = settings.rpcUrl?.replace(/\/$/, '')
-    if (!rpcUrl) return 0
-    const res = await fetch(`${rpcUrl}/cosmos/base/node/v1beta1/status`)
+    const pocketApiUrl = settings.pocketApiUrl?.replace(/\/$/, '')
+    if (!pocketApiUrl) return 0
+    const res = await fetch(`${pocketApiUrl}/cosmos/base/node/v1beta1/status`)
     if (!res.ok) return 0
     const data = await res.json()
     return parseInt(data.height, 10) || 0

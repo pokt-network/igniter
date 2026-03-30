@@ -74,18 +74,31 @@ export const registerGracefulShutdown = (
 }
 
 export async function setupTemporalWorker() {
-  const POCKET_RPC = process.env.POKT_RPC_URL || ''
-
-  if (!POCKET_RPC) {
-    throw new Error('POKT_RPC_URL environment variable is not defined.')
-  }
-
-  // This will attempt to connect which will fail if the rpc is not available or the right one.
-  const blockchainProvider = await PocketBlockchain.setup(POCKET_RPC)
-
   const dbClient = getDb<typeof schema>(logger)
 
   const dal = new DAL(dbClient, logger)
+
+  await waitForAppBootstrap(dal, logger)
+
+  // Read Pocket URLs from DB settings, seed from ENV if not yet set
+  let settings = await dal.appSettings.getFirst()
+
+  if (!settings?.pocketRpcUrl && process.env.POKT_RPC_URL) {
+    logger.info('Seeding pocketRpcUrl from POKT_RPC_URL environment variable')
+    await dal.appSettings.update({ pocketRpcUrl: process.env.POKT_RPC_URL })
+    settings = await dal.appSettings.getFirst()
+  }
+
+  const rpcUrl = settings?.pocketRpcUrl
+  const apiUrl = settings?.pocketApiUrl
+
+  if (!rpcUrl) {
+    throw new Error(
+      'No Pocket RPC URL configured. Set pocketRpcUrl in application settings or provide POKT_RPC_URL environment variable.'
+    )
+  }
+
+  const blockchainProvider = await PocketBlockchain.setup(rpcUrl, 'upokt', 0.001, apiUrl || undefined)
 
   const providerService = new ProviderService(dal.appSettings, logger)
 
@@ -101,7 +114,6 @@ export async function setupTemporalWorker() {
     shutdownGraceTime,
   })
 
-  await waitForAppBootstrap(dal, logger)
   await bootstrap(logger)
 
   registerGracefulShutdown(disconnect, logger, shutdownGraceTime)

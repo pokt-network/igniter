@@ -154,6 +154,7 @@ export class PocketBlockchain {
   protected readonly rpcUrl: string
   protected readonly denom: string
   protected readonly gasPrice?: GasPrice
+  protected readonly apiUrl?: string
   protected stargateClient: StargateClient | undefined
   protected cometClient: Comet38Client | undefined
   protected logger: Logger;
@@ -163,10 +164,11 @@ export class PocketBlockchain {
    * @param denom  staking token denom, e.g. "upokt"
    * @param gasPrice
    */
-  private constructor(rpcUrl: string, denom: string = 'upokt', gasPrice = 0.001) {
+  private constructor(rpcUrl: string, denom: string = 'upokt', gasPrice = 0.001, apiUrl?: string) {
     this.rpcUrl = rpcUrl
     this.denom = denom
     this.gasPrice = GasPrice.fromString(`${gasPrice}${denom}`)
+    this.apiUrl = apiUrl
     this.logger = getLogger().child({ service: 'pocket-blockchain' })
   }
 
@@ -178,8 +180,8 @@ export class PocketBlockchain {
    * @param gasPrice
    * @return {Promise<Blockchain>} A promise that resolves to an instance of the Blockchain class.
    */
-  static async setup(rpcUrl: string, denom: string = 'upokt', gasPrice = 0.001) {
-    const blockchain = new PocketBlockchain(rpcUrl, denom, gasPrice)
+  static async setup(rpcUrl: string, denom: string = 'upokt', gasPrice = 0.001, apiUrl?: string) {
+    const blockchain = new PocketBlockchain(rpcUrl, denom, gasPrice, apiUrl)
     await blockchain.connect()
     return blockchain
   }
@@ -279,33 +281,106 @@ export class PocketBlockchain {
   }
 
   /**
-   * Retrieves transaction details by transaction hash
+   * Retrieves transaction details by transaction hash using a 3-tier fallback:
+   *   Tier 1: RPC tx_index via StargateClient.getTx
+   *   Tier 2: REST API lookup (requires apiUrl)
+   *   Tier 3: Block scan using SHA256 hash matching (requires height)
    * @param txHash The transaction hash to look up
+   * @param height Optional block height hint for Tier 3 block scan
    * @returns Transaction details or null if not found
    */
-  async getTransaction(txHash: string): Promise<TransactionResult | null> {
+  async getTransaction(txHash: string, height?: number): Promise<TransactionResult | null> {
     const client = await this.getStargateClient()
 
+    // Tier 1: RPC tx_index
     try {
       const tx = await client.getTx(txHash)
-
-      if (!tx) {
-        return null
-      }
-
-      return {
-        hash: txHash,
-        height: tx.height,
-        index: tx.txIndex,
-        gasUsed: tx.gasUsed,
-        gasWanted: tx.gasWanted,
-        success: tx.code === 0,
-        code: tx.code,
+      if (tx) {
+        return {
+          hash: txHash,
+          height: tx.height,
+          index: tx.txIndex,
+          gasUsed: tx.gasUsed,
+          gasWanted: tx.gasWanted,
+          success: tx.code === 0,
+          code: tx.code,
+        }
       }
     } catch (error) {
-      console.error('Error fetching transaction:', error)
+      this.logger.warn({ txHash, error }, 'Tier 1 (RPC getTx) failed')
+    }
+
+    // Tier 2: REST API
+    this.logger.info({ txHash }, 'Tier 1 returned null, trying REST API fallback')
+    const apiResult = await this.getTransactionViaApi(txHash)
+    if (apiResult) return apiResult
+
+    // Tier 3: Block scan
+    if (height) {
+      this.logger.info({ txHash, height }, 'Tier 2 returned null, trying block scan')
+      const blockResult = await this.getTransactionFromBlock(txHash, height)
+      if (blockResult) return blockResult
+    }
+
+    this.logger.warn({ txHash, height }, 'All tiers failed to find transaction')
+    return null
+  }
+
+  private async getTransactionViaApi(txHash: string): Promise<TransactionResult | null> {
+    if (!this.apiUrl) return null
+    const url = `${this.apiUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs/${txHash}`
+    try {
+      const response = await fetch(url)
+      if (!response.ok) return null
+      const data = await response.json()
+      const txResponse = data.tx_response
+      if (!txResponse) return null
+      return {
+        hash: txResponse.txhash,
+        height: parseInt(txResponse.height, 10),
+        index: txResponse.tx_index ?? undefined,
+        gasUsed: BigInt(txResponse.gas_used || '0'),
+        gasWanted: BigInt(txResponse.gas_wanted || '0'),
+        success: txResponse.code === 0,
+        code: txResponse.code,
+      }
+    } catch (error) {
+      this.logger.warn({ txHash, error }, 'API tx lookup failed')
       return null
     }
+  }
+
+  private async getTransactionFromBlock(txHash: string, startHeight: number, maxBlocks = 30): Promise<TransactionResult | null> {
+    const { sha256 } = await import('@cosmjs/crypto')
+    const { toHex } = await import('@cosmjs/encoding')
+    const comet = await this.getCometClient()
+
+    for (let h = startHeight; h < startHeight + maxBlocks; h++) {
+      try {
+        const block = await comet.block(h)
+        const txs = block.block.txs
+        for (let i = 0; i < txs.length; i++) {
+          const hash = toHex(sha256(txs[i])).toUpperCase()
+          if (hash === txHash.toUpperCase()) {
+            const results = await comet.blockResults(h)
+            const txData = results.results[i]
+            return {
+              hash: txHash,
+              height: h,
+              index: i,
+              gasUsed: txData.gasUsed,
+              gasWanted: txData.gasWanted,
+              success: txData.code === 0,
+              code: txData.code,
+            }
+          }
+        }
+      } catch (error) {
+        this.logger.warn({ txHash, height: h, error }, 'Block scan error at height')
+        continue
+      }
+    }
+    return null
   }
 
   /**

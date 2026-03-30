@@ -1,6 +1,6 @@
 {
-  "id": "8da36f45-7bbf-4ef1-ad04-ab117d0e11bf",
-  "prevId": "002b264c-ca17-4755-864b-171a5d09b314",
+  "id": "219c2209-3dc1-43c9-9563-e98c375ac6ab",
+  "prevId": "8da36f45-7bbf-4ef1-ad04-ab117d0e11bf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -47,28 +47,28 @@
         "address_group_services_address_group_id_address_groups_id_fk": {
           "name": "address_group_services_address_group_id_address_groups_id_fk",
           "tableFrom": "address_group_services",
-          "tableTo": "address_groups",
           "columnsFrom": [
             "address_group_id"
           ],
+          "tableTo": "address_groups",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "address_group_services_service_id_services_serviceId_fk": {
           "name": "address_group_services_service_id_services_serviceId_fk",
           "tableFrom": "address_group_services",
-          "tableTo": "services",
           "columnsFrom": [
             "service_id"
           ],
+          "tableTo": "services",
           "columnsTo": [
             "serviceId"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -95,15 +95,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "address_groups_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "name": {
@@ -164,41 +164,41 @@
         "address_groups_relay_miner_id_relay_miners_id_fk": {
           "name": "address_groups_relay_miner_id_relay_miners_id_fk",
           "tableFrom": "address_groups",
-          "tableTo": "relay_miners",
           "columnsFrom": [
             "relay_miner_id"
           ],
+          "tableTo": "relay_miners",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "restrict"
         },
         "address_groups_createdBy_users_identity_fk": {
           "name": "address_groups_createdBy_users_identity_fk",
           "tableFrom": "address_groups",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "address_groups_updatedBy_users_identity_fk": {
           "name": "address_groups_updatedBy_users_identity_fk",
           "tableFrom": "address_groups",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -217,15 +217,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "application_settings_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "name": {
@@ -291,12 +291,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "rpcUrl": {
-          "name": "rpcUrl",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
         "indexerApiUrl": {
           "name": "indexerApiUrl",
           "type": "varchar",
@@ -340,6 +334,18 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "pocketApiUrl": {
+          "name": "pocketApiUrl",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pocketRpcUrl": {
+          "name": "pocketRpcUrl",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -347,28 +353,28 @@
         "application_settings_createdBy_users_identity_fk": {
           "name": "application_settings_createdBy_users_identity_fk",
           "tableFrom": "application_settings",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "application_settings_updatedBy_users_identity_fk": {
           "name": "application_settings_updatedBy_users_identity_fk",
           "tableFrom": "application_settings",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -387,15 +393,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "delegators_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "name": {
@@ -448,38 +454,38 @@
         "delegators_createdBy_users_identity_fk": {
           "name": "delegators_createdBy_users_identity_fk",
           "tableFrom": "delegators",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "delegators_updatedBy_users_identity_fk": {
           "name": "delegators_updatedBy_users_identity_fk",
           "tableFrom": "delegators",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "delegators_identity_unique": {
           "name": "delegators_identity_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "identity"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -496,15 +502,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "import_supplier_requests_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "ownerAddress": {
@@ -583,25 +589,25 @@
         "import_supplier_requests_delegatorIdentity_delegators_identity_fk": {
           "name": "import_supplier_requests_delegatorIdentity_delegators_identity_fk",
           "tableFrom": "import_supplier_requests",
-          "tableTo": "delegators",
           "columnsFrom": [
             "delegatorIdentity"
           ],
+          "tableTo": "delegators",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "import_supplier_requests_nonce_unique": {
           "name": "import_supplier_requests_nonce_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "nonce"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -618,15 +624,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "users_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "identity": {
@@ -669,10 +675,10 @@
       "uniqueConstraints": {
         "users_identity_unique": {
           "name": "users_identity_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "identity"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -689,15 +695,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "keys_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "address": {
@@ -840,45 +846,45 @@
         "keys_delegator_identity_delegators_identity_fk": {
           "name": "keys_delegator_identity_delegators_identity_fk",
           "tableFrom": "keys",
-          "tableTo": "delegators",
           "columnsFrom": [
             "delegator_identity"
           ],
+          "tableTo": "delegators",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "keys_address_group_id_address_groups_id_fk": {
           "name": "keys_address_group_id_address_groups_id_fk",
           "tableFrom": "keys",
-          "tableTo": "address_groups",
           "columnsFrom": [
             "address_group_id"
           ],
+          "tableTo": "address_groups",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "keys_address_unique": {
           "name": "keys_address_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "address"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "keys_publicKey_unique": {
           "name": "keys_publicKey_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "publicKey"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -895,15 +901,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "regions_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "displayName": {
@@ -950,45 +956,45 @@
         "regions_createdBy_users_identity_fk": {
           "name": "regions_createdBy_users_identity_fk",
           "tableFrom": "regions",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "regions_updatedBy_users_identity_fk": {
           "name": "regions_updatedBy_users_identity_fk",
           "tableFrom": "regions",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "regions_displayName_unique": {
           "name": "regions_displayName_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "displayName"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "regions_urlValue_unique": {
           "name": "regions_urlValue_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "urlValue"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1005,15 +1011,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "relay_miners_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "name": {
@@ -1085,50 +1091,50 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
+          "with": {},
           "method": "btree",
-          "with": {}
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "relay_miners_region_id_regions_id_fk": {
           "name": "relay_miners_region_id_regions_id_fk",
           "tableFrom": "relay_miners",
-          "tableTo": "regions",
           "columnsFrom": [
             "region_id"
           ],
+          "tableTo": "regions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "relay_miners_createdBy_users_identity_fk": {
           "name": "relay_miners_createdBy_users_identity_fk",
           "tableFrom": "relay_miners",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "relay_miners_updatedBy_users_identity_fk": {
           "name": "relay_miners_updatedBy_users_identity_fk",
           "tableFrom": "relay_miners",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1147,15 +1153,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "type": "always",
             "name": "services_id_seq",
-            "schema": "public",
             "increment": "1",
-            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
+            "startWith": "1",
             "cache": "1",
-            "cycle": false
+            "cycle": false,
+            "schema": "public",
+            "type": "always"
           }
         },
         "serviceId": {
@@ -1226,38 +1232,38 @@
         "services_createdBy_users_identity_fk": {
           "name": "services_createdBy_users_identity_fk",
           "tableFrom": "services",
-          "tableTo": "users",
           "columnsFrom": [
             "createdBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "services_updatedBy_users_identity_fk": {
           "name": "services_updatedBy_users_identity_fk",
           "tableFrom": "services",
-          "tableTo": "users",
           "columnsFrom": [
             "updatedBy"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "identity"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "services_serviceId_unique": {
           "name": "services_serviceId_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "serviceId"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1328,10 +1334,10 @@
     }
   },
   "schemas": {},
+  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

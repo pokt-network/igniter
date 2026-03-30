@@ -31,7 +31,8 @@ const UpdateSettingsSchema = z.object({
     .min(0, 'Provider fee must be greater than or equal to 0')
     .max(100).transform((value) => value.toString()).optional(),
   minimumStake: z.number().optional(),
-  rpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
+  pocketApiUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
   indexerApiUrl: UrlSchema.optional(),
   delegatorRewardsAddress: z.string().min(1, 'Delegator rewards address is required').optional(),
   privacyPolicy: z.string().optional(),
@@ -39,7 +40,8 @@ const UpdateSettingsSchema = z.object({
 
 const CreateSettingsSchema = z.object({
   minimumStake: z.number().min(1),
-  rpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
+  pocketApiUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
   indexerApiUrl: UrlSchema,
   appIdentity: z.string().min(1, 'App identity is required'),
   chainId: z.nativeEnum(ChainId),

@@ -1,6 +1,6 @@
 import type {DBClient} from '@igniter/db/connection'
 import {asc} from 'drizzle-orm/sql/expressions/select'
-import {notInArray, sql} from 'drizzle-orm'
+import {lt, notInArray, sql} from 'drizzle-orm'
 import {
   and,
   eq,
@@ -155,6 +155,29 @@ export default class Keys {
 
     this.logger.debug('loadKeysInRange: Execution Finished', {afterId, endId})
 
+    return result
+  }
+
+  /**
+   * Loads keys in "delivered" state where `deliveredAt` is older than the given threshold.
+   *
+   * @param {Date} olderThan - The cutoff date; keys delivered before this date are considered stale.
+   * @return {Promise<Array<{ id: number; address: string }>>} A promise resolving to the stale delivered keys.
+   */
+  async loadStaleDeliveredKeys(olderThan: Date): Promise<Array<{ id: number; address: string }>> {
+    this.logger.debug('loadStaleDeliveredKeys: Execution Started', { olderThan })
+    const result = await this.dbClient.db
+      .select({ id: keysTable.id, address: keysTable.address })
+      .from(keysTable)
+      .where(
+        and(
+          eq(keysTable.state, KeyState.Delivered),
+          lt(keysTable.deliveredAt, olderThan),
+        ),
+      )
+      .orderBy(asc(keysTable.id))
+
+    this.logger.debug('loadStaleDeliveredKeys: Execution Finished', { count: result.length })
     return result
   }
 

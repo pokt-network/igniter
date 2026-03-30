@@ -27,7 +27,8 @@ const UpdateSettingsSchema = z.object({
   appIdentity: z.string().min(1, 'App identity is required').optional(),
   supportEmail: z.string().email().optional(),
   ownerEmail: z.string().email().optional(),
-  rpcUrl: UrlSchema.optional(),
+  pocketApiUrl: UrlSchema.optional(),
+  pocketRpcUrl: UrlSchema.optional(),
   indexerApiUrl: UrlSchema.optional(),
   minimumStake: z.number().optional(),
   updatedAtHeight: z.string().optional(),
@@ -36,7 +37,8 @@ const UpdateSettingsSchema = z.object({
 
 const CreateSettingsSchema = z.object({
   minimumStake: z.number().min(1),
-  rpcUrl: UrlSchema,
+  pocketApiUrl: UrlSchema,
+  pocketRpcUrl: UrlSchema,
   indexerApiUrl: UrlSchema,
   appIdentity: z.string().min(1, 'App identity is required'),
   chainId: z.nativeEnum(ChainId),

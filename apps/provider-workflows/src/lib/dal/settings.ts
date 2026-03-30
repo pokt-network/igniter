@@ -18,6 +18,13 @@ export default class Settings {
     this.dbClient = dbClient
   }
 
+  async update(data: Partial<{ pocketRpcUrl: string; pocketApiUrl: string }>) {
+    await this.dbClient.db
+      .update(schema.applicationSettingsTable)
+      .set(data)
+    this.logger.info({ data }, 'Updated application settings')
+  }
+
   async isBootstrapped(): Promise<boolean> {
     const settings = await this.dbClient.db
       .select({ isBootstrapped: schema.applicationSettingsTable.isBootstrapped })
