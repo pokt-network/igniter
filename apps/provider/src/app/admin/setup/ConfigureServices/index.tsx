@@ -5,7 +5,7 @@ import {useEffect, useState} from "react";
 import type {Service} from "@igniter/db/provider/schema";
 import {DeleteService, ListServices} from "@/actions/Services";
 import {Button} from "@igniter/ui/components/button";
-import {DataTable} from "@/components/DataTable";
+import DataTable from '@igniter/ui/components/DataTable/index';
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import {columns} from "./Columns";
 import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
@@ -31,7 +31,7 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
         <DataTable
           columns={columns}
           data={services}
-          searchableFields={["name", "serviceId"]}
+          searchableColumns={["name", "serviceId"]}
           actions={
             <Button
               onClick={() => setIsAddingService(true) }

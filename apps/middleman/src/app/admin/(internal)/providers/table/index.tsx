@@ -2,6 +2,7 @@
 
 import React from 'react'
 import DataTable from "@igniter/ui/components/DataTable/index";
+import LoadNewButton from '@igniter/ui/components/DataTable/LoadNewButton'
 import {columns, filters, sorts} from "./columns";
 import { ListProviders, CountProviders } from "@/actions/Providers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -54,17 +55,7 @@ export default function ProvidersTable() {
       searchableColumns={['name', 'identity']}
       searchPlaceholder="Search by name or identity..."
       countLabel="providers"
-      headerLeft={
-        newCount > 0 ? (
-          <button
-            onClick={handleLoadNew}
-            className="inline-flex items-center gap-1.5 whitespace-nowrap h-9 px-4 rounded-lg text-sm font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors cursor-pointer"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            +{newCount} new
-          </button>
-        ) : undefined
-      }
+      headerLeft={<LoadNewButton count={newCount} onClick={handleLoadNew} />}
     />
   );
 }

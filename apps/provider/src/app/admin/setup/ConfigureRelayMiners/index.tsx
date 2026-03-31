@@ -5,7 +5,7 @@ import {useEffect, useMemo, useState} from "react";
 import {DeleteRelayMiner, ListRelayMiners} from "@/actions/RelayMiners";
 import {Button} from "@igniter/ui/components/button";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import {DataTable} from "@/components/DataTable";
+import DataTable from '@igniter/ui/components/DataTable/index';
 import {columns} from "./Columns";
 import {AddOrUpdateRelayMinerDialog} from "@/components/AddOrUpdateRelayMinerDialog";
 import {LoaderIcon} from "@igniter/ui/assets";
@@ -36,7 +36,7 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
         <DataTable
           columns={columns}
           data={relayMiners}
-          searchableFields={["name", "region", "domain"]}
+          searchableColumns={["name", "region", "domain"]}
           actions={
             <Button
               onClick={() => setIsAddingRelayMiner(true) }

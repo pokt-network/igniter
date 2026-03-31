@@ -3,7 +3,7 @@
 
 import {useEffect, useMemo, useState} from "react";
 import {Button} from "@igniter/ui/components/button";
-import {DataTable} from "@/components/DataTable";
+import DataTable from '@igniter/ui/components/DataTable/index';
 import {columns} from "./Columns";
 import {LoaderIcon} from "@igniter/ui/assets";
 import type {Delegator} from "@igniter/db/provider/schema";
@@ -91,7 +91,7 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
             </div>
           }
           data={delegators}
-          searchableFields={["name", "identity", "publicKey"]}
+          searchableColumns={["name", "identity", "publicKey"]}
         />
       )
       : (

@@ -7,7 +7,7 @@ import { DeleteRegion, ListRegions } from "@/actions/Regions";
 import { Button } from "@igniter/ui/components/button";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
-import { DataTable } from "@/components/DataTable";
+import DataTable from '@igniter/ui/components/DataTable/index';
 import { columns } from "./Columns";
 import { AddOrUpdateRegionDialog } from "@/components/AddOrUpdateRegionDialog";
 import { LoaderIcon } from "@igniter/ui/assets";
@@ -33,7 +33,7 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
         <DataTable
           columns={columns}
           data={regions}
-          searchableFields={["displayName", "urlValue"]}
+          searchableColumns={["displayName", "urlValue"]}
           actions={
             <Button
               onClick={() => setIsAddingRegion(true)}
