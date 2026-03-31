@@ -16,7 +16,9 @@ interface BootstrapConfig {
     fee: number
     delegatorRewardsAddress: string
     privacyPolicy?: string
-    rpcUrl: string
+    pocketApiUrl?: string
+    pocketRpcUrl?: string
+    rpcUrl?: string // backward compat: old field name, used as pocketApiUrl fallback
     indexerApiUrl: string
     chainId: string
   }
@@ -82,8 +84,16 @@ async function main() {
     const config: BootstrapConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
     console.log('[bootstrap-seed] Starting bootstrap...')
 
-    // Step 0: Fetch blockchain params from RPC (minimumStake + current height)
-    const rpcBase = config.settings.rpcUrl.replace(/\/$/, '')
+    // Resolve URLs with backward compat (old configs use rpcUrl for what is now pocketApiUrl)
+    const pocketApiUrl = config.settings.pocketApiUrl || config.settings.rpcUrl || ''
+    const pocketRpcUrl = config.settings.pocketRpcUrl || ''
+
+    if (!pocketApiUrl) {
+      throw new Error('Bootstrap config missing pocketApiUrl (or rpcUrl for backward compat)')
+    }
+
+    // Step 0: Fetch blockchain params from API (minimumStake + current height)
+    const rpcBase = pocketApiUrl.replace(/\/$/, '')
     const stakeBuffer = parseInt(process.env.MINIMUM_STAKE_BUFFER || '0', 10)
     let minimumStake = 0
     let updatedAtHeight = '0'
@@ -136,7 +146,8 @@ async function main() {
         isBootstrapped: false,
         chainId: config.settings.chainId,
         delegatorRewardsAddress: config.settings.delegatorRewardsAddress || ownerIdentity,
-        rpcUrl: config.settings.rpcUrl,
+        pocketApiUrl,
+        pocketRpcUrl,
         indexerApiUrl: config.settings.indexerApiUrl,
         updatedAtHeight,
         privacyPolicy: config.settings.privacyPolicy ?? null,

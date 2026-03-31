@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 async function proxyToRpc(request: NextRequest, path: string) {
   const settings = await getApplicationSettings()
-  const rpcUrl = settings.rpcUrl
+  const rpcUrl = settings.pocketApiUrl
 
   if (!rpcUrl) {
     return NextResponse.json({ error: 'RPC URL not configured' }, { status: 503 })

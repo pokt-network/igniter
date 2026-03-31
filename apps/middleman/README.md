@@ -27,7 +27,7 @@ Before deploying, you need:
 - **Docker** and **Docker Compose** (v2+)
 - **A Pocket Network wallet address** — used as the owner identity for SIWP login (`OWNER_IDENTITY`). Must be a valid `pokt1...` bech32 address.
 - **A Pocket Network private key** — used for governance signing (`APP_IDENTITY`). This is a hex-encoded private key.
-- **Access to a Pocket Network node** — you need both the Tendermint RPC endpoint (port `26657`, used by the workflows service to broadcast transactions via `POKT_RPC_URL`) and the REST API endpoint (port `1317`, configured during bootstrap as "Shannon API URL" for querying chain data). You can use your own node or [public endpoints](https://github.com/pokt-network/pocket-network-resources).
+- **Access to a Pocket Network node** — you need both the Cosmos SDK REST API endpoint (port `1317`) and the CometBFT RPC endpoint (port `26657`). Both are configured during the setup wizard. The `POKT_RPC_URL` env var seeds the RPC URL into the database on first boot if not already set. You can use your own node or [public endpoints](https://github.com/pokt-network/pocket-network-resources).
 - **A CoinMarketCap API key** — used to display POKT coin value to users. Get one at [coinmarketcap.com/api](https://coinmarketcap.com/api/documentation/v1/)
 
 ---
@@ -76,7 +76,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 
 | Variable | Required | Description | Example / Default |
 |----------|----------|-------------|-------------------|
-| `POKT_RPC_URL` | Required | Pocket Network RPC endpoint used by the workflows service to submit transactions | `https://sauron-rpc.beta.infra.pocket.network` |
+| `POKT_RPC_URL` | Required | CometBFT RPC endpoint. Seeded into the database on first boot if not already configured via the setup wizard | `https://sauron-rpc.beta.infra.pocket.network` |
 | `CHAIN_ID` | Required | Blockchain chain identifier | `pocket-beta` |
 | `BLOCKCHAIN_PROTOCOL` | Required | Protocol version (`shannon`) | `shannon` |
 | `OWNER_IDENTITY` | Required | POKT bech32 wallet address of the Middleman owner — must be a valid `pokt1...` address. Used to restrict pre-bootstrap login via SIWP | `pokt1abc123...` |
@@ -161,7 +161,7 @@ Fill in the required values in `.env`. At minimum, you must set:
 - `PGPASSWORD` — must match `POSTGRES_PASSWORD` from the dependencies `.env`
 - `OWNER_IDENTITY` — your `pokt1...` wallet address
 - `APP_IDENTITY` — your hex private key for governance signing
-- `POKT_RPC_URL` — a Pocket Network RPC endpoint
+- `POKT_RPC_URL` — CometBFT RPC endpoint (seeded into DB on first boot)
 - `AUTH_SECRET` — generate with `openssl rand -hex 24`
 - `OWNER_EMAIL` — your email address
 - `COIN_MARKET_CAP_API_KEY` — your CoinMarketCap API key

@@ -166,11 +166,17 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           update.state = KeyState.Unstaked
           break
         case KeyState.Delivered:
-          // If the key was delivered more than 24 hours ago mark it as missing stake
-          update.state = key.deliveredAt &&
-            key.deliveredAt.getTime() < Date.now() - 24 * 60 * 60 * 1000 // 24 h
-            ? KeyState.MissingStake
-            : key.state;
+        case KeyState.MissingStake:
+          // If delivered/missing_stake for more than 24h with no supplier, release the key
+          if (key.deliveredAt && key.deliveredAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+            update.state = KeyState.Available
+            update.deliveredAt = null
+            update.addressGroupId = null
+            update.delegatorRevSharePercentage = 0
+            update.delegatorRewardsAddress = ''
+          } else {
+            update.state = key.state
+          }
           break;
         default:
           update.state = key.state
@@ -403,8 +409,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     if (!supplier) {
-      log.warn('remediateSupplier: Supplier not found', {params})
-      throw ApplicationFailure.retryable('Supplier not found', 'not_found')
+      log.info('remediateSupplier: Supplier not found on-chain, skipping remediation', {params})
+      return {
+        success: true,
+        message: 'Supplier not found on-chain — nothing to remediate.'
+      }
     }
 
     if (key.remediationHistory?.length === 0) {

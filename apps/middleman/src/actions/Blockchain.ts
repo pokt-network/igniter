@@ -55,9 +55,7 @@ export async function GetAccountSequence(address: string): Promise<{
 }> {
   const applicationSettings = await getApplicationSettings();
 
-  const apiUrl = applicationSettings.rpcUrl;
-
-  console.log(applicationSettings)
+  const apiUrl = applicationSettings.pocketApiUrl;
 
   if (!apiUrl) {
     throw new Error('API URL not found');
@@ -133,7 +131,7 @@ export async function SimulateFee({
 
   const applicationSettings = await getApplicationSettings();
 
-  const apiUrl = applicationSettings.rpcUrl;
+  const apiUrl = applicationSettings.pocketApiUrl;
 
   if (!apiUrl) {
     throw new Error('API URL not found');
@@ -214,7 +212,7 @@ export type SupplierParams = {
 export async function GetSupplierStakingFee() {
   const applicationSettings = await getApplicationSettings();
 
-  const apiUrl = applicationSettings.rpcUrl;
+  const apiUrl = applicationSettings.pocketApiUrl;
 
   if (!apiUrl) {
     throw new Error('API URL not found');

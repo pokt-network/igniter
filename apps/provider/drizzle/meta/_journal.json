@@ -120,6 +120,13 @@
       "when": 1774628547730,
       "tag": "0016_slim_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1774900301191,
+      "tag": "0017_narrow_doctor_doom",
+      "breakpoints": true
     }
   ]
 }
