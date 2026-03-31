@@ -1,4 +1,4 @@
-import { Jost, Overpass_Mono } from "next/font/google";
+import { Rubik, Overpass_Mono } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import "@/app/globals.css";
 import { ThemeProvider } from "@/app/theme";
@@ -6,9 +6,9 @@ import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import {ApplicationSettingsProvider} from "@/app/context/ApplicationSettings";
 import NotificationsProvider from "@igniter/ui/context/Notifications/index";
 
-const jost = Jost({
-  variable: "--font-jost",
-  weight: ["400", "600", "500", "700"],
+const rubik = Rubik({
+  variable: "--font-rubik",
+  weight: ["300", "400", "500", "600", "700"],
   style: ["normal", "italic"],
   subsets: ["latin"],
   display: "swap",
@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${overpass_mono.variable} ${jost.variable} overflow-x-hidden`}
+      className={`${overpass_mono.variable} ${rubik.variable} overflow-x-hidden`}
       suppressHydrationWarning
     >
     <body>
