@@ -14,7 +14,6 @@ enum ScheduledWorkflowType {
   SupplierStatus = 'SupplierStatus',
   SupplierRemediation = 'SupplierRemediation',
   SupplierInitialStake = 'SupplierInitialStake',
-  DeliveredKeyRecovery = 'DeliveredKeyRecovery',
 }
 
 const ScheduledWorkflowConfig: Record<
@@ -48,12 +47,6 @@ const ScheduledWorkflowConfig: Record<
       reasons: [RemediationHistoryEntryReason.OwnerInitialStake]
     }],
     envVar: 'SCHEDULE_SUPPLIER_INITIAL_STAKE_INTERVAL',
-  },
-  [ScheduledWorkflowType.DeliveredKeyRecovery]: {
-    workflowType: 'DeliveredKeyRecovery',
-    interval: '5m',
-    args: [],
-    envVar: 'SCHEDULE_DELIVERED_KEY_RECOVERY_INTERVAL',
   },
 }
 

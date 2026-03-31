@@ -207,6 +207,23 @@ export async function ValidateBlockchainRPC(url: string) {
   }
 }
 
+export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const statusUrl = `${url.replace(/\/$/, '')}/status`
+    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
+    if (!response.ok) {
+      return { success: false, error: `RPC returned HTTP ${response.status}` }
+    }
+    const data = await response.json()
+    if (!data?.result?.node_info) {
+      return { success: false, error: 'Invalid RPC response — not a CometBFT node' }
+    }
+    return { success: true }
+  } catch {
+    return { success: false, error: 'Could not reach the RPC endpoint. Check the URL and ensure the node is accessible.' }
+  }
+}
+
 export async function ValidateIndexerUrl(url: string) {
   const [currentSettings, indexerNetwork] = await Promise.all([
     getApplicationSettings(),

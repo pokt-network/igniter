@@ -46,74 +46,7 @@ export type GovernanceSyncResult = {
   disabled: number;
 }
 
-export type RecoverStaleDeliveredKeysResult = {
-  recovered: number;
-  staked: number;
-  available: number;
-  errors: number;
-}
-
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => ({
-  /**
-   * Recovers keys stuck in "delivered" state for more than 24 hours.
-   * For each stale key:
-   *   - If a supplier exists on-chain, transitions the key to "staked".
-   *   - If no supplier exists on-chain, transitions the key to "available".
-   */
-  async recoverStaleDeliveredKeys(): Promise<RecoverStaleDeliveredKeysResult> {
-    const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 hours
-    const olderThan = new Date(Date.now() - STALE_THRESHOLD_MS)
-
-    log.info('recoverStaleDeliveredKeys: Querying stale delivered keys', { olderThan: olderThan.toISOString() })
-
-    const staleKeys = await dal.keys.loadStaleDeliveredKeys(olderThan)
-
-    if (staleKeys.length === 0) {
-      log.info('recoverStaleDeliveredKeys: No stale delivered keys found')
-      return { recovered: 0, staked: 0, available: 0, errors: 0 }
-    }
-
-    log.info('recoverStaleDeliveredKeys: Found stale delivered keys', { count: staleKeys.length })
-
-    const result: RecoverStaleDeliveredKeysResult = { recovered: 0, staked: 0, available: 0, errors: 0 }
-
-    for (const key of staleKeys) {
-      try {
-        const supplier = await pocketRpcClient.getSupplier(key.address)
-
-        const update: Partial<InsertKey> = {
-          deliveredAt: null,
-          deliveredTo: null,
-        }
-
-        if (supplier) {
-          update.state = KeyState.Staked
-          update.stakeOwner = supplier.ownerAddress
-          update.stakeAmountUpokt = BigInt(supplier.stake ? supplier.stake.amount : '0')
-          update.services = supplier.services || []
-          log.info('recoverStaleDeliveredKeys: Supplier exists on-chain, transitioning to staked', { address: key.address })
-          result.staked++
-        } else {
-          update.state = KeyState.Available
-          update.addressGroupId = null
-          update.delegatorRevSharePercentage = 0
-          update.delegatorRewardsAddress = ''
-          log.info('recoverStaleDeliveredKeys: No supplier on-chain, transitioning to available', { address: key.address })
-          result.available++
-        }
-
-        await dal.keys.updateKey(key.address, update, Number.MAX_SAFE_INTEGER)
-        result.recovered++
-      } catch (err) {
-        log.warn('recoverStaleDeliveredKeys: Error recovering key', { address: key.address, error: err })
-        result.errors++
-      }
-    }
-
-    log.info('recoverStaleDeliveredKeys: Done', result)
-    return result
-  },
-
   async syncDelegatorsFromGovernance(): Promise<GovernanceSyncResult> {
     const settings = await dal.settings.loadSettings()
     if (!settings) {
@@ -233,11 +166,17 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           update.state = KeyState.Unstaked
           break
         case KeyState.Delivered:
-          // If the key was delivered more than 24 hours ago mark it as missing stake
-          update.state = key.deliveredAt &&
-            key.deliveredAt.getTime() < Date.now() - 24 * 60 * 60 * 1000 // 24 h
-            ? KeyState.MissingStake
-            : key.state;
+        case KeyState.MissingStake:
+          // If delivered/missing_stake for more than 24h with no supplier, release the key
+          if (key.deliveredAt && key.deliveredAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+            update.state = KeyState.Available
+            update.deliveredAt = null
+            update.addressGroupId = null
+            update.delegatorRevSharePercentage = 0
+            update.delegatorRewardsAddress = ''
+          } else {
+            update.state = key.state
+          }
           break;
         default:
           update.state = key.state
@@ -470,8 +409,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     if (!supplier) {
-      log.warn('remediateSupplier: Supplier not found', {params})
-      throw ApplicationFailure.retryable('Supplier not found', 'not_found')
+      log.info('remediateSupplier: Supplier not found on-chain, skipping remediation', {params})
+      return {
+        success: true,
+        message: 'Supplier not found on-chain — nothing to remediate.'
+      }
     }
 
     if (key.remediationHistory?.length === 0) {

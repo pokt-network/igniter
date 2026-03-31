@@ -158,37 +158,6 @@ export default class Keys {
     return result
   }
 
-  /**
-   * Loads keys in "delivered" state where `deliveredAt` is older than the given threshold.
-   *
-   * @param {Date} olderThan - The cutoff date; keys delivered before this date are considered stale.
-   * @return {Promise<Array<{ id: number; address: string }>>} A promise resolving to the stale delivered keys.
-   */
-  async loadStaleDeliveredKeys(olderThan: Date): Promise<Array<{ id: number; address: string }>> {
-    this.logger.debug('loadStaleDeliveredKeys: Execution Started', { olderThan })
-    const result = await this.dbClient.db
-      .select({ id: keysTable.id, address: keysTable.address })
-      .from(keysTable)
-      .where(
-        and(
-          eq(keysTable.state, KeyState.Delivered),
-          lt(keysTable.deliveredAt, olderThan),
-        ),
-      )
-      .orderBy(asc(keysTable.id))
-
-    this.logger.debug('loadStaleDeliveredKeys: Execution Finished', { count: result.length })
-    return result
-  }
-
-  /**
-   * Updates the key information for the specified address in the database.
-   *
-   * @param {string} address - The unique identifier of the key to be updated.
-   * @param {Partial<schema.InsertKey>} update - The partial object containing the key properties to be updated.
-   * @param {number} [lastUpdatedHeight=-1] - The maximum last updated height to consider for updates. Defaults to -1.
-   * @return {Promise<any>} A promise that resolves when the update operation is complete.
-   */
   async updateKey(address: string, update: Partial<schema.InsertKey>, lastUpdatedHeight: number = -1): Promise<any> {
     this.logger.debug('updateKey: Execution Started', {address, update, lastUpdatedHeight})
     const result = this.dbClient.db.update(keysTable)

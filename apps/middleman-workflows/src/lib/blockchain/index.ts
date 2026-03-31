@@ -153,7 +153,9 @@ export class Blockchain implements IBlockchain {
             const block = await comet.block(h);
             const txs = block.block.txs;
             for (let i = 0; i < txs.length; i++) {
-              const hash = toHex(sha256(txs[i])).toUpperCase();
+              const txBytes = txs[i];
+              if (!txBytes) continue;
+              const hash = toHex(sha256(txBytes)).toUpperCase();
               if (hash === txHash.toUpperCase()) {
                 const results = await comet.blockResults(h);
                 const txData = results.results[i];

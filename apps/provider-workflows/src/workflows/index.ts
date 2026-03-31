@@ -1,4 +1,3 @@
-export * from './DeliveredKeyRecovery'
 export * from './GovernanceSync'
 export * from './SupplierRemediation'
 export * from './SupplierRemediationRange'

@@ -421,13 +421,13 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     // Tier 4: all lookup methods failed — check supplier state directly
     if (operatorAddress) {
-      log.warn({ hash, operatorAddress }, 'TX not found via any method, checking supplier state')
+      log.warn('TX not found via any method, checking supplier state', { hash, operatorAddress })
       const supplier = await pocketRpcClient.getSupplier(operatorAddress)
       if (supplier) {
-        log.info({ hash, operatorAddress }, 'Supplier exists on-chain, marking TX as success')
+        log.info('Supplier exists on-chain, marking TX as success', { hash, operatorAddress })
         return [true, 0, '0'] as const
       }
-      log.warn({ hash, operatorAddress }, 'Supplier not found on-chain, marking TX as failure')
+      log.warn('Supplier not found on-chain, marking TX as failure', { hash, operatorAddress })
       return [false, -1, '0'] as const
     }
 
