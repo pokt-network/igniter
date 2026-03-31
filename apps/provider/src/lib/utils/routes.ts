@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getApplicationSettings } from "@/lib/dal/applicationSettings";
 import { getDelegatorByIdentity } from "@/lib/dal/delegators";
-import { verifySignature } from "@/lib/crypto";
+import { verifySignature } from "@igniter/commons/crypto";
 import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@igniter/commons/constants";
 import {APIResponse} from "@/lib/models/response";
 

@@ -538,6 +538,9 @@ importers:
       '@cosmjs/encoding':
         specifier: ^0.33.1
         version: 0.33.1
+      '@cosmjs/proto-signing':
+        specifier: ^0.33.1
+        version: 0.33.1
       '@cosmjs/stargate':
         specifier: ^0.33.1
         version: 0.33.1(bufferutil@4.0.9)
@@ -865,6 +868,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: 4.0.3
         version: 4.0.3
+      '@tanstack/react-query':
+        specifier: ^5.0.0
+        version: 5.76.1(react@19.0.1)
       '@tanstack/react-table':
         specifier: ^8.21.2
         version: 8.21.2(react-dom@19.0.1(react@19.0.1))(react@19.0.1)
@@ -892,6 +898,9 @@ importers:
       graphql-ws:
         specifier: ^6.0.5
         version: 6.0.6(graphql@16.11.0)(ws@8.18.0(bufferutil@4.0.9))
+      isomorphic-dompurify:
+        specifier: ^2.0.0
+        version: 2.22.0(bufferutil@4.0.9)
       lodash:
         specifier: ^4.17.21
         version: 4.17.21

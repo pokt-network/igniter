@@ -2,7 +2,7 @@ import { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import {SiwpMessage} from "@poktscan/vault-siwp";
 import {env} from "@/config/env";
-import {normalizeIdentityToAddress} from "@/lib/crypto";
+import {normalizeIdentityToAddress} from "@igniter/commons/crypto";
 
 const authConfig: NextAuthConfig = {
   trustHost: true,

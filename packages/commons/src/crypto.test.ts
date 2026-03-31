@@ -1,11 +1,3 @@
-jest.mock('@/config/env', () => ({
-  env: {
-    APP_IDENTITY: 'a'.repeat(64),
-    OWNER_IDENTITY: 'pokt1' + 'a'.repeat(38),
-    MINIMUM_STAKE_BUFFER: 500000000,
-  },
-}));
-
 import { isPoktBech32Address, isHexPublicKey, pubkeyToAddress, normalizeIdentityToAddress } from './crypto';
 
 describe('isPoktBech32Address', () => {
