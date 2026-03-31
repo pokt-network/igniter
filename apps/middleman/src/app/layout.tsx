@@ -11,7 +11,7 @@ import CurrentUser from "@/app/components/CurrentUser";
 import { CurrencyContextProvider } from "@igniter/ui/context/currency";
 import Sidebar from "@/app/components/Sidebar";
 import { Toaster } from "@igniter/ui/components/sonner";
-import QueryClientProvider from '@/app/context/QueryClientProvider';
+import QueryClientProvider from '@igniter/ui/context/QueryClientProvider';
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins';
 import NotificationsProvider from '@igniter/ui/context/Notifications/index';
 import QuickDetailProvider from "@/app/detail/QuickDetailProviderBridge";
