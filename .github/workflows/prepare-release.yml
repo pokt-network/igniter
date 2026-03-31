@@ -5,6 +5,10 @@ on:
     types: [labeled, unlabeled]
     branches: [main]
 
+concurrency:
+  group: release-branch
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write

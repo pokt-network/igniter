@@ -15,7 +15,7 @@ permissions:
   packages: write
 
 jobs:
-  deploy:
+  build-push:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
@@ -23,6 +23,12 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'release:minor') ||
         contains(github.event.pull_request.labels.*.name, 'release:major')))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [middleman, middleman-workflows, provider, provider-workflows]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,65 +56,39 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine version
+        id: version
         run: |
-          # Version already set by prepare-release workflow in mainnet overlays
           NEW_VERSION=$(grep 'newTag:' k8s/apps/middleman/overlays/mainnet/kustomization.yaml | head -1 | sed 's/.*newTag: "\(.*\)"/\1/')
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Deploying version: v$NEW_VERSION"
 
-      - name: Prune all apps
-        run: |
-          for APP in middleman middleman-workflows provider provider-workflows; do
-            pnpm exec turbo prune @igniter/$APP --out-dir ./out/$APP --docker
-          done
+      - name: Prepare docker context
+        run: pnpm exec turbo prune @igniter/${{ matrix.app }} --out-dir ./out/${{ matrix.app }} --docker
 
-      - name: Build and push middleman
+      - name: Build and push ${{ matrix.app }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./apps/middleman/Dockerfile
+          file: ./apps/${{ matrix.app }}/Dockerfile
           push: true
           tags: |
-            ghcr.io/pokt-network/middleman:${{ env.NEW_VERSION }}
-            ghcr.io/pokt-network/middleman:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ghcr.io/pokt-network/${{ matrix.app }}:${{ env.NEW_VERSION }}
+            ghcr.io/pokt-network/${{ matrix.app }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
 
-      - name: Build and push middleman-workflows
-        uses: docker/build-push-action@v6
+  release:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
         with:
-          context: .
-          file: ./apps/middleman-workflows/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/pokt-network/middleman-workflows:${{ env.NEW_VERSION }}
-            ghcr.io/pokt-network/middleman-workflows:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push provider
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/provider/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/pokt-network/provider:${{ env.NEW_VERSION }}
-            ghcr.io/pokt-network/provider:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push provider-workflows
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/provider-workflows/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/pokt-network/provider-workflows:${{ env.NEW_VERSION }}
-            ghcr.io/pokt-network/provider-workflows:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Set version
+        run: echo "NEW_VERSION=${{ needs.build-push.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create and push version tag
         run: |

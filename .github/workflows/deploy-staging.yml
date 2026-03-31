@@ -16,12 +16,16 @@ permissions:
   pull-requests: write
 
 jobs:
-  deploy:
+  build-push:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
        contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [middleman, middleman-workflows, provider, provider-workflows]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,51 +55,34 @@ jobs:
       - name: Set image tag
         run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      - name: Prune all apps
-        run: |
-          for APP in middleman middleman-workflows provider provider-workflows; do
-            pnpm exec turbo prune @igniter/$APP --out-dir ./out/$APP --docker
-          done
+      - name: Prepare docker context
+        run: pnpm exec turbo prune @igniter/${{ matrix.app }} --out-dir ./out/${{ matrix.app }} --docker
 
-      - name: Build and push middleman
+      - name: Build and push ${{ matrix.app }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./apps/middleman/Dockerfile
+          file: ./apps/${{ matrix.app }}/Dockerfile
           push: true
-          tags: ghcr.io/pokt-network/middleman:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ghcr.io/pokt-network/${{ matrix.app }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
 
-      - name: Build and push middleman-workflows
-        uses: docker/build-push-action@v6
+  post-deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-branch
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
         with:
-          context: .
-          file: ./apps/middleman-workflows/Dockerfile
-          push: true
-          tags: ghcr.io/pokt-network/middleman-workflows:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          ref: staging
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push provider
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/provider/Dockerfile
-          push: true
-          tags: ghcr.io/pokt-network/provider:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push provider-workflows
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/provider-workflows/Dockerfile
-          push: true
-          tags: ghcr.io/pokt-network/provider-workflows:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Update staging overlay
         run: |
@@ -110,15 +97,26 @@ jobs:
           git commit -m "chore(deploy): update staging image to $IMAGE_TAG"
           git push
 
+      - name: Create or update release branch
+        run: |
+          git fetch origin
+
+          if git ls-remote --heads origin release | grep -q release; then
+            # Release branch exists — merge staging into it to preserve
+            # any commits from prepare-release (mainnet overlay bumps)
+            git checkout -b release origin/release
+            git merge staging --no-edit -m "chore: merge staging ($IMAGE_TAG) into release"
+            git push origin release
+          else
+            # First deploy: create release branch from staging
+            git checkout -B release
+            git push origin release
+          fi
+
       - name: Create or update release PR to main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create/update release branch from staging
-          git checkout -B release
-          git push --force origin release
-
-          # Check if a PR from release to main already exists
           EXISTING_PR=$(gh pr list --base main --head release --json number --jq '.[0].number' 2>/dev/null || echo "")
 
           PR_BODY="## Staging Release
