@@ -173,7 +173,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
             update.deliveredAt = null
             update.deliveredTo = null
             update.ownerAddress = null
-            update.addressGroupId = null
+            // Keep addressGroupId — key returns to its original group
             update.delegatorRevSharePercentage = 0
             update.delegatorRewardsAddress = ''
           } else {
