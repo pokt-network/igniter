@@ -67,7 +67,7 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 
 | Variable               | Required | Description                                                                                                                          | Example / Default                                      |
 |------------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------|
-| `POKT_RPC_URL`         | Required | Pocket Network RPC endpoint used by the workflows service to submit transactions                                                     | `https://sauron-rpc.beta.infra.pocket.network`         |
+| `POKT_RPC_URL`         | Required | CometBFT RPC endpoint. Seeded into the database on first boot if not already configured via the setup wizard                         | `https://sauron-rpc.beta.infra.pocket.network`         |
 | `CHAIN_ID`             | Required | Blockchain chain identifier                                                                                                          | `pocket-beta`                                          |
 | `BLOCKCHAIN_PROTOCOL`  | Required | Protocol version (`shannon`)                                                                                                         | `shannon`                                              |
 | `OWNER_IDENTITY`       | Required | POKT bech32 wallet address of the Provider owner — must be a valid `pokt1...` address. Used to restrict pre-bootstrap login via SIWP | `pokt1abc123...`                                       |

@@ -20,6 +20,7 @@ import {
   RetrieveBlockchainSettings,
   UpsertApplicationSettings,
   ValidateIndexerUrl,
+  ValidateRpcEndpoint,
 } from '@/actions/ApplicationSettings'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { Trash2Icon } from 'lucide-react'
@@ -38,7 +39,8 @@ const FormSchema = z.object({
     'Invalid email format'
   ),
   rewardAddresses: z.array(z.string()).default([]),
-  rpcUrl: z.string().url('Please enter a valid URL').optional(),
+  pocketApiUrl: z.string().url('Please enter a valid URL').optional(),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').optional(),
   indexerApiUrl: z.string().optional().refine(
     (v) => !v || /^https?:\/\/.+/.test(v),
     'Please enter a valid URL'
@@ -58,9 +60,11 @@ export default function SettingsForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isValidatingRpc, setIsValidatingRpc] = useState(false)
   const [isValidatingIndexer, setIsValidatingIndexer] = useState(false)
+  const [isValidatingRpcEndpoint, setIsValidatingRpcEndpoint] = useState(false)
   const [rpcWarning, setRpcWarning] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const rpcDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const rpcEndpointDebounceRef = useRef<NodeJS.Timeout | null>(null)
   const indexerDebounceRef = useRef<NodeJS.Timeout | null>(null)
 
   const {
@@ -81,7 +85,8 @@ export default function SettingsForm() {
       supportEmail: settings?.supportEmail || '',
       ownerEmail: settings?.ownerEmail || '',
       rewardAddresses: settings?.rewardAddresses || [],
-      rpcUrl: settings?.rpcUrl || '',
+      pocketApiUrl: settings?.pocketApiUrl || '',
+      pocketRpcUrl: settings?.pocketRpcUrl || '',
       indexerApiUrl: settings?.indexerApiUrl || '',
       initialOperationalFunds: settings?.initialOperationalFunds ?? 5,
       minimumOperationalFunds: settings?.minimumOperationalFunds ?? 2,
@@ -96,7 +101,8 @@ export default function SettingsForm() {
       supportEmail: settings.supportEmail || '',
       ownerEmail: settings.ownerEmail || '',
       rewardAddresses: settings.rewardAddresses || [],
-      rpcUrl: settings.rpcUrl || '',
+      pocketApiUrl: settings.pocketApiUrl || '',
+      pocketRpcUrl: settings.pocketRpcUrl || '',
       indexerApiUrl: settings.indexerApiUrl || '',
       initialOperationalFunds: settings.initialOperationalFunds ?? 5,
       minimumOperationalFunds: settings.minimumOperationalFunds ?? 2,
@@ -109,7 +115,8 @@ export default function SettingsForm() {
   })
 
   const allValues = form.watch()
-  const rpcUrl = allValues.rpcUrl
+  const pocketApiUrl = allValues.pocketApiUrl
+  const pocketRpcUrl = allValues.pocketRpcUrl
   const indexerApiUrl = allValues.indexerApiUrl
   const rewardAddresses = allValues.rewardAddresses ?? []
   const isDirty = JSON.stringify(allValues) !== JSON.stringify(form.formState.defaultValues)
@@ -137,18 +144,18 @@ export default function SettingsForm() {
     if (!url) return
     try {
       setIsValidatingRpc(true)
-      form.clearErrors('rpcUrl')
+      form.clearErrors('pocketApiUrl')
       setRpcWarning(null)
 
       const response = await RetrieveBlockchainSettings(url, null)
 
       if (!response.success && response.errors) {
-        form.setError('rpcUrl', { type: 'manual', message: response.errors[0] })
+        form.setError('pocketApiUrl', { type: 'manual', message: response.errors[0] })
         return
       }
 
       if (response.network && response.network !== settings?.chainId) {
-        form.setError('rpcUrl', {
+        form.setError('pocketApiUrl', {
           type: 'manual',
           message: `This node is on network "${response.network}" but the app is configured for "${settings?.chainId}".`,
         })
@@ -165,8 +172,8 @@ export default function SettingsForm() {
 
       if (response.minStake) form.setValue('minimumStake', response.minStake, { shouldDirty: true })
       if (response.height) form.setValue('updatedAtHeight', response.height, { shouldDirty: true })
-    } catch (err) {
-      form.setError('rpcUrl', { type: 'manual', message: (err as Error).message })
+    } catch {
+      form.setError('pocketApiUrl', { type: 'manual', message: 'Could not reach the API endpoint. Check the URL and ensure the node is accessible.' })
     } finally {
       setIsValidatingRpc(false)
     }
@@ -191,13 +198,31 @@ export default function SettingsForm() {
   }, [])
 
   useEffect(() => {
-    if (!rpcUrl || rpcUrl === settings?.rpcUrl) return
-    form.clearErrors('rpcUrl')
+    if (!pocketApiUrl || pocketApiUrl === settings?.pocketApiUrl) return
+    form.clearErrors('pocketApiUrl')
     setRpcWarning(null)
     if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current)
-    rpcDebounceRef.current = setTimeout(() => validateRpcUrl(rpcUrl), 1000)
+    rpcDebounceRef.current = setTimeout(() => validateRpcUrl(pocketApiUrl), 1000)
     return () => { if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current) }
-  }, [rpcUrl])
+  }, [pocketApiUrl])
+
+  const validateRpcEndpoint = useCallback(async (url: string) => {
+    if (!url) return
+    try {
+      setIsValidatingRpcEndpoint(true)
+      form.clearErrors('pocketRpcUrl')
+      const result = await ValidateRpcEndpoint(url)
+      if (!result.success) {
+        form.setError('pocketRpcUrl', { type: 'manual', message: result.error || 'Invalid RPC endpoint' })
+      } else if (result.network && settings?.chainId && result.network !== settings.chainId) {
+        form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but this app is configured for "${settings.chainId}". Both must point to the same chain.` })
+      }
+    } catch {
+      form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' })
+    } finally {
+      setIsValidatingRpcEndpoint(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!indexerApiUrl || indexerApiUrl === settings?.indexerApiUrl) return
@@ -206,6 +231,14 @@ export default function SettingsForm() {
     indexerDebounceRef.current = setTimeout(() => validateIndexerUrl(indexerApiUrl), 1000)
     return () => { if (indexerDebounceRef.current) clearTimeout(indexerDebounceRef.current) }
   }, [indexerApiUrl])
+
+  useEffect(() => {
+    if (!pocketRpcUrl || pocketRpcUrl === settings?.pocketRpcUrl) return
+    form.clearErrors('pocketRpcUrl')
+    if (rpcEndpointDebounceRef.current) clearTimeout(rpcEndpointDebounceRef.current)
+    rpcEndpointDebounceRef.current = setTimeout(() => validateRpcEndpoint(pocketRpcUrl), 1000)
+    return () => { if (rpcEndpointDebounceRef.current) clearTimeout(rpcEndpointDebounceRef.current) }
+  }, [pocketRpcUrl])
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null)
@@ -385,7 +418,7 @@ export default function SettingsForm() {
         <div className="flex flex-col gap-4">
           <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Blockchain</span>
 
-          <FormField control={form.control} name="rpcUrl" render={({ field }) => (
+          <FormField control={form.control} name="pocketApiUrl" render={({ field }) => (
             <FormItem className="flex flex-row items-start gap-4">
               <FormLabel className="text-sm shrink-0 w-28 mt-2.5">
                 Pocket API URL
@@ -393,8 +426,23 @@ export default function SettingsForm() {
               </FormLabel>
               <div className="flex-1">
                 <FormControl><Input {...field} className="h-9 text-sm" placeholder="https://your-node-api.example.com" /></FormControl>
+                <p className="text-[11px] text-text-tertiary mt-1 px-1">Cosmos SDK REST API endpoint (port 1317). Used for querying chain state and simulating transactions.</p>
                 <FormMessage className="mt-1" />
                 {rpcWarning && <p className="text-[11px] text-yellow-500 mt-1">{rpcWarning}</p>}
+              </div>
+            </FormItem>
+          )} />
+
+          <FormField control={form.control} name="pocketRpcUrl" render={({ field }) => (
+            <FormItem className="flex flex-row items-start gap-4">
+              <FormLabel className="text-sm shrink-0 w-28 mt-2.5">
+                Pocket RPC URL
+                {isValidatingRpcEndpoint && <LoaderIcon className="inline-block animate-spin ml-1 h-3 w-3" />}
+              </FormLabel>
+              <div className="flex-1">
+                <FormControl><Input {...field} className="h-9 text-sm" placeholder="https://your-node-rpc.example.com" /></FormControl>
+                <p className="text-[11px] text-text-tertiary mt-1 px-1">CometBFT RPC endpoint (port 26657). Used for broadcasting and verifying transactions.</p>
+                <FormMessage className="mt-1" />
               </div>
             </FormItem>
           )} />
@@ -434,7 +482,7 @@ export default function SettingsForm() {
               </FormLabel>
               <div className="flex-1">
                 <FormControl><Input {...field} className="h-9 text-sm" placeholder="https://api.poktscan.com" /></FormControl>
-                <p className="text-[11px] text-text-tertiary mt-1">GraphQL API URL of the POKTscan indexer. Must match the same network as your node.</p>
+                <p className="text-[11px] text-text-tertiary mt-1 px-1">GraphQL API URL of the POKTscan indexer. Must match the same network as your node.</p>
                 <FormMessage className="mt-1" />
               </div>
             </FormItem>
@@ -447,7 +495,7 @@ export default function SettingsForm() {
         <div className="flex items-center gap-3">
           {submitError && <p className="text-xs text-red-400 flex-1">{submitError}</p>}
           <div className="flex-1" />
-          <Button type="submit" disabled={isSubmitting || !isDirty || hasAddressErrors}>
+          <Button type="submit" disabled={isSubmitting || !isDirty || hasAddressErrors || isValidatingRpc || isValidatingRpcEndpoint || isValidatingIndexer || !!form.formState.errors.pocketApiUrl || !!form.formState.errors.pocketRpcUrl || !!form.formState.errors.indexerApiUrl}>
             {isSubmitting ? <LoaderIcon className="animate-spin mr-2 h-4 w-4" /> : null}
             Save Changes
           </Button>

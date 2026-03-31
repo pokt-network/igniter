@@ -31,7 +31,8 @@ const UpdateSettingsSchema = z.object({
     .min(0, 'Provider fee must be greater than or equal to 0')
     .max(100).transform((value) => value.toString()).optional(),
   minimumStake: z.number().optional(),
-  rpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
+  pocketApiUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required').optional(),
   indexerApiUrl: UrlSchema.optional(),
   delegatorRewardsAddress: z.string().min(1, 'Delegator rewards address is required').optional(),
   privacyPolicy: z.string().optional(),
@@ -39,7 +40,8 @@ const UpdateSettingsSchema = z.object({
 
 const CreateSettingsSchema = z.object({
   minimumStake: z.number().min(1),
-  rpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
+  pocketApiUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
+  pocketRpcUrl: z.string().url('Please enter a valid URL').min(1, 'URL is required'),
   indexerApiUrl: UrlSchema,
   appIdentity: z.string().min(1, 'App identity is required'),
   chainId: z.nativeEnum(ChainId),
@@ -202,6 +204,23 @@ export async function ValidateBlockchainRPC(url: string) {
 
   return {
     success: true,
+  }
+}
+
+export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string; network?: string }> {
+  try {
+    const statusUrl = `${url.replace(/\/$/, '')}/status`
+    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
+    if (!response.ok) {
+      return { success: false, error: `RPC returned HTTP ${response.status}` }
+    }
+    const data = await response.json()
+    if (!data?.result?.node_info) {
+      return { success: false, error: 'Invalid RPC response — not a CometBFT node' }
+    }
+    return { success: true, network: data.result.node_info.network }
+  } catch {
+    return { success: false, error: 'Could not reach the RPC endpoint. Check the URL and ensure the node is accessible.' }
   }
 }
 

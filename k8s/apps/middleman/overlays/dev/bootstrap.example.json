@@ -4,7 +4,8 @@
     "ownerEmail": "dev@igniter.local",
     "fee": 0,
     "delegatorRewardsAddress": "pokt10d79e5fyglwt9clgrvtwmy6jqj8a9nh8ntp00c",
-    "rpcUrl": "https://sauron-api.beta.infra.pocket.network",
+    "pocketApiUrl": "https://sauron-api.beta.infra.pocket.network",
+    "pocketRpcUrl": "https://sauron-rpc.beta.infra.pocket.network",
     "indexerApiUrl": "https://beta-api.poktscan.com/",
     "chainId": "pocket-lego-testnet"
   }

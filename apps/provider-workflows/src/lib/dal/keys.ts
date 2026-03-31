@@ -1,6 +1,6 @@
 import type {DBClient} from '@igniter/db/connection'
 import {asc} from 'drizzle-orm/sql/expressions/select'
-import {notInArray, sql} from 'drizzle-orm'
+import {lt, notInArray, sql} from 'drizzle-orm'
 import {
   and,
   eq,
@@ -158,14 +158,6 @@ export default class Keys {
     return result
   }
 
-  /**
-   * Updates the key information for the specified address in the database.
-   *
-   * @param {string} address - The unique identifier of the key to be updated.
-   * @param {Partial<schema.InsertKey>} update - The partial object containing the key properties to be updated.
-   * @param {number} [lastUpdatedHeight=-1] - The maximum last updated height to consider for updates. Defaults to -1.
-   * @return {Promise<any>} A promise that resolves when the update operation is complete.
-   */
   async updateKey(address: string, update: Partial<schema.InsertKey>, lastUpdatedHeight: number = -1): Promise<any> {
     this.logger.debug('updateKey: Execution Started', {address, update, lastUpdatedHeight})
     const result = this.dbClient.db.update(keysTable)

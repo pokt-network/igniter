@@ -124,6 +124,7 @@ The `bootstrap.json` files are gitignored. The `.example.json` files are committ
 
 | Variable | Description |
 |----------|-------------|
+| `LOCALNET_ENABLED` | Set to `true` to spin up a local Pocket Network validator (pocketd) with pre-funded accounts and pre-staked suppliers. Also sets `POKT_RPC_URL` to `http://validator:26657` in the workflow configmaps and adds `owner-fund` as a dependency for both apps. Required for local end-to-end testing |
 | `MINIMUM_STAKE_BUFFER` | Buffer in uPOKT added to on-chain minimum stake (default: `500000000`) |
 | `PROVIDER_BOOTSTRAP_CONFIG_PATH` | Path to provider bootstrap JSON (relative to Tiltfile). Enables auto-bootstrap when set |
 | `MIDDLEMAN_BOOTSTRAP_CONFIG_PATH` | Path to middleman bootstrap JSON (relative to Tiltfile). Enables auto-bootstrap when set |

@@ -25,6 +25,7 @@ import {
   RetrieveBlockchainSettings,
   RetrieveIndexerNetwork,
   UpsertApplicationSettings,
+  ValidateRpcEndpoint,
 } from '@/actions/ApplicationSettings'
 import type { ApplicationSettings } from '@igniter/db/provider/schema'
 import { SetupHelpBar } from '@/components/SetupHelpBar'
@@ -39,7 +40,8 @@ const RpcUrlSchema = z.string().url('Please enter a valid URL').min(1, 'URL is r
 
 export const FormSchema = z.object({
   chainId: z.nativeEnum(ChainId),
-  rpcUrl: RpcUrlSchema,
+  pocketApiUrl: RpcUrlSchema,
+  pocketRpcUrl: RpcUrlSchema,
   indexerApiUrl: RpcUrlSchema,
   appIdentity: z.string().min(1, 'App Identity is Required'),
   updatedAtHeight: z.string().nullable(),
@@ -80,7 +82,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
-      rpcUrl: defaultValues?.rpcUrl || '',
+      pocketApiUrl: defaultValues?.pocketApiUrl || '',
+      pocketRpcUrl: defaultValues?.pocketRpcUrl || '',
       indexerApiUrl: defaultValues?.indexerApiUrl || '',
       minimumStake: defaultValues?.minimumStake,
       chainId: defaultValues?.chainId,
@@ -90,15 +93,18 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   })
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rpcDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [isValidatingRpc, setIsValidatingRpc] = useState(false)
 
   const { isValidating, isSubmitting } = form.formState
-  const [rpcUrl, chainId] = form.watch([
-    'rpcUrl',
+  const [pocketApiUrl, pocketRpcUrl, chainId] = form.watch([
+    'pocketApiUrl',
+    'pocketRpcUrl',
     'chainId',
   ])
 
   const debouncedRetrieveParams = useCallback(() => {
-    form.clearErrors('rpcUrl')
+    form.clearErrors('pocketApiUrl')
     form.clearErrors('indexerApiUrl')
     // Reset height so switching between networks (e.g., mainnet → beta) doesn't
     // fail the height regression check against the previous network's height.
@@ -109,11 +115,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      if (rpcUrl && rpcUrl.trim() !== '') {
+      if (pocketApiUrl && pocketApiUrl.trim() !== '') {
         retrieveBlockchainParams()
       }
     }, 1000)
-  }, [rpcUrl])
+  }, [pocketApiUrl])
 
   useEffect(() => {
     debouncedRetrieveParams()
@@ -123,7 +129,29 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
         clearTimeout(debounceTimerRef.current)
       }
     }
-  }, [rpcUrl, debouncedRetrieveParams])
+  }, [pocketApiUrl, debouncedRetrieveParams])
+
+  useEffect(() => {
+    if (!pocketRpcUrl || pocketRpcUrl.trim() === '') return
+    form.clearErrors('pocketRpcUrl')
+    if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current)
+    rpcDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsValidatingRpc(true)
+        const result = await ValidateRpcEndpoint(pocketRpcUrl)
+        if (!result.success) {
+          form.setError('pocketRpcUrl', { type: 'manual', message: result.error || 'Invalid RPC endpoint' })
+        } else if (result.network && chainId && result.network !== chainId) {
+          form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but API detected "${chainId}". Both must point to the same chain.` })
+        }
+      } catch {
+        form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' })
+      } finally {
+        setIsValidatingRpc(false)
+      }
+    }, 1000)
+    return () => { if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current) }
+  }, [pocketRpcUrl])
 
   const isUpdate = useMemo(() => defaultValues?.id !== 0, [defaultValues])
   const formRef = useRef<HTMLFormElement>(null)
@@ -133,11 +161,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   }
 
   const retrieveBlockchainParams = async () => {
-    const url = form.getValues().rpcUrl
+    const url = form.getValues().pocketApiUrl
     const validatedUrl = RpcUrlSchema.safeParse(url)
 
     if (!validatedUrl.success) {
-      form.setError('rpcUrl', {
+      form.setError('pocketApiUrl', {
         type: 'manual',
         message: 'Please enter a valid URL (e.g., https://your-node-api.example.com)',
       })
@@ -145,7 +173,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
     }
 
     // Clear any previous error before fetching — a valid URL format is a good sign
-    form.clearErrors('rpcUrl')
+    form.clearErrors('pocketApiUrl')
 
     try {
       setIsLoadingBlockchainParams(true)
@@ -156,23 +184,21 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
 
       if (!response.success && response.errors) {
         const [error] = response.errors
-        form.setError('rpcUrl', {
+        form.setError('pocketApiUrl', {
           type: 'manual',
           message: error,
         })
         return
       } else if (response.network && response.height && response.minStake) {
-        form.clearErrors('rpcUrl')
+        form.clearErrors('pocketApiUrl')
         form.setValue('chainId', response.network as ChainId)
         form.setValue('minimumStake', response.minStake)
         form.setValue('updatedAtHeight', response.height)
       }
-    } catch (err) {
-      const { message } = err as Error
-      console.error('Failed to fetch blockchain params', err)
-      form.setError('rpcUrl', {
+    } catch {
+      form.setError('pocketApiUrl', {
         type: 'manual',
-        message,
+        message: 'Could not reach the API endpoint. Check the URL and ensure the node is accessible.',
       })
     } finally {
       setIsLoadingBlockchainParams(false)
@@ -220,7 +246,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
               name="indexerApiUrl"
               control={form.control}
               render={({ field }) => {
-                const isDisabled = !chainId || !rpcUrl;
+                const isDisabled = !chainId || !pocketApiUrl;
                 return (
                 <FormItem>
                   <FormLabel>Indexer API URL</FormLabel>
@@ -245,7 +271,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           {/* Right column */}
           <div className="flex flex-col gap-5">
             <FormField
-              name="rpcUrl"
+              name="pocketApiUrl"
               control={form.control}
               render={({ field }) => (
                 <FormItem>
@@ -260,6 +286,26 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                     The Cosmos SDK REST API of your Pocket Network node (port <code>1317</code>).
                     <strong> Do not use the Tendermint RPC</strong> (port <code>26657</code>).
                     This auto-detects your network and minimum stake. The chain ID is locked after setup.
+                  </FormDescription>
+                  <FormMessage/>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              name="pocketRpcUrl"
+              control={form.control}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Pocket RPC URL</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="https://your-pocket-rpc.example.com"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    The Tendermint RPC endpoint of your Pocket Network node (port <code>26657</code>).
                   </FormDescription>
                   <FormMessage/>
                 </FormItem>
@@ -311,7 +357,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all hover:brightness-110"
           style={{ background: 'rgba(72, 229, 194, 0.12)', border: '1px solid rgba(72, 229, 194, 0.25)', color: 'var(--pnf-mint, #48e5c2)' }}
           onClick={() => {
-            form.setValue('rpcUrl', 'https://sauron-api.infra.pocket.network', { shouldDirty: true });
+            form.setValue('pocketApiUrl', 'https://sauron-api.infra.pocket.network', { shouldDirty: true });
+            form.setValue('pocketRpcUrl', 'https://sauron-rpc.infra.pocket.network', { shouldDirty: true });
             form.setValue('indexerApiUrl', 'https://api.poktscan.com', { shouldDirty: true });
           }}
         >
@@ -322,7 +369,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all hover:brightness-110"
           style={{ background: 'rgba(255, 197, 71, 0.12)', border: '1px solid rgba(255, 197, 71, 0.25)', color: 'var(--pnf-gold, #ffc547)' }}
           onClick={() => {
-            form.setValue('rpcUrl', 'https://sauron-api.beta.infra.pocket.network', { shouldDirty: true });
+            form.setValue('pocketApiUrl', 'https://sauron-api.beta.infra.pocket.network', { shouldDirty: true });
+            form.setValue('pocketRpcUrl', 'https://sauron-rpc.beta.infra.pocket.network', { shouldDirty: true });
             form.setValue('indexerApiUrl', 'https://beta-api.poktscan.com', { shouldDirty: true });
           }}
         >
@@ -331,7 +379,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       </SetupHelpBar>
 
       <div className="flex justify-end">
-        <Button type="button" onClick={handleGoNext} disabled={isLoading || isValidating || isSubmitting}>
+        <Button type="button" onClick={handleGoNext} disabled={isLoading || isValidating || isSubmitting || isValidatingRpc || isLoadingBlockchainParams || !!form.formState.errors.pocketApiUrl || !!form.formState.errors.pocketRpcUrl}>
           {isLoading ? 'Loading...' : 'Next'}
         </Button>
       </div>

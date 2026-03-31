@@ -87,7 +87,7 @@ cp docker-compose/apps/provider/.env.sample docker-compose/apps/provider/.env
 Key variables:
 - `TEMPORAL_NAMESPACE=provider`
 - DB credentials matching **dependencies**
-- `POKT_RPC_URL` — RPC endpoint
+- `POKT_RPC_URL` — CometBFT RPC endpoint (seeded into DB on first boot)
 - `OWNER_IDENTITY`, `OWNER_EMAIL`, `APP_IDENTITY` — Pocket Network identity
 - Encryption keys/secrets (generate with `openssl rand -hex ...`)
 
@@ -109,7 +109,7 @@ cp docker-compose/apps/middleman/.env.sample docker-compose/apps/middleman/.env
 Key variables:
 - `TEMPORAL_NAMESPACE=middleman`
 - DB credentials matching **dependencies**
-- `POKT_RPC_URL` — RPC endpoint
+- `POKT_RPC_URL` — CometBFT RPC endpoint (seeded into DB on first boot)
 - `OWNER_IDENTITY`, `OWNER_EMAIL`, `APP_IDENTITY`
 - Optional: `COIN_MARKET_CAP_API_KEY`
 

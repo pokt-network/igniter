@@ -27,7 +27,8 @@ const UpdateSettingsSchema = z.object({
   appIdentity: z.string().min(1, 'App identity is required').optional(),
   supportEmail: z.string().email().optional(),
   ownerEmail: z.string().email().optional(),
-  rpcUrl: UrlSchema.optional(),
+  pocketApiUrl: UrlSchema.optional(),
+  pocketRpcUrl: UrlSchema.optional(),
   indexerApiUrl: UrlSchema.optional(),
   minimumStake: z.number().optional(),
   updatedAtHeight: z.string().optional(),
@@ -36,7 +37,8 @@ const UpdateSettingsSchema = z.object({
 
 const CreateSettingsSchema = z.object({
   minimumStake: z.number().min(1),
-  rpcUrl: UrlSchema,
+  pocketApiUrl: UrlSchema,
+  pocketRpcUrl: UrlSchema,
   indexerApiUrl: UrlSchema,
   appIdentity: z.string().min(1, 'App identity is required'),
   chainId: z.nativeEnum(ChainId),
@@ -201,6 +203,23 @@ export async function RetrieveIndexerNetwork(url: string) {
   })
 
   return data?.status?.chain || ''
+}
+
+export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string; network?: string }> {
+  try {
+    const statusUrl = `${url.replace(/\/$/, '')}/status`
+    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
+    if (!response.ok) {
+      return { success: false, error: `RPC returned HTTP ${response.status}` }
+    }
+    const data = await response.json()
+    if (!data?.result?.node_info) {
+      return { success: false, error: 'Invalid RPC response — not a CometBFT node' }
+    }
+    return { success: true, network: data.result.node_info.network }
+  } catch {
+    return { success: false, error: 'Could not reach the RPC endpoint. Check the URL and ensure the node is accessible.' }
+  }
 }
 
 export async function ValidateIndexerUrl(url: string) {

@@ -22,7 +22,8 @@ import { chainIdEnum } from './enums'
  * - `chainId`: The associated blockchain chain ID, required and defined by an enumeration.
  * - `minimumStake`: The minimum stake amount required for the application, required and stored as an integer.
  * - `isBootstrapped`: A boolean value indicating if the application is bootstrapped, required.
- * - `rpcUrl`: The RPC URL for application interaction, required.
+ * - `pocketApiUrl`: The Pocket API URL for application interaction, required.
+ * - `pocketRpcUrl`: The Pocket RPC URL for direct node communication, optional.
  * - `indexerApiUrl`: The API URL for indexing services, optional.
  * - `rewardAddresses`: Optional array of reward addresses for the application, stored as a string array. Used by Delegators to fetch provider rewards.
  * - `updatedAtHeight`: Optional field that tracks the blockchain height at the last update, stored as a string.
@@ -43,7 +44,8 @@ export const applicationSettingsTable = pgTable('application_settings', {
   initialOperationalFunds: integer().default(5),
   minimumOperationalFunds: integer().default(2),
   isBootstrapped: boolean().notNull(),
-  rpcUrl: varchar().notNull(),
+  pocketApiUrl: varchar().notNull(),
+  pocketRpcUrl: varchar(),
   indexerApiUrl: varchar(),
   rewardAddresses: varchar().array(),
   updatedAtHeight: varchar(),
