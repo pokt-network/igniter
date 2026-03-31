@@ -205,7 +205,7 @@ export async function RetrieveIndexerNetwork(url: string) {
   return data?.status?.chain || ''
 }
 
-export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string }> {
+export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string; network?: string }> {
   try {
     const statusUrl = `${url.replace(/\/$/, '')}/status`
     const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
@@ -216,7 +216,7 @@ export async function ValidateRpcEndpoint(url: string): Promise<{ success: boole
     if (!data?.result?.node_info) {
       return { success: false, error: 'Invalid RPC response — not a CometBFT node' }
     }
-    return { success: true }
+    return { success: true, network: data.result.node_info.network }
   } catch {
     return { success: false, error: 'Could not reach the RPC endpoint. Check the URL and ensure the node is accessible.' }
   }

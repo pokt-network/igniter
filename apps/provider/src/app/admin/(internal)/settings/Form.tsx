@@ -214,6 +214,8 @@ export default function SettingsForm() {
       const result = await ValidateRpcEndpoint(url)
       if (!result.success) {
         form.setError('pocketRpcUrl', { type: 'manual', message: result.error || 'Invalid RPC endpoint' })
+      } else if (result.network && settings?.chainId && result.network !== settings.chainId) {
+        form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but this app is configured for "${settings.chainId}". Both must point to the same chain.` })
       }
     } catch {
       form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' })

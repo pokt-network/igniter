@@ -25,6 +25,7 @@ import {
   RetrieveBlockchainSettings,
   RetrieveIndexerNetwork,
   UpsertApplicationSettings,
+  ValidateRpcEndpoint,
 } from '@/actions/ApplicationSettings'
 import type { ApplicationSettings } from '@igniter/db/provider/schema'
 import { SetupHelpBar } from '@/components/SetupHelpBar'
@@ -92,10 +93,13 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
   })
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rpcDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [isValidatingRpc, setIsValidatingRpc] = useState(false)
 
   const { isValidating, isSubmitting } = form.formState
-  const [pocketApiUrl, chainId] = form.watch([
+  const [pocketApiUrl, pocketRpcUrl, chainId] = form.watch([
     'pocketApiUrl',
+    'pocketRpcUrl',
     'chainId',
   ])
 
@@ -126,6 +130,28 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       }
     }
   }, [pocketApiUrl, debouncedRetrieveParams])
+
+  useEffect(() => {
+    if (!pocketRpcUrl || pocketRpcUrl.trim() === '') return
+    form.clearErrors('pocketRpcUrl')
+    if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current)
+    rpcDebounceRef.current = setTimeout(async () => {
+      try {
+        setIsValidatingRpc(true)
+        const result = await ValidateRpcEndpoint(pocketRpcUrl)
+        if (!result.success) {
+          form.setError('pocketRpcUrl', { type: 'manual', message: result.error || 'Invalid RPC endpoint' })
+        } else if (result.network && chainId && result.network !== chainId) {
+          form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but API detected "${chainId}". Both must point to the same chain.` })
+        }
+      } catch {
+        form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' })
+      } finally {
+        setIsValidatingRpc(false)
+      }
+    }, 1000)
+    return () => { if (rpcDebounceRef.current) clearTimeout(rpcDebounceRef.current) }
+  }, [pocketRpcUrl])
 
   const isUpdate = useMemo(() => defaultValues?.id !== 0, [defaultValues])
   const formRef = useRef<HTMLFormElement>(null)
@@ -169,12 +195,10 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
         form.setValue('minimumStake', response.minStake)
         form.setValue('updatedAtHeight', response.height)
       }
-    } catch (err) {
-      const { message } = err as Error
-      console.error('Failed to fetch blockchain params', err)
+    } catch {
       form.setError('pocketApiUrl', {
         type: 'manual',
-        message,
+        message: 'Could not reach the API endpoint. Check the URL and ensure the node is accessible.',
       })
     } finally {
       setIsLoadingBlockchainParams(false)
@@ -355,7 +379,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       </SetupHelpBar>
 
       <div className="flex justify-end">
-        <Button type="button" onClick={handleGoNext} disabled={isLoading || isValidating || isSubmitting}>
+        <Button type="button" onClick={handleGoNext} disabled={isLoading || isValidating || isSubmitting || isValidatingRpc || isLoadingBlockchainParams || !!form.formState.errors.pocketApiUrl || !!form.formState.errors.pocketRpcUrl}>
           {isLoading ? 'Loading...' : 'Next'}
         </Button>
       </div>
