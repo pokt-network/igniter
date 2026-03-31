@@ -78,3 +78,5 @@ igniter-landing.html
 # Claude Code local dev helpers
 .claude/start-middleman.js
 .claude/worktrees/
+SESSION-SUMMARY.md
+*.png
