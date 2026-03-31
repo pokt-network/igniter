@@ -11,7 +11,7 @@ import {CaretSmallIcon, CornerIcon, LoaderIcon} from "@igniter/ui/assets";
 import {useApplicationSettings} from "@/app/context/ApplicationSettings";
 import {StakeDistributionOffer} from "@/lib/models/StakeDistributionOffer";
 import Amount from '@igniter/ui/components/Amount'
-import { MessageType } from "@/lib/constants";
+import { MessageType } from "@igniter/commons/constants";
 import { Operation, SendOperation, StakeOperation } from '@/app/detail/TransactionDetail'
 import { calculateShares } from '@/lib/utils/shareCalculations'
 import { PlanDetailsSection } from '@/app/app/stake/components/PlanDetailsSection'

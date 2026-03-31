@@ -3,7 +3,7 @@ import React from 'react'
 import DataTable from '@igniter/ui/components/DataTable/index'
 import { columns, filters, sorts } from './columns'
 import {ItemBase, useDetailContext} from '@igniter/ui/components/QuickDetails/Provider'
-import { MessageType } from '@/lib/constants'
+import { MessageType } from '@igniter/commons/constants'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetTransactions, CountTransactions } from '@/actions/Transactions'
 import {Operation} from "@/app/detail/TransactionDetail";

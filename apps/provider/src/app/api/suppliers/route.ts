@@ -4,7 +4,7 @@ import {SupplierStakeRequest} from "@/lib/models/supplier";
 import {Supplier} from '@igniter/domain/provider/models';
 import {APIResponse} from "@/lib/models/response";
 import {getSupplierStakeConfigurations} from "@/lib/services/suppliers";
-import {REQUEST_IDENTITY_HEADER} from "@/lib/constants";
+import {REQUEST_IDENTITY_HEADER} from "@igniter/commons/constants";
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
