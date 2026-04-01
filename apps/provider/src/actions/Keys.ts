@@ -42,6 +42,13 @@ const poktAddressRegex = /^pokt1[a-z0-9]{38,43}$/
 
 export async function ImportKeys(keys: string[], addressGroupId: number): Promise<ActionResult<void>> {
   return withRequireOwner(async () => {
+    if (!addressGroupId || !Number.isFinite(addressGroupId) || addressGroupId <= 0) {
+      throw new Error('A valid address group must be selected before importing keys')
+    }
+
+    const group = await findAddressGroupById(addressGroupId)
+    if (!group) throw new Error(`Address group ${addressGroupId} does not exist`)
+
     const validatedKeys = KeysSchema.parse(keys)
 
     const keysToInsert: Array<InsertKey> = await Promise.all(validatedKeys.map(key => {
