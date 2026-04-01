@@ -2,11 +2,7 @@ import { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import {SiwpMessage} from "@poktscan/vault-siwp";
 import {env} from "@/config/env";
-// Edge-safe inline: full normalizeIdentityToAddress lives in @igniter/commons/crypto
-// but that module pulls @cosmjs which isn't Edge-compatible.
-// auth.config only needs the bech32 check — hex pubkey conversion is legacy.
-const normalizeIdentityToAddress = (identity: string) =>
-  /^pokt1[a-z0-9]{38,43}$/.test(identity) ? identity : identity;
+import {normalizeIdentityToAddress} from "@igniter/commons/crypto";
 
 const authConfig: NextAuthConfig = {
   trustHost: true,
