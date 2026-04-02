@@ -8,13 +8,17 @@ import {
   AddressGroupsJson,
   InsertNode,
   Node,
+  NodeService,
   Provider,
   Transaction,
 } from '@igniter/db/middleman/schema'
 import {
   NodeStatus,
   TransactionStatus,
+  SupplierChangeType,
 } from '@igniter/db/middleman/enums'
+import { createHash } from 'node:crypto'
+import { detectSupplierChanges, DetectedSupplierChange } from '@igniter/domain/middleman/utils/supplierChanges'
 import { extractTransactionStakingSuppliers, extractTransactionUnstakingSuppliers } from '@/workflows/utils'
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
@@ -256,6 +260,47 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
             }))
 
           update.services = [...activeServices, ...pendingServices]
+        }
+      }
+
+      // Detect changes in services/rev-share and persist them
+      if (node.services && node.services.length > 0 && update.services) {
+        try {
+          const changes = detectSupplierChanges(
+            node.services,
+            update.services as NodeService[],
+            node.ownerAddress,
+          )
+
+          if (changes.length > 0) {
+            const batchInput = [
+              node.providerId ?? 'unknown',
+              ...changes.map((c: DetectedSupplierChange) => c.changeType).sort(),
+              ...changes.map((c: DetectedSupplierChange) => c.serviceId).sort(),
+              String(params.height),
+            ].join('-')
+            const batchId = createHash('sha256').update(batchInput).digest('hex')
+
+            await dal.supplierChanges.insertChanges(
+              node.id,
+              changes.map((c: DetectedSupplierChange) => ({
+                changeType: c.changeType as SupplierChangeType,
+                serviceId: c.serviceId,
+                description: c.description,
+                previousValue: c.previousValue,
+                newValue: c.newValue,
+                batchId,
+              })),
+            )
+            log.info('Supplier changes detected and persisted', {
+              address: params.address,
+              changeCount: changes.length,
+              batchId,
+            })
+          }
+        } catch (e) {
+          log.error('Error detecting/persisting supplier changes', { error: e })
+          // Non-fatal — don't block the status update
         }
       }
 
@@ -1017,7 +1062,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
               const rawRewards: Array<RewardBySupplier> = result.data?.data?.services ?? []
 
               const configuredServiceIds = new Set(ag.addressGroupServices.map((s) => s.serviceId))
-              const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id))
+              const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id) || true)
 
               const adjustedRewards = filteredRewards.map((entry) => ({
                 ...entry,

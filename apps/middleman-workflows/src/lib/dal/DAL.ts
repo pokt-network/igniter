@@ -6,6 +6,7 @@ import Provider from '@/lib/dal/provider'
 import Node from '@/lib/dal/nodes'
 import Transaction from '@/lib/dal/transaction'
 import ImportSupplierAttempts from '@/lib/dal/importSupplierAttempts'
+import SupplierChanges from '@/lib/dal/supplierChanges'
 
 export default class DAL {
   logger: Logger
@@ -18,6 +19,7 @@ export default class DAL {
   transaction: Transaction
   provider: Provider
   importSupplierAttempts: ImportSupplierAttempts
+  supplierChanges: SupplierChanges
 
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
@@ -28,6 +30,7 @@ export default class DAL {
     this.transaction = new Transaction(dbClient, logger)
     this.provider = new Provider(dbClient, logger)
     this.importSupplierAttempts = new ImportSupplierAttempts(dbClient, logger)
+    this.supplierChanges = new SupplierChanges(dbClient, logger)
   }
 
   // add any common queries below
