@@ -9,7 +9,7 @@
     "start": "next start --port 3001",
     "lint": "next lint",
     "check-types": "tsc --noEmit",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand --passWithNoTests"
   },
   "dependencies": {
     "@cosmjs/amino": "^0.33.1",
