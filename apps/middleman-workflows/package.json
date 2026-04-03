@@ -27,6 +27,7 @@
     "@igniter/pocket": "workspace:*",
     "@igniter/logger": "workspace:*",
     "@igniter/db": "workspace:*",
+    "@igniter/domain": "workspace:*",
     "@igniter/temporal": "workspace:*",
     "dotenv": "16.4.7",
     "drizzle-orm": "0.44.1",
