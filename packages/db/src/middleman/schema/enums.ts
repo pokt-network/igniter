@@ -247,6 +247,20 @@ export const importAttemptStatusEnum = pgEnum(
   enumToPgEnum(ImportAttemptStatus),
 )
 
+/**
+ * Enum representing the types of changes detected on a supplier's configuration.
+ */
+export enum SupplierChangeType {
+  ServiceAdded = 'service_added',
+  ServiceRemoved = 'service_removed',
+  RevShareChanged = 'rev_share_changed',
+}
+
+export const supplierChangeTypeEnum = pgEnum(
+  'supplier_change_type',
+  enumToPgEnum(SupplierChangeType),
+)
+
 
 
 

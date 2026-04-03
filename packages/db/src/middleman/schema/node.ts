@@ -19,6 +19,7 @@ import {
   Transaction,
   transactionsTable,
 } from './transaction'
+import { supplierChangesTable } from './supplierChange'
 
 
 export type NodeService = {
@@ -64,6 +65,7 @@ export const nodesRelations = relations(nodesTable, ({ one, many }) => ({
     references: [usersTable.identity],
   }),
   transactionsToNodes: many(transactionsToNodesTable),
+  supplierChanges: many(supplierChangesTable),
 }))
 
 export const transactionsToNodesTable = pgTable('transactions_to_nodes', {

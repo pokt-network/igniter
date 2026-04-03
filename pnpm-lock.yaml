@@ -214,6 +214,9 @@ importers:
       '@igniter/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@igniter/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@igniter/logger':
         specifier: workspace:*
         version: link:../../packages/logger

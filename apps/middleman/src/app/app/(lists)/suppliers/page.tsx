@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
-import React from 'react'
+import React, { Suspense } from 'react'
 import NodesTable from '@/app/app/(lists)/suppliers/table'
 import ProviderStats from '@/app/app/(lists)/suppliers/ProviderStats'
 import ChainOverview from '@/app/app/(lists)/suppliers/ChainOverview'
+import RecentChanges from '@/app/app/(lists)/suppliers/RecentChanges'
 import { GetAppName } from '@/actions/ApplicationSettings'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
@@ -49,6 +50,9 @@ export default async function Page() {
       <div className="mx-10 pt-10 flex flex-col gap-8">
         <ProviderStats />
         <ChainOverview />
+        <Suspense>
+          <RecentChanges />
+        </Suspense>
         <NodesTable />
       </div>
     </>
