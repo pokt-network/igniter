@@ -103,7 +103,36 @@ jobs:
         run: |
           PREV_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | sed -n '2p')
 
-          DOCKER_IMAGES="## Docker Images
+          # Build changelog from PRs merged to staging since last release
+          if [ -n "$PREV_TAG" ]; then
+            PREV_TAG_DATE=$(git log -1 --format=%aI "$PREV_TAG" 2>/dev/null || echo "")
+            if [ -n "$PREV_TAG_DATE" ]; then
+              CHANGELOG=$(gh pr list --base staging --state merged --search "merged:>=$PREV_TAG_DATE" \
+                --json number,title --jq '.[] | "- \(.title) (#\(.number))"' 2>/dev/null || echo "")
+            fi
+
+            # Fallback to git log if no PRs found
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG=$(git log "${PREV_TAG}..v${NEW_VERSION}" --oneline --no-merges --pretty=format:"- %s" \
+                | grep -v "^- chore(deploy):" \
+                | grep -v "^- chore(release):" \
+                | grep -v "^- Release v" \
+                || echo "- No changes")
+            fi
+
+            COMPARE="**Full Changelog:** https://github.com/${{ github.repository }}/compare/${PREV_TAG}...v${NEW_VERSION}"
+          else
+            CHANGELOG="- Initial release"
+            COMPARE=""
+          fi
+
+          RELEASE_NOTES="## What's Changed
+
+          ${CHANGELOG}
+
+          ${COMPARE}
+
+          ## Docker Images
 
           **Provider Application:**
           - Provider: \`ghcr.io/pokt-network/provider:${NEW_VERSION}\`
@@ -113,24 +142,10 @@ jobs:
           - Middleman: \`ghcr.io/pokt-network/middleman:${NEW_VERSION}\`
           - Middleman Workflows: \`ghcr.io/pokt-network/middleman-workflows:${NEW_VERSION}\`"
 
-          if [ -n "$PREV_TAG" ]; then
-            gh release create "v${NEW_VERSION}" \
-              --title "v${NEW_VERSION}" \
-              --generate-notes \
-              --notes-start-tag "$PREV_TAG" \
-              --latest
-          else
-            gh release create "v${NEW_VERSION}" \
-              --title "v${NEW_VERSION}" \
-              --generate-notes \
-              --latest
-          fi
-
-          EXISTING_BODY=$(gh release view "v${NEW_VERSION}" --json body --jq '.body')
-          gh release edit "v${NEW_VERSION}" \
-            --notes "${EXISTING_BODY}
-
-          ${DOCKER_IMAGES}"
+          gh release create "v${NEW_VERSION}" \
+            --title "v${NEW_VERSION}" \
+            --notes "$RELEASE_NOTES" \
+            --latest
 
       - name: Sync staging with main
         run: git push origin main:staging --force

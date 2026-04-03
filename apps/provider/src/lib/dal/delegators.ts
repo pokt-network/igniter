@@ -1,7 +1,7 @@
 import { getDbClient } from "@/db";
 import type {Delegator} from "@igniter/db/provider/schema";
 import {delegatorsTable} from "@igniter/db/provider/schema";
-import {count, sql} from "drizzle-orm";
+import {count, eq, sql} from "drizzle-orm";
 
 export async function countDelegators(): Promise<number> {
   const dbClient = getDbClient()
@@ -64,6 +64,49 @@ export async function list() {
   return dbClient.db.query.delegatorsTable.findMany();
 }
 
+
+export type DelegatorToInsert = { name: string; identity: string }
+export type DelegatorToUpdate = { id: number; name: string; identity: string }
+export type DelegatorToDisable = { identity: string }
+
+export async function listAll() {
+  const dbClient = getDbClient()
+  return dbClient.db.select().from(delegatorsTable)
+}
+
+export async function applyGovernanceSync(
+  toInsert: DelegatorToInsert[],
+  toUpdate: DelegatorToUpdate[],
+  toDisable: DelegatorToDisable[],
+  updatedBy: string,
+): Promise<void> {
+  const dbClient = getDbClient()
+  await dbClient.db.transaction(async (tx) => {
+    for (const d of toInsert) {
+      await tx.insert(delegatorsTable).values({
+        name: d.name,
+        identity: d.identity,
+        createdBy: updatedBy,
+        updatedBy,
+        enabled: true,
+      })
+    }
+
+    for (const d of toUpdate) {
+      await tx
+        .update(delegatorsTable)
+        .set({ identity: d.identity, name: d.name, updatedBy })
+        .where(eq(delegatorsTable.id, d.id))
+    }
+
+    for (const d of toDisable) {
+      await tx
+        .update(delegatorsTable)
+        .set({ enabled: false, updatedAt: new Date(), updatedBy })
+        .where(eq(delegatorsTable.identity, d.identity))
+    }
+  })
+}
 
 export async function update(
   identity: string,

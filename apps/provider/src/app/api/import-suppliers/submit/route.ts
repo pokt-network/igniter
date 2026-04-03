@@ -4,6 +4,7 @@ import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@/lib/constants'
 import { pubkeyToAddress, verifySignature } from '@/lib/crypto'
+import { verifyAdr36Signature } from '@/lib/adr36'
 import {
   assignSuppliersToDelegate,
   findPendingRequest,
@@ -156,13 +157,22 @@ export async function POST(
       )
     }
 
-    // Verify the signature of the nonce
-    const isValidSignature = await verifySignature(
+    // Verify the signature of the nonce (try raw signature first, then ADR-36 for Keplr)
+    let isValidSignature = await verifySignature(
       pendingRequest.nonce,
       data.ownerPublicKey,
       data.signedNonce,
       'hex',
     )
+
+    if (!isValidSignature) {
+      isValidSignature = await verifyAdr36Signature(
+        pendingRequest.nonce,
+        data.ownerAddress,
+        data.ownerPublicKey,
+        data.signedNonce,
+      )
+    }
 
     if (!isValidSignature) {
       console.log(`Invalid nonce signature for ${data.ownerAddress} and ${delegatorIdentity}.`)
