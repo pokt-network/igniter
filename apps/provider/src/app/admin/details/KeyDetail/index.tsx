@@ -11,6 +11,7 @@ import {KeyWithRelations} from "@igniter/db/provider/schema"
 import {KeyState, KeyStateNameMap} from "@igniter/db/provider/enums"
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationHistoryList";
+import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal";
 
 export interface KeyDetail {
   type: 'key'
@@ -137,7 +138,7 @@ export default function KeyDetail(key: KeyWithRelations) {
       {!isStakedKey && (state === KeyState.Available) && (
         <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
           <span className="text-[14px] text-text-secondary p-[11px_16px]">
-             This key is readily <strong>available</strong> to be staked. When a request for suppliers is received this key is prioritized. It's a recommended practice to pre-configure these keys in their corresponding relay miner.
+             This key is readily <strong>available</strong> to be staked. When a request for suppliers is received this key is prioritized. It&apos;s a recommended practice to pre-configure these keys in their corresponding relay miner.
           </span>
         </div>
       )}
@@ -169,7 +170,7 @@ export default function KeyDetail(key: KeyWithRelations) {
       {[KeyState.RemediationFailed, KeyState.AttentionNeeded].includes(state) && (
         <div className="flex flex-col bg-bg-elevated p-0 rounded-[8px]">
           <span className="text-[14px] text-text-secondary p-[11px_16px]">
-             This key is <strong>{KeyStateNameMap[state]}</strong>. The system has detected issues with the key. This doesn't mean the supplier is not operational. Please review the details below.
+             This key is <strong>{KeyStateNameMap[state]}</strong>. The system has detected issues with the key. This doesn&apos;t mean the supplier is not operational. Please review the details below.
           </span>
         </div>
       )}
@@ -191,6 +192,8 @@ export default function KeyDetail(key: KeyWithRelations) {
           keyId={id}
         />
       )}
+
+      <PrivateKeyReveal keyId={id} />
     </div>
   )
 }
