@@ -3,6 +3,40 @@ import { getDb } from "@/db";
 import { Provider, providersTable } from "@igniter/db/middleman/schema";
 import {and, count, eq, sql} from "drizzle-orm";
 
+export type ProviderToInsert = { name: string; identity: string; url: string }
+export type ProviderToUpdate = { id: number; name: string; identity: string; url: string }
+
+export async function listAll(): Promise<Provider[]> {
+  return getDb().select().from(providersTable)
+}
+
+export async function applyGovernanceSync(
+  toInsert: ProviderToInsert[],
+  toUpdate: ProviderToUpdate[],
+  updatedBy: string,
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    for (const p of toInsert) {
+      await tx.insert(providersTable).values({
+        name: p.name,
+        identity: p.identity,
+        url: p.url,
+        enabled: true,
+        visible: true,
+        createdBy: updatedBy,
+        updatedBy,
+      })
+    }
+
+    for (const p of toUpdate) {
+      await tx
+        .update(providersTable)
+        .set({ identity: p.identity, name: p.name, url: p.url, updatedBy, enabled: true, visible: true, })
+        .where(eq(providersTable.id, p.id))
+    }
+  })
+}
+
 export async function countProviders(): Promise<number> {
   const [{ value }] = await getDb().select({ value: count() }).from(providersTable)
   return value

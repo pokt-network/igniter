@@ -12,6 +12,7 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@cosmjs/amino": "^0.33.1",
     "@cosmjs/crypto": "^0.33.1",
     "@cosmjs/encoding": "^0.33.1",
     "@cosmjs/proto-signing": "^0.33.1",

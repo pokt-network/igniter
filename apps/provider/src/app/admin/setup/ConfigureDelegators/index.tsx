@@ -11,7 +11,7 @@ import {
   DisableAllDelegators,
   EnableAllDelegators,
   ListDelegators,
-  UpdateDelegatorsFromSource
+  SyncDelegatorsFromGovernance,
 } from "@/actions/Delegators";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
 
@@ -122,7 +122,7 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
     setIsLoading(true);
     (async function () {
       try {
-        const result = await UpdateDelegatorsFromSource();
+        const result = await SyncDelegatorsFromGovernance();
         if (!result.success) {
           throw new Error(result.error.message);
         }

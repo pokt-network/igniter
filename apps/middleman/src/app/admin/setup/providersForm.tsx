@@ -12,7 +12,7 @@ import {
   FormMessage,
 } from "@igniter/ui/components/form";
 import { Checkbox } from "@igniter/ui/components/checkbox";
-import { UpdateProvidersFromSource, Provider, submitProviders } from '@/actions/Providers'
+import { SyncProvidersFromGovernance, Provider, submitProviders } from '@/actions/Providers'
 import { LoaderIcon } from '@igniter/ui/assets'
 
 interface ProvidersFormProps {
@@ -43,13 +43,13 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
   async function updateProvidersList() {
     try {
       setIsLoading(true)
-      const { success, error, data: providersList } = await UpdateProvidersFromSource()
+      const { success, error, data: providersList } = await SyncProvidersFromGovernance()
       if(!success) throw new Error(
         error || "Failed to load providers list"
       )
-      setProviders(providersList)
+      setProviders(providersList || [])
       if (!providers.length) {
-        form.setValue('providers', providersList.map((provider) => provider.identity))
+        form.setValue('providers', (providersList || []).map((provider) => provider.identity))
       }
     } catch (error) {
       console.error("Failed to load providers list", error)

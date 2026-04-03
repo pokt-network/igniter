@@ -32,7 +32,7 @@ export default async function Page() {
 
   return (
     <OverrideSidebar>
-      <div className="flex flex-col w-full gap-6">
+      <div className="flex flex-col w-full gap-6 pt-[70px]">
         <div className="p-6 pt-14">
           <Stepper settings={settings} providers={[]} />
         </div>
