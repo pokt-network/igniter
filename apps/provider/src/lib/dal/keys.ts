@@ -183,6 +183,8 @@ export async function markKeysDelivered(
   delegatorRewardsAddress: string
 ): Promise<Key[]> {
   if (!keyIds.length) return []
+  if (!ownerAddress) throw new Error('ownerAddress is required when delivering keys')
+  if (!deliveredTo) throw new Error('deliveredTo (delegator identity) is required when delivering keys')
   return tx
     .update(keysTable)
     .set({

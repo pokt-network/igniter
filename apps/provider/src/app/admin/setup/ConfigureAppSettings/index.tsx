@@ -18,7 +18,7 @@ import React, {useMemo, useRef, useState} from "react";
 import { UpsertApplicationSettings } from "@/actions/ApplicationSettings";
 import type {ApplicationSettings} from "@igniter/db/provider/schema";
 import { Textarea } from '@igniter/ui/components/textarea'
-import { isPoktBech32Address } from '@/lib/crypto'
+import { isPoktBech32Address } from '@igniter/commons/crypto'
 import { cn } from '@igniter/ui/lib/utils'
 import { SetupHelpBar } from "@/components/SetupHelpBar"
 

@@ -4,7 +4,7 @@ import type { NodeWithDetails } from '@igniter/db/middleman/schema'
 import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
-import { normalizeIdentityToAddress } from '@/lib/crypto'
+import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
 import { summaryDocument, StakeStatus } from '@igniter/graphql'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'

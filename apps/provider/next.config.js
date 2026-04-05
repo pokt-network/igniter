@@ -15,7 +15,7 @@ const nextConfig = {
     },
   },
   outputFileTracingRoot: path.join(__dirname, '..', '..'),
-  transpilePackages: ['@igniter/logger', '@igniter/db'],
+  transpilePackages: ['@igniter/logger', '@igniter/db', '@igniter/commons'],
   webpack: (config) => {
     config.module.rules.push({
       test: /\.svg$/,

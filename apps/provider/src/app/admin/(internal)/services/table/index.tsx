@@ -42,14 +42,13 @@ export default function ServicesTable() {
           id: 'actions',
           header: '',
           cell: ({ row }) => (
-              <div className="flex gap-3 justify-end">
+              <div className="flex gap-2 justify-end">
                   <Button
                       disabled={isLoading}
                       variant="ghost"
                       size="icon"
                       onClick={() => setUpdateService(row.original)}
-                      title="Edit Region"
-                      className={'h-4 w-4'}
+                      title="Edit Service"
                   >
                       <PencilIcon className="h-4 w-4" />
                   </Button>
@@ -58,8 +57,7 @@ export default function ServicesTable() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setServiceToDelete(row.original)}
-                      title="Delete Region"
-                      className={'h-4 w-4'}
+                      title="Delete Service"
                   >
                       <Trash2Icon className="h-4 w-4 text-red-500" />
                   </Button>

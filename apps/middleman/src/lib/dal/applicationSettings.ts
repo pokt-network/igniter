@@ -8,7 +8,7 @@ import {
 } from "@igniter/db/middleman/schema";
 import {ChainId} from '@igniter/db/middleman/enums'
 import { eq } from "drizzle-orm";
-import {getCompressedPublicKeyFromAppIdentity} from "@/lib/crypto";
+import {getCompressedPublicKeyFromAppIdentity} from "@igniter/commons/crypto";
 import {env} from "@/config/env";
 
 const defaultSettings: ApplicationSettings = {

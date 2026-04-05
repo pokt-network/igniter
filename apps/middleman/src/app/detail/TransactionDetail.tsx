@@ -14,7 +14,7 @@ import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { BaseQuickInfoTooltip } from '@igniter/ui/components/BaseQuickInfoTooltip'
 import Address from '@igniter/ui/components/Address'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
-import { MessageType } from '@/lib/constants'
+import { MessageType } from '@igniter/commons/constants'
 import { GetNode } from '@/actions/Nodes'
 import {
   TransactionsToNodesWithDetails,

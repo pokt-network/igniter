@@ -6,7 +6,7 @@ import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import {ApplicationSettingsProvider} from "@/app/context/ApplicationSettings";
 import {AppTopBar} from "@igniter/ui/components/AppTopBar/index";
 import CurrentUser from "@/components/CurrentUser";
-import QueryClientProvider from "@/app/context/QueryClientProvider";
+import QueryClientProvider from "@igniter/ui/context/QueryClientProvider";
 import NotificationsProvider from "@igniter/ui/context/Notifications/index";
 
 export const metadata: Metadata = {

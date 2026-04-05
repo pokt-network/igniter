@@ -1,4 +1,4 @@
-import { signPayload } from '@/lib/crypto'
+import { signPayload } from '@igniter/commons/crypto'
 import { Provider } from '@igniter/db/middleman/schema'
 import { ProviderStatus } from '@igniter/db/middleman/enums'
 import ApplicationSettings from '@/lib/dal/applicationSettings'

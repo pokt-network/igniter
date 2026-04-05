@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib/utils/routes'
 import { APIResponse } from '@/lib/models/response'
-import { REQUEST_IDENTITY_HEADER } from '@/lib/constants'
-import { pubkeyToAddress, verifySignature } from '@/lib/crypto'
+import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
+import { pubkeyToAddress, verifySignature } from '@igniter/commons/crypto'
 import { verifyAdr36Signature } from '@/lib/adr36'
 import {
   assignSuppliersToDelegate,

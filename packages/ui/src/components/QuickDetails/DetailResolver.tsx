@@ -88,14 +88,8 @@ export function DetailResolver<Item extends ItemBase>({
       }}
     >
       <DrawerContent className="!w-[478px] !max-w-[478px]">
-        <div className="h-full max-h-sm w-[478px] px-[32px] overflow-auto pb-8">
-          <div
-            className={clsx(
-              'mt-6 flex items-center mb-3',
-              items.length <= 1 && 'justify-end',
-              items.length > 1 && 'justify-between'
-            )}
-          >
+        <div className="relative h-full max-h-sm w-[478px] px-[32px] overflow-auto pb-8 pt-6">
+          <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
             {items.length > 1 && (
               <Button variant="icon" className="h-[30px]" onClick={back}>
                 <ArrowBackIcon className="text-text-tertiary hover:text-text-primary" />

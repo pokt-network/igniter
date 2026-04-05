@@ -7,7 +7,7 @@ import { getDbClient } from '@/db'
 import { ChainId } from '@igniter/db/provider/enums'
 import { applicationSettingsTable } from '@igniter/db/provider/schema'
 import { eq } from 'drizzle-orm'
-import { getCompressedPublicKeyFromAppIdentity } from '@/lib/crypto'
+import { getCompressedPublicKeyFromAppIdentity } from '@igniter/commons/crypto'
 import { env } from '@/config/env'
 
 const defaultSettings: ApplicationSettings = {

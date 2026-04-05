@@ -59,39 +59,37 @@ export default function AddressGroupsTable() {
           header: '',
           cell: ({ row }) => (
             <div className="flex gap-2 justify-end">
-              <div className="flex gap-2 justify-end">
-                <Button
-                  disabled={isLoading}
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setUpdateAddressGroup(row.original)}
-                  title="Edit AddressGroup"
-                >
-                  <PencilIcon className="h-4 w-4"/>
-                </Button>
-                <Button
-                  disabled={isLoading}
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    if (row.original.keysCount > 0) {
-                      addNotification({
-                        id: `ag-has-keys-error`,
-                        type: 'warning',
-                        showTypeIcon: true,
-                        content: 'Address groups with associated keys are protected from deletion. Support for removing these groups will be added in a future version.',
-                      })
+              <Button
+                disabled={isLoading}
+                variant="ghost"
+                size="icon"
+                onClick={() => setUpdateAddressGroup(row.original)}
+                title="Edit Address Group"
+              >
+                <PencilIcon className="h-4 w-4"/>
+              </Button>
+              <Button
+                disabled={isLoading}
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (row.original.keysCount > 0) {
+                    addNotification({
+                      id: `ag-has-keys-error`,
+                      type: 'warning',
+                      showTypeIcon: true,
+                      content: 'Address groups with associated keys are protected from deletion. Support for removing these groups will be added in a future version.',
+                    })
 
-                      return
-                    }
+                    return
+                  }
 
-                    setAddressGroupToDelete(row.original)
-                  }}
-                  title={'Delete Address Group'}
-                >
-                  <Trash2Icon className="h-4 w-4 text-red-500"/>
-                </Button>
-              </div>
+                  setAddressGroupToDelete(row.original)
+                }}
+                title="Delete Address Group"
+              >
+                <Trash2Icon className="h-4 w-4 text-red-500"/>
+              </Button>
             </div>
           ),
         },

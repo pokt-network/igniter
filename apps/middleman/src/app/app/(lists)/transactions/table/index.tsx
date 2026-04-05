@@ -2,7 +2,7 @@
 import DataTable from '@igniter/ui/components/DataTable/index'
 import { columns, filters, sorts } from './columns'
 import { useDetailContext } from '@igniter/ui/components/QuickDetails/Provider'
-import { MessageType } from '@/lib/constants'
+import { MessageType } from '@igniter/commons/constants'
 import { useQuery } from '@tanstack/react-query'
 import {GetUserTransactions} from '@/actions/Transactions'
 import { useEffect } from 'react'

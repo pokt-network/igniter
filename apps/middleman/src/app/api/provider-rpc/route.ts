@@ -2,9 +2,9 @@ import {z} from "zod";
 import urlJoin from 'url-join';
 import {GetProviderByIdentity} from "@/actions/Providers";
 import {Provider} from "@igniter/db/middleman/schema";
-import {signPayload} from "@/lib/crypto";
+import {signPayload} from "@igniter/commons/crypto";
 import {getApplicationSettings} from "@/lib/dal/applicationSettings";
-import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@/lib/constants";
+import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@igniter/commons/constants";
 
 export async function POST(request: Request) {
   console.log('Preparing a request to a provider');
