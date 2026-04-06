@@ -4,6 +4,7 @@ import {RPCType, SupplierEndpoint, SupplierServiceConfig} from '@igniter/pocket/
 import {PROTOCOL_DEFAULT_URL} from "@igniter/domain/provider/constants";
 import {KeyWithGroup} from "@igniter/db/provider/schema";
 import {RPCTypeMap} from '@igniter/pocket/constants';
+import {deduplicateRevShare} from "./services";
 
 export function getSchemeForRpcType(rpcType: RPCType) {
     switch (rpcType) {
@@ -161,6 +162,7 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
 
     const newExpectedService: SupplierServiceConfig = {
       serviceId: addressGroupService.serviceId,
+      revShare: deduplicateRevShare(filteredRevShare),
       endpoints: addressGroupService.service.endpoints?.map((endpoint) => ({
         url: getEndpointInterpolatedUrl(endpoint, {
           sid: addressGroupService.serviceId,
@@ -174,7 +176,6 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
           : endpoint.rpcType,
         configs: []
       })),
-      revShare: filteredRevShare,
     }
 
     expectedServices.push(newExpectedService)

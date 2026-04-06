@@ -8,23 +8,28 @@ import {
   countKeys,
   countPrivateKeysByAddressGroup,
   countKeysForExport,
+  countKeysForMigration,
   getPrivateKeyById,
   insertMany,
   listDistinctOwnerAddresses,
   listKeysForExport,
+  listKeysForMigration,
   listKeysWithPk,
   listPrivateKeysByAddressGroup,
   markKeysExported,
+  migrateKeysToAddressGroup,
   updateKeysState,
   updateRewardsSettings,
   updateKeysStateWhereCurrentStateIn,
   type KeyExportFilters,
+  type KeyMigrationFilters,
 } from '@/lib/dal/keys'
 import {
   type ActionResult,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
 import { findById as findAddressGroupById } from '@/lib/dal/addressGroups'
+import { TriggerRemediationSchedule } from '@/actions/Schedules'
 
 export async function CountKeys(): Promise<ActionResult<number>> {
   return withRequireOwner(async () => countKeys())
@@ -213,5 +218,46 @@ export async function GenerateKeys(addressGroupId: number, count: number) {
     await insertMany(keysToInsert)
 
     return generatedKeys
+  })
+}
+
+const KeyMigrationFiltersSchema = z.object({
+  keyIds: z.array(z.number().int().positive()).optional(),
+  addressGroupId: z.number().int().positive().optional(),
+  states: z.array(z.nativeEnum(KeyState)).optional(),
+  ownerAddress: z.string().optional(),
+  delegatorIdentity: z.string().optional(),
+})
+
+export async function CountKeysForMigration(filters: KeyMigrationFilters): Promise<ActionResult<number>> {
+  return withRequireOwner(async () => {
+    const parsed = KeyMigrationFiltersSchema.parse(filters)
+    return countKeysForMigration(parsed)
+  })
+}
+
+export async function MigrateKeysToAddressGroup(filters: KeyMigrationFilters, targetAddressGroupId: number): Promise<ActionResult<number>> {
+  return withRequireOwner(async () => {
+    const parsed = z.object({
+      filters: KeyMigrationFiltersSchema,
+      targetAddressGroupId: z.number().int().positive(),
+    }).parse({ filters, targetAddressGroupId })
+
+    const targetGroup = await findAddressGroupById(parsed.targetAddressGroupId)
+    if (!targetGroup) throw new Error(`Address group ${parsed.targetAddressGroupId} does not exist`)
+
+    const keys = await listKeysForMigration(parsed.filters)
+    const keysToMigrate = keys.filter((k) => k.addressGroupId !== parsed.targetAddressGroupId)
+
+    if (keysToMigrate.length === 0) return 0
+
+    const migrated = await migrateKeysToAddressGroup(
+      keysToMigrate.map((k) => k.id),
+      parsed.targetAddressGroupId,
+    )
+
+    await TriggerRemediationSchedule()
+
+    return migrated
   })
 }

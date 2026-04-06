@@ -1,4 +1,4 @@
-import { getRevShare } from './services';
+import { getRevShare, deduplicateRevShare } from './services';
 import type { AddressGroupService } from '@igniter/db/provider/schema';
 
 describe('getRevShare', () => {
@@ -53,5 +53,44 @@ describe('getRevShare', () => {
 
     const result = getRevShare(ags, 'pokt1operator');
     expect(result).toEqual([{ address: 'pokt1operator', revSharePercentage: 10 }]);
+  });
+});
+
+describe('deduplicateRevShare', () => {
+  it('sums percentages for duplicate addresses', () => {
+    const result = deduplicateRevShare([
+      { address: 'pokt1owner', revSharePercentage: 10 },
+      { address: 'pokt1other', revSharePercentage: 1 },
+      { address: 'pokt1owner', revSharePercentage: 89 },
+    ]);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { address: 'pokt1owner', revSharePercentage: 99 },
+        { address: 'pokt1other', revSharePercentage: 1 },
+      ]),
+    );
+    expect(result).toHaveLength(2);
+  });
+
+  it('is case-insensitive when matching addresses', () => {
+    const result = deduplicateRevShare([
+      { address: 'pokt1OWNER', revSharePercentage: 10 },
+      { address: 'pokt1owner', revSharePercentage: 89 },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.revSharePercentage).toBe(99);
+  });
+
+  it('returns unchanged array when all addresses are unique', () => {
+    const input = [
+      { address: 'pokt1alice', revSharePercentage: 20 },
+      { address: 'pokt1bob', revSharePercentage: 80 },
+    ];
+    const result = deduplicateRevShare(input);
+    expect(result).toEqual(input);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(deduplicateRevShare([])).toEqual([]);
   });
 });

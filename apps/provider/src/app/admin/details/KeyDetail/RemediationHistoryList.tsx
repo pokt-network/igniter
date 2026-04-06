@@ -23,6 +23,8 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
         return "Supplier's stake too low"
       case RemediationHistoryEntryReason.SupplierFundsTooLow:
         return "Supplier's funds too low"
+      case RemediationHistoryEntryReason.AddressGroupMigration:
+        return 'Address group migration'
       default:
         return String(r)
     }

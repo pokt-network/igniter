@@ -1,5 +1,5 @@
 import {BuildSupplierServiceConfigInput} from '@igniter/domain/provider/operations';
-import {getRevShare, getEndpointInterpolatedUrl} from "@igniter/domain/provider/utils";
+import {getRevShare, getEndpointInterpolatedUrl, deduplicateRevShare} from "@igniter/domain/provider/utils";
 import {SupplierServiceConfig} from "@igniter/pocket/proto/pocket/shared/service";
 import {RevenueShareOverflowError} from "@igniter/domain/provider/errors";
 import {RPCTypeMap} from '@igniter/pocket';
@@ -28,7 +28,8 @@ export class BuildSupplierServiceConfigHandler {
                 });
             }
 
-            const totalRevShare = revShare.reduce((sum, r) => sum + r.revSharePercentage, 0);
+            const deduplicatedRevShare = deduplicateRevShare(revShare);
+            const totalRevShare = deduplicatedRevShare.reduce((sum, r) => sum + r.revSharePercentage, 0);
 
             if (totalRevShare > 100) {
                 throw new RevenueShareOverflowError(totalRevShare);
@@ -38,7 +39,7 @@ export class BuildSupplierServiceConfigHandler {
 
             return {
                 serviceId: cfg.serviceId,
-                revShare,
+                revShare: deduplicatedRevShare,
                 endpoints: svc.endpoints.map((ep) => {
                     const rpcKey = String(ep.rpcType);
                     const overrideUrl = overrides[rpcKey];

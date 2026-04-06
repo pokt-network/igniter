@@ -157,6 +157,35 @@ describe('CompareSupplierServiceConfigHandler with fixtures', () => {
         expect(result.diff).toEqual([]);
     });
 
+    it('returns isEqual true when one side has duplicate addresses that sum to the same total', () => {
+        // Chain may return two entries for the same address (e.g. 10% + 89%),
+        // while the expected config has a single merged entry (99%).
+        const withDuplicates: SupplierServiceConfig[] = [{
+            serviceId: 'anvil',
+            endpoints: [{ url: 'https://test.example.com', rpcType: RPCType.JSON_RPC, configs: [] }],
+            revShare: [
+                { address: OWNER_ADDRESS, revSharePercentage: 10 },
+                { address: PROVIDER_ADDRESS, revSharePercentage: 1 },
+                { address: OWNER_ADDRESS, revSharePercentage: 89 },
+            ],
+        }];
+        const consolidated: SupplierServiceConfig[] = [{
+            serviceId: 'anvil',
+            endpoints: [{ url: 'https://test.example.com', rpcType: RPCType.JSON_RPC, configs: [] }],
+            revShare: [
+                { address: OWNER_ADDRESS, revSharePercentage: 99 },
+                { address: PROVIDER_ADDRESS, revSharePercentage: 1 },
+            ],
+        }];
+
+        const result = handler.execute({
+            serviceConfigSetA: withDuplicates,
+            serviceConfigSetB: consolidated,
+        });
+
+        expect(result.isEqual).toBe(true);
+    });
+
     it('returns isEqual true when revShare entries are in different order', () => {
         const serviceA: SupplierServiceConfig[] = [{
             serviceId: 'anvil',

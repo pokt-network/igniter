@@ -5,7 +5,7 @@ import type {
 } from '@igniter/db/provider/schema'
 import * as schema from '@igniter/db/provider/schema'
 import { getDbClient } from '@/db'
-import { KeyState } from '@igniter/db/provider/enums'
+import { KeyState, RemediationHistoryEntryReason } from '@igniter/db/provider/enums'
 import { PgTransaction } from 'drizzle-orm/pg-core'
 import {
   and,
@@ -531,6 +531,115 @@ export async function markKeysExported(keyIds: number[]): Promise<void> {
       exportCount: sql`COALESCE(${keysTable.exportCount}, 0) + 1`,
     })
     .where(inArray(keysTable.id, keyIds))
+}
+
+export interface KeyMigrationFilters {
+  keyIds?: number[]
+  addressGroupId?: number
+  states?: KeyState[]
+  ownerAddress?: string
+  delegatorIdentity?: string
+}
+
+function buildMigrationFilterConditions(filters: KeyMigrationFilters): SQL[] {
+  const conditions: SQL[] = []
+
+  if (filters.keyIds && filters.keyIds.length > 0) {
+    conditions.push(inArray(keysTable.id, filters.keyIds))
+  }
+
+  if (filters.addressGroupId) {
+    conditions.push(eq(keysTable.addressGroupId, filters.addressGroupId))
+  }
+
+  if (filters.states && filters.states.length > 0) {
+    conditions.push(inArray(keysTable.state, filters.states))
+  }
+
+  if (filters.ownerAddress) {
+    conditions.push(eq(keysTable.ownerAddress, filters.ownerAddress))
+  }
+
+  if (filters.delegatorIdentity) {
+    conditions.push(eq(keysTable.deliveredTo, filters.delegatorIdentity))
+  }
+
+  return conditions
+}
+
+export async function countKeysForMigration(filters: KeyMigrationFilters): Promise<number> {
+  const dbClient = getDbClient()
+  const conditions = buildMigrationFilterConditions(filters)
+
+  const [result] = await dbClient.db.select({ count: count() })
+    .from(keysTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+
+  return Number(result?.count || 0)
+}
+
+export async function listKeysForMigration(filters: KeyMigrationFilters): Promise<Array<{
+  id: number
+  address: string
+  addressGroupId: number | null
+  state: KeyState
+  remediationHistory: RemediationHistoryEntry[] | null
+}>> {
+  const dbClient = getDbClient()
+  const conditions = buildMigrationFilterConditions(filters)
+
+  return dbClient.db.query.keysTable.findMany({
+    ...(conditions.length > 0 && { where: and(...conditions) }),
+    columns: {
+      id: true,
+      address: true,
+      addressGroupId: true,
+      state: true,
+      remediationHistory: true,
+    },
+  })
+}
+
+export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressGroupId: number): Promise<number> {
+  if (keyIds.length === 0) return 0
+  const dbClient = getDbClient()
+
+  await dbClient.db.transaction(async (tx) => {
+    const keys = await tx
+      .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
+      .from(keysTable)
+      .where(inArray(keysTable.id, keyIds))
+
+    for (const key of keys) {
+      const entry: RemediationHistoryEntry = {
+        message: `Key migrated to address group ${targetAddressGroupId}`,
+        reason: RemediationHistoryEntryReason.AddressGroupMigration,
+        timestamp: Date.now(),
+      }
+
+      const history = [...((key.remediationHistory as RemediationHistoryEntry[]) ?? [])]
+      const existingIndex = history.findIndex((item) => item.reason === entry.reason)
+      if (existingIndex !== -1) {
+        history[existingIndex] = entry
+      } else {
+        history.push(entry)
+        history.sort((a, b) => b.timestamp - a.timestamp)
+      }
+
+      const needsStateReset = [KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(key.state)
+
+      await tx
+        .update(keysTable)
+        .set({
+          addressGroupId: targetAddressGroupId,
+          remediationHistory: history,
+          ...(needsStateReset && { state: KeyState.Staked }),
+        })
+        .where(eq(keysTable.id, key.id))
+    }
+  })
+
+  return keyIds.length
 }
 
 export async function listDistinctOwnerAddresses(): Promise<string[]> {

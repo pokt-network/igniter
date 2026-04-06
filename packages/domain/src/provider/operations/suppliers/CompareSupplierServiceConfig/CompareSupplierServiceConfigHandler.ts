@@ -9,6 +9,7 @@ import {
   ConfigOption,
 } from '@igniter/pocket';
 import diff from 'microdiff';
+import { deduplicateRevShare } from '@igniter/domain/provider/utils';
 import {getLogger, Logger} from "@igniter/logger";
 
 
@@ -36,7 +37,7 @@ export class CompareSupplierServiceConfigHandler {
         serviceId: cfg.serviceId,
 
         revShare: copyAndSort<ServiceRevenueShare>(
-          cfg.revShare,
+          deduplicateRevShare(cfg.revShare),
           compareStringField<ServiceRevenueShare>('address'),
         ),
 
