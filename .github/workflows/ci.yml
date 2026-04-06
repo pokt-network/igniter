@@ -11,8 +11,29 @@ concurrency:
 permissions:
   contents: read
   packages: read
+  pull-requests: read
 
 jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            refactor
+            chore
+            docs
+            test
+            ci
+            perf
+            style
+            build
+            revert
+
   branch-gate:
     runs-on: ubuntu-latest
     steps:
