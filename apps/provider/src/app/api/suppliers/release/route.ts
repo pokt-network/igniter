@@ -3,7 +3,7 @@ import {ensureApplicationIsBootstrapped, validateRequestSignature} from "@/lib/u
 import {SupplierReleaseRequest} from "@/lib/models/supplier";
 import {APIResponse} from "@/lib/models/response";
 import {releaseDeliveredSuppliers} from "@/lib/services/suppliers";
-import {REQUEST_IDENTITY_HEADER} from "@/lib/constants";
+import {REQUEST_IDENTITY_HEADER} from "@igniter/commons/constants";
 
 export async function OPTIONS() {
     return NextResponse.json({}, {

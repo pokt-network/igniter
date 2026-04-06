@@ -7,7 +7,7 @@ import { SidebarInset, SidebarProvider } from "@igniter/ui/components/sidebar";
 import { AppTopBar } from "@igniter/ui/components/AppTopBar/index";
 import CurrentUser from "@/components/CurrentUser";
 import Sidebar from "@/components/Sidebar";
-import QueryClientProvider from '@/app/context/QueryClientProvider'
+import QueryClientProvider from '@igniter/ui/context/QueryClientProvider'
 import NotificationsProvider from '@igniter/ui/context/Notifications/index'
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins'
 import { ThemeToggle } from '@igniter/ui/theme-toggle'

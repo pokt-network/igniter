@@ -34,6 +34,7 @@ import {
 } from '@/app/app/import-suppliers/types'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { getShortAddress } from '@igniter/ui/lib/utils'
+import { fromBase64, toHex } from '@cosmjs/encoding'
 
 interface ImportProcessProps {
   provider: ProviderOption
@@ -166,7 +167,18 @@ export function ImportProcess({
         const pubKey = await getPublicKey(ownerAddress)
         const signature = await signMessage(nonce, ownerAddress)
 
-        setPublicKey(pubKey)
+        // Convert public key to hex if needed (Keplr returns base64, provider expects 66-char hex)
+        const isHex = /^[0-9a-fA-F]+$/.test(pubKey)
+        const isBase64 = /^[A-Za-z0-9+/]+=*$/.test(pubKey)
+        let hexPubKey: string
+        if (isHex) {
+          hexPubKey = pubKey
+        } else if (isBase64) {
+          hexPubKey = toHex(fromBase64(pubKey))
+        } else {
+          throw new Error('Public key is not in a recognized format (expected hex or base64)')
+        }
+        setPublicKey(hexPubKey)
         setSignedNonce(signature)
 
         // Update attempt status

@@ -11,6 +11,8 @@ import { getApplicationSettings, GetAppName } from '@/actions/ApplicationSetting
 import InitializeHeightContext from '@igniter/ui/context/Height/InitializeContext'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
+import PageHeader from '@igniter/ui/components/PageHeader'
+import PageContent from '@igniter/ui/components/PageContent'
 import ProviderBreakdown from './ProviderBreakdown'
 
 export const dynamic = "force-dynamic";
@@ -26,29 +28,21 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Page() {
   return (
     <>
-      <div className={"border-b-1"}>
-        <div className="px-5 sm:px-3 md:px-6 lg:px-6 xl:px-10 py-6">
-          <div className="flex flex-row justify-between items-center">
-            <div className="flex flex-col">
-              <h1>Overview</h1>
-              <p className="text-text-secondary">
-                Welcome to your $POKT staking dashboard.
-              </p>
-            </div>
-            <div className="flex flex-col">
-              <div className="flex flex-row gap-3">
-                <Link href="/app/stake">
-                  <Button>New Stake</Button>
-                </Link>
-                <Link href="/app/import-suppliers">
-                  <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Import Suppliers</Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className={'flex flex-col p-4 w-full gap-4 md:gap-6 sm:px-3 md:px-6 lg:px-6 xl:px-10'}>
+      <PageHeader
+        title="Overview"
+        subtitle="Welcome to your $POKT staking dashboard."
+        actions={
+          <>
+            <Link href="/app/stake">
+              <Button>New Stake</Button>
+            </Link>
+            <Link href="/app/import-suppliers">
+              <Button className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90">Import Suppliers</Button>
+            </Link>
+          </>
+        }
+      />
+      <PageContent>
         <Suspense
           fallback={(
             <>
@@ -61,7 +55,7 @@ export default async function Page() {
         >
           <Rewards />
         </Suspense>
-      </div>
+      </PageContent>
     </>
   )
 }

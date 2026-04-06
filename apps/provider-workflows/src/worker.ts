@@ -5,7 +5,11 @@ import {
 } from '@igniter/logger'
 import { getWorker } from '@igniter/temporal'
 import { getDb } from '@igniter/db/provider/connection'
+import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/provider/schema'
+import { keysTable } from '@igniter/db/provider/schema'
+import { KeyState } from '@igniter/db/provider/enums'
+import { and, eq, isNotNull, or } from 'drizzle-orm'
 import bootstrap from '@/bootstrap'
 import { PocketBlockchain } from '@igniter/pocket'
 import DAL from '@/lib/dal/DAL'
@@ -71,12 +75,45 @@ export const registerGracefulShutdown = (
   }
 }
 
+async function cleanupStaleAvailableKeys(dbClient: DBClient<typeof schema>, logger: Logger) {
+  try {
+    const result = await dbClient.db.update(keysTable)
+      .set({
+        ownerAddress: null,
+        deliveredTo: null,
+        deliveredAt: null,
+        delegatorRevSharePercentage: 0,
+        delegatorRewardsAddress: '',
+      })
+      .where(
+        and(
+          eq(keysTable.state, KeyState.Available),
+          or(
+            isNotNull(keysTable.ownerAddress),
+            isNotNull(keysTable.deliveredTo),
+          ),
+        ),
+      )
+      .returning({ address: keysTable.address })
+
+    if (result.length > 0) {
+      logger.warn({ count: result.length }, 'Cleaned up Available keys with stale delivery data (v0.9.0 bug fix)')
+    }
+  } catch (error) {
+    logger.error({ error }, 'Failed to cleanup stale Available keys')
+  }
+}
+
 export async function setupTemporalWorker() {
   const dbClient = getDb<typeof schema>(logger)
 
   const dal = new DAL(dbClient, logger)
 
   await waitForAppBootstrap(dal, logger)
+
+  // One-time cleanup: fix keys left with stale delivery data from v0.9.0 bug
+  // Keys in Available state should not have ownerAddress or deliveredTo set
+  await cleanupStaleAvailableKeys(dbClient, logger)
 
   // Read Pocket URLs from DB settings, seed from ENV if not yet set
   let settings = await dal.settings.loadSettings()

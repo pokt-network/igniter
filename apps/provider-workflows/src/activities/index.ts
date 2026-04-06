@@ -171,7 +171,9 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           if (key.deliveredAt && key.deliveredAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
             update.state = KeyState.Available
             update.deliveredAt = null
-            update.addressGroupId = null
+            update.deliveredTo = null
+            update.ownerAddress = null
+            // Keep addressGroupId — key returns to its original group
             update.delegatorRevSharePercentage = 0
             update.delegatorRewardsAddress = ''
           } else {

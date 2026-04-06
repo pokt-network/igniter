@@ -1,6 +1,6 @@
 'use client';
 
-import { NodeStatus } from '@igniter/db/middleman/enums'
+import { NodeStatus, SupplierChangeType } from '@igniter/db/middleman/enums'
 import Amount from '@igniter/ui/components/Amount'
 import React, { useState } from 'react'
 import { Badge } from '@igniter/ui/components/badge'
@@ -18,8 +18,9 @@ import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { NodeService, Provider } from '@igniter/db/middleman/schema'
 import {TransactionDetailBody} from "@/app/detail/TransactionDetail"
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetUnstakeDuration } from '@/actions/Unstake'
+import { GetSupplierChanges, AcknowledgeAllByNode } from '@/actions/SupplierChanges'
 import { formatDuration } from '@/lib/utils/time'
 
 export interface NodeDetailBody {
@@ -112,6 +113,117 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
   )
 }
 
+const CHANGE_TYPE_ICON: Record<string, string> = {
+  [SupplierChangeType.ServiceAdded]: '+',
+  [SupplierChangeType.ServiceRemoved]: '-',
+  [SupplierChangeType.RevShareChanged]: '~',
+}
+
+const CHANGE_TYPE_COLOR: Record<string, string> = {
+  [SupplierChangeType.ServiceAdded]: 'text-green-400',
+  [SupplierChangeType.ServiceRemoved]: 'text-red-400',
+  [SupplierChangeType.RevShareChanged]: 'text-yellow-400',
+}
+
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
+}
+
+function RecentChanges({ nodeId }: { nodeId: number }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isAcknowledging, setIsAcknowledging] = useState(false)
+  const queryClient = useQueryClient()
+
+  const { data: changes } = useQuery({
+    queryKey: ['supplier-changes', nodeId],
+    queryFn: () => GetSupplierChanges(nodeId),
+  })
+
+  if (!changes?.length) return null
+
+  const unreadCount = changes.filter((c) => !c.acknowledgedAt).length
+
+  const handleAcknowledgeAll = async () => {
+    setIsAcknowledging(true)
+    try {
+      await AcknowledgeAllByNode(nodeId)
+      await queryClient.invalidateQueries({ queryKey: ['supplier-changes', nodeId] })
+      await queryClient.invalidateQueries({ queryKey: ['unacknowledged-supplier-changes'] })
+    } finally {
+      setIsAcknowledging(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span
+          className="flex items-center gap-2 cursor-pointer w-fit"
+          onClick={() => setIsExpanded((prev) => !prev)}
+        >
+          <span className="flex items-center justify-center">
+            <CaretSmallIcon
+              style={{ transform: isExpanded ? 'rotate(90deg)' : undefined }}
+            />
+          </span>
+          <span className="text-sm">
+            Recent Changes ({changes.length})
+          </span>
+          {unreadCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+          )}
+        </span>
+
+        {unreadCount > 0 && isExpanded && (
+          <Button
+            variant="ghost"
+            className="text-xs h-6 px-2"
+            disabled={isAcknowledging}
+            onClick={handleAcknowledgeAll}
+          >
+            Mark all as read
+          </Button>
+        )}
+      </div>
+
+      {isExpanded && (
+        <div className="flex flex-col gap-2">
+          {changes.map((change) => (
+            <div
+              key={change.id}
+              className={clsx(
+                'rounded-[8px] border border-border-primary px-3 py-2 flex items-start gap-2',
+                !change.acknowledgedAt && 'bg-bg-surface',
+              )}
+            >
+              <span className={clsx('font-mono font-bold text-sm w-4 shrink-0', CHANGE_TYPE_COLOR[change.changeType])}>
+                {CHANGE_TYPE_ICON[change.changeType] ?? '?'}
+              </span>
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <p className="text-xs text-text-primary">{change.description}</p>
+                <p className="text-xs text-text-tertiary">
+                  {change.createdAt ? formatRelativeTime(new Date(change.createdAt)) : ''}
+                </p>
+              </div>
+              {!change.acknowledgedAt && (
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0 mt-1.5" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ActionButton({children, ...props}: React.PropsWithChildren & Omit<ButtonProps, 'children'>) {
   return (
     <Button
@@ -129,6 +241,7 @@ function ActionButton({children, ...props}: React.PropsWithChildren & Omit<Butto
 }
 
 export default function NodeDetail({
+   id,
    address,
    ownerAddress,
    status,
@@ -347,6 +460,8 @@ export default function NodeDetail({
           </div>
         )
       })()}
+
+      <RecentChanges nodeId={id} />
 
       {status === NodeStatus.Staked && (
         <div className={'bg-bg-surface h-[109px] rounded-[8px]'}>

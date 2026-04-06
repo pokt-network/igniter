@@ -9,7 +9,7 @@ import { Transaction } from "@igniter/db/middleman/schema";
 import { CaretSmallIcon, LoaderIcon } from "@igniter/ui/assets";
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { Operation, UnstakeOperation } from '@/app/detail/TransactionDetail'
-import { MessageType } from '@/lib/constants'
+import { MessageType } from '@igniter/commons/constants'
 
 export interface UnstakeSuccessStepProps {
   nodeCount: number;

@@ -18,7 +18,7 @@ import {
   type ActionResult,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
-import { isPoktBech32Address } from '@/lib/crypto'
+import { isPoktBech32Address } from '@igniter/commons/crypto'
 
 const UrlSchema = z.string().url('Please enter a valid URL').min(1, 'URL is required')
 

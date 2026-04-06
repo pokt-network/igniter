@@ -11,7 +11,7 @@ import {toCurrencyFormat} from '@igniter/ui/lib/utils'
 import {CountKeysForExport, ExportKeys, ListDistinctOwnerAddresses} from '@/actions/Keys'
 import {ListAddressGroups} from '@/actions/AddressGroups'
 import {ListDelegators} from '@/actions/Delegators'
-import {exportToJson} from '@/app/admin/(internal)/keys/exportUtils'
+import {exportToJson, exportToRelayMinerHaYaml} from '@/app/admin/(internal)/keys/exportUtils'
 import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants"
 import {KeyState} from "@igniter/db/provider/enums"
 
@@ -21,6 +21,7 @@ interface ExportFormProps {
 }
 
 type ExportStatus = 'not_exported' | 'previously_exported' | 'all'
+type ExportFormat = 'json' | 'relayminer-ha'
 
 interface FilterFormValues {
   addressGroupId: string
@@ -31,6 +32,7 @@ interface FilterFormValues {
   dateFrom: string
   dateTo: string
   exportStatus: ExportStatus
+  exportFormat: ExportFormat
 }
 
 function buildFilters(values: FilterFormValues): KeyExportFilters {
@@ -78,6 +80,7 @@ export default function ExportForm({onClose}: ExportFormProps) {
       dateFrom: '',
       dateTo: '',
       exportStatus: 'all',
+      exportFormat: 'json',
     },
   })
 
@@ -91,6 +94,7 @@ export default function ExportForm({onClose}: ExportFormProps) {
   const dateFrom = values.dateFrom ?? ''
   const dateTo = values.dateTo ?? ''
   const exportStatus = values.exportStatus ?? 'all'
+  const exportFormat = values.exportFormat ?? 'json'
 
   const statesKey = JSON.stringify(selectedStates)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
@@ -133,14 +137,20 @@ export default function ExportForm({onClose}: ExportFormProps) {
       const result = await ExportKeys(filters)
       if (!result || !result.success) throw new Error('Failed to fetch keys')
 
-      const privateKeys = result.data
+      const exportedKeys = result.data
       const groupName = addressGroupId
         ? addressesGroup.find(a => a.id === Number(addressGroupId))?.name ?? 'keys'
         : 'all-groups'
-      const filename = `${groupName}-keys-at-${new Date().toISOString().replace(/[:.]/g, '_')}.json`
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '_')
 
-      exportToJson(privateKeys, filename)
-      setKeysExported(privateKeys.length)
+      if (exportFormat === 'relayminer-ha') {
+        const filename = `${groupName}-keys-at-${timestamp}.yaml`
+        exportToRelayMinerHaYaml(exportedKeys, filename)
+      } else {
+        const filename = `${groupName}-keys-at-${timestamp}.json`
+        exportToJson(exportedKeys.map(k => ({hex: k.hex})), filename)
+      }
+      setKeysExported(exportedKeys.length)
       setStatus('success')
     } catch {
       setStatus('error')
@@ -373,21 +383,53 @@ export default function ExportForm({onClose}: ExportFormProps) {
           </div>
         </div>
 
+        {/* Export Format */}
+        <div className="flex flex-row items-start gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary pt-1">Format</label>
+          <div className="flex items-center gap-4 flex-1">
+            {([
+              ['json', 'JSON'],
+              ['relayminer-ha', 'RelayMiner HA'],
+            ] as const).map(([value, label]) => (
+              <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  value={value}
+                  checked={exportFormat === value}
+                  {...register('exportFormat')}
+                  className="accent-blue-600"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
         {/* Example output — collapsible */}
         <details className="group">
           <summary className="text-sm text-text-secondary cursor-pointer select-none hover:text-text-primary transition-colors">
             Example output
           </summary>
-          <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <span className="text-[#8b949e]">{'['}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
-            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'}'}</span><span className="text-[#8b949e]">,</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
-            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'}'}</span>{'\n'}
-            <span className="text-[#8b949e]">{']'}</span>
-          </div>
+          {exportFormat === 'json' ? (
+            <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre">
+              <span className="text-[#8b949e]">{'['}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+              {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'}'}</span><span className="text-[#8b949e]">,</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+              {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'}'}</span>{'\n'}
+              <span className="text-[#8b949e]">{']'}</span>
+            </div>
+          ) : (
+            <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre">
+              <span className="text-[#7ee787]">keys</span><span className="text-[#8b949e]">:</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]"># supplier1 - pokt1abc...xyz</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">-</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]"># supplier2 - pokt1def...uvw</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">-</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>
+            </div>
+          )}
         </details>
       </>
     )

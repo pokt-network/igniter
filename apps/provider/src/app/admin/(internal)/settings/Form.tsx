@@ -25,7 +25,7 @@ import {
 import { LoaderIcon } from '@igniter/ui/assets'
 import { Trash2Icon } from 'lucide-react'
 import { ChainId } from '@igniter/db/provider/enums'
-import { isPoktBech32Address } from '@/lib/crypto'
+import { isPoktBech32Address } from '@igniter/commons/crypto'
 import clsx from 'clsx'
 
 const FormSchema = z.object({

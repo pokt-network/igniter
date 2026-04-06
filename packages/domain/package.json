@@ -27,6 +27,11 @@
       "import": "./dist/src/provider/constants.js",
       "require": "./dist/src/provider/constants.js",
       "types": "./dist/src/provider/constants.d.ts"
+    },
+    "./middleman/utils/supplierChanges": {
+      "import": "./dist/src/middleman/utils/supplierChanges.js",
+      "require": "./dist/src/middleman/utils/supplierChanges.js",
+      "types": "./dist/src/middleman/utils/supplierChanges.d.ts"
     }
   },
   "scripts": {

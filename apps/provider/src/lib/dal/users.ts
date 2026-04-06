@@ -3,7 +3,7 @@ import {UserRole} from "@igniter/db/provider/enums";
 import {usersTable} from "@igniter/db/provider/schema";
 import {getDb} from "@/db";
 import {eq} from "drizzle-orm";
-import {normalizeIdentityToAddress} from "@/lib/crypto";
+import {normalizeIdentityToAddress} from "@igniter/commons/crypto";
 
 export async function createUser(identity: string) {
   try {

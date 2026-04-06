@@ -1,10 +1,11 @@
 "use server";
 
-import {countProviders, list, upsertProviders, getByIdentity, update} from "@/lib/dal/providers";
+import {countProviders, list, listAll, upsertProviders, applyGovernanceSync, getByIdentity, update} from "@/lib/dal/providers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import {requireAuth} from "@/lib/utils/actions";
-import {ProviderStatus} from "@igniter/db/middleman/enums";
+import { getCurrentUser, requireAuth } from '@/lib/utils/actions'
+import {ProviderStatus, UserRole} from "@igniter/db/middleman/enums";
+import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 
 export interface Provider {
   id: number;
@@ -31,6 +32,74 @@ export async function TriggerGovernanceSync(): Promise<{ success: boolean, error
     return { success: true }
   } catch (error) {
     console.error('Error triggering GovernanceSync:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    }
+  }
+}
+
+type CdnProvider = { name: string; identity: string; identityHistory: string[]; url: string }
+
+// This is here because when doing the setup, the middleman workflows can not start running because the app is not bootstrapped
+// so we cannot call TriggerGovernanceSync at setup time
+export async function SyncProvidersFromGovernance(): Promise<{ success: boolean; error?: string; data?: Provider[] }> {
+  try {
+    const user = await getCurrentUser()
+
+    if (![UserRole.Owner].includes(user.role)) {
+      throw new Error('Forbidden')
+    }
+
+    const cdnUrlTemplate = process.env.PROVIDERS_CDN_URL
+    if (!cdnUrlTemplate) {
+      return { success: false, error: 'PROVIDERS_CDN_URL environment variable is not defined' }
+    }
+
+    const settings = await getApplicationSettings()
+    const cdnUrl = cdnUrlTemplate.replace('{chainId}', settings.chainId.replace('lego-testnet', 'beta'))
+
+    const response = await fetch(cdnUrl)
+    if (!response.ok) {
+      return { success: false, error: `Failed to fetch providers from CDN: ${response.statusText}` }
+    }
+
+    const cdnProviders = (await response.json()) as CdnProvider[]
+    const current = await listAll()
+    const currentMap = new Map(current.map((p) => [p.identity, p]))
+
+    const allCdnIdentities = new Set<string>()
+    for (const p of cdnProviders) {
+      allCdnIdentities.add(p.identity)
+      p.identityHistory.forEach((h) => allCdnIdentities.add(h))
+    }
+
+    const toInsert: { name: string; identity: string; url: string }[] = []
+    const toUpdate: { id: number; name: string; identity: string; url: string }[] = []
+
+    for (const cdnProvider of cdnProviders) {
+      const possibleIds = [cdnProvider.identity, ...cdnProvider.identityHistory]
+      const matchingCurrent = possibleIds.map((id) => currentMap.get(id)).find(Boolean) ?? null
+
+      if (matchingCurrent) {
+        if (
+          matchingCurrent.identity !== cdnProvider.identity ||
+          matchingCurrent.name !== cdnProvider.name ||
+          matchingCurrent.url !== cdnProvider.url
+        ) {
+          toUpdate.push({ id: matchingCurrent.id, identity: cdnProvider.identity, name: cdnProvider.name, url: cdnProvider.url })
+        }
+      } else {
+        toInsert.push({ identity: cdnProvider.identity, name: cdnProvider.name, url: cdnProvider.url })
+      }
+    }
+
+    await applyGovernanceSync(toInsert, toUpdate, user.identity)
+
+    const providers = await list(true)
+    return { success: true, data: providers }
+  } catch (error) {
+    console.error('Error syncing providers from governance:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

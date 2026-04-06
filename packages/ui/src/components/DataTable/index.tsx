@@ -52,8 +52,8 @@ export interface SortOption<TData> {
 export interface DataTableProps<TData extends object, TValue> {
   columns: (ColumnDef<TData, TValue> & CsvColumnDef<TData>)[];
   data: TData[];
-  filters: FilterGroup<TData>[];
-  sorts: SortOption<TData>[][];
+  filters?: FilterGroup<TData>[];
+  sorts?: SortOption<TData>[][];
   isLoading?: boolean;
   skeletonRows?: number;
   isError?: boolean
@@ -69,13 +69,19 @@ export interface DataTableProps<TData extends object, TValue> {
   countLabel?: string
   /** Render a status line showing filtered/total counts */
   renderStatus?: (filteredCount: number, totalCount: number) => React.ReactNode
+  /** Toolbar-level actions (e.g. "Add New" button), rendered at the right of the toolbar */
+  actions?: React.ReactNode
+  /** Per-row action buttons (e.g. edit/delete), rendered as extra cell at the end of each row */
+  itemActions?: (row: TData) => React.ReactNode
+  /** Disable entire table interaction */
+  isDisabled?: boolean
 }
 
 export default function DataTable<TData extends object, TValue>({
   columns,
   data,
-  filters,
-  sorts,
+  filters = [],
+  sorts = [],
   isLoading,
   skeletonRows = 6,
   isError,
@@ -87,6 +93,9 @@ export default function DataTable<TData extends object, TValue>({
   headerLeft,
   countLabel,
   renderStatus,
+  actions,
+  itemActions,
+  isDisabled,
 }: DataTableProps<TData, TValue>) {
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
@@ -175,6 +184,8 @@ export default function DataTable<TData extends object, TValue>({
 
   let tableBody: React.ReactNode;
 
+  const totalColSpan = columns.length + (itemActions ? 1 : 0);
+
   if (isLoading) {
     tableBody = new Array(skeletonRows).fill(null).map((_, index) => (
       <TableRow key={index} className={'pointer-events-none'}>
@@ -183,12 +194,13 @@ export default function DataTable<TData extends object, TValue>({
             <Skeleton className={'w-4/5 h-4 bg-bg-elevated'} />
           </TableCell>
         ))}
+        {itemActions && <TableCell><Skeleton className={'w-4/5 h-4 bg-bg-elevated'} /></TableCell>}
       </TableRow>
     ))
   } else if (isError) {
     tableBody = (
       <TableRow className={'hover:bg-bg-surface'}>
-        <TableCell colSpan={columns.length} className="h-24 text-center">
+        <TableCell colSpan={totalColSpan} className="h-24 text-center">
           There was an error loading the data.
           {refetch && (
             <Button onClick={refetch} className={'h-[30px] ml-2'}>
@@ -204,17 +216,23 @@ export default function DataTable<TData extends object, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
+            className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
           >
             {row.getVisibleCells().map((cell) => (
               <TableCell key={cell.id}>
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </TableCell>
             ))}
+            {itemActions && (
+              <TableCell className="flex flex-row-reverse px-2">
+                {itemActions(row.original)}
+              </TableCell>
+            )}
           </TableRow>
         ))
       ) : (
         <TableRow>
-          <TableCell colSpan={columns.length} className="h-24 text-center">
+          <TableCell colSpan={totalColSpan} className="h-24 text-center">
             No results.
           </TableCell>
         </TableRow>
@@ -268,6 +286,7 @@ export default function DataTable<TData extends object, TValue>({
           {headerLeft}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {actions}
           {csvFilename && (
             <ExportButton
               columns={columns}
@@ -332,6 +351,7 @@ export default function DataTable<TData extends object, TValue>({
                     </TableHead>
                   )
                 })}
+                {itemActions && <TableHead />}
               </TableRow>
             ))}
           </TableHeader>

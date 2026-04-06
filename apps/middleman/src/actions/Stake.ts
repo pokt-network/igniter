@@ -25,7 +25,7 @@ import { requireAuth } from '@/lib/utils/actions'
 import {
   getCompressedPublicKeyFromAppIdentity,
   signPayload,
-} from '@/lib/crypto'
+} from '@igniter/commons/crypto'
 
 export interface CreateStakeTransactionRequest {
   offer: StakeDistributionOffer;

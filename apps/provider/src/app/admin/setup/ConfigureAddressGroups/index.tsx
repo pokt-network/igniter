@@ -6,7 +6,7 @@ import type {AddressGroup, AddressGroupWithDetails, Service} from "@igniter/db/p
 import {DeleteAddressGroup, ListAddressGroups} from "@/actions/AddressGroups";
 import {Button} from "@igniter/ui/components/button";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import {DataTable} from "@/components/DataTable";
+import DataTable from '@igniter/ui/components/DataTable/index';
 import {columns} from "./Columns";
 import {AddOrUpdateAddressGroupDialog} from "@/components/AddOrUpdateAddressGroupDialog";
 import {LoaderIcon} from "@igniter/ui/assets";
@@ -40,7 +40,7 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
         <DataTable
           columns={columns}
           data={addressGroups}
-          searchableFields={["name", "region", "domain"]}
+          searchableColumns={["name", "region", "domain"]}
           actions={
             <Button
               onClick={() => setIsAddingAddressGroup(true) }

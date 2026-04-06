@@ -183,6 +183,8 @@ export async function markKeysDelivered(
   delegatorRewardsAddress: string
 ): Promise<Key[]> {
   if (!keyIds.length) return []
+  if (!ownerAddress) throw new Error('ownerAddress is required when delivering keys')
+  if (!deliveredTo) throw new Error('deliveredTo (delegator identity) is required when delivering keys')
   return tx
     .update(keysTable)
     .set({
@@ -367,6 +369,15 @@ export async function countKeys(): Promise<number> {
   return value
 }
 
+export async function getPrivateKeyById(keyId: number): Promise<string | null> {
+  const dbClient = getDbClient()
+  const result = await dbClient.db.query.keysTable.findFirst({
+    where: eq(keysTable.id, keyId),
+    columns: { privateKey: true },
+  })
+  return result?.privateKey ?? null
+}
+
 export async function getKeysSummary(): Promise<{ totalKeys: number; stakedKeys: number; availableKeys: number; totalStakedUpokt: number }> {
   const dbClient = getDbClient()
   const result = await dbClient.db
@@ -505,6 +516,7 @@ export async function listKeysForExport(filters: KeyExportFilters) {
     ...(conditions.length > 0 && { where: and(...conditions) }),
     columns: {
       id: true,
+      address: true,
       privateKey: true,
     },
   })

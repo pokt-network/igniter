@@ -18,7 +18,7 @@ export interface Key {
   addressGroup: {
     id: number
     name: string
-  }
+  } | null
   state: KeyState
   ownerAddress: string | null
   delegator: {
@@ -48,13 +48,14 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
       return (
         <div className="flex items-center gap-2">
           <span className="text-slightly-muted-foreground flex justify-center items-center gap-2">
-            {addressGroup.name}
+            {addressGroup?.name || '-'}
           </span>
         </div>
       );
     },
     filterFn: (row, columnId, value) => {
       const addressGroup = row.getValue("addressGroup") as Key['addressGroup'];
+      if (!addressGroup) return false;
       return typeof value === 'string' ? addressGroup.name.toLowerCase().includes(value.toLowerCase()) : addressGroup.id === value;
     },
   },

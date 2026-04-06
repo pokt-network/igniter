@@ -19,7 +19,7 @@ import {
   DialogFooter
 } from '@igniter/ui/components/dialog'
 import { GenerateKeys } from '@/actions/Keys'
-import {exportToJson} from '@/app/admin/(internal)/keys/exportUtils'
+import {exportToJson, exportToRelayMinerHaYaml} from '@/app/admin/(internal)/keys/exportUtils'
 
 
 interface GenerateFormProps {
@@ -34,6 +34,7 @@ export default function GenerateForm({ onClose }: GenerateFormProps) {
   const [keyCount, setKeyCount] = useState<string>('')
   const [keysGenerated, setKeysGenerated] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
+  const [exportFormat, setExportFormat] = useState<'json' | 'relayminer-ha'>('json')
 
   useEffect(() => {
     ListAddressGroups().then(result => {
@@ -57,12 +58,18 @@ export default function GenerateForm({ onClose }: GenerateFormProps) {
         throw new Error('Failed to generate keys')
       }
 
-      const privateKeys = result.data
+      const generatedKeys = result.data
       const groupName = addressesGroup.find(a => a.id === Number(addressGroup))?.name ?? 'keys'
-      const filename = `${groupName}-generated-${parsedCount}-keys-at-${new Date().toISOString().replace(/[:.]/g, '_')}.json`
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '_')
 
-      exportToJson(privateKeys, filename)
-      setKeysGenerated(privateKeys.length)
+      if (exportFormat === 'relayminer-ha') {
+        const filename = `${groupName}-generated-${parsedCount}-keys-at-${timestamp}.yaml`
+        exportToRelayMinerHaYaml(generatedKeys, filename)
+      } else {
+        const filename = `${groupName}-generated-${parsedCount}-keys-at-${timestamp}.json`
+        exportToJson(generatedKeys.map(k => ({hex: k.hex})), filename)
+      }
+      setKeysGenerated(generatedKeys.length)
       setStatus('success')
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : 'An unexpected error occurred')
@@ -127,20 +134,52 @@ export default function GenerateForm({ onClose }: GenerateFormProps) {
           </div>
         )}
 
+        {/* Export Format */}
+        <div className="flex flex-row items-center gap-3">
+          <label className="text-xs shrink-0 whitespace-nowrap w-28 text-text-secondary">Format</label>
+          <div className="flex items-center gap-4 flex-1">
+            {([
+              ['json', 'JSON'],
+              ['relayminer-ha', 'RelayMiner HA'],
+            ] as const).map(([value, label]) => (
+              <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  value={value}
+                  checked={exportFormat === value}
+                  onChange={(e) => setExportFormat(e.target.value as 'json' | 'relayminer-ha')}
+                  className="accent-blue-600"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
         <details className="group">
           <summary className="text-sm text-text-secondary cursor-pointer select-none hover:text-text-primary transition-colors">
             Example output
           </summary>
-          <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-            <span className="text-[#8b949e]">{'['}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
-            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'}'}</span><span className="text-[#8b949e]">,</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
-            {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>{'\n'}
-            {'  '}<span className="text-[#8b949e]">{'}'}</span>{'\n'}
-            <span className="text-[#8b949e]">{']'}</span>
-          </div>
+          {exportFormat === 'json' ? (
+            <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre">
+              <span className="text-[#8b949e]">{'['}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+              {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'}'}</span><span className="text-[#8b949e]">,</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'{'}</span>{'\n'}
+              {'    '}<span className="text-[#7ee787]">{'"hex"'}</span><span className="text-[#8b949e]">:</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">{'}'}</span>{'\n'}
+              <span className="text-[#8b949e]">{']'}</span>
+            </div>
+          ) : (
+            <div className="mt-2 rounded-lg border border-border bg-[#0d1117] p-4 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre">
+              <span className="text-[#7ee787]">keys</span><span className="text-[#8b949e]">:</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]"># supplier1 - pokt1abc...xyz</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">-</span> <span className="text-[#a5d6ff]">{'"<pk1>"'}</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]"># supplier2 - pokt1def...uvw</span>{'\n'}
+              {'  '}<span className="text-[#8b949e]">-</span> <span className="text-[#a5d6ff]">{'"<pk2>"'}</span>
+            </div>
+          )}
         </details>
 
       </>

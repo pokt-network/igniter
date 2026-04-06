@@ -16,15 +16,15 @@ export default function KeyActions() {
       <Button onClick={() => setActiveModal('import')}>Import</Button>
       <Button
         className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90"
-        onClick={() => setActiveModal('export')}
-      >
-        Export
-      </Button>
-      <Button
-        className="bg-pnf-mint text-gray-900 border-transparent hover:opacity-90"
         onClick={() => setActiveModal('generate')}
       >
         Generate
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => setActiveModal('export')}
+      >
+        Export
       </Button>
 
       {activeModal === 'import' && (
