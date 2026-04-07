@@ -29,7 +29,7 @@ import {
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
 import { findById as findAddressGroupById } from '@/lib/dal/addressGroups'
-import { TriggerRemediationSchedule } from '@/actions/Schedules'
+import { TriggerAddressGroupMigrationSchedule } from '@/actions/Schedules'
 
 export async function CountKeys(): Promise<ActionResult<number>> {
   return withRequireOwner(async () => countKeys())
@@ -256,7 +256,7 @@ export async function MigrateKeysToAddressGroup(filters: KeyMigrationFilters, ta
       parsed.targetAddressGroupId,
     )
 
-    await TriggerRemediationSchedule()
+    await TriggerAddressGroupMigrationSchedule()
 
     return migrated
   })

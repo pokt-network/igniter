@@ -36,3 +36,13 @@ export async function TriggerRemediationSchedule(): Promise<ActionResult<void>> 
     await handle.trigger()
   })
 }
+
+const ADDRESS_GROUP_MIGRATION_SCHEDULE_ID = 'SupplierAddressGroupMigration-scheduled'
+
+export async function TriggerAddressGroupMigrationSchedule(): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
+    const client = getTemporalClient()
+    const handle = client.schedule.getHandle(ADDRESS_GROUP_MIGRATION_SCHEDULE_ID)
+    await handle.trigger()
+  })
+}

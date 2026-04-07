@@ -37,7 +37,7 @@ function buildFilters(values: FilterFormValues): KeyMigrationFilters {
 
 export default function MigrateForm({ onClose }: MigrateFormProps) {
   const queryClient = useQueryClient()
-  const [status, setStatus] = useState<'form' | 'loading' | 'success' | 'error'>('form')
+  const [status, setStatus] = useState<'form' | 'confirm' | 'loading' | 'success' | 'error'>('form')
   const [keysMigrated, setKeysMigrated] = useState(0)
 
   const { data: formData, isLoading: isDataLoading } = useQuery({
@@ -108,6 +108,11 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
     setValue('selectedStates', next)
   }
 
+  const confirmMigration = () => {
+    if (!canMigrate) return
+    setStatus('confirm')
+  }
+
   const migrateKeys = async () => {
     if (status === 'loading' || !targetAddressGroupId) return
     setStatus('loading')
@@ -139,6 +144,7 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
     return parts.length > 0 ? parts.join(' · ') : 'No filters applied'
   }
 
+  const sourceGroup = addressesGroup.find((g) => g.id === Number(addressGroupId))
   const targetGroup = addressesGroup.find((g) => g.id === Number(targetAddressGroupId))
   const canMigrate = !!targetAddressGroupId && !!totalKeysCount && totalKeysCount > 0
 
@@ -150,7 +156,13 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
         <LoaderIcon className="animate-spin h-6 w-6 text-text-secondary" />
       </div>
     )
-  } else if (status === 'form' || status === 'loading') {
+  } else if (status === 'loading') {
+    content = (
+      <div className="flex items-center justify-center py-12">
+        <LoaderIcon className="animate-spin h-6 w-6 text-text-secondary" />
+      </div>
+    )
+  } else if (status === 'form') {
     content = (
       <>
         {/* Source Address Group */}
@@ -298,6 +310,28 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
         </div>
       </>
     )
+  } else if (status === 'confirm') {
+    content = (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-secondary">Keys to migrate</span>
+            <span className="font-semibold">{toCurrencyFormat(totalKeysCount ?? 0, 0, 0)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-secondary">Source group</span>
+            <span className="font-semibold">{sourceGroup?.name ?? 'All Groups'}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-text-secondary">Target group</span>
+            <span className="font-semibold">{targetGroup?.name}</span>
+          </div>
+        </div>
+        <div className="p-3 rounded-md bg-yellow-500/5 border border-yellow-500/30 text-xs text-yellow-400">
+          Migrated keys will be re-staked to match the target group&apos;s service configuration and will consume POKT to execute the transactions.
+        </div>
+      </div>
+    )
   } else if (status === 'success') {
     content = (
       <>
@@ -345,14 +379,33 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
 
         <div className="h-px bg-border-primary" />
         <DialogFooter className="px-5 py-3 flex flex-row items-center gap-2">
-          {(status === 'form' || status === 'loading') && (
+          {status === 'form' && (
             <>
               <div className="flex-1" />
-              <Button variant="outline" onClick={onClose} disabled={status === 'loading'}>
+              <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button onClick={migrateKeys} disabled={status === 'loading' || !canMigrate}>
-                {status === 'loading' ? <LoaderIcon className="animate-spin" /> : 'Migrate Keys'}
+              <Button onClick={confirmMigration} disabled={!canMigrate}>
+                Migrate Keys
+              </Button>
+            </>
+          )}
+          {status === 'confirm' && (
+            <>
+              <div className="flex-1" />
+              <Button variant="outline" onClick={() => setStatus('form')}>
+                Back
+              </Button>
+              <Button onClick={migrateKeys}>
+                Confirm Migration
+              </Button>
+            </>
+          )}
+          {status === 'loading' && (
+            <>
+              <div className="flex-1" />
+              <Button disabled>
+                <LoaderIcon className="animate-spin" />
               </Button>
             </>
           )}
@@ -365,6 +418,9 @@ export default function MigrateForm({ onClose }: MigrateFormProps) {
           {status === 'error' && (
             <>
               <div className="flex-1" />
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
               <Button disabled={!canMigrate} onClick={migrateKeys}>
                 Try Again
               </Button>

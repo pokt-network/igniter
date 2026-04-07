@@ -600,42 +600,60 @@ export async function listKeysForMigration(filters: KeyMigrationFilters): Promis
   })
 }
 
+const MIGRATION_CHUNK_SIZE = 500
+
 export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressGroupId: number): Promise<number> {
   if (keyIds.length === 0) return 0
   const dbClient = getDbClient()
 
+  const now = Date.now()
+  const migrationEntry: RemediationHistoryEntry = {
+    message: `Key migrated to address group ${targetAddressGroupId}`,
+    reason: RemediationHistoryEntryReason.AddressGroupMigration,
+    timestamp: now,
+  }
+
   await dbClient.db.transaction(async (tx) => {
-    const keys = await tx
-      .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
-      .from(keysTable)
-      .where(inArray(keysTable.id, keyIds))
+    for (let i = 0; i < keyIds.length; i += MIGRATION_CHUNK_SIZE) {
+      const chunkIds = keyIds.slice(i, i + MIGRATION_CHUNK_SIZE)
 
-    for (const key of keys) {
-      const entry: RemediationHistoryEntry = {
-        message: `Key migrated to address group ${targetAddressGroupId}`,
-        reason: RemediationHistoryEntryReason.AddressGroupMigration,
-        timestamp: Date.now(),
+      const keys = await tx
+        .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
+        .from(keysTable)
+        .where(inArray(keysTable.id, chunkIds))
+
+      const stateResetIds: number[] = []
+      const historyCaseChunks: SQL[] = []
+
+      for (const key of keys) {
+        const history = [...((key.remediationHistory as RemediationHistoryEntry[]) ?? [])]
+        const existingIndex = history.findIndex((item) => item.reason === migrationEntry.reason)
+        if (existingIndex !== -1) {
+          history[existingIndex] = migrationEntry
+        } else {
+          history.push(migrationEntry)
+          history.sort((a, b) => b.timestamp - a.timestamp)
+        }
+        historyCaseChunks.push(sql`WHEN ${keysTable.id} = ${key.id} THEN ${JSON.stringify(history)}::json`)
+
+        if ([KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(key.state)) {
+          stateResetIds.push(key.id)
+        }
       }
 
-      const history = [...((key.remediationHistory as RemediationHistoryEntry[]) ?? [])]
-      const existingIndex = history.findIndex((item) => item.reason === entry.reason)
-      if (existingIndex !== -1) {
-        history[existingIndex] = entry
-      } else {
-        history.push(entry)
-        history.sort((a, b) => b.timestamp - a.timestamp)
-      }
-
-      const needsStateReset = [KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(key.state)
+      const historyCase = sql`CASE ${sql.join(historyCaseChunks, sql` `)} ELSE ${keysTable.remediationHistory} END`
 
       await tx
         .update(keysTable)
-        .set({
-          addressGroupId: targetAddressGroupId,
-          remediationHistory: history,
-          ...(needsStateReset && { state: KeyState.Staked }),
-        })
-        .where(eq(keysTable.id, key.id))
+        .set({ addressGroupId: targetAddressGroupId, remediationHistory: historyCase })
+        .where(inArray(keysTable.id, chunkIds))
+
+      if (stateResetIds.length > 0) {
+        await tx
+          .update(keysTable)
+          .set({ state: KeyState.Staked })
+          .where(inArray(keysTable.id, stateResetIds))
+      }
     }
   })
 
