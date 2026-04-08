@@ -149,7 +149,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
 
       notificationsRender = (
         <div
-          className={'sticky top-0 z-20 flex flex-col h-[70px] pt-5 bg-bg-root'}
+          className={'sticky top-0 z-30 flex flex-col h-[70px] pt-5 bg-bg-root'}
         >
           <div className={'flex items-center gap-2 justify-between mx-30'}>
             <div className={'flex flex-row items-center gap-3'}>
@@ -206,8 +206,10 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
         }
       }}
     >
-      {notificationsRender}
-      {children}
+      <div className="contents" style={{ '--notification-height': notifications.length > 0 ? '70px' : '0px' } as React.CSSProperties}>
+        {notificationsRender}
+        {children}
+      </div>
     </NotificationsContext>
   )
 }
