@@ -196,7 +196,7 @@ export default function KeyDetail(key: KeyWithRelations) {
 
       <Summary rows={generalKeyDetails} />
 
-      {addressGroup && [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(state) && (
+      {addressGroup && (
         <MigrateKeyButton
           keyId={id}
           currentGroupId={addressGroup.id}

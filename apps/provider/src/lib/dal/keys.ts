@@ -602,46 +602,51 @@ export async function listKeysForMigration(filters: KeyMigrationFilters): Promis
 
 const MIGRATION_CHUNK_SIZE = 500
 
+function upsertMigrationEntry(remediationHistory: unknown, entry: RemediationHistoryEntry): RemediationHistoryEntry[] {
+  const history = [...((remediationHistory as RemediationHistoryEntry[]) ?? [])]
+  const existingIndex = history.findIndex((item) => item.reason === entry.reason)
+  if (existingIndex !== -1) {
+    history[existingIndex] = entry
+  } else {
+    history.push(entry)
+    history.sort((a, b) => b.timestamp - a.timestamp)
+  }
+  return history
+}
+
+function buildRemediationHistoryCaseExpr(keys: { id: number; remediationHistory: unknown }[], entry: RemediationHistoryEntry): SQL {
+  const whenClauses = keys.map((key) => {
+    const updatedHistory = upsertMigrationEntry(key.remediationHistory, entry)
+    return sql`WHEN ${keysTable.id} = ${key.id} THEN ${JSON.stringify(updatedHistory)}::json`
+  })
+  return sql`CASE ${sql.join(whenClauses, sql` `)} ELSE ${keysTable.remediationHistory} END`
+}
+
+const STATES_REQUIRING_RESET = [KeyState.AttentionNeeded, KeyState.RemediationFailed]
+
 export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressGroupId: number): Promise<number> {
   if (keyIds.length === 0) return 0
   const dbClient = getDbClient()
 
-  const now = Date.now()
   const migrationEntry: RemediationHistoryEntry = {
     message: `Key migrated to address group ${targetAddressGroupId}`,
     reason: RemediationHistoryEntryReason.AddressGroupMigration,
-    timestamp: now,
+    timestamp: Date.now(),
   }
 
   await dbClient.db.transaction(async (tx) => {
-    for (let i = 0; i < keyIds.length; i += MIGRATION_CHUNK_SIZE) {
-      const chunkIds = keyIds.slice(i, i + MIGRATION_CHUNK_SIZE)
+    const chunks = Array.from({ length: Math.ceil(keyIds.length / MIGRATION_CHUNK_SIZE) }, (_, i) =>
+      keyIds.slice(i * MIGRATION_CHUNK_SIZE, (i + 1) * MIGRATION_CHUNK_SIZE),
+    )
 
+    for (const chunkIds of chunks) {
       const keys = await tx
         .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
         .from(keysTable)
         .where(inArray(keysTable.id, chunkIds))
 
-      const stateResetIds: number[] = []
-      const historyCaseChunks: SQL[] = []
-
-      for (const key of keys) {
-        const history = [...((key.remediationHistory as RemediationHistoryEntry[]) ?? [])]
-        const existingIndex = history.findIndex((item) => item.reason === migrationEntry.reason)
-        if (existingIndex !== -1) {
-          history[existingIndex] = migrationEntry
-        } else {
-          history.push(migrationEntry)
-          history.sort((a, b) => b.timestamp - a.timestamp)
-        }
-        historyCaseChunks.push(sql`WHEN ${keysTable.id} = ${key.id} THEN ${JSON.stringify(history)}::json`)
-
-        if ([KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(key.state)) {
-          stateResetIds.push(key.id)
-        }
-      }
-
-      const historyCase = sql`CASE ${sql.join(historyCaseChunks, sql` `)} ELSE ${keysTable.remediationHistory} END`
+      const historyCase = buildRemediationHistoryCaseExpr(keys, migrationEntry)
+      const stateResetIds = keys.filter((key) => STATES_REQUIRING_RESET.includes(key.state)).map((key) => key.id)
 
       await tx
         .update(keysTable)
