@@ -9,10 +9,11 @@ export type DetectedSupplierChange = {
 }
 
 function getOwnerRevShare(service: NodeService, ownerAddress: string): number | undefined {
-  const entry = service.revShare.find(
+  const entries = service.revShare.filter(
     (rs) => rs.address.toLowerCase() === ownerAddress.toLowerCase(),
   )
-  return entry?.revSharePercentage
+  if (entries.length === 0) return undefined
+  return entries.reduce((sum: number, rs: { revSharePercentage: number }) => sum + rs.revSharePercentage, 0)
 }
 
 /**

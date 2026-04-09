@@ -14,6 +14,7 @@ enum ScheduledWorkflowType {
   SupplierStatus = 'SupplierStatus',
   SupplierRemediation = 'SupplierRemediation',
   SupplierInitialStake = 'SupplierInitialStake',
+  SupplierAddressGroupMigration = 'SupplierAddressGroupMigration',
 }
 
 const ScheduledWorkflowConfig: Record<
@@ -47,6 +48,14 @@ const ScheduledWorkflowConfig: Record<
       reasons: [RemediationHistoryEntryReason.OwnerInitialStake]
     }],
     envVar: 'SCHEDULE_SUPPLIER_INITIAL_STAKE_INTERVAL',
+  },
+  [ScheduledWorkflowType.SupplierAddressGroupMigration]: {
+    workflowType: 'SupplierRemediation',
+    interval: '30s',
+    args: [{
+      reasons: [RemediationHistoryEntryReason.AddressGroupMigration]
+    }],
+    envVar: 'SCHEDULE_SUPPLIER_ADDRESS_GROUP_MIGRATION_INTERVAL',
   },
 }
 

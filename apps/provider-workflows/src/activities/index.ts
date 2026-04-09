@@ -295,7 +295,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         }
       }
 
-      if (!isOwnerInitialStakeRemediationNeeded && update.state === KeyState.Staked) {
+      const hasAddressGroupMigrationPending = (key.remediationHistory ?? []).some(
+        (rh) => rh.reason === RemediationHistoryEntryReason.AddressGroupMigration
+      )
+
+      if (!isOwnerInitialStakeRemediationNeeded && !hasAddressGroupMigrationPending && update.state === KeyState.Staked) {
         const expectedServices = getExpectedServicesFromKey(key)
 
         // only compare to the active services from the history, so if a service stake change is about to take place, we override it
@@ -344,7 +348,8 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         remediationReasons?.length &&
         !remediationReasons.includes(RemediationHistoryEntryReason.OwnerInitialStake) &&
         !remediationReasons.includes(RemediationHistoryEntryReason.ServiceMismatch) &&
-        !remediationReasons.includes(RemediationHistoryEntryReason.DelegatorAddressMissing)
+        !remediationReasons.includes(RemediationHistoryEntryReason.DelegatorAddressMissing) &&
+        !remediationReasons.includes(RemediationHistoryEntryReason.AddressGroupMigration)
       ) {
         update.state = KeyState.AttentionNeeded
       }
@@ -462,8 +467,14 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       ? remediationHistory.find((rh) => rh.reason === RemediationHistoryEntryReason.ServiceMismatch) ?? null
       : null
 
+    const hasAddressGroupMigrationReason = params.reasons.includes(RemediationHistoryEntryReason.AddressGroupMigration);
+
+    const addressGroupMigrationEntry = hasAddressGroupMigrationReason
+      ? remediationHistory.find((rh) => rh.reason === RemediationHistoryEntryReason.AddressGroupMigration) ?? null
+      : null
+
     // Nothing actionable? DO NOT stake.
-    if (!ownerInitialStakeEntry && !serviceMismatchEntry) {
+    if (!ownerInitialStakeEntry && !serviceMismatchEntry && !addressGroupMigrationEntry) {
       log.info('remediateSupplier: No actionable remediation in reasons. Skipping stake.', {
         params,
         reasons: params.reasons,
@@ -592,7 +603,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     // Record the transaction
     try {
-      const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry
+      const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
       const isManual = activeEntry?.message?.includes('requested by operator') ?? false
 
       await dal.transactions.insert({
@@ -624,7 +635,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     } else {
       update.state = KeyState.Staked
       // Tx succeeded — clear the remediation entry that triggered this
-      const reasonToClear = ownerInitialStakeEntry?.reason || serviceMismatchEntry?.reason
+      const reasonToClear = ownerInitialStakeEntry?.reason || serviceMismatchEntry?.reason || addressGroupMigrationEntry?.reason
       if (reasonToClear) {
         update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== reasonToClear)
       }

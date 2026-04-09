@@ -12,7 +12,8 @@ import {KeyState, KeyStateNameMap} from "@igniter/db/provider/enums"
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationHistoryList";
 import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants";
-import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal";
+import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal"
+import { MigrateKeyButton } from "@/app/admin/details/KeyDetail/MigrateKeyButton";
 
 export interface KeyDetail {
   type: 'key'
@@ -194,6 +195,14 @@ export default function KeyDetail(key: KeyWithRelations) {
       )}
 
       <Summary rows={generalKeyDetails} />
+
+      {addressGroup && (
+        <MigrateKeyButton
+          keyId={id}
+          currentGroupId={addressGroup.id}
+          currentGroupName={addressGroup.name}
+        />
+      )}
 
       {isStakedKey && delegator && (
         <div className="flex flex-col gap-2">

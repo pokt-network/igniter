@@ -5,6 +5,7 @@ import {
 import { SupplierServiceConfig, ServiceRevenueShare } from '@igniter/pocket';
 
 jest.mock('@igniter/domain/provider/utils', () => ({
+    ...jest.requireActual('@igniter/domain/provider/utils'),
     getRevShare: jest.fn(),
     getEndpointInterpolatedUrl: jest.fn(),
 }));
@@ -120,6 +121,28 @@ describe('BuildSupplierServiceConfigHandler', () => {
         const [cfg] = handler.execute(input);
 
         expect(cfg?.revShare.some((r: ServiceRevenueShare) => r.revSharePercentage === 0)).toBe(false);
+    });
+
+    it('merges duplicate address entries when ownerAddress equals operatorAddress', () => {
+        // When owner and operator are the same address, getRevShare adds it once
+        // (as supplierShare) and the handler adds it again as the owner remainder.
+        // The result should have a single merged entry.
+        mockedGetRevShare.mockReturnValue([
+            { address: ownerAddress, revSharePercentage: 30 }, // operator == owner
+        ]);
+
+        const sameAddressInput = {
+            ...input,
+            operatorAddress: ownerAddress, // same as ownerAddress
+        };
+
+        const result = handler.execute(sameAddressInput);
+        const cfg = result[0]!;
+
+        const ownerEntries = cfg.revShare.filter((r: ServiceRevenueShare) => r.address === ownerAddress);
+        expect(ownerEntries).toHaveLength(1);
+        // 30% from getRevShare + 50% remainder = 80% total for owner; request_addr gets 20%
+        expect(ownerEntries[0]?.revSharePercentage).toBe(80);
     });
 
     it('throws RevenueShareOverflowError when total revshare exceeds 100', () => {
