@@ -11,14 +11,6 @@ export async function getNodesByUser(userIdentity: string) {
     where: eq(nodesTable.createdBy, userIdentity),
     with: {
       provider: true,
-      transactionsToNodes: {
-        with: {
-          transaction: true,
-        },
-        limit: 10,
-        // here we can't order directly by cratedAt of transactionsToNodes because findMany doesn't support orderBy on relations
-        orderBy: (t) => [desc(t.transactionId)]
-      },
     },
   });
 }

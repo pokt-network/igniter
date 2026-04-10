@@ -7,22 +7,6 @@ import { useQuery } from '@tanstack/react-query'
 import {ItemBase, useDetailContext} from '@igniter/ui/components/QuickDetails/Provider'
 import { useEffect } from 'react'
 
-const getHeight = (transactions: NodeDetails['transactions']) => {
-  const stakeTxs = transactions
-    ?.filter((tx) => tx.type === "Stake");
-
-  if (!stakeTxs || stakeTxs.length === 0) return undefined;
-
-  const mostRecentStake = stakeTxs
-    .slice()
-    .sort((a, b) =>
-      new Date(b.createdAt!).getTime() -
-      new Date(a.createdAt!).getTime()
-    )[0];
-
-  return mostRecentStake?.executionHeight;
-}
-
 export default function NodesTable() {
   const { data, isError, isLoading, refetch } = useQuery({
     queryKey: ["nodes"],
@@ -48,19 +32,6 @@ export default function NodesTable() {
               stakeAmount: Number(node.stakeAmount),
               operationalFundsAmount: Number(node.balance.toString()),
               services: node.services ?? [],
-              transactions: node.transactionsToNodes.map((transaction) => transaction.transaction).map(t => ({
-                id: t.id,
-                type: t.type,
-                status: t.status,
-                createdAt: t.createdAt!,
-                operations: JSON.parse(t.unsignedPayload).body.messages,
-                hash: t.hash || '',
-                estimatedFee: t.estimatedFee,
-                consumedFee: t.consumedFee,
-                provider: node.provider?.name || '',
-                providerFee: t.providerFee,
-                typeProviderFee: t.typeProviderFee,
-              })),
             }
           }, index)
         }
@@ -81,13 +52,11 @@ export default function NodesTable() {
   }, [data])
 
   const nodes: Array<NodeDetails> = data?.map((node) => {
-    const transactions = node.transactionsToNodes.map((transaction) => transaction.transaction)
     return {
       ...node,
       provider: node.provider ?? null,
       stakeAmount: node.stakeAmount,
-      transactions,
-      height: getHeight(transactions) || 0,
+      height: node.lastUpdatedHeight ?? 0,
     }
   }) || [];
 

@@ -11,6 +11,7 @@ import {
   SortOption,
 } from '@igniter/ui/components/DataTable/index'
 import {CsvColumnDef} from "@igniter/ui/lib/csv";
+import { copyToClipboard } from "@igniter/ui/lib/utils";
 
 export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
   {
@@ -29,7 +30,7 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
         <div className="flex items-center space-x-2">
           <span>{shortenedIdentity}</span>
           <button
-            onClick={() => navigator.clipboard.writeText(identity)}
+            onClick={() => copyToClipboard(identity)}
             className="p-1 rounded"
             title="Copy to clipboard"
           >

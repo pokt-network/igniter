@@ -3,6 +3,7 @@ import * as CSV from 'csv-string'
 export interface CsvColumnDef<T extends object> {
   accessorKey?: keyof T
   header?: string
+  csvHeader?: string
   csvFormatterFn?: (rowData: T) => string
 }
 
@@ -67,7 +68,7 @@ export const exportToCsvFromClient = <T extends object>({
     (item: T) => (rowsDataString += convertRowToString<T>(columns,item))
   )
 
-  const blob = new Blob([CSV.stringify(columns.filter(item => !!item.accessorKey && !!item.csvFormatterFn).map(item => item.header!)) + rowsDataString], {
+  const blob = new Blob([CSV.stringify(columns.filter(item => !!item.accessorKey && !!item.csvFormatterFn).map(item => item.csvHeader ?? item.header!)) + rowsDataString], {
     type: 'text/csv;charset=utf-8;',
   })
   const url = URL.createObjectURL(blob)

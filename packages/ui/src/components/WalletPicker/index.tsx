@@ -18,7 +18,7 @@ import DialogContentSectionHeader from "@igniter/ui/components/DialogContentSect
 import WalletPickerItem, {WalletPickerItemProps} from "./components/WalletPickerItem";
 import {DialogClose} from "../dialog";
 import {useWalletConnection} from "@igniter/ui/context/WalletConnection/index";
-import { getShortAddress } from "../../lib/utils";
+import { copyToClipboard, getShortAddress } from "../../lib/utils";
 import { Checkbox } from '../checkbox'
 import { LoaderIcon } from '../../assets'
 import AvatarByString from "../AvatarByString";
@@ -450,7 +450,7 @@ function SignInStep({
 
     const copyErrorToClipboard = async () => {
       if (errorDetails) {
-        await navigator.clipboard.writeText(errorDetails)
+        await copyToClipboard(errorDetails)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       }

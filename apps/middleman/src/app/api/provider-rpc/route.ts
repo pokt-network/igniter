@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       console.error('Provider not found');
       return new Response("Provider not found", {status: 404});
     }
-    console.log('Provider loaded:', JSON.stringify(provider, null, 2));
+    console.log('Provider loaded:', JSON.stringify({ id: provider.id, name: provider.name, }, null, 2))
   } catch (error) {
     console.error(error);
     return new Response("Unable to load the provider", {status: 500});

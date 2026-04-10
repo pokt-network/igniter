@@ -5,14 +5,18 @@ import { Button } from "@igniter/ui/components/button";
 import { Skeleton } from "@igniter/ui/components/skeleton";
 import { Input } from "@igniter/ui/components/input";
 import { Checkbox } from "@igniter/ui/components/checkbox";
-import { useQuery } from "@tanstack/react-query";
-import { GetUserNodes } from "@/actions/Nodes";
 import { useState, useMemo } from "react";
-import { NodeWithDetails } from "@igniter/db/middleman/schema";
 import { getShortAddress, toCurrencyFormat } from "@igniter/ui/lib/utils";
 import AvatarByString from "@igniter/ui/components/AvatarByString";
+import { GetUserNodes } from "@/actions/Nodes";
+
+type UserNodes = Awaited<ReturnType<typeof GetUserNodes>>;
 
 export interface NodeSelectionStepProps {
+  nodes: UserNodes | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   ownerAddress: string;
   selectedNodes: string[];
   onNodesSelected: (nodeAddresses: string[]) => void;
@@ -21,6 +25,10 @@ export interface NodeSelectionStepProps {
 }
 
 export function NodeSelectionStep({
+  nodes,
+  isLoading,
+  isError,
+  onRetry,
   ownerAddress,
   selectedNodes,
   onNodesSelected,
@@ -29,16 +37,6 @@ export function NodeSelectionStep({
 }: Readonly<NodeSelectionStepProps>) {
   const [searchTerm, setSearchTerm] = useState("");
   const [internalSelectedNodes, setInternalSelectedNodes] = useState<string[]>(selectedNodes);
-
-  const {
-    data: nodes,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ['user-nodes'],
-    queryFn: GetUserNodes,
-  });
 
   // Filter nodes based on owner address and search term
   const filteredNodes = useMemo(() => {
@@ -53,17 +51,13 @@ export function NodeSelectionStep({
 
     const lowerSearch = searchTerm.toLowerCase();
     return ownerNodes.filter(node => {
-      // Search by operator address (node address)
       if (node.address.toLowerCase().includes(lowerSearch)) return true;
-
-      // Search by provider name
       if (node.provider?.name?.toLowerCase().includes(lowerSearch)) return true;
-
       return false;
     });
   }, [nodes, ownerAddress, searchTerm]);
 
-  const handleToggleNode = (node: NodeWithDetails) => {
+  const handleToggleNode = (node: { address: string }) => {
     setInternalSelectedNodes(prev =>
       prev.includes(node.address)
         ? prev.filter(addr => addr !== node.address)
@@ -79,12 +73,10 @@ export function NodeSelectionStep({
     );
 
     if (allSelected) {
-      // Unselect all filtered nodes
       setInternalSelectedNodes(prev =>
         prev.filter(addr => !filteredAddresses.includes(addr))
       );
     } else {
-      // Select all filtered nodes
       setInternalSelectedNodes(prev => {
         const newSelected = [...prev];
         filteredAddresses.forEach(addr => {
@@ -101,10 +93,6 @@ export function NodeSelectionStep({
     if (filteredNodes.length === 0) return false;
     return filteredNodes.every(node => internalSelectedNodes.includes(node.address));
   }, [filteredNodes, internalSelectedNodes]);
-
-  const handleContinue = () => {
-    onNodesSelected(internalSelectedNodes);
-  };
 
   return (
     <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-6">
@@ -136,7 +124,7 @@ export function NodeSelectionStep({
           <span className="text-[14px] font-medium text-[var(--text-primary)]">
             Failed to load nodes
           </span>
-          <Button onClick={() => refetch()} className="mt-2 w-fit">
+          <Button onClick={onRetry} className="mt-2 w-fit">
             Retry
           </Button>
         </div>
@@ -171,43 +159,41 @@ export function NodeSelectionStep({
               </div>
 
               <div className="flex flex-col max-h-[400px] overflow-y-auto border border-[var(--border-primary)] rounded-b-[8px]">
-                {filteredNodes.map((node) => {
-                  return (
-                    <div
-                      key={node.address}
-                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] last:border-b-0 hover:bg-[var(--bg-surface)] cursor-pointer"
-                      onClick={() => handleToggleNode(node)}
-                    >
-                      <div className="flex flex-row items-center gap-3 flex-1">
-                        <Checkbox
-                          checked={internalSelectedNodes.includes(node.address)}
-                          onCheckedChange={() => handleToggleNode(node)}
-                        />
-                        <div className="flex flex-col gap-1">
-                          <div className="flex flex-row items-center gap-2">
-                            <AvatarByString string={node.address} />
-                            <span className="font-mono text-[14px] text-[var(--text-primary)]">
-                              {getShortAddress(node.address, 5)}
-                            </span>
-                          </div>
-                          {node.provider?.name && (
-                            <div className="flex flex-row items-center gap-2 text-[12px] text-[var(--text-tertiary)]">
-                              <span>Provider: {node.provider.name}</span>
-                            </div>
-                          )}
+                {filteredNodes.map((node) => (
+                  <div
+                    key={node.address}
+                    className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] last:border-b-0 hover:bg-[var(--bg-surface)] cursor-pointer"
+                    onClick={() => handleToggleNode(node)}
+                  >
+                    <div className="flex flex-row items-center gap-3 flex-1">
+                      <Checkbox
+                        checked={internalSelectedNodes.includes(node.address)}
+                        onCheckedChange={() => handleToggleNode(node)}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-row items-center gap-2">
+                          <AvatarByString string={node.address} />
+                          <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                            {getShortAddress(node.address, 5)}
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-0">
-                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
-                          {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
-                        </span>
-                        <span className="font-mono text-[12px] text-[var(--text-tertiary)]">
-                          $POKT
-                        </span>
+                        {node.provider?.name && (
+                          <div className="flex flex-row items-center gap-2 text-[12px] text-[var(--text-tertiary)]">
+                            <span>Provider: {node.provider.name}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="flex flex-col items-end gap-0">
+                      <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                        {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
+                      </span>
+                      <span className="font-mono text-[12px] text-[var(--text-tertiary)]">
+                        $POKT
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </>
           )}
@@ -215,7 +201,7 @@ export function NodeSelectionStep({
       )}
 
       <Button
-        onClick={handleContinue}
+        onClick={() => onNodesSelected(internalSelectedNodes)}
         disabled={internalSelectedNodes.length === 0}
         className="w-full"
       >
