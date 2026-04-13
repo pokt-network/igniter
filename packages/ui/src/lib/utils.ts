@@ -49,6 +49,22 @@ export function amountToPokt(amount: string | number): number {
   return isNaN(Number(amount)) ? 0 : Number(amount) / UPOKT_CONSTANT;
 }
 
+export async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback for non-secure contexts (plain HTTP)
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 export function toDateFormat(value: Date | null) {
     return value
         ? value.toLocaleString("en-US", {

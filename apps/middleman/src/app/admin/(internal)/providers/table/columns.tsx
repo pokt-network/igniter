@@ -7,6 +7,7 @@ import {Provider} from "@igniter/db/middleman/schema";
 import {useState} from "react";
 import {UpdateEnabled, UpdateVisibility} from "@/actions/Providers";
 import {Switch} from "@igniter/ui/components/switch";
+import { copyToClipboard } from "@igniter/ui/lib/utils";
 
 export const columns: ColumnDef<Provider>[] = [
   {
@@ -25,7 +26,7 @@ export const columns: ColumnDef<Provider>[] = [
         <div className="flex items-center space-x-2">
           <span>{shortenedIdentity}</span>
           <button
-            onClick={() => navigator.clipboard.writeText(identity)}
+            onClick={() => copyToClipboard(identity)}
             className="p-1 rounded"
             title="Copy to clipboard"
           >

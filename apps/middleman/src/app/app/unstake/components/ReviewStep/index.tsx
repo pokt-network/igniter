@@ -6,8 +6,8 @@ import { Skeleton } from "@igniter/ui/components/skeleton";
 import { QuickInfoPopOverIcon } from "@igniter/ui/components/QuickInfoPopOverIcon";
 import { CaretSmallIcon, CornerIcon } from "@igniter/ui/assets";
 import { useQuery } from "@tanstack/react-query";
-import { GetUserNodes } from "@/actions/Nodes";
 import { GetUnstakeDuration } from "@/actions/Unstake";
+import { GetUserNodes } from "@/actions/Nodes";
 import { formatDuration } from "@/lib/utils/time";
 import { useMemo, useState } from "react";
 import { getShortAddress, toCurrencyFormat } from "@igniter/ui/lib/utils";
@@ -16,7 +16,13 @@ import { UnstakingProcess, UnstakingProcessStatus } from "@/app/app/unstake/comp
 import { Transaction } from "@igniter/db/middleman/schema";
 import React from "react";
 
+type UserNodes = Awaited<ReturnType<typeof GetUserNodes>>;
+
 export interface ReviewStepProps {
+  nodes: UserNodes | undefined;
+  isLoadingNodes: boolean;
+  isErrorNodes: boolean;
+  onRetryNodes: () => void;
   selectedNodeAddresses: string[];
   ownerAddress: string;
   errorMessage?: string;
@@ -36,6 +42,10 @@ interface OwnerAddressGroup {
 }
 
 export function ReviewStep({
+  nodes,
+  isLoadingNodes,
+  isErrorNodes,
+  onRetryNodes,
   selectedNodeAddresses,
   ownerAddress,
   errorMessage,
@@ -44,16 +54,6 @@ export function ReviewStep({
   onClose
 }: Readonly<ReviewStepProps>) {
   const [isShowingNodeDetails, setIsShowingNodeDetails] = useState(false);
-
-  const {
-    data: nodes,
-    isLoading: isLoadingNodes,
-    isError: isErrorNodes,
-    refetch: refetchNodes,
-  } = useQuery({
-    queryKey: ['user-nodes'],
-    queryFn: GetUserNodes,
-  });
 
   const {
     data: unstakeDurationData,
@@ -104,8 +104,6 @@ export function ReviewStep({
   const totalStakeAmount = useMemo(() => {
     return selectedNodes.reduce((sum, node) => sum + parseFloat(node.stakeAmount), 0);
   }, [selectedNodes]);
-
-  const totalTransactions = ownerAddressGroups.length;
 
   const formattedDuration = unstakeDurationData ? formatDuration(unstakeDurationData.durationSeconds) : null;
 
@@ -167,7 +165,7 @@ export function ReviewStep({
             Failed to load unstake information.
             <div className="flex gap-2 mt-2">
               {isErrorNodes && (
-                <Button onClick={() => refetchNodes()} className="h-[30px]">
+                <Button onClick={onRetryNodes} className="h-[30px]">
                   Retry Nodes
                 </Button>
               )}

@@ -6,6 +6,7 @@ import {UpdateKeysState} from "@/actions/Keys";
 import {ActionButton} from "@/app/admin/details/KeyDetail/ActionButton";
 import {ConfirmationDialog} from "@/components/ConfirmationDialog";
 import {Button} from "@igniter/ui/components/button";
+import { copyToClipboard } from "@igniter/ui/lib/utils";
 
 export function RemediationHistoryList({ entries, keyId, keyState }: { entries: RemediationHistoryEntry[]; keyId: number, keyState: KeyState }) {
 
@@ -84,28 +85,7 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
     const [copied, setCopied] = React.useState(false)
 
     const copy = async () => {
-      try {
-        if (navigator && 'clipboard' in navigator) {
-          await navigator.clipboard.writeText(text)
-        } else {
-          throw new Error('clipboard api not available')
-        }
-      } catch {
-        // Fallback for older browsers
-        try {
-          const textarea = document.createElement('textarea')
-          textarea.value = text
-          textarea.setAttribute('readonly', '')
-          textarea.style.position = 'absolute'
-          textarea.style.left = '-9999px'
-          document.body.appendChild(textarea)
-          textarea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textarea)
-        } catch {
-          // ignore
-        }
-      }
+      await copyToClipboard(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }

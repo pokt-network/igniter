@@ -38,6 +38,9 @@ export default function UnstakePage() {
 
   const {
     data: nodes,
+    isLoading: isLoadingNodes,
+    isError: isErrorNodes,
+    refetch: refetchNodes,
   } = useQuery({
     queryKey: ['user-nodes'],
     queryFn: GetUserNodes,
@@ -138,6 +141,10 @@ export default function UnstakePage() {
 
           {step === UnstakeActivitySteps.OwnerAddressSelection && (
             <OwnerAddressSelectionStep
+              nodes={nodes}
+              isLoading={isLoadingNodes}
+              isError={isErrorNodes}
+              onRetry={refetchNodes}
               selectedOwnerAddress={selectedOwnerAddress}
               onOwnerAddressSelected={handleOwnerAddressSelected}
               onBack={() => setStep(UnstakeActivitySteps.Information)}
@@ -147,6 +154,10 @@ export default function UnstakePage() {
 
           {step === UnstakeActivitySteps.NodeSelection && (
             <NodeSelectionStep
+              nodes={nodes}
+              isLoading={isLoadingNodes}
+              isError={isErrorNodes}
+              onRetry={refetchNodes}
               ownerAddress={selectedOwnerAddress}
               selectedNodes={selectedNodeAddresses}
               onNodesSelected={handleNodesSelected}
@@ -163,6 +174,10 @@ export default function UnstakePage() {
 
           {step === UnstakeActivitySteps.Review && (
             <ReviewStep
+              nodes={nodes}
+              isLoadingNodes={isLoadingNodes}
+              isErrorNodes={isErrorNodes}
+              onRetryNodes={refetchNodes}
               selectedNodeAddresses={selectedNodeAddresses}
               ownerAddress={selectedOwnerAddress}
               errorMessage={unstakingErrorMessage}
