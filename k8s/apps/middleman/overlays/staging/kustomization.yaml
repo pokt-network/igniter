@@ -6,7 +6,7 @@ resources:
 images:
   - name: localhost:5001/middleman
     newName: ghcr.io/pokt-network/middleman
-    newTag: "4506d47"
+    newTag: "f59bab8"
 patches:
   - path: ./patches/configmap.yaml
   - path: ./patches/middleman-secrets.yaml
