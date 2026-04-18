@@ -319,3 +319,29 @@ export const importRequestStatusEnum = pgEnum(
   'import_request_status',
   enumToPgEnum(ImportRequestStatus),
 )
+
+export enum NotificationChannelType {
+  Discord = 'discord',
+  Telegram = 'telegram',
+  Email = 'email',
+}
+
+export const notificationChannelTypeEnum = pgEnum(
+  'notification_channel_type',
+  enumToPgEnum(NotificationChannelType),
+)
+
+export const NOTIFICATION_EVENT_TYPES = [
+  'keys_staked',
+  'keys_unstaked',
+  'supplier_funds_low',
+  'supplier_stake_low',
+  'remediation_summary',
+  'delegators_synced',
+] as const
+
+export const notificationEventTypeEnum = pgEnum(
+  'notification_event_type',
+  NOTIFICATION_EVENT_TYPES,
+)
+
