@@ -1,6 +1,4 @@
 import {
-  ActivityFailure,
-  ApplicationFailure,
   proxyActivities,
   WorkflowError,
 } from '@temporalio/workflow'
@@ -9,24 +7,9 @@ import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import {SendTransactionResult} from "@/lib/blockchain";
 
 const TX_EXPIRATION_BLOCKS = 30
-const TX_NOT_FOUND_ERROR_TYPE = 'TX_NOT_FOUND'
 
 interface TransactionArgs {
   transactionId: number;
-}
-
-/**
- * Returns true when `err` is the retries-exhausted wrapper around the retriable
- * `TX_NOT_FOUND` ApplicationFailure thrown by the `verifyTransaction` activity.
- * Any other failure (RPC unreachable, deserialization, bugs) returns false and
- * should be rethrown so the workflow fails loudly rather than silently marking
- * the tx as failure on insufficient evidence.
- */
-function isTxNotFoundFailure(err: unknown): boolean {
-  if (err instanceof ActivityFailure && err.cause instanceof ApplicationFailure) {
-    return err.cause.type === TX_NOT_FOUND_ERROR_TYPE
-  }
-  return false
 }
 
 /**
@@ -172,24 +155,18 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     // retriable TX_NOT_FOUND until the policy is exhausted.
     [success, code, gasUsed] = await verifyTransaction(txHash, baseHeight);
     txFoundOnChain = true;
-  } catch (err) {
-    // Only fall through to Tier 4 when retries were exhausted specifically with
-    // TX_NOT_FOUND. Any other failure (RPC unreachable, bug, unexpected shape) is
-    // rethrown so the workflow fails and the tx stays Pending for human triage —
-    // avoids false "failure" marks when we lack evidence either way.
-    if (!isTxNotFoundFailure(err)) {
-      throw err;
-    }
-
-    // Retries exhausted. Tier 4: check supplier state directly. Only a positive result
-    // (supplier on-chain) is conclusive; a missing supplier keeps the tx marked failed.
+  } catch {
     if (operatorAddress) {
-      const supplierExists = await checkSupplierOnChain(operatorAddress);
-      if (supplierExists) {
-        success = true;
-        code = 0;
-        gasUsed = '0';
-        supplierFallbackHit = true;
+      try {
+        const supplierExists = await checkSupplierOnChain(operatorAddress);
+        if (supplierExists) {
+          success = true;
+          code = 0;
+          gasUsed = '0';
+          supplierFallbackHit = true;
+        }
+      } catch {
+        // supplier check also failed — tx stays marked as Failure (success stays false)
       }
     }
   }
