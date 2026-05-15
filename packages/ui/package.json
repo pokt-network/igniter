@@ -62,7 +62,7 @@
     "graphql-ws": "^6.0.5",
     "lodash": "^4.17.21",
     "lucide-react": "0.456.0",
-    "next": "15.5.9",
+    "next": "15.5.16",
     "next-themes": "0.4.3",
     "react": "19.0.1",
     "react-chartjs-2": "^5.3.0",
@@ -88,7 +88,10 @@
     "./graphql/server": "./src/lib/graphql/server.ts",
     "./graphql/client": "./src/lib/graphql/client.tsx",
     "./models": "./src/lib/models/index.ts",
-    "./components/*": ["./src/components/*.tsx", "./src/components/*.ts"],
+    "./components/*": [
+      "./src/components/*.tsx",
+      "./src/components/*.ts"
+    ],
     "./components/PocketBrandLogo": "./src/components/PocketBrandLogo/index.tsx",
     "./hooks/*": "./src/hooks/*.ts",
     "./context/*": "./src/context/*.tsx",

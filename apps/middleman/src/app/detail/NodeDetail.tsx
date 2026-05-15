@@ -22,6 +22,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetUnstakeDuration } from '@/actions/Unstake'
 import { GetSupplierChanges, AcknowledgeAllByNode } from '@/actions/SupplierChanges'
 import { formatDuration } from '@/lib/utils/time'
+import { GetNode } from '@/actions/Nodes'
+import { Skeleton } from '@igniter/ui/components/skeleton'
 
 export interface NodeDetailBody {
   [key: string]: unknown;
@@ -32,7 +34,7 @@ export interface NodeDetailBody {
   provider: Provider | null;
   stakeAmount: number;
   operationalFundsAmount: number;
-  transactions: Array<TransactionDetailBody>;
+  transactions?: Array<TransactionDetailBody>;
   services: NodeService[];
 }
 
@@ -245,10 +247,10 @@ export default function NodeDetail({
    address,
    ownerAddress,
    status,
-   transactions,
    provider,
    operationalFundsAmount,
    stakeAmount,
+   transactions: transactionsFromProps,
    services,
 }: NodeDetailBody) {
   const addItem = useAddItemToDetail()
@@ -264,6 +266,26 @@ export default function NodeDetail({
     queryFn: GetUnstakeDuration,
     enabled: status === NodeStatus.Staked,
   });
+  
+  const { data: nodeData, isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ['node-transactions', address],
+    queryFn: () => GetNode(address),
+    enabled: !transactionsFromProps?.length,
+  });
+
+  const transactions: TransactionDetailBody[] = transactionsFromProps ?? (nodeData?.transactionsToNodes ?? []).map((t) => ({
+    id: t.transaction.id,
+    type: t.transaction.type,
+    status: t.transaction.status,
+    createdAt: t.transaction.createdAt!,
+    operations: JSON.parse(t.transaction.unsignedPayload).body.messages,
+    hash: t.transaction.hash || '',
+    estimatedFee: t.transaction.estimatedFee,
+    consumedFee: t.transaction.consumedFee,
+    provider: provider?.name || '',
+    providerFee: t.transaction.providerFee,
+    typeProviderFee: t.transaction.typeProviderFee,
+  }));
 
   const summaryRows: Array<SummaryRow> = [
     {
@@ -295,7 +317,12 @@ export default function NodeDetail({
     }
   ]
 
-  if (transactions.length) {
+  if (isLoadingTransactions) {
+    summaryRows.push({
+      label: <Skeleton className="w-24 h-4 bg-bg-elevated" />,
+      value: null,
+    })
+  } else if (transactions.length) {
     summaryRows.push({
       label: (
         <div className={'flex items-center gap-2'}>

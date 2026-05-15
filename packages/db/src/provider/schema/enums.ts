@@ -160,6 +160,7 @@ export enum RemediationHistoryEntryReason {
   OwnerInitialStake = '1003',
   SupplierStakeTooLow = '1004',
   SupplierFundsTooLow = '1005',
+  AddressGroupMigration = '1006',
 }
 
 /**

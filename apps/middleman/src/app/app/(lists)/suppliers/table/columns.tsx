@@ -1,7 +1,7 @@
 "use client";
 
 import type { CsvColumnDef } from '@igniter/ui/lib/csv'
-import {NodeWithDetails, Provider, Transaction} from '@igniter/db/middleman/schema'
+import {NodeWithDetails, Provider} from '@igniter/db/middleman/schema'
 import {NodeStatus} from '@igniter/db/middleman/enums'
 import {
   CopyIcon,
@@ -14,6 +14,7 @@ import {
 } from "@igniter/ui/components/DataTable/index";
 import {
   amountToPokt,
+  copyToClipboard,
   getShortAddress,
   roundAndSeparate,
 } from "@igniter/ui/lib/utils";
@@ -21,17 +22,17 @@ import {CellContext, ColumnDef} from "@tanstack/react-table";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider';
+import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon';
 
-export type NodeDetails = NodeWithDetails & {
+export type NodeDetails = Omit<NodeWithDetails, 'transactionsToNodes'> & {
   height: number;
-  transactions: Transaction[];
 };
 
 const createAddressCellRenderer = (attribute: keyof Pick<NodeDetails, 'address' | 'ownerAddress'>) => ({ row }: CellContext<NodeDetails, unknown>) => {
       const address = row.getValue(attribute) as string;
 
       const onClickCopy = useCallback(() => {
-        navigator.clipboard.writeText(address).then(() => {
+        copyToClipboard(address).then(() => {
           toast.success("Address copied to clipboard");
         });
       }, [address]);
@@ -80,11 +81,21 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
   },
   {
     id: "height",
-    header: "Height",
+    header: () => (
+      <div className="flex items-center justify-end gap-1">
+        <span>Height</span>
+        <QuickInfoPopOverIcon
+          title="Last Updated Height"
+          description="The block height at which this supplier's on-chain state was last synced."
+          url=""
+        />
+      </div>
+    ),
     accessorKey: "height",
     meta: {
       headerAlign: 'right'
     },
+    csvHeader: "Height",
     csvFormatterFn: (item: NodeDetails) => item.height.toString(),
     cell: ({ row }) => {
       return (
@@ -185,19 +196,6 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
                   operationalFundsAmount: Number(node.balance.toString()),
                   provider: node.provider,
                   services: node.services ?? [],
-                  transactions: node.transactions.map(t => ({
-                    id: t.id,
-                    type: t.type,
-                    status: t.status,
-                    createdAt: t.createdAt!,
-                    operations: JSON.parse(t.unsignedPayload).body.messages,
-                    hash: t.hash || '',
-                    estimatedFee: t.estimatedFee,
-                    consumedFee: t.consumedFee,
-                    provider: node.provider?.name || '',
-                    providerFee: t.providerFee,
-                    typeProviderFee: t.typeProviderFee,
-                  })),
                 }
               })
             }}

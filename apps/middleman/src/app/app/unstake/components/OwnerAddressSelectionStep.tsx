@@ -2,16 +2,21 @@
 
 import { ActivityHeader } from '@igniter/ui/components/ActivityHeader';
 import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index';
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { getShortAddress, toCurrencyFormat } from '@igniter/ui/lib/utils';
 import { Checkbox } from '@igniter/ui/components/checkbox';
 import { Button } from '@igniter/ui/components/button';
 import { Skeleton } from '@igniter/ui/components/skeleton';
 import AvatarByString from '@igniter/ui/components/AvatarByString';
-import { useQuery } from '@tanstack/react-query';
 import { GetUserNodes } from '@/actions/Nodes';
 
+type UserNodes = Awaited<ReturnType<typeof GetUserNodes>>;
+
 interface OwnerAddressSelectionStepProps {
+  nodes: UserNodes | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   onClose: () => void;
   onBack: () => void;
   selectedOwnerAddress?: string;
@@ -25,6 +30,10 @@ interface OwnerAddressData {
 }
 
 export function OwnerAddressSelectionStep({
+  nodes,
+  isLoading,
+  isError,
+  onRetry,
   onClose,
   onBack,
   onOwnerAddressSelected,
@@ -32,16 +41,6 @@ export function OwnerAddressSelectionStep({
 }: OwnerAddressSelectionStepProps) {
   const { connectedIdentity, connectedIdentities } = useWalletConnection();
   const [selectedOwnerAddress, setSelectedOwnerAddress] = useState(selectedOwnerAddressFromProps || '');
-
-  const {
-    data: nodes,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ['user-nodes'],
-    queryFn: GetUserNodes,
-  });
 
   // Calculate node count and total staked amount per owner address
   const ownerAddressData = useMemo(() => {
@@ -101,7 +100,7 @@ export function OwnerAddressSelectionStep({
           <span className="text-[14px] font-medium text-[var(--text-primary)]">
             Failed to load owner addresses
           </span>
-          <Button onClick={() => refetch()} className="mt-2 w-fit">
+          <Button onClick={onRetry} className="mt-2 w-fit">
             Retry
           </Button>
         </div>
@@ -119,7 +118,7 @@ export function OwnerAddressSelectionStep({
 
           {ownerAddressData.length > 0 && (
             <div className="flex flex-col gap-4 h-full overflow-y-auto">
-              {ownerAddressData.map((data, index) => {
+              {ownerAddressData.map((data) => {
                 const isPrimaryAccount = data.address === connectedIdentity;
                 return (
                   <div key={data.address}>

@@ -321,6 +321,71 @@ describe('getExpectedServicesFromKey', () => {
 
     expect(getExpectedServicesFromKey(key)).toEqual([]);
   });
+
+  it('filters out 0% rev share entries and recalculates owner remainder', () => {
+    const key = {
+      address: 'pokt1supplier',
+      ownerAddress: 'pokt1owner',
+      delegatorRewardsAddress: 'pokt1delegator',
+      delegatorRevSharePercentage: 0, // 0% should be excluded
+      addressGroup: {
+        relayMiner: { identity: 'rm1', domain: 'example.com', region: { urlValue: 'us' } },
+        addressGroupServices: [
+          {
+            serviceId: 'svc1',
+            addSupplierShare: true,
+            supplierShare: 0, // 0% should also be excluded
+            revShare: [{ address: 'pokt1provider', share: 20 }],
+            service: {
+              endpoints: [{ rpcType: RPCType.JSON_RPC, url: 'https://test.com' }],
+            },
+          },
+        ],
+      },
+    } as any;
+
+    const result = getExpectedServicesFromKey(key);
+    const svc = result[0]!;
+
+    // delegator=0 (filtered), supplier=0 (filtered), provider=20, owner=80
+    expect(svc.revShare).toHaveLength(2);
+    expect(svc.revShare).toEqual([
+      { address: 'pokt1provider', revSharePercentage: 20 },
+      { address: 'pokt1owner', revSharePercentage: 80 },
+    ]);
+  });
+
+  it('normalizes rpcType to numeric enum values', () => {
+    const key = {
+      address: 'pokt1supplier',
+      ownerAddress: 'pokt1owner',
+      delegatorRewardsAddress: null,
+      delegatorRevSharePercentage: null,
+      addressGroup: {
+        relayMiner: { identity: 'rm1', domain: 'example.com', region: { urlValue: 'us' } },
+        addressGroupServices: [
+          {
+            serviceId: 'svc1',
+            addSupplierShare: false,
+            supplierShare: 0,
+            revShare: [],
+            service: {
+              endpoints: [
+                { rpcType: 'JSON_RPC' as any, url: 'https://test.com' },
+                { rpcType: 'REST' as any, url: 'https://test.com/rest' },
+              ],
+            },
+          },
+        ],
+      },
+    } as any;
+
+    const result = getExpectedServicesFromKey(key);
+    const svc = result[0]!;
+
+    expect(svc.endpoints[0].rpcType).toBe(RPCType.JSON_RPC); // 3
+    expect(svc.endpoints[1].rpcType).toBe(RPCType.REST);     // 4
+  });
 });
 
 // ── Fixture-based tests ─────────────────────────────────────────────────

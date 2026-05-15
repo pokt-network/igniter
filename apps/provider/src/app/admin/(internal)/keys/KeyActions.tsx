@@ -5,10 +5,11 @@ import { Button } from '@igniter/ui/components/button'
 import ImportForm from './import/ImportForm'
 import ExportForm from './export/ExportForm'
 import GenerateForm from './generate/GenerateForm'
+import MigrateForm from './migrate/MigrateForm'
 
 export default function KeyActions() {
   const [activeModal, setActiveModal] = useState<
-    'import' | 'export' | 'generate' | null
+    'import' | 'export' | 'generate' | 'migrate' | null
   >(null)
 
   return (
@@ -26,6 +27,12 @@ export default function KeyActions() {
       >
         Export
       </Button>
+      <Button
+        variant="outline"
+        onClick={() => setActiveModal('migrate')}
+      >
+        Migrate
+      </Button>
 
       {activeModal === 'import' && (
         <ImportForm onClose={() => setActiveModal(null)} />
@@ -35,6 +42,9 @@ export default function KeyActions() {
       )}
       {activeModal === 'generate' && (
         <GenerateForm onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === 'migrate' && (
+        <MigrateForm onClose={() => setActiveModal(null)} />
       )}
     </>
   )

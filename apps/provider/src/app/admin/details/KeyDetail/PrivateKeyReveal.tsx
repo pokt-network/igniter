@@ -5,6 +5,7 @@ import {clsx} from 'clsx'
 import {Button} from '@igniter/ui/components/button'
 import {LoaderIcon, WarningIcon, CopyIcon, CheckSuccess as CheckIcon} from '@igniter/ui/assets'
 import {RevealPrivateKey} from '@/actions/Keys'
+import { copyToClipboard } from '@igniter/ui/lib/utils'
 
 const AUTO_HIDE_SECONDS = 30
 
@@ -69,7 +70,7 @@ export default function PrivateKeyReveal({keyId}: {keyId: number}) {
 
   const handleCopy = () => {
     if (!privateKey) return
-    navigator.clipboard.writeText(privateKey).then(() => {
+    copyToClipboard(privateKey).then(() => {
       setIsCopied(true)
       setTimeout(() => setIsCopied(false), 1500)
     })

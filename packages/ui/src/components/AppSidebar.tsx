@@ -28,7 +28,7 @@ export default function AppSidebar({
 }: Readonly<AppSidebarProps>) {
   return (
     <Sidebar
-      className="top-(--header-height) !h-[calc(100svh-var(--header-height))]"
+      className="top-[calc(var(--header-height)+var(--notification-height,0px))] !h-[calc(100svh-var(--header-height)-var(--notification-height,0px))]"
       {...sidebarProps}
     >
       <SidebarHeader></SidebarHeader>

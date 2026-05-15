@@ -27,6 +27,7 @@ const ReasonLabels: Record<string, string> = {
   [RemediationHistoryEntryReason.OwnerInitialStake]: 'Initial Stake',
   [RemediationHistoryEntryReason.SupplierStakeTooLow]: 'Stake Too Low',
   [RemediationHistoryEntryReason.SupplierFundsTooLow]: 'Funds Too Low',
+  [RemediationHistoryEntryReason.AddressGroupMigration]: 'Address Group Migration',
 }
 
 const TriggerLabels: Record<string, string> = {

@@ -4,7 +4,7 @@ import {zodResolver} from "@hookform/resolvers/zod";
 import {useForm} from "react-hook-form";
 import {z} from "zod";
 import {Button} from "@igniter/ui/components/button";
-import {getShortAddress} from "@igniter/ui/lib/utils";
+import { copyToClipboard, getShortAddress } from "@igniter/ui/lib/utils";
 import {
   Form,
   FormControl,
@@ -390,7 +390,7 @@ export function AddOrUpdateServiceDialog({
                         <button
                           type="button"
                           className="text-text-tertiary hover:text-text-primary transition-colors"
-                          onClick={() => navigator.clipboard.writeText(serviceOnChain.ownerAddress)}
+                          onClick={() => copyToClipboard(serviceOnChain.ownerAddress)}
                           title="Copy address"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>

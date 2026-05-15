@@ -4,7 +4,7 @@ import CopyIcon from '../assets/icons/dark/copy.svg'
 import CheckIcon from '../assets/icons/dark/check_success.svg'
 import AvatarByString from './AvatarByString'
 import React from 'react'
-import { getShortAddress } from '../lib/utils'
+import { copyToClipboard, getShortAddress } from '../lib/utils'
 import { clsx } from 'clsx'
 
 interface AddressProps {
@@ -17,7 +17,7 @@ export default function Address({address, onClick, showAvatar}: AddressProps) {
   const [isCopied, setIsCopied] = React.useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(address).then(() => {
+    copyToClipboard(address).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 1000);
     });

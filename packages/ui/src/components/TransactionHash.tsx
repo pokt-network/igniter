@@ -3,6 +3,7 @@ import { Button } from './button'
 import CopyIcon from '../assets/icons/dark/copy.svg'
 import CheckIcon from '../assets/icons/dark/check_success.svg'
 import React from 'react'
+import { copyToClipboard } from '../lib/utils'
 
 interface TransactionHashProps {
   hash: string;
@@ -14,7 +15,7 @@ export default function TransactionHash({hash, onClick}: TransactionHashProps) {
   const truncateHash = hash.slice(0, 7) + '...' + hash.slice(-7);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(hash).then(() => {
+    copyToClipboard(hash).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 1000);
     });
