@@ -2,7 +2,9 @@ FROM node:22-slim AS base
 
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+# pnpm 10+ resolves the global bin to $PNPM_HOME/bin and enforces it must be
+# in PATH. Earlier versions accepted $PNPM_HOME itself.
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
 
 # Install necessary tools and dependencies
 RUN apt-get update && apt-get install -y \
