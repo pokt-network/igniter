@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     git \
     openssh-client \
     curl \
-    && npm install -g pnpm@latest turbo@^2.4.4 \
+    && npm install -g pnpm@10.15.0 turbo@2.4.4 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -47,6 +47,11 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 --gid 100
 
 RUN mkdir -p /app/apps/middleman/.next/cache/fetch-cache && \
     chown -R nextjs:nodejs /app/apps/middleman/.next/cache/fetch-cache
+
+# The migration initContainer runs `pnpm run middleman:migration:migrate`
+# with workingDir /app as the nextjs user. pnpm writes temp files in the
+# CWD, so /app itself must be writable by that user.
+RUN chown nextjs:nodejs /app
 
 USER nextjs
 
