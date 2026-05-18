@@ -304,7 +304,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                       <Input
                         {...field}
                         disabled={isDisabled}
-                        placeholder="https://api.poktscan.com"
+                        placeholder="https://indexer.pocket.network"
                       />
                     </FormControl>
                     <FormDescription>
