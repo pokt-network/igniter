@@ -471,7 +471,7 @@ export default function LandingPage() {
             </a>
 
             <a
-              href="https://www.poktscan.com/"
+              href="https://explorer.pocket.network"
               className="builder-card"
               target="_blank"
               rel="noopener noreferrer"
@@ -485,15 +485,15 @@ export default function LandingPage() {
                   color: "var(--text-primary)",
                 }}
               >
-                PS
+                EX
               </div>
               <div className="builder-info">
-                <h4>POKTScan</h4>
+                <h4>Pocket Explorer</h4>
                 <p>
-                  Also by the Soothe team — the network explorer trusted by the
-                  Pocket community.
+                  The official Pocket Network explorer by the Pocket Network
+                  Foundation.
                 </p>
-                <span className="builder-link">poktscan.com →</span>
+                <span className="builder-link">explorer.pocket.network →</span>
               </div>
             </a>
           </div>

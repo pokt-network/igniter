@@ -398,8 +398,8 @@ export default function SettingsForm() {
                 {isValidatingIndexer && <LoaderIcon className="inline-block animate-spin ml-1 h-3 w-3" />}
               </FormLabel>
               <div className="flex-1">
-                <FormControl><Input {...field} value={field.value ?? ''} className="h-9 text-sm" placeholder="https://indexer.pocket.network" /></FormControl>
-                <p className="text-[11px] text-text-tertiary mt-1 px-1">GraphQL API URL of the POKTscan indexer. Must match the same network as your node.</p>
+                <FormControl><Input {...field} value={field.value ?? ''} className="h-9 text-sm" placeholder="https://data.pocket.network" /></FormControl>
+                <p className="text-[11px] text-text-tertiary mt-1 px-1">GraphQL API URL of the Pocket Network indexer. Must match the same network as your node.</p>
                 <FormMessage className="mt-1" />
               </div>
             </FormItem>
