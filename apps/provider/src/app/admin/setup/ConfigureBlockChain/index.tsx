@@ -254,7 +254,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                     <Input
                       {...field}
                       disabled={isDisabled}
-                      placeholder="https://api.poktscan.com"
+                      placeholder="https://indexer.pocket.network"
                     />
                   </FormControl>
                   <FormDescription>
@@ -359,7 +359,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           onClick={() => {
             form.setValue('pocketApiUrl', 'https://sauron-api.infra.pocket.network', { shouldDirty: true });
             form.setValue('pocketRpcUrl', 'https://sauron-rpc.infra.pocket.network', { shouldDirty: true });
-            form.setValue('indexerApiUrl', 'https://api.poktscan.com', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://indexer.pocket.network', { shouldDirty: true });
           }}
         >
           Mainnet
@@ -371,7 +371,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           onClick={() => {
             form.setValue('pocketApiUrl', 'https://sauron-api.beta.infra.pocket.network', { shouldDirty: true });
             form.setValue('pocketRpcUrl', 'https://sauron-rpc.beta.infra.pocket.network', { shouldDirty: true });
-            form.setValue('indexerApiUrl', 'https://beta-api.poktscan.com', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://indexer.beta.pocket.network', { shouldDirty: true });
           }}
         >
           Beta

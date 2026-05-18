@@ -10,7 +10,7 @@ dotenvConfig({
 
 let graphqlApiUrl = process.env.GRAPHQL_API_URL;
 if (!graphqlApiUrl || graphqlApiUrl === "") {
-  graphqlApiUrl = "https://api.poktscan.com"
+  graphqlApiUrl = "https://indexer.pocket.network"
 }
 
 console.log(`Generating GraphQL types from schema at: ${graphqlApiUrl}`)

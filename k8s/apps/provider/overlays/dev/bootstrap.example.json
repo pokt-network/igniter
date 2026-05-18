@@ -3,7 +3,7 @@
     "name": "Igniter Provider (Dev)",
     "pocketApiUrl": "https://sauron-api.beta.infra.pocket.network",
     "pocketRpcUrl": "https://sauron-rpc.beta.infra.pocket.network",
-    "indexerApiUrl": "https://beta-api.poktscan.com/",
+    "indexerApiUrl": "https://indexer.beta.pocket.network/",
     "chainId": "pocket-lego-testnet",
     "rewardAddresses": [],
     "initialOperationalFunds": 5,
