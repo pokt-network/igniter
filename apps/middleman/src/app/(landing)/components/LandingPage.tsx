@@ -471,7 +471,7 @@ export default function LandingPage() {
             </a>
 
             <a
-              href="https://explorer.pocket.network"
+              href="https://poktscan.pocket.network"
               className="builder-card"
               target="_blank"
               rel="noopener noreferrer"
@@ -493,7 +493,7 @@ export default function LandingPage() {
                   The official Pocket Network explorer by the Pocket Network
                   Foundation.
                 </p>
-                <span className="builder-link">explorer.pocket.network →</span>
+                <span className="builder-link">poktscan.pocket.network →</span>
               </div>
             </a>
           </div>
