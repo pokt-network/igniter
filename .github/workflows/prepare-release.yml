@@ -52,21 +52,6 @@ jobs:
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
           echo "New version: v$NEW_VERSION"
 
-      - name: Update mainnet overlays
-        run: |
-          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman/overlays/mainnet/kustomization.yaml
-          sed -i 's/newTag: ".*"/newTag: "'"$NEW_VERSION"'"/' k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-
-      - name: Commit overlay changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add k8s/apps/middleman/overlays/mainnet/kustomization.yaml \
-                  k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml
-          git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore(release): prepare v${NEW_VERSION} mainnet overlays [skip ci]"
-          git push
-
       - name: Update PR title and body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,10 +63,6 @@ jobs:
 
           **Version bump:** \`${{ github.event.label.name }}\`
           **Previous version:** $(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
-
-          ### Mainnet overlays updated
-          - \`k8s/apps/middleman/overlays/mainnet/kustomization.yaml\` → \`${NEW_VERSION}\`
-          - \`k8s/apps/middleman-workflows/overlays/mainnet/kustomization.yaml\` → \`${NEW_VERSION}\`
 
           ### What happens on merge
           1. Build + push all 4 images tagged \`${NEW_VERSION}\` + \`latest\`
