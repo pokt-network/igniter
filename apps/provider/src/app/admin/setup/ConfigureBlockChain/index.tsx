@@ -254,11 +254,11 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
                     <Input
                       {...field}
                       disabled={isDisabled}
-                      placeholder="https://indexer.pocket.network"
+                      placeholder="https://data.pocket.network"
                     />
                   </FormControl>
                   <FormDescription>
-                    The POKTscan GraphQL API for your network. Used to fetch supplier rewards and on-chain data.
+                    The Pocket Network GraphQL API for your network. Used to fetch supplier rewards and on-chain data.
                     Must match the same network as your Node API.
                   </FormDescription>
                   <FormMessage/>
@@ -359,7 +359,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           onClick={() => {
             form.setValue('pocketApiUrl', 'https://sauron-api.infra.pocket.network', { shouldDirty: true });
             form.setValue('pocketRpcUrl', 'https://sauron-rpc.infra.pocket.network', { shouldDirty: true });
-            form.setValue('indexerApiUrl', 'https://indexer.pocket.network', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://data.pocket.network', { shouldDirty: true });
           }}
         >
           Mainnet
@@ -371,7 +371,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
           onClick={() => {
             form.setValue('pocketApiUrl', 'https://sauron-api.beta.infra.pocket.network', { shouldDirty: true });
             form.setValue('pocketRpcUrl', 'https://sauron-rpc.beta.infra.pocket.network', { shouldDirty: true });
-            form.setValue('indexerApiUrl', 'https://indexer.beta.pocket.network', { shouldDirty: true });
+            form.setValue('indexerApiUrl', 'https://data.beta.pocket.network', { shouldDirty: true });
           }}
         >
           Beta

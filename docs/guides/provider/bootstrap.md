@@ -26,7 +26,7 @@ Connect the Provider to the Pocket Network by entering the REST API URL of a Poc
 | **Pocket RPC URL** | The CometBFT RPC endpoint of a Pocket Network node (e.g., `https://sauron-rpc.beta.infra.pocket.network`). Typically served on port `26657` for self-hosted nodes. Required. Used by workflow services to broadcast and verify transactions. |
 | **Network** | The chain ID detected from the API (e.g., `pocket-beta`). Read-only — auto-populated. Cannot be changed after bootstrap. |
 | **Network Minimum Stake** | The minimum stake required on-chain, in uPOKT. Read-only — auto-populated from the API. |
-| **Indexer API URL** | URL of the blockchain indexer, used to retrieve reward data. Required. The app validates that the indexer's network matches the detected chain ID. Available indexers: `https://indexer.pocket.network` (mainnet) and `https://indexer.beta.pocket.network` (beta). |
+| **Indexer API URL** | URL of the blockchain indexer, used to retrieve reward data. Required. The app validates that the indexer's network matches the detected chain ID. Available indexers: `https://data.pocket.network` (mainnet) and `https://data.beta.pocket.network` (beta). |
 
 > The API URL and RPC URL are different endpoints on the same node. The API URL (port `1317`) serves the Cosmos SDK REST interface. The RPC URL (port `26657`) serves the CometBFT/Tendermint RPC interface.
 
