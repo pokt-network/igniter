@@ -163,6 +163,14 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
     csvFormatterFn: (item: NodeDetails) => amountToPokt(item.balance.toString()).toString(),
   },
   {
+    accessorKey: "services",
+    filterFn: (row, _columnId, value) => {
+      if (!value) return true;
+      const services = row.getValue("services") as Array<{ serviceId: string }>;
+      return (services ?? []).some((s) => s.serviceId === value);
+    },
+  },
+  {
     accessorKey: "createdAt",
     header: "Created At",
     meta: {

@@ -70,6 +70,12 @@ export default function NodesTable() {
       ).entries()
     ).sort(([a], [b]) => a.localeCompare(b));
 
+    const uniqueServices = Array.from(
+      new Set(
+        nodes.flatMap((n) => (n.services ?? []).map((s: { serviceId: string }) => s.serviceId))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
     return [
       {
         group: "bin/status",
@@ -95,6 +101,19 @@ export default function NodesTable() {
           ],
         ],
       },
+      {
+        group: "services",
+        items: [
+          [
+            { label: "All Services", value: "", column: "services", isDefault: true },
+            ...uniqueServices.map((id) => ({
+              label: id,
+              value: id,
+              column: "services" as keyof NodeDetails,
+            })),
+          ],
+        ],
+      },
     ];
   }, [nodes]);
 
@@ -104,6 +123,7 @@ export default function NodesTable() {
       data={nodes}
       filters={filters}
       sorts={sorts}
+      columnVisibility={{ services: false }}
       isLoading={isLoading}
       isError={isError}
       refetch={refetch}
