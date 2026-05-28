@@ -22,7 +22,6 @@ export default function ClientProvidersPage() {
   const router = useRouter();
   const { isConnected, connectedIdentities } = useWalletConnection();
   const [expandedProviders, setExpandedProviders] = useState<Set<number>>(new Set());
-  const [hasInitializedExpanded, setHasInitializedExpanded] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['providers', connectedIdentities],
@@ -41,22 +40,10 @@ export default function ClientProvidersPage() {
     refetchInterval: 30000,
   });
 
-  const providers = data?.providers || [];
+  const providers = (data?.providers || []).slice().sort((a, b) => a.name.localeCompare(b.name));
   const delegatorFee = data?.delegatorFee || 0;
   const minimumStake = data?.minimumStake || 0;
 
-  useEffect(() => {
-    if (!hasInitializedExpanded && providers.length > 0) {
-      const autoExpand = new Set<number>();
-      providers.forEach(p => {
-        if (p.addressGroups.length === 1) {
-          autoExpand.add(p.id);
-        }
-      });
-      setExpandedProviders(autoExpand);
-      setHasInitializedExpanded(true);
-    }
-  }, [providers, hasInitializedExpanded]);
 
   const toggleExpanded = (providerId: number) => {
     setExpandedProviders(prev => {

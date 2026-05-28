@@ -9,7 +9,6 @@ import {
 } from "@igniter/ui/assets";
 import { Button } from "@igniter/ui/components/button";
 import {
-  FilterGroup,
   SortOption,
 } from "@igniter/ui/components/DataTable/index";
 import {
@@ -74,8 +73,9 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
       );
     },
     filterFn: (row, _columnId, value) => {
+      if (!value) return true;
       const provider = row.getValue("provider") as Provider;
-      return provider.name.toLowerCase().includes(value.toLowerCase());
+      return provider?.name === value;
     },
     csvFormatterFn: (item: NodeDetails) => item.provider?.name || "Imported Node",
   },
@@ -108,6 +108,11 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
   },
   {
     accessorKey: "status",
+    filterFn: (row, _columnId, value) => {
+      if (!value) return true;
+      const status = row.getValue("status") as string;
+      return status === value;
+    },
     header: "Status",
     meta: {
       headerAlign: 'center'
@@ -158,6 +163,14 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
     csvFormatterFn: (item: NodeDetails) => amountToPokt(item.balance.toString()).toString(),
   },
   {
+    accessorKey: "services",
+    filterFn: (row, _columnId, value) => {
+      if (!value) return true;
+      const services = row.getValue("services") as Array<{ serviceId: string }>;
+      return (services ?? []).some((s) => s.serviceId === value);
+    },
+  },
+  {
     accessorKey: "createdAt",
     header: "Created At",
     meta: {
@@ -205,50 +218,6 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
         </div>
       );
     },
-  },
-];
-
-export const filters: FilterGroup<NodeDetails>[] = [
-  {
-    group: "bin/status",
-    items: [
-      [
-        {
-          label: "All Nodes",
-          value: "",
-          column: "status",
-        },
-        {
-          label: "Staked",
-          value: "staked",
-          column: "status",
-          isDefault: true,
-        },
-        {
-          label: "Unstaking",
-          value: "unstaking",
-          column: "status",
-        },
-        {
-          label: "Unstaked",
-          value: "unstaked",
-          column: "status",
-        },
-      ],
-    ],
-  },
-  {
-    group: "providers",
-    items: [
-      [
-        {
-          label: "All Providers",
-          value: "",
-          column: "provider",
-          isDefault: true,
-        },
-      ],
-    ],
   },
 ];
 
