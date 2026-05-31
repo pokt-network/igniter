@@ -1,4 +1,6 @@
 import {
+  ActivityFailure,
+  ApplicationFailure,
   proxyActivities,
   WorkflowError,
 } from '@temporalio/workflow'
@@ -7,32 +9,55 @@ import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import {SendTransactionResult} from "@/lib/blockchain";
 
 const TX_EXPIRATION_BLOCKS = 30
+const TX_NOT_FOUND_ERROR_TYPE = 'TX_NOT_FOUND'
 
 interface TransactionArgs {
   transactionId: number;
 }
 
 /**
- * Extracts the operator address from a transaction's unsigned payload.
- * Used for Tier 4 fallback (supplier state check) when TX lookup fails.
+ * Returns true when `err` is the retries-exhausted wrapper around the retriable
+ * `TX_NOT_FOUND` ApplicationFailure thrown by the `verifyTransaction` activity.
+ * Any other failure (RPC unreachable, deserialization, bugs) returns false and
+ * should be rethrown so the workflow fails loudly rather than silently marking
+ * the tx as failure on insufficient evidence.
  */
-function extractOperatorAddress(transaction: { unsignedPayload?: string | null }): string | undefined {
+function isTxNotFoundFailure(err: unknown): boolean {
+  if (err instanceof ActivityFailure && err.cause instanceof ApplicationFailure) {
+    return err.cause.type === TX_NOT_FOUND_ERROR_TYPE
+  }
+  return false
+}
+
+/**
+ * Extracts the owner + operator addresses from a Stake transaction's unsigned payload.
+ * Used for the Tier 4 fallback (supplier state check) when TX lookup fails — both are
+ * needed so the fallback can confirm the on-chain supplier is actually owned by us
+ * rather than someone who staked the same operator address during the verify window.
+ */
+function extractStakeAddresses(
+  transaction: { unsignedPayload?: string | null },
+): { operatorAddress?: string; ownerAddress?: string } {
   try {
-    if (!transaction.unsignedPayload) return undefined
+    if (!transaction.unsignedPayload) return {}
     const payload = JSON.parse(transaction.unsignedPayload)
     const messages = payload?.body?.messages
-    if (!Array.isArray(messages)) return undefined
+    if (!Array.isArray(messages)) return {}
     for (const msg of messages) {
       if (
         msg.typeUrl === '/pocket.supplier.MsgStakeSupplier' &&
         typeof msg.value?.operatorAddress === 'string'
       ) {
-        return msg.value.operatorAddress
+        return {
+          operatorAddress: msg.value.operatorAddress,
+          ownerAddress:
+            typeof msg.value?.ownerAddress === 'string' ? msg.value.ownerAddress : undefined,
+        }
       }
     }
-    return undefined
+    return {}
   } catch {
-    return undefined
+    return {}
   }
 }
 
@@ -136,18 +161,24 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   });
 
   if (!skipWait) {
-    await waitForNextBlock(txHeight);
+    // Wait for txHeight + 2 (waitForNextBlock blocks until currentHeight >= arg + 1).
+    // txHeight is sampled before broadcast, so if the chain advanced during broadcast
+    // a plain "+1" wait can no-op and trigger verifyTransaction before the tx is
+    // indexed. The extra block gives indexing margin; the verify retry loop covers the
+    // rarer case where broadcast spanned multiple blocks.
+    await waitForNextBlock(txHeight + 1);
   }
 
   const txHash = result?.transactionHash || transaction.hash!;
   const baseHeight = transaction.executionHeight || txHeight;
-  const operatorAddress = extractOperatorAddress(transaction);
+  const { operatorAddress, ownerAddress } = extractStakeAddresses(transaction);
 
   let success = false;
   let code = -1;
   let gasUsed = '0';
   let txFoundOnChain = false;
   let supplierFallbackHit = false;
+  let verifyErroredUnexpectedly = false;
 
   try {
     // Retries are driven by Temporal's activity retry policy — one attempt per block
@@ -155,10 +186,23 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     // retriable TX_NOT_FOUND until the policy is exhausted.
     [success, code, gasUsed] = await verifyTransaction(txHash, baseHeight);
     txFoundOnChain = true;
-  } catch {
-    if (operatorAddress) {
+  } catch (err) {
+    // We only reach here after verifyTransaction exhausted its full retry budget
+    // (TX_EXPIRATION_BLOCKS ≈ 30 min), so a transient RPC blip would already have
+    // recovered. Whatever the failure reason, attempt the positive-only supplier
+    // fallback — a supplier on-chain conclusively confirms the stake regardless of
+    // why verify failed. If the fallback is inconclusive we mark Failure (bounded:
+    // we never rethrow into an indefinite Pending loop) but record *why* so a real
+    // verification error stays triageable instead of being mislabeled a clean
+    // "not found".
+    verifyErroredUnexpectedly = !isTxNotFoundFailure(err);
+
+    // Need both addresses to validate ownership — without the expected owner the
+    // supplier fallback can't prove the on-chain supplier is ours, so we skip it
+    // and let the tx stay marked Failure rather than risk a false positive.
+    if (operatorAddress && ownerAddress) {
       try {
-        const supplierExists = await checkSupplierOnChain(operatorAddress);
+        const supplierExists = await checkSupplierOnChain(operatorAddress, ownerAddress);
         if (supplierExists) {
           success = true;
           code = 0;
@@ -166,7 +210,8 @@ export async function ExecuteTransaction(args: TransactionArgs) {
           supplierFallbackHit = true;
         }
       } catch {
-        // supplier check also failed — tx stays marked as Failure (success stays false)
+        // supplier check also failed (e.g. RPC still down) — no positive evidence,
+        // tx stays marked as Failure (success stays false)
       }
     }
   }
@@ -181,6 +226,8 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     }
   } else if (supplierFallbackHit) {
     verificationLog = 'verified via supplier state fallback (tx hash not found)';
+  } else if (verifyErroredUnexpectedly) {
+    verificationLog = `verification errored (not a clean not-found) after ${TX_EXPIRATION_BLOCKS} retries; marked failure for triage (baseHeight=${baseHeight})`;
   } else {
     verificationLog = `tx not found on-chain after ${TX_EXPIRATION_BLOCKS} retries (baseHeight=${baseHeight})`;
   }

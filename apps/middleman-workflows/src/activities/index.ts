@@ -475,13 +475,16 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     )
   },
   /**
-   * Checks whether a supplier exists on-chain with the given operator address.
-   * Used as a Tier 4 positive-only fallback for Stake transactions when `verifyTransaction`
-   * exhausts its retries without finding the tx hash.
+   * Returns true only when a supplier exists on-chain at `operatorAddress` AND it is
+   * owned by `expectedOwnerAddress`. Used as a Tier 4 positive-only fallback for Stake
+   * transactions when `verifyTransaction` exhausts its retries without finding the tx
+   * hash. The ownership check guards against a false positive: during the ~30-block
+   * verify window another operator could stake the same address, so existence alone is
+   * not proof that *our* stake is the one that landed.
    */
-  async checkSupplierOnChain(operatorAddress: string): Promise<boolean> {
+  async checkSupplierOnChain(operatorAddress: string, expectedOwnerAddress: string): Promise<boolean> {
     const supplier = await pocketRpcClient.getSupplier(operatorAddress)
-    return !!supplier
+    return !!supplier && supplier.ownerAddress === expectedOwnerAddress
   },
   /**
    * Creates new nodes based on the data extracted from a provided transaction.
