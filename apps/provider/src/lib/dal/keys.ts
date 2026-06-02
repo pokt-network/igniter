@@ -644,6 +644,7 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
         .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
         .from(keysTable)
         .where(inArray(keysTable.id, chunkIds))
+        .for('update')
 
       const historyCase = buildRemediationHistoryCaseExpr(keys, migrationEntry)
       const stateResetIds = keys.filter((key) => STATES_REQUIRING_RESET.includes(key.state)).map((key) => key.id)
@@ -657,7 +658,12 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
         await tx
           .update(keysTable)
           .set({ state: KeyState.Staked })
-          .where(inArray(keysTable.id, stateResetIds))
+          .where(
+            and(
+              inArray(keysTable.id, stateResetIds),
+              inArray(keysTable.state, STATES_REQUIRING_RESET),
+            ),
+          )
       }
     }
   })
