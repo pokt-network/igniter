@@ -41,6 +41,24 @@ export function PlanDetailsSection({
   return (
     <>
       <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+        <span className="text-[14px] text-[var(--text-tertiary)]">Provider Share</span>
+        <span className="text-[14px] font-mono text-[var(--text-primary)] mt-[4px]">
+          {shares.providerShare.toFixed(1)}%
+        </span>
+      </span>
+      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+        <span className="text-[14px] text-[var(--text-tertiary)]">Supplier Share</span>
+        <span className="text-[14px] font-mono text-[var(--text-primary)] mt-[4px]">
+          {shares.supplierShare.toFixed(1)}%
+        </span>
+      </span>
+      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+        <span className="text-[14px] text-[var(--text-tertiary)]">Delegator Fee</span>
+        <span className="text-[14px] font-mono text-[var(--text-primary)] mt-[4px]">
+          {shares.delegatorShare.toFixed(1)}%
+        </span>
+      </span>
+      <span className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
         <span className="text-[14px] text-[var(--text-tertiary)]">Client Share</span>
         <span className="text-[14px] font-mono text-[var(--text-primary)] mt-[4px]">
           {shares.clientShare.toFixed(1)}%
