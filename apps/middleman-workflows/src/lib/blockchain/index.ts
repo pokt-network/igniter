@@ -148,7 +148,14 @@ export class Blockchain implements IBlockchain {
       const maxBlocks = 30;
       try {
         const comet = await connectComet(this.rpcUrl);
-        for (let h = height; h < height + maxBlocks; h++) {
+        const status = await comet.status();
+        const latestHeight = status.syncInfo.latestBlockHeight;
+        // Only scan blocks that already exist on-chain. Future heights throw and would
+        // waste the scan budget; the workflow-level poll loop handles waiting for new
+        // blocks. Tier 3's role is to recover from a lagging/broken tx_index within
+        // already-produced blocks, not to wait for the chain to advance.
+        const endHeight = Math.min(height + maxBlocks, latestHeight);
+        for (let h = height; h <= endHeight; h++) {
           try {
             const block = await comet.block(h);
             const txs = block.block.txs;

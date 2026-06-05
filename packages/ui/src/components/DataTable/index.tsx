@@ -173,7 +173,7 @@ export default function DataTable<TData extends object, TValue>({
   const currentPage = tableState.pagination.pageIndex;
 
   const defaultFilters = filters.flatMap((filterGroup) =>
-    filterGroup.items.flatMap((filter) => filter.find((f) => f.isDefault) || [])
+    filterGroup.items.flatMap((filter) => filter.find((f) => f.value === '') || filter.find((f) => f.isDefault) || [])
   );
 
 

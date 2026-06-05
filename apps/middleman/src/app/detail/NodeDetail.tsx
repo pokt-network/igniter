@@ -103,7 +103,9 @@ function ServiceCard({ service, ownerAddress }: { service: NodeService; ownerAdd
               <p className="text-xs text-[color:var(--muted-foreground)]">Revenue Share</p>
               {service.revShare.map((rs, i) => (
                 <div key={i} className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-text-tertiary">{getShortAddress(rs.address, 5)}</span>
+                  <span className={`font-mono text-xs ${rs.address.toLowerCase() === ownerAddress.toLowerCase() ? 'text-text-primary font-bold' : 'text-text-tertiary'}`}>
+                    {getShortAddress(rs.address, 5)}
+                  </span>
                   <span className="font-mono text-xs">{rs.revSharePercentage}%</span>
                 </div>
               ))}

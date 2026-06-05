@@ -455,28 +455,36 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
   /**
    * Verifies the transaction status by the given transaction hash.
    *
-   * @param {string} hash - The hash of the transaction to be verified.
-   * @return {Promise<readonly [boolean, number, string]>} A promise that resolves to a tuple containing the success status (boolean), the transaction code (number), and the gas used (string). Throws an error if the transaction data is incomplete or not found.
+   * Returns `[success, code, gasUsed]` when the tx is found on-chain. Throws a retriable
+   * `ApplicationFailure` when the tx is not (yet) found — the workflow's activity retry
+   * policy handles re-checking across blocks until the expiration window closes.
    */
-  async verifyTransaction(hash: string, height?: number, operatorAddress?: string) {
+  async verifyTransaction(
+    hash: string,
+    height?: number,
+  ): Promise<readonly [boolean, number, string]> {
     const tx = await pocketRpcClient.getTransaction(hash, height)
     if (tx) {
       return [tx.success, tx.code, tx.gasUsed?.toString() || '0'] as const
     }
 
-    // Tier 4: all lookup methods failed — check supplier state directly
-    if (operatorAddress) {
-      log.warn('TX not found via any method, checking supplier state', { hash, operatorAddress })
-      const supplier = await pocketRpcClient.getSupplier(operatorAddress)
-      if (supplier) {
-        log.info('Supplier exists on-chain, marking TX as success', { hash, operatorAddress })
-        return [true, 0, '0'] as const
-      }
-      log.warn('Supplier not found on-chain, marking TX as failure', { hash, operatorAddress })
-      return [false, -1, '0'] as const
-    }
-
-    throw new Error('Transaction data is incomplete or not found')
+    throw ApplicationFailure.retryable(
+      'Transaction not found on-chain',
+      'TX_NOT_FOUND',
+      { hash, height },
+    )
+  },
+  /**
+   * Returns true only when a supplier exists on-chain at `operatorAddress` AND it is
+   * owned by `expectedOwnerAddress`. Used as a Tier 4 positive-only fallback for Stake
+   * transactions when `verifyTransaction` exhausts its retries without finding the tx
+   * hash. The ownership check guards against a false positive: during the ~30-block
+   * verify window another operator could stake the same address, so existence alone is
+   * not proof that *our* stake is the one that landed.
+   */
+  async checkSupplierOnChain(operatorAddress: string, expectedOwnerAddress: string): Promise<boolean> {
+    const supplier = await pocketRpcClient.getSupplier(operatorAddress)
+    return !!supplier && supplier.ownerAddress === expectedOwnerAddress
   },
   /**
    * Creates new nodes based on the data extracted from a provided transaction.

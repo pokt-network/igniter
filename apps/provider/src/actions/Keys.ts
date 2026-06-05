@@ -256,7 +256,12 @@ export async function MigrateKeysToAddressGroup(filters: KeyMigrationFilters, ta
       parsed.targetAddressGroupId,
     )
 
-    await TriggerAddressGroupMigrationSchedule()
+    const scheduleResult = await TriggerAddressGroupMigrationSchedule()
+    if (!scheduleResult.success) {
+      console.warn(
+        `[MigrateKeysToAddressGroup] keys migrated but schedule trigger failed; the recurring migration schedule will pick them up: ${scheduleResult.error.message}`,
+      )
+    }
 
     return migrated
   })
