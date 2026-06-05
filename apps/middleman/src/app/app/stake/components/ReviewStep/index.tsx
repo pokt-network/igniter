@@ -11,7 +11,7 @@ import { requestSuppliers } from '@/lib/services/provider'
 import { StakeDistributionOffer } from '@/lib/models/StakeDistributionOffer'
 import { getShortAddress, toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
-import { CaretSmallIcon, CornerIcon } from '@igniter/ui/assets'
+import { CaretSmallIcon, CornerIcon, WarningIcon } from '@igniter/ui/assets'
 import React, { useMemo, useState } from 'react'
 import { useApplicationSettings } from '@/app/context/ApplicationSettings'
 import { StakingProcess, StakingProcessStatus } from '@/app/app/stake/components/ReviewStep/StakingProcess'
@@ -19,6 +19,8 @@ import { Transaction } from '@igniter/db/middleman/schema'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { calculateShares } from '@/lib/utils/shareCalculations'
 import { PlanDetailsSection } from '@/app/app/stake/components/PlanDetailsSection'
+
+const CLIENT_SHARE_WARNING_THRESHOLD = 0;
 
 function useSimulateFee(
   selectedOffer: StakeDistributionOffer,
@@ -500,6 +502,19 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                     </React.Fragment>
                 ))}
             </div>
+
+            {shares && shares.clientShare <= CLIENT_SHARE_WARNING_THRESHOLD && (
+              <div className="flex flex-row items-start gap-3 bg-warning-bg p-[11px_16px] rounded-[8px]">
+                <WarningIcon className="mt-[2px] shrink-0" />
+                <span className="text-[14px] text-[var(--text-primary)]">
+                    <span className="font-medium text-warning">
+                        This plan's client rev share is {shares.clientShare.toFixed(1)}%.
+                    </span>
+                    <br />
+                    You will receive 0% of rewards from this provider.
+                </span>
+              </div>
+            )}
 
             <StakingProcess
               disabled={isLoadingFee || errorFee || isLoadingBalance || errorBalance || !balanceCoversTotal}
