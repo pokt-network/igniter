@@ -161,12 +161,15 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   });
 
   if (!skipWait) {
-    // Wait for txHeight + 2 (waitForNextBlock blocks until currentHeight >= arg + 1).
-    // txHeight is sampled before broadcast, so if the chain advanced during broadcast
-    // a plain "+1" wait can no-op and trigger verifyTransaction before the tx is
-    // indexed. The extra block gives indexing margin; the verify retry loop covers the
-    // rarer case where broadcast spanned multiple blocks.
-    await waitForNextBlock(txHeight + 1);
+    // Re-sample the height AFTER broadcast: txHeight was captured before
+    // executeTransaction, so if the chain advanced during broadcast a wait based on the
+    // stale txHeight can no-op and trigger verifyTransaction before the tx is indexed.
+    // waitForNextBlock blocks until currentHeight >= arg + 1, so passing the fresh
+    // post-broadcast height guarantees we wait for at least one block past it — the
+    // indexing margin — regardless of how many blocks broadcast spanned. The verify
+    // retry loop covers any remaining lag.
+    const heightAfterBroadcast = await getBlockHeight();
+    await waitForNextBlock(heightAfterBroadcast);
   }
 
   const txHash = result?.transactionHash || transaction.hash!;
