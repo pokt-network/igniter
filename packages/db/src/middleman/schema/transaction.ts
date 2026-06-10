@@ -28,6 +28,11 @@ export const transactionsTable = pgTable("transactions", {
   executionTimestamp: timestamp(),
   verificationHeight: integer(),
   verificationTimestamp: timestamp(),
+  lastCoveredHeight: integer(),
+  txVerificationAttempts: integer().notNull().default(0),
+  supplierVerificationAttempts: integer().notNull().default(0),
+  unavailableChecks: integer().notNull().default(0),
+  lastVerificationAt: timestamp(),
 
   //Self-referencing foreign key workaround: https://orm.drizzle.team/docs/indexes-constraints#foreign-key
   dependsOn: integer().references((): AnyPgColumn => transactionsTable.id),
