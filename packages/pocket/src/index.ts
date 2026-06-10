@@ -60,6 +60,36 @@ export function isSequenceMismatchError(errorMessage: string): boolean {
 }
 
 /**
+ * Maps `items` through `fn` with at most `limit` calls in flight at once, preserving
+ * input order in the returned array. Used to bound the Tier-3 block scan's parallel
+ * `comet.block()` fan-out: firing all ~30 heights at once (and up to MAX_CONCURRENT
+ * ExecuteTransactions doing the same) could burst hundreds of concurrent RPCs at a
+ * single node and trip its rate limits. A small pool keeps most of the latency win
+ * of parallelism without the unbounded burst (issue #304).
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = next++
+      if (i >= items.length) return
+      results[i] = await fn(items[i]!)
+    }
+  }
+  const workerCount = Math.min(limit, items.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
+/** Max concurrent `comet.block()` fetches per Tier-3 block scan (issue #304). */
+const BLOCK_SCAN_CONCURRENCY = 8
+
+/**
  * Creates a Protobuf-based RPC client for querying a blockchain using a QueryClient.
  *
  * This client sends Protobuf-encoded requests to a specified service and method
@@ -356,35 +386,60 @@ export class PocketBlockchain {
     const comet = await this.getCometClient()
     const normalizedHash = txHash.toUpperCase()
 
-    for (let h = startHeight; h < startHeight + maxBlocks; h++) {
+
+    let latestHeight: number
+    try {
+      latestHeight = await this.getHeight()
+    } catch (error) {
+      this.logger.warn({ txHash, startHeight, error }, 'Block scan: failed to read chain head, scanning full window')
+      latestHeight = startHeight + maxBlocks - 1
+    }
+
+    const endHeight = Math.min(startHeight + maxBlocks - 1, latestHeight)
+    if (endHeight < startHeight) {
+      // The tx height is ahead of the current head; nothing to scan yet.
+      return null
+    }
+
+    const heights: number[] = []
+    for (let h = startHeight; h <= endHeight; h++) heights.push(h)
+
+    // Fetch candidate blocks in parallel, but bounded
+    const blocks = await mapWithConcurrency(heights, BLOCK_SCAN_CONCURRENCY, async (h) => {
       try {
-        const block = await comet.block(h)
-        const txs = block.block.txs
-        for (let i = 0; i < txs.length; i++) {
-          const txBytes = txs[i]
-          if (!txBytes) continue
-          const hash = toHex(sha256(txBytes)).toUpperCase()
-          if (hash === normalizedHash) {
-            const results = await comet.blockResults(h)
-            const txData = results.results[i]
-            if (!txData) {
-              this.logger.warn({ txHash, height: h, index: i }, 'Block results missing entry for matched TX')
-              return null
-            }
-            return {
-              hash: txHash,
-              height: h,
-              index: i,
-              gasUsed: txData.gasUsed,
-              gasWanted: txData.gasWanted,
-              success: txData.code === 0,
-              code: txData.code,
-            }
-          }
-        }
+        return { h, block: await comet.block(h) }
       } catch (error) {
         this.logger.warn({ txHash, height: h, error }, 'Block scan error at height')
-        continue
+        return { h, block: null }
+      }
+    })
+
+    // Iterate in ascending height order so we deterministically return the first
+    // (lowest-height) match, preserving the previous sequential behavior.
+    for (const { h, block } of blocks) {
+      if (!block) continue
+      const txs = block.block.txs
+      for (let i = 0; i < txs.length; i++) {
+        const txBytes = txs[i]
+        if (!txBytes) continue
+        const hash = toHex(sha256(txBytes)).toUpperCase()
+        if (hash === normalizedHash) {
+          const results = await comet.blockResults(h)
+          const txData = results.results[i]
+          if (!txData) {
+            this.logger.warn({ txHash, height: h, index: i }, 'Block results missing entry for matched TX')
+            return null
+          }
+          return {
+            hash: txHash,
+            height: h,
+            index: i,
+            gasUsed: txData.gasUsed,
+            gasWanted: txData.gasWanted,
+            success: txData.code === 0,
+            code: txData.code,
+          }
+        }
       }
     }
     return null

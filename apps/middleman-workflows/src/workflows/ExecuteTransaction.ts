@@ -2,6 +2,7 @@ import {
   ActivityFailure,
   ApplicationFailure,
   proxyActivities,
+  TimeoutFailure,
   WorkflowError,
 } from '@temporalio/workflow'
 import { delegatorActivities } from "@/activities";
@@ -25,6 +26,13 @@ interface TransactionArgs {
 function isTxNotFoundFailure(err: unknown): boolean {
   if (err instanceof ActivityFailure && err.cause instanceof ApplicationFailure) {
     return err.cause.type === TX_NOT_FOUND_ERROR_TYPE
+  }
+  return false
+}
+
+function isStartToCloseTimeout(err: unknown): boolean {
+  if (err instanceof ActivityFailure && err.cause instanceof TimeoutFailure) {
+    return err.cause.timeoutType === 'START_TO_CLOSE'
   }
   return false
 }
@@ -182,6 +190,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   let txFoundOnChain = false;
   let supplierFallbackHit = false;
   let verifyErroredUnexpectedly = false;
+  let verifyTimedOut = false;
 
   try {
     // Retries are driven by Temporal's activity retry policy — one attempt per block
@@ -198,7 +207,10 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     // we never rethrow into an indefinite Pending loop) but record *why* so a real
     // verification error stays triageable instead of being mislabeled a clean
     // "not found".
-    verifyErroredUnexpectedly = !isTxNotFoundFailure(err);
+    // A clean not-found and a start-to-close timeout are both inconclusive (no
+    // proof the tx failed); only anything else counts as an unexpected error.
+    verifyTimedOut = isStartToCloseTimeout(err);
+    verifyErroredUnexpectedly = !isTxNotFoundFailure(err) && !verifyTimedOut;
 
     // Need both addresses to validate ownership — without the expected owner the
     // supplier fallback can't prove the on-chain supplier is ours, so we skip it
@@ -231,6 +243,8 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     verificationLog = 'verified via supplier state fallback (tx hash not found)';
   } else if (verifyErroredUnexpectedly) {
     verificationLog = `verification errored (not a clean not-found) after ${TX_EXPIRATION_BLOCKS} retries; marked failure for triage (baseHeight=${baseHeight})`;
+  } else if (verifyTimedOut) {
+    verificationLog = `verify timed out (inconclusive, treated as not-found) after ${TX_EXPIRATION_BLOCKS} retries (baseHeight=${baseHeight})`;
   } else {
     verificationLog = `tx not found on-chain after ${TX_EXPIRATION_BLOCKS} retries (baseHeight=${baseHeight})`;
   }
