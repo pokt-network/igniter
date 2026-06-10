@@ -1,6 +1,6 @@
 import {proxyActivities, WorkflowIdReusePolicy} from "@temporalio/workflow";
 import { delegatorActivities } from '@/activities';
-import {executeChild, log} from "@temporalio/workflow";
+import {executeChild, log, WorkflowError} from "@temporalio/workflow";
 
 // @ts-expect-error p-limit is ESM-only; its default export has no CJS types under this build's module resolution
 import pLimit from 'p-limit'
@@ -43,11 +43,22 @@ export async function ExecutePendingTransactions(args: ExecutePendingTransaction
     })
   );
 
-const results = await Promise.allSettled(childPromises);
+  const results = await Promise.allSettled(childPromises);
 
   for (const r of results) {
     if (r.status === "rejected") {
       log.warn("ExecutePendingTransactions: child workflow failed", { reason: String(r.reason) });
     }
+  }
+
+  // Match the SupplierStatus pattern: a partial failure is tolerated (one bad tx
+  // shouldn't block the rest), but if every scheduled child failed the run is a
+  // systemic problem (e.g. RPC/DB down) and must surface as a workflow failure
+  // rather than completing green. Guard against the empty-batch case where
+  // `every` would vacuously return true.
+  const allFailed =
+    results.length > 0 && results.every((r) => r.status === "rejected");
+  if (allFailed) {
+    throw new WorkflowError("ExecutePendingTransactions: all child workflows failed");
   }
 }
