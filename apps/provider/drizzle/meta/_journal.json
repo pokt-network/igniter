@@ -127,6 +127,13 @@
       "when": 1774900301191,
       "tag": "0017_narrow_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781146262961,
+      "tag": "0018_white_proudstar",
+      "breakpoints": true
     }
   ]
 }

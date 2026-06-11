@@ -25,6 +25,11 @@ export const transactionsTable = pgTable('transactions', {
   code: integer(),
   message: text(),
   executionHeight: integer('execution_height'),
+  lastCoveredHeight: integer('last_covered_height'),
+  txVerificationAttempts: integer('tx_verification_attempts').notNull().default(0),
+  supplierVerificationAttempts: integer('supplier_verification_attempts').notNull().default(0),
+  unavailableChecks: integer('unavailable_checks').notNull().default(0),
+  lastVerificationAt: timestamp('last_verification_at'),
   createdAt: timestamp('created_at').defaultNow(),
 })
 
