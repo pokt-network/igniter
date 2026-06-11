@@ -1,6 +1,7 @@
-import type {PocketBlockchain, StakeSupplierParams, Supplier} from '@igniter/pocket'
+import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
 import {isSequenceMismatchError, parseExpectedSequence} from '@igniter/pocket'
-import type {ApplicationSettings, InsertKey, KeyWithGroup, Service} from '@igniter/db/provider/schema'
+import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
+import type {VerificationDecision} from '@igniter/tx-verify'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
 import {KeysMinMax} from '@/lib/dal/keys'
@@ -46,7 +47,40 @@ export type GovernanceSyncResult = {
   disabled: number;
 }
 
-export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => ({
+/** Number of consecutive unavailable checks between critical alerts for a chronically-unverifiable tx. */
+const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE_ALERT_THRESHOLD ?? 50)
+
+/** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
+const TX_EXPIRATION_BLOCKS = 30
+
+/**
+ * Maps a provider transaction + its key into the expected on-chain supplier effect.
+ * Returns null when the tx has no supplier-state path so the verifier skips the
+ * supplier verification path for it.
+ */
+export function supplierEffectFromKey(
+  tx: Transaction,
+  key: Pick<Key, 'address' | 'stakeOwner'>,
+): { operatorAddress: string; effect: SupplierEffect } | null {
+  if (tx.type === TransactionType.Stake) {
+    return {
+      operatorAddress: key.address,
+      effect: { kind: 'stake', ownerAddress: key.stakeOwner ?? '' },
+    }
+  }
+
+  if (tx.type === TransactionType.Unstake) {
+    return {
+      operatorAddress: key.address,
+      effect: { kind: 'unstake', minSessionEndHeight: tx.executionHeight ?? 0 },
+    }
+  }
+
+  return null
+}
+
+export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => {
+  const activities = {
   async syncDelegatorsFromGovernance(): Promise<GovernanceSyncResult> {
     const settings = await dal.settings.loadSettings()
     if (!settings) {
@@ -561,6 +595,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       servicesToStakeCount: stakeParams.services.length,
     })
 
+    // Re-entry guard: if this key already has a broadcast, still-pending tx awaiting
+    // verification, do NOT re-stake — the verifier owns its terminal transition.
+    if (await dal.transactions.hasPendingTx(key.id)) {
+      log.info('remediateSupplier: key has a pending verification tx, skipping re-stake', { address: params.address })
+      return
+    }
+
     let txResult = await pocketRpcClient.stakeSupplier(stakeParams)
 
     // Retry once with the expected sequence if we hit a sequence mismatch error
@@ -601,19 +642,63 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     log.debug('remediateSupplier: Stake transaction result', {txResult})
 
-    // Record the transaction
-    try {
-      const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
-      const isManual = activeEntry?.message?.includes('requested by operator') ?? false
+    const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
+    const isManual = activeEntry?.message?.includes('requested by operator') ?? false
 
+    // Broadcast got a hash → record the tx as Pending and hand it to the verifier.
+    // Do NOT flip key state, do NOT clear the remediation entry, do NOT throw:
+    // the verifier owns the terminal transition (KeyState.Staked / RemediationFailed).
+    if (txResult.transactionHash) {
+      try {
+        await dal.transactions.insert({
+          keyId: key.id,
+          keyAddress: key.address,
+          type: TransactionType.Stake,
+          status: TransactionStatus.Pending,
+          reason: activeEntry?.reason ?? null,
+          trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
+          hash: txResult.transactionHash,
+          code: txResult.code ?? null,
+          message: txResult.message ?? null,
+          executionHeight: params.height,
+        })
+      } catch (e) {
+        // Transaction recording is best-effort — don't fail remediation if it errors
+        log.warn('remediateSupplier: Failed to record pending transaction', { address: params.address, error: e })
+      }
+
+      // Update only the benign fields; leave state + remediation history untouched.
+      try {
+        await dal.keys.updateKey(params.address, {
+          lastUpdatedHeight: params.height,
+          balanceUpokt: BigInt(balance),
+        }, params.height)
+      } catch (e) {
+        log.warn('remediateSupplier: Update Supplier failed while recording pending tx!', { params, error: e })
+        throw ApplicationFailure.retryable(
+          `Failed while updating the supplier status for ${params.address}.`,
+          'db_update_failed',
+        )
+      }
+
+      log.info('remediateSupplier: Stake broadcast; pending verification', { params, hash: txResult.transactionHash })
+      return {
+        success: true,
+        message: 'Stake transaction broadcast; pending verification.',
+      }
+    }
+
+    // No transactionHash → broadcast failed. Keep the OLD behavior: record Failure,
+    // mark the key RemediationFailed (keep the remediation entry), and throw.
+    try {
       await dal.transactions.insert({
         keyId: key.id,
         keyAddress: key.address,
         type: TransactionType.Stake,
-        status: txResult.success ? TransactionStatus.Success : TransactionStatus.Failure,
+        status: TransactionStatus.Failure,
         reason: activeEntry?.reason ?? null,
         trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
-        hash: txResult.transactionHash ?? null,
+        hash: null,
         code: txResult.code ?? null,
         message: txResult.message ?? null,
         executionHeight: params.height,
@@ -626,20 +711,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const update: Partial<InsertKey> = {
       lastUpdatedHeight: params.height,
       balanceUpokt: BigInt(balance),
+      state: KeyState.RemediationFailed,
+      // Keep the remediation entry so the next cycle can retry
     }
 
-    if (!txResult.success) {
-      log.debug(`remediateSupplier: Stake transaction failed for: ${key.address} ${JSON.stringify(txResult)}`)
-      update.state = KeyState.RemediationFailed
-      // Keep the remediation entry so the next cycle can retry
-    } else {
-      update.state = KeyState.Staked
-      // Tx succeeded — clear the remediation entry that triggered this
-      const reasonToClear = ownerInitialStakeEntry?.reason || serviceMismatchEntry?.reason || addressGroupMigrationEntry?.reason
-      if (reasonToClear) {
-        update.remediationHistory = remediationHistory.filter((rh) => rh.reason !== reasonToClear)
-      }
-    }
+    log.debug(`remediateSupplier: Stake transaction failed to broadcast for: ${key.address} ${JSON.stringify(txResult)}`)
 
     log.debug('remediateSupplier: Updating supplier', { params, update }) // NOTE: adding the update could result in an error due to BIGINT
     try {
@@ -653,19 +729,141 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       )
     }
 
-    if (!txResult.success) {
-      log.warn('remediateSupplier: Stake transaction failed', { params, txResult })
-      throw ApplicationFailure.nonRetryable(
-        `Remediation transaction failed for ${params.address}. Key state: ${update.state}. Tx code: ${txResult.code}, message: ${txResult.message}`,
-        'stake_tx_failed',
+    log.warn('remediateSupplier: Stake transaction failed', { params, txResult })
+    throw ApplicationFailure.nonRetryable(
+      `Remediation transaction failed for ${params.address}. Key state: ${update.state}. Tx code: ${txResult.code}, message: ${txResult.message}`,
+      'stake_tx_failed',
+    )
+  },
+
+  /**
+   * The verifier's queue: pending transactions that have been broadcast (have a hash).
+   */
+  async listPendingWithHash() {
+    const txs = await dal.transactions.listPendingWithHash()
+    return txs.map(({ id, executionHeight }) => ({ id, executionHeight }))
+  },
+
+  /**
+   * Verifies a broadcast tx by hash, scanning from one block past its last covered
+   * height (or its execution height on the first sweep). Maps the pocket tri-state
+   * result down to the minimal shape the pure decision logic consumes.
+   */
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: bigint }>> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn?.hash) {
+      throw new Error('verifyTxHash: tx missing hash')
+    }
+    const startHeight = txn.lastCoveredHeight != null ? txn.lastCoveredHeight + 1 : (txn.executionHeight ?? 0)
+    const out = await pocketRpcClient.verifyTransaction(txn.hash, startHeight, TX_EXPIRATION_BLOCKS)
+    if (out.status !== 'confirmed') return out
+    return {
+      status: 'confirmed',
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed },
+    }
+  },
+
+  /**
+   * Verifies a broadcast tx by its expected on-chain supplier effect. Returns null for
+   * tx types with no supplier-state path so the decision logic treats the supplier path
+   * as inapplicable.
+   */
+  async verifySupplierEffect(transactionId: number): Promise<VerifyOutcome<unknown> | null> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn) {
+      throw new Error('verifySupplierEffect: tx not found')
+    }
+    const key = await dal.keys.loadKey(txn.keyAddress)
+    if (!key) {
+      throw new Error('verifySupplierEffect: key not found')
+    }
+    const parsed = supplierEffectFromKey(txn, key)
+    if (!parsed) return null
+    return pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
+  },
+
+  /**
+   * Applies a verification decision computed by the pure `decideVerification`.
+   * Pending → record progress (counters/coverage) + maybe alert on chronic unavailability.
+   * Terminal → run the provider key-state effect FIRST, then atomically CAS the tx to its
+   * terminal status. Effects-before-CAS so a failure mid-effect re-sweeps and re-runs the
+   * idempotent effect instead of losing it to a lost CAS.
+   */
+  async applyVerificationDecision(transactionId: number, decision: VerificationDecision): Promise<void> {
+    if (decision.outcome === 'pending') {
+      await dal.transactions.recordVerificationProgress(transactionId, {
+        lastCoveredHeight: decision.newLastCoveredHeight,
+        incTx: decision.advanceTxAttempt,
+        incSupplier: decision.advanceSupplierAttempt,
+        incUnavailable: decision.incUnavailable,
+      })
+      if (decision.incUnavailable) await maybeAlertUnavailable(transactionId)
+      return
+    }
+
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn) return
+
+    const success = decision.outcome === 'success'
+
+    // Run the key-state effect BEFORE flipping tx status. The tx stays Pending until
+    // the CAS below commits, so a failure after a partial run is re-swept and the
+    // idempotent flip re-runs (set state is idempotent; filtering an already-removed
+    // entry is a no-op) — whereas flipping first would let a retry lose the CAS and
+    // skip the unfinished effect entirely.
+    await flipKeyForTx(txn, decision.outcome)
+
+    const status = success ? TransactionStatus.Success : TransactionStatus.Failure
+    await dal.transactions.claimTerminalTransition(transactionId, status, {
+      code: decision.code,
+      message: success ? 'verified' : 'verification negative',
+    })
+  },
+  }
+
+  /**
+   * Provider terminal effect: flips the key state for a verified/failed stake tx.
+   * Success → KeyState.Staked + drop the remediation entry that triggered this tx.
+   * Failure → KeyState.RemediationFailed (keep the entry for retry). Idempotent.
+   */
+  async function flipKeyForTx(
+    txn: Transaction,
+    outcome: 'success' | 'failure',
+  ): Promise<void> {
+    const key = await dal.keys.loadKey(txn.keyAddress)
+    if (!key) {
+      log.warn('flipKeyForTx: key not found', { keyAddress: txn.keyAddress })
+      return
+    }
+
+    const height = txn.executionHeight ?? (await pocketRpcClient.getHeight().catch(() => -1))
+
+    if (outcome === 'success') {
+      await dal.keys.updateKey(txn.keyAddress, {
+        state: KeyState.Staked,
+        remediationHistory: (key.remediationHistory ?? []).filter((rh) => rh.reason !== txn.reason),
+      }, height)
+      return
+    }
+
+    await dal.keys.updateKey(txn.keyAddress, {
+      state: KeyState.RemediationFailed,
+    }, height)
+  }
+
+  /**
+   * Reads the tx and emits a critical log when its unavailable-check counter crosses a
+   * multiple of the alert threshold. No status change — operator-attention only.
+   */
+  async function maybeAlertUnavailable(transactionId: number): Promise<void> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (txn && txn.unavailableChecks > 0 && txn.unavailableChecks % VERIFY_UNAVAILABLE_ALERT_THRESHOLD === 0) {
+      log.error(
+        'TX unverifiable: RPC repeatedly unavailable — operator attention needed',
+        { transactionId, unavailableChecks: txn.unavailableChecks },
       )
     }
-
-    log.info('remediateSupplier: Execution finished', { params })
-
-    return {
-      success: true,
-      message: 'Remediation completed successfully.',
-    }
   }
-})
+
+  return activities
+}

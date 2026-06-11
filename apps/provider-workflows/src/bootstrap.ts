@@ -15,6 +15,7 @@ enum ScheduledWorkflowType {
   SupplierRemediation = 'SupplierRemediation',
   SupplierInitialStake = 'SupplierInitialStake',
   SupplierAddressGroupMigration = 'SupplierAddressGroupMigration',
+  VerifyPendingTransactions = 'VerifyPendingTransactions',
 }
 
 const ScheduledWorkflowConfig: Record<
@@ -56,6 +57,12 @@ const ScheduledWorkflowConfig: Record<
       reasons: [RemediationHistoryEntryReason.AddressGroupMigration]
     }],
     envVar: 'SCHEDULE_SUPPLIER_ADDRESS_GROUP_MIGRATION_INTERVAL',
+  },
+  [ScheduledWorkflowType.VerifyPendingTransactions]: {
+    workflowType: 'VerifyPendingTransactions',
+    interval: '30s',
+    args: [],
+    envVar: 'SCHEDULE_VERIFY_PENDING_TX_INTERVAL',
   },
 }
 
