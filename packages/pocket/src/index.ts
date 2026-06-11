@@ -37,17 +37,11 @@ import {StakeSupplierParams} from "@pocket/types";
 import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
-import { VerifyOutcome } from './verifyOutcome'
+import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
 
 export * from './types'
 export * from './constants';
-export * from './verifyOutcome';
-
-/** The expected on-chain effect of a supplier-mutating transaction, used for state-based verification. */
-export type SupplierEffect =
-  | { kind: 'stake'; ownerAddress: string }
-  | { kind: 'upstake'; ownerAddress: string; minStakeUpokt: bigint }
-  | { kind: 'unstake'; minSessionEndHeight: number }
+export * from '@igniter/tx-verify';
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.

@@ -27,6 +27,7 @@
     "@temporalio/worker": "1.11.7",
     "@temporalio/workflow": "1.11.7",
     "@igniter/pocket": "workspace:*",
+    "@igniter/tx-verify": "workspace:*",
     "@igniter/logger": "workspace:*",
     "@igniter/db": "workspace:*",
     "@igniter/domain": "workspace:*",

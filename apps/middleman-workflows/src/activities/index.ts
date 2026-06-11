@@ -24,7 +24,7 @@ import { extractTransactionStakingSuppliers, extractTransactionUnstakingSupplier
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
-import type { VerificationDecision } from '@/workflows/verification/decide'
+import type { VerificationDecision } from '@igniter/tx-verify'
 import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 import { NodesMinMax } from '@/lib/dal/nodes'

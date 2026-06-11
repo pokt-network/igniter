@@ -1,4 +1,4 @@
-import type { VerifyOutcome } from '@igniter/pocket'
+import type { VerifyOutcome } from './verifyOutcome'
 
 export interface DecideInput {
   hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: bigint }>

@@ -1,6 +1,6 @@
 import { proxyActivities, log, WorkflowError } from '@temporalio/workflow'
 import { delegatorActivities } from '@/activities'
-import { decideVerification } from '@/workflows/verification/decide'
+import { decideVerification } from '@igniter/tx-verify'
 
 // we built to commonjs and p-limit for esm support
 // @ts-ignore
