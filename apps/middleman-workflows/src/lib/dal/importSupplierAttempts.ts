@@ -12,6 +12,7 @@ import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
+import { sql } from 'drizzle-orm'
 
 export default class ImportSupplierAttempts {
   logger: Logger
@@ -107,10 +108,20 @@ export default class ImportSupplierAttempts {
       createdBy: attempt.userIdentity,
     }))
 
-    // Use upsert to handle potential duplicates
+    // Use upsert to handle potential duplicates. The nodes.address unique
+    // constraint means a bare onConflictDoNothing() would silently drop
+    // same-address re-imports, so update the mutable fields instead.
     await this.dbClient.db
       .insert(nodesTable)
       .values(nodesToInsert)
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: nodesTable.address,
+        set: {
+          status: sql`excluded.status`,
+          stakeAmount: sql`excluded."stakeAmount"`,
+          ownerAddress: sql`excluded."ownerAddress"`,
+          updatedAt: new Date(),
+        },
+      })
   }
 }

@@ -1,6 +1,6 @@
 import { Duration } from "@temporalio/common";
 import Long from "long";
-import { Client } from '@temporalio/client'
+import { Client, ScheduleOverlapPolicy } from '@temporalio/client'
 import {
   getClient,
   getConfig,
@@ -128,6 +128,7 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
           spec: {
             intervals: [{ every: interval as Duration }],
           },
+          policies: { overlap: ScheduleOverlapPolicy.SKIP },
         }));
         logger.info({ workflowType }, 'Scheduled workflow updated successfully');
       } else {
@@ -148,6 +149,7 @@ async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfi
           spec: {
             intervals: [{ every: interval as Duration }],
           },
+          policies: { overlap: ScheduleOverlapPolicy.SKIP },
         });
         logger.info({ workflowType, interval }, 'Scheduled workflow created successfully');
       } catch (createError: any) {

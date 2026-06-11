@@ -91,16 +91,24 @@ describe('PocketBlockchain.verifySupplierEffect', () => {
     expect(r).toEqual({ status: 'absent', coveredUpToHeight: 1234 })
   })
 
-  it('unstake: unstakeSessionEndHeight > 0 → confirmed', async () => {
+  it('unstake: session end >= broadcast height → confirmed', async () => {
     getSupplierSpy.mockResolvedValue(makeSupplier({ unstakeSessionEndHeight: 42 }))
-    const effect: SupplierEffect = { kind: 'unstake' }
+    const effect: SupplierEffect = { kind: 'unstake', minSessionEndHeight: 10 }
     const r = await bc.verifySupplierEffect(OPERATOR, effect)
     expect(r.status).toBe('confirmed')
   })
 
-  it('unstake: unstakeSessionEndHeight === 0 → absent', async () => {
+  it('unstake: not unbonding (session end 0) → absent', async () => {
     getSupplierSpy.mockResolvedValue(makeSupplier({ unstakeSessionEndHeight: 0 }))
-    const effect: SupplierEffect = { kind: 'unstake' }
+    const effect: SupplierEffect = { kind: 'unstake', minSessionEndHeight: 10 }
+    const r = await bc.verifySupplierEffect(OPERATOR, effect)
+    expect(r.status).toBe('absent')
+  })
+
+  it('unstake: pre-existing unbonding below broadcast height → absent (no false positive)', async () => {
+    // Node already unbonding from an earlier session (endHeight 5) when we broadcast at 10.
+    getSupplierSpy.mockResolvedValue(makeSupplier({ unstakeSessionEndHeight: 5 }))
+    const effect: SupplierEffect = { kind: 'unstake', minSessionEndHeight: 10 }
     const r = await bc.verifySupplierEffect(OPERATOR, effect)
     expect(r.status).toBe('absent')
   })

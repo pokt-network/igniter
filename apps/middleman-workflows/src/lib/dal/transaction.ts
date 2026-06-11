@@ -34,8 +34,13 @@ export default class Transaction {
   }
 
   /**
-   * The verifier's queue: every transaction that has been broadcast (has a hash)
-   * but is still pending verification.
+   * The verifier's queue: every transaction that has been broadcast (has a hash +
+   * execution height) and is still pending verification, EXCLUDING those checked
+   * too recently. The backoff grows with `unavailableChecks` (base 30s × the
+   * capped count) so a chronically-unverifiable tx is re-checked ever less often
+   * instead of being hammered every sweep — bounding RPC load during an outage.
+   * `executionHeight` is required so the verifier never scans from a null/zero
+   * height (which would mis-compute the expiration window).
    */
   async listPendingWithHash(): Promise<TransactionModel[]> {
     return this.dbClient.db
@@ -44,6 +49,8 @@ export default class Transaction {
       .where(and(
         eq(transactionsTable.status, TransactionStatus.Pending),
         isNotNull(transactionsTable.hash),
+        isNotNull(transactionsTable.executionHeight),
+        sql`(${transactionsTable.lastVerificationAt} IS NULL OR ${transactionsTable.lastVerificationAt} < now() - (LEAST(${transactionsTable.unavailableChecks}, 20) * interval '30 seconds'))`,
       ));
   }
 

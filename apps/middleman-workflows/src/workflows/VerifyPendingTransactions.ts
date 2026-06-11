@@ -33,10 +33,8 @@ export async function VerifyPendingTransactions() {
   const results = await Promise.allSettled(
     txs.map((t) =>
       limit(async () => {
-        const [hash, supplier] = await Promise.all([
-          verifyTxHash(t.id),
-          verifySupplierEffect(t.id),
-        ])
+        const hash = await verifyTxHash(t.id)
+        const supplier = hash.status === 'confirmed' ? null : await verifySupplierEffect(t.id)
         const decision = decideVerification({
           hash,
           supplier,

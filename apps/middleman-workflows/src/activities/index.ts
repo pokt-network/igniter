@@ -162,46 +162,36 @@ const TX_EXPIRATION_BLOCKS = 30
  * verifier knows to skip the supplier verification path for it.
  */
 export function supplierEffectFromTx(
-  txn: { unsignedPayload?: string | null; type?: string },
+  txn: Transaction,
 ): { operatorAddress: string; effect: SupplierEffect } | null {
-  try {
-    if (!txn.unsignedPayload) return null
-    const { body } = JSON.parse(txn.unsignedPayload)
-    const messages = body?.messages
-    if (!Array.isArray(messages)) return null
-
-    for (const message of messages) {
-      const value = message?.value
-      if (!value) continue
-
-      if (message.typeUrl === STAKE_TYPE_URL && typeof value.operatorAddress === 'string') {
-        // Stake and Upstake share the MsgStakeSupplier type-url; the DB tx type disambiguates.
-        if (txn.type === TransactionType.Upstake) {
-          return {
-            operatorAddress: value.operatorAddress,
-            effect: {
-              kind: 'upstake',
-              ownerAddress: value.ownerAddress,
-              minStakeUpokt: BigInt(value.stake?.amount ?? 0),
-            },
-          }
-        }
-        return {
-          operatorAddress: value.operatorAddress,
-          effect: { kind: 'stake', ownerAddress: value.ownerAddress },
-        }
-      }
-
-      if (message.typeUrl === UNSTAKE_TYPE_URL && typeof value.operatorAddress === 'string') {
-        return { operatorAddress: value.operatorAddress, effect: { kind: 'unstake' } }
+  // Stake and Upstake share the MsgStakeSupplier type-url; the DB tx type disambiguates.
+  if (txn.type === TransactionType.Stake || txn.type === TransactionType.Upstake) {
+    const [stake] = extractTransactionStakingSuppliers(txn)
+    if (!stake) return null
+    if (txn.type === TransactionType.Upstake) {
+      return {
+        operatorAddress: stake.address,
+        effect: { kind: 'upstake', ownerAddress: stake.ownerAddress, minStakeUpokt: BigInt(stake.stakeAmount) },
       }
     }
-
-    return null
-  } catch (error) {
-    log.error('supplierEffectFromTx: failed to parse transaction payload', { error })
-    return null
+    return {
+      operatorAddress: stake.address,
+      effect: { kind: 'stake', ownerAddress: stake.ownerAddress },
+    }
   }
+
+  if (txn.type === TransactionType.Unstake) {
+    const [unstake] = extractTransactionUnstakingSuppliers(txn)
+    if (!unstake) return null
+    // Our unstake sets a session end at/after the broadcast height; use it as the
+    // floor so a node already unbonding from an earlier session can't false-confirm.
+    return {
+      operatorAddress: unstake.operatorAddress,
+      effect: { kind: 'unstake', minSessionEndHeight: txn.executionHeight ?? 0 },
+    }
+  }
+
+  return null
 }
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
@@ -1274,19 +1264,32 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       return
     }
 
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn) return
+
+    // Run effects BEFORE flipping status. The tx stays Pending until the CAS
+    // below commits, so if an effect (e.g. provider notify) fails after a partial
+    // run, the tx is simply re-swept and the idempotent effects re-run — whereas
+    // flipping first would let a retry lose the CAS and skip the unfinished
+    // effects entirely. Effects are idempotent (per-tx node guard + address
+    // upsert + onConflictDoNothing links), so re-running is safe.
+    await runTerminalEffects(txn, decision.outcome)
+
     const status = decision.outcome === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
     const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
-    const claimed = await dal.transaction.claimTerminalTransition(transactionId, status, {
-      code: decision.code,
-      consumedFee: Number(decision.gasUsed ?? 0n),
+    const fields: { code?: number; consumedFee?: number; verificationHeight?: number; log?: string } = {
       verificationHeight,
       log: decision.outcome === 'success'
         ? 'verified'
         : 'verification negative (window covered, no effect)',
-    })
-    // CAS lost → another worker already terminalized this tx. DO NOT run effects.
-    if (!claimed) return
-    await runTerminalEffects(claimed, decision.outcome)
+    }
+    // Only persist code/fee when the hash path supplied them. A supplier-state
+    // confirmation has no code/gasUsed, so leave the existing values untouched
+    // instead of clobbering consumedFee to 0.
+    if (decision.code !== undefined) fields.code = decision.code
+    if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)
+
+    await dal.transaction.claimTerminalTransition(transactionId, status, fields)
   },
   }
 

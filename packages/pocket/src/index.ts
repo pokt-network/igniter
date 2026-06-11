@@ -47,7 +47,7 @@ export * from './verifyOutcome';
 export type SupplierEffect =
   | { kind: 'stake'; ownerAddress: string }
   | { kind: 'upstake'; ownerAddress: string; minStakeUpokt: bigint }
-  | { kind: 'unstake' }
+  | { kind: 'unstake'; minSessionEndHeight: number }
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.
@@ -427,28 +427,45 @@ export class PocketBlockchain {
         this.logger.warn({ txHash, height: h, error }, 'verifyTransaction: block fetch failed')
         return { status: 'unavailable' } // could not cover the window
       }
-      const txs = block.block.txs
-      for (let i = 0; i < txs.length; i++) {
-        const bytes = txs[i]
-        if (!bytes) continue
-        if (toHex(sha256(bytes)).toUpperCase() === normalizedHash) {
-          const results = await comet.blockResults(h)
-          const txData = results.results[i]
-          // Hash matched in this block but its result row is missing — the tx IS
-          // on-chain, we just can't read its outcome. That is NOT negative evidence;
-          // treat as unavailable so the verifier keeps retrying instead of failing.
-          if (!txData) {
-            this.logger.warn({ txHash, height: h, index: i }, 'verifyTransaction: matched tx has no block result entry')
-            return { status: 'unavailable' }
-          }
-          return {
-            status: 'confirmed',
-            data: { hash: txHash, height: h, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code },
-          }
-        }
+      const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
+      if (match === 'no-match') continue
+      // Hash matched in this block but its result row is missing — the tx IS
+      // on-chain, we just can't read its outcome. That is NOT negative evidence;
+      // treat as unavailable so the verifier keeps retrying instead of failing.
+      if (match === 'result-missing') {
+        this.logger.warn({ txHash, height: h }, 'verifyTransaction: matched tx has no block result entry')
+        return { status: 'unavailable' }
       }
+      return { status: 'confirmed', data: match }
     }
     return { status: 'absent', coveredUpToHeight: endHeight }
+  }
+
+  /**
+   * Scans the already-fetched `block` at `height` for the tx whose SHA256 equals
+   * `normalizedHash`. Returns the built TransactionResult on a hit, 'no-match' if
+   * the hash is not in this block, or 'result-missing' if the hash matched but
+   * blockResults had no entry at the matched index.
+   */
+  private async matchTxInBlock(
+    comet: Awaited<ReturnType<typeof this.getCometClient>>,
+    block: Awaited<ReturnType<Awaited<ReturnType<typeof this.getCometClient>>['block']>>,
+    height: number,
+    normalizedHash: string,
+    txHash: string,
+  ): Promise<TransactionResult | 'no-match' | 'result-missing'> {
+    const txs = block.block.txs
+    for (let i = 0; i < txs.length; i++) {
+      const bytes = txs[i]
+      if (!bytes) continue
+      if (toHex(sha256(bytes)).toUpperCase() === normalizedHash) {
+        const results = await comet.blockResults(height)
+        const txData = results.results[i]
+        if (!txData) return 'result-missing'
+        return { hash: txHash, height, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code }
+      }
+    }
+    return 'no-match'
   }
 
   private async getTransactionViaApi(txHash: string): Promise<TransactionResult | null> {
@@ -511,29 +528,13 @@ export class PocketBlockchain {
     // (lowest-height) match, preserving the previous sequential behavior.
     for (const { h, block } of blocks) {
       if (!block) continue
-      const txs = block.block.txs
-      for (let i = 0; i < txs.length; i++) {
-        const txBytes = txs[i]
-        if (!txBytes) continue
-        const hash = toHex(sha256(txBytes)).toUpperCase()
-        if (hash === normalizedHash) {
-          const results = await comet.blockResults(h)
-          const txData = results.results[i]
-          if (!txData) {
-            this.logger.warn({ txHash, height: h, index: i }, 'Block results missing entry for matched TX')
-            return null
-          }
-          return {
-            hash: txHash,
-            height: h,
-            index: i,
-            gasUsed: txData.gasUsed,
-            gasWanted: txData.gasWanted,
-            success: txData.code === 0,
-            code: txData.code,
-          }
-        }
+      const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
+      if (match === 'no-match') continue
+      if (match === 'result-missing') {
+        this.logger.warn({ txHash, height: h }, 'Block results missing entry for matched TX')
+        return null
       }
+      return match
     }
     return null
   }
@@ -595,7 +596,11 @@ export class PocketBlockchain {
           : { status: 'absent', coveredUpToHeight }
       }
       case 'unstake':
-        return supplier.unstakeSessionEndHeight > 0
+        // Guard against a pre-existing unstake: a node already unbonding from an
+        // earlier session would show unstakeSessionEndHeight > 0 even if THIS
+        // unstake never landed. Our unstake sets a session end at/after the
+        // broadcast height, so require it to clear that floor before confirming.
+        return supplier.unstakeSessionEndHeight >= effect.minSessionEndHeight
           ? { status: 'confirmed', data: supplier }
           : { status: 'absent', coveredUpToHeight }
     }

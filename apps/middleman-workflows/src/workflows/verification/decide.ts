@@ -49,10 +49,11 @@ export function decideVerification(input: DecideInput): VerificationDecision {
     }
   }
   if (supplierApplicable && supplier!.status === 'confirmed') {
+    // Confirmed via supplier state, not the tx hash → we have no code/gasUsed for
+    // this tx. Leave them undefined so applyVerificationDecision does NOT overwrite
+    // the persisted consumedFee/code with a fabricated 0.
     return {
       outcome: 'success',
-      code: 0,
-      gasUsed: 0n,
       advanceTxAttempt: hashAnswered,
       advanceSupplierAttempt: true,
       incUnavailable: false,
