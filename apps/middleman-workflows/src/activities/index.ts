@@ -15,6 +15,7 @@ import {
 import {
   NodeStatus,
   TransactionStatus,
+  TransactionType,
   SupplierChangeType,
 } from '@igniter/db/middleman/enums'
 import { createHash } from 'node:crypto'
@@ -22,7 +23,9 @@ import { detectSupplierChanges, DetectedSupplierChange } from '@igniter/domain/m
 import { extractTransactionStakingSuppliers, extractTransactionUnstakingSuppliers } from '@/workflows/utils'
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
-import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare } from '@igniter/pocket'
+import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
+import type { VerificationDecision } from '@/workflows/verification/decide'
+import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 import { NodesMinMax } from '@/lib/dal/nodes'
 
@@ -147,7 +150,62 @@ export const governanceActivities = (dal: DAL) => ({
   },
 })
 
-export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => ({
+/** Number of consecutive unavailable checks between critical alerts for a chronically-unverifiable tx. */
+const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE_ALERT_THRESHOLD ?? 50)
+
+/** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
+const TX_EXPIRATION_BLOCKS = 30
+
+/**
+ * Parses a transaction's unsigned payload into the expected on-chain supplier effect.
+ * Returns null when the tx has no supplier-state path (send / OperationalFunds), so the
+ * verifier knows to skip the supplier verification path for it.
+ */
+export function supplierEffectFromTx(
+  txn: { unsignedPayload?: string | null; type?: string },
+): { operatorAddress: string; effect: SupplierEffect } | null {
+  try {
+    if (!txn.unsignedPayload) return null
+    const { body } = JSON.parse(txn.unsignedPayload)
+    const messages = body?.messages
+    if (!Array.isArray(messages)) return null
+
+    for (const message of messages) {
+      const value = message?.value
+      if (!value) continue
+
+      if (message.typeUrl === STAKE_TYPE_URL && typeof value.operatorAddress === 'string') {
+        // Stake and Upstake share the MsgStakeSupplier type-url; the DB tx type disambiguates.
+        if (txn.type === TransactionType.Upstake) {
+          return {
+            operatorAddress: value.operatorAddress,
+            effect: {
+              kind: 'upstake',
+              ownerAddress: value.ownerAddress,
+              minStakeUpokt: BigInt(value.stake?.amount ?? 0),
+            },
+          }
+        }
+        return {
+          operatorAddress: value.operatorAddress,
+          effect: { kind: 'stake', ownerAddress: value.ownerAddress },
+        }
+      }
+
+      if (message.typeUrl === UNSTAKE_TYPE_URL && typeof value.operatorAddress === 'string') {
+        return { operatorAddress: value.operatorAddress, effect: { kind: 'unstake' } }
+      }
+    }
+
+    return null
+  } catch (error) {
+    log.error('supplierEffectFromTx: failed to parse transaction payload', { error })
+    return null
+  }
+}
+
+export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
+  const activities = {
   /**
    * Returns the latest block height from the blockchain.
    * @returns GetLatestBlockResult
@@ -1154,4 +1212,124 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       }
     }
   },
-})
+
+  /**
+   * The verifier's queue: pending transactions that have been broadcast (have a hash).
+   */
+  async listPendingWithHash() {
+    const txs = await dal.transaction.listPendingWithHash()
+    // @ts-ignore (todo: align serialized shape with the workflow)
+    return txs.map(({ id, executionHeight }) => ({ id, executionHeight }))
+  },
+
+  /**
+   * Verifies a broadcast tx by hash, scanning from one block past its last covered
+   * height (or its execution height on the first sweep). Maps the pocket tri-state
+   * result down to the minimal shape the pure decision logic consumes.
+   */
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: bigint }>> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn?.hash) {
+      throw new Error('verifyTxHash: tx missing hash')
+    }
+    const startHeight = txn.lastCoveredHeight != null ? txn.lastCoveredHeight + 1 : (txn.executionHeight ?? 0)
+    const out = await pocketRpcClient.verifyTransaction(txn.hash, startHeight, TX_EXPIRATION_BLOCKS)
+    if (out.status !== 'confirmed') return out
+    return {
+      status: 'confirmed',
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed },
+    }
+  },
+
+  /**
+   * Verifies a broadcast tx by its expected on-chain supplier effect. Returns null for
+   * tx types with no supplier-state path (send / OperationalFunds) so the decision logic
+   * treats the supplier path as inapplicable.
+   */
+  async verifySupplierEffect(transactionId: number): Promise<VerifyOutcome<unknown> | null> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn) {
+      throw new Error('verifySupplierEffect: tx not found')
+    }
+    const parsed = supplierEffectFromTx(txn)
+    if (!parsed) return null
+    return pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
+  },
+
+  /**
+   * Applies a verification decision computed by the pure `decideVerification`.
+   * Pending → record progress (counters/coverage) + maybe alert on chronic unavailability.
+   * Terminal → atomic CAS to the terminal status; only the caller that wins the CAS runs
+   * the downstream effects (node creation / provider notification).
+   */
+  async applyVerificationDecision(transactionId: number, decision: VerificationDecision): Promise<void> {
+    if (decision.outcome === 'pending') {
+      await dal.transaction.recordVerificationProgress(transactionId, {
+        lastCoveredHeight: decision.newLastCoveredHeight,
+        incTx: decision.advanceTxAttempt,
+        incSupplier: decision.advanceSupplierAttempt,
+        incUnavailable: decision.incUnavailable,
+      })
+      if (decision.incUnavailable) await maybeAlertUnavailable(transactionId)
+      return
+    }
+
+    const status = decision.outcome === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
+    const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
+    const claimed = await dal.transaction.claimTerminalTransition(transactionId, status, {
+      code: decision.code,
+      consumedFee: Number(decision.gasUsed ?? 0n),
+      verificationHeight,
+      log: decision.outcome === 'success'
+        ? 'verified'
+        : 'verification negative (window covered, no effect)',
+    })
+    // CAS lost → another worker already terminalized this tx. DO NOT run effects.
+    if (!claimed) return
+    await runTerminalEffects(claimed, decision.outcome)
+  },
+  }
+
+  /**
+   * Reads the tx and emits a critical log when its unavailable-check counter crosses a
+   * multiple of the alert threshold. No status change — this is operator-attention only.
+   */
+  async function maybeAlertUnavailable(transactionId: number): Promise<void> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (txn && txn.unavailableChecks > 0 && txn.unavailableChecks % VERIFY_UNAVAILABLE_ALERT_THRESHOLD === 0) {
+      log.error(
+        'TX unverifiable: RPC repeatedly unavailable — operator attention needed',
+        { transactionId, unavailableChecks: txn.unavailableChecks },
+      )
+    }
+  }
+
+  /**
+   * Runs the downstream effects of a terminalized supplier tx. Moved out of
+   * ExecuteTransaction so the verifier owns the terminal transition. The DAL writes
+   * these trigger are idempotent (per-tx guard + address upsert), so a re-run is safe.
+   */
+  async function runTerminalEffects(
+    txn: Transaction,
+    outcome: 'success' | 'failure',
+  ): Promise<void> {
+    const success = outcome === 'success'
+
+    if (txn.type === TransactionType.Stake) {
+      if (success) {
+        await activities.createNewNodesFromTransaction(txn.id)
+        await activities.notifyProviderOfStakedAddresses(txn.id)
+      } else {
+        await activities.notifyProviderOfFailedStakes(txn.id)
+      }
+      return
+    }
+
+    if (txn.type === TransactionType.Unstake && success) {
+      await activities.updateUnstakingNodesFromTransaction(txn.id)
+      await activities.notifyProviderOfUntakingAddresses(txn.id)
+    }
+  }
+
+  return activities
+}
