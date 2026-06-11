@@ -37,9 +37,17 @@ import {StakeSupplierParams} from "@pocket/types";
 import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
+import { VerifyOutcome } from './verifyOutcome'
 
 export * from './types'
 export * from './constants';
+export * from './verifyOutcome';
+
+/** The expected on-chain effect of a supplier-mutating transaction, used for state-based verification. */
+export type SupplierEffect =
+  | { kind: 'stake'; ownerAddress: string }
+  | { kind: 'upstake'; ownerAddress: string; minStakeUpokt: bigint }
+  | { kind: 'unstake' }
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.
@@ -322,30 +330,18 @@ export class PocketBlockchain {
    * @returns Transaction details or null if not found
    */
   async getTransaction(txHash: string, height?: number): Promise<TransactionResult | null> {
-    const client = await this.getStargateClient()
-
-    // Tier 1: RPC tx_index
+    // Tier 1 + Tier 2: keep the back-compat behavior of swallowing an RPC error
+    // (Tier 1) and continuing to the lower tiers instead of failing the lookup.
+    let direct: TransactionResult | null = null
     try {
-      const tx = await client.getTx(txHash)
-      if (tx) {
-        return {
-          hash: txHash,
-          height: tx.height,
-          index: tx.txIndex,
-          gasUsed: tx.gasUsed,
-          gasWanted: tx.gasWanted,
-          success: tx.code === 0,
-          code: tx.code,
-        }
-      }
+      direct = await this.getTransactionDirect(txHash)
     } catch (error) {
       this.logger.warn({ txHash, error }, 'Tier 1 (RPC getTx) failed')
+      // Tier 1 errored; still attempt Tier 2 (REST API).
+      const apiResult = await this.getTransactionViaApi(txHash)
+      if (apiResult) return apiResult
     }
-
-    // Tier 2: REST API
-    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
-    const apiResult = await this.getTransactionViaApi(txHash)
-    if (apiResult) return apiResult
+    if (direct) return direct
 
     // Tier 3: Block scan
     if (height) {
@@ -356,6 +352,103 @@ export class PocketBlockchain {
 
     this.logger.warn({ txHash, height }, 'All tiers failed to find transaction')
     return null
+  }
+
+  /**
+   * Tier 1 (RPC tx_index) + Tier 2 (REST API) lookup. Unlike {@link getTransaction},
+   * this THROWS if the Tier 1 RPC call errors (so callers can distinguish an
+   * unreachable RPC from an answered "not found"). Returns null only when both
+   * tiers answered and the tx was not present.
+   */
+  private async getTransactionDirect(txHash: string): Promise<TransactionResult | null> {
+    const client = await this.getStargateClient()
+
+    // Tier 1: RPC tx_index (throws on RPC error).
+    const tx = await client.getTx(txHash)
+    if (tx) {
+      return {
+        hash: txHash,
+        height: tx.height,
+        index: tx.txIndex,
+        gasUsed: tx.gasUsed,
+        gasWanted: tx.gasWanted,
+        success: tx.code === 0,
+        code: tx.code,
+      }
+    }
+
+    // Tier 2: REST API
+    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
+    const apiResult = await this.getTransactionViaApi(txHash)
+    if (apiResult) return apiResult
+
+    return null
+  }
+
+  /**
+   * Tri-state hash verification over [startHeight, min(chainHead, startHeight+maxBlocks-1)].
+   * confirmed  → tx found (Tier 1 RPC, Tier 2 API, or Tier 3 block scan)
+   * absent     → every height in the (head-capped) window was scanned, tx not present
+   * unavailable→ the chain head or any block in the window could not be read
+   */
+  async verifyTransaction(
+    txHash: string,
+    startHeight: number,
+    maxBlocks = 30,
+  ): Promise<VerifyOutcome<TransactionResult>> {
+    // Tier 1 + Tier 2: a direct hit short-circuits.
+    try {
+      const direct = await this.getTransactionDirect(txHash) // Tier1+Tier2 only, throws on RPC error
+      if (direct) return { status: 'confirmed', data: direct }
+    } catch {
+      return { status: 'unavailable' }
+    }
+
+    let head: number
+    try {
+      head = await this.getHeight()
+    } catch {
+      return { status: 'unavailable' }
+    }
+
+    const endHeight = Math.min(startHeight + maxBlocks - 1, head)
+    if (endHeight < startHeight) {
+      // tx height ahead of head: window not yet producible → not covered
+      return { status: 'unavailable' }
+    }
+
+    const comet = await this.getCometClient()
+    const normalizedHash = txHash.toUpperCase()
+    for (let h = startHeight; h <= endHeight; h++) {
+      let block
+      try {
+        block = await comet.block(h)
+      } catch (error) {
+        this.logger.warn({ txHash, height: h, error }, 'verifyTransaction: block fetch failed')
+        return { status: 'unavailable' } // could not cover the window
+      }
+      const txs = block.block.txs
+      for (let i = 0; i < txs.length; i++) {
+        const bytes = txs[i]
+        if (!bytes) continue
+        if (toHex(sha256(bytes)).toUpperCase() === normalizedHash) {
+          const results = await comet.blockResults(h)
+          const txData = results.results[i]
+          // Hash matched in this block but its result row is missing — the tx IS
+          // on-chain, we just can't read its outcome. That is NOT negative evidence;
+          // treat as unavailable so the verifier keeps retrying instead of failing.
+          if (!txData) {
+            this.logger.warn({ txHash, height: h, index: i }, 'verifyTransaction: matched tx has no block result entry')
+            return { status: 'unavailable' }
+          }
+          return {
+            status: 'confirmed',
+            data: { hash: txHash, height: h, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code },
+          }
+        }
+      }
+    }
+    return { status: 'absent', coveredUpToHeight: endHeight }
   }
 
   private async getTransactionViaApi(txHash: string): Promise<TransactionResult | null> {
@@ -462,6 +555,49 @@ export class PocketBlockchain {
         return null
       }
       throw e
+    }
+  }
+
+  /**
+   * Tri-state state-based verification of a supplier-mutating tx's expected effect.
+   * confirmed  → the supplier state reflects the expected effect
+   * absent     → the RPC answered (supplier found or NotFound) but the effect is not present
+   * unavailable→ the supplier query could not be read (non-NotFound error)
+   *
+   * Note: {@link getSupplier} returns `null` on `code = NotFound` (answered-absent) and
+   * rethrows otherwise (unavailable).
+   */
+  async verifySupplierEffect(
+    operatorAddress: string,
+    effect: SupplierEffect,
+    height?: number,
+  ): Promise<VerifyOutcome<Supplier>> {
+    let supplier: Supplier | null
+    try {
+      supplier = await this.getSupplier(operatorAddress, height)
+    } catch {
+      return { status: 'unavailable' }
+    }
+    // Not load-bearing: decideVerification ignores the supplier path's coveredUpToHeight
+    // (only the hash path's window-coverage drives the failure verdict). 0 = "queried latest".
+    const coveredUpToHeight = height ?? 0
+    if (!supplier) return { status: 'absent', coveredUpToHeight }
+
+    switch (effect.kind) {
+      case 'stake':
+        return supplier.ownerAddress === effect.ownerAddress
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
+      case 'upstake': {
+        const staked = BigInt(supplier.stake?.amount ?? '0')
+        return supplier.ownerAddress === effect.ownerAddress && staked >= effect.minStakeUpokt
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
+      }
+      case 'unstake':
+        return supplier.unstakeSessionEndHeight > 0
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
     }
   }
 
