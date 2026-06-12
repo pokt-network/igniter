@@ -795,8 +795,6 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     if (decision.outcome === 'pending') {
       await dal.transactions.recordVerificationProgress(transactionId, {
         lastCoveredHeight: decision.newLastCoveredHeight,
-        incTx: decision.advanceTxAttempt,
-        incSupplier: decision.advanceSupplierAttempt,
         incUnavailable: decision.incUnavailable,
       })
       if (decision.incUnavailable) await maybeAlertUnavailable(transactionId)

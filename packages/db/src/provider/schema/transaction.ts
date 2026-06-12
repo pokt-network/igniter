@@ -1,11 +1,13 @@
 import {
+  index,
   integer,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   transactionStatusEnum,
   transactionTypeEnum,
@@ -26,12 +28,15 @@ export const transactionsTable = pgTable('transactions', {
   message: text(),
   executionHeight: integer('execution_height'),
   lastCoveredHeight: integer('last_covered_height'),
-  txVerificationAttempts: integer('tx_verification_attempts').notNull().default(0),
-  supplierVerificationAttempts: integer('supplier_verification_attempts').notNull().default(0),
+  // inclusion in any block > timeoutHeight is impossible (Cosmos ante); null = no embedded bound (failure needs sequence evidence)
+  timeoutHeight: integer('timeout_height'),
   unavailableChecks: integer('unavailable_checks').notNull().default(0),
   lastVerificationAt: timestamp('last_verification_at'),
   createdAt: timestamp('created_at').defaultNow(),
-})
+}, (table) => ({
+  verifierSweepIdx: index('transactions_verifier_sweep_idx').on(table.status, table.lastVerificationAt).where(sql`"hash" IS NOT NULL`),
+  pendingPerKeyUq: uniqueIndex('transactions_key_pending_uq').on(table.keyId).where(sql`status = 'pending'`),
+}))
 
 export const transactionsRelations = relations(transactionsTable, ({ one }) => ({
   key: one(keysTable, {

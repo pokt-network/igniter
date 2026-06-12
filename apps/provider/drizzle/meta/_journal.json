@@ -134,6 +134,13 @@
       "when": 1781146262961,
       "tag": "0018_white_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781295991057,
+      "tag": "0019_stormy_black_queen",
+      "breakpoints": true
     }
   ]
 }

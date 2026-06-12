@@ -76,15 +76,15 @@ export default class Transactions {
    */
   async recordVerificationProgress(
     transactionId: number,
-    p: { lastCoveredHeight?: number; incTx?: boolean; incSupplier?: boolean; incUnavailable?: boolean },
+    p: { lastCoveredHeight?: number; incUnavailable?: boolean },
   ): Promise<void> {
     await this.dbClient.db
       .update(transactionsTable)
       .set({
         lastCoveredHeight: p.lastCoveredHeight,
-        txVerificationAttempts: p.incTx ? sql`${transactionsTable.txVerificationAttempts} + 1` : undefined,
-        supplierVerificationAttempts: p.incSupplier ? sql`${transactionsTable.supplierVerificationAttempts} + 1` : undefined,
-        unavailableChecks: p.incUnavailable ? sql`${transactionsTable.unavailableChecks} + 1` : undefined,
+        unavailableChecks: p.incUnavailable
+          ? sql`${transactionsTable.unavailableChecks} + 1`
+          : sql`GREATEST(${transactionsTable.unavailableChecks} - 1, 0)`,
         lastVerificationAt: new Date(),
       })
       .where(eq(transactionsTable.id, transactionId))

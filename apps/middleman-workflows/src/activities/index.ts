@@ -1258,8 +1258,6 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     if (decision.outcome === 'pending') {
       await dal.transaction.recordVerificationProgress(transactionId, {
         lastCoveredHeight: decision.newLastCoveredHeight,
-        incTx: decision.advanceTxAttempt,
-        incSupplier: decision.advanceSupplierAttempt,
         incUnavailable: decision.incUnavailable,
       })
       if (decision.incUnavailable) await maybeAlertUnavailable(transactionId)
