@@ -142,4 +142,42 @@ describe('PocketBlockchain.verifyTransaction', () => {
 
     expect(r.status).toBe('unavailable')
   })
+
+  it('falls through to the block scan when Tier-1 getTx throws (tx indexing disabled)', async () => {
+    // Tier 1 rejects with "transaction indexing is disabled"
+    mockGetTx.mockRejectedValue(new Error('transaction indexing is disabled'))
+    // REST is disabled too
+    mockFetch.mockResolvedValue({ ok: false })
+    // head is beyond the window
+    mockGetHeight.mockResolvedValue(1005)
+    // The tx IS in block 1000
+    mockBlock.mockImplementation((h: number) => {
+      if (h === 1000) {
+        return Promise.resolve({ block: { txs: [txContent] } })
+      }
+      return Promise.resolve({ block: { txs: [] } })
+    })
+    mockBlockResults.mockResolvedValue({
+      results: [{ code: 0, gasUsed: BigInt(50000), gasWanted: BigInt(100000) }],
+    })
+
+    const bc = await createInstance('http://api.example.com')
+    const r = await bc.verifyTransaction(txHash, 1000, 30)
+
+    expect(r.status).toBe('confirmed')
+  })
+
+  it('returns absent with coveredUpToHeight = startHeight - 1 when caught up to head', async () => {
+    // getTx returns null (no direct hit)
+    mockGetTx.mockResolvedValue(null)
+    // REST disabled
+    mockFetch.mockResolvedValue({ ok: false })
+    // head is startHeight - 1 (node has not produced any new blocks yet)
+    mockGetHeight.mockResolvedValue(999) // startHeight=1000, so head < startHeight
+
+    const bc = await createInstance('http://api.example.com')
+    const r = await bc.verifyTransaction(txHash, 1000, 30)
+
+    expect(r).toEqual({ status: 'absent', coveredUpToHeight: 999 })
+  })
 })

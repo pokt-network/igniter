@@ -390,12 +390,14 @@ export class PocketBlockchain {
     startHeight: number,
     maxBlocks = 30,
   ): Promise<VerifyOutcome<TransactionResult>> {
-    // Tier 1 + Tier 2: a direct hit short-circuits.
+    // Tier 1 + Tier 2: a direct hit short-circuits. A Tier-1 RPC error does NOT
+    // abort verification: the Tier-3 block scan below is the authoritative coverage
+    // mechanism (works even when tx indexing is disabled on the RPC node).
     try {
-      const direct = await this.getTransactionDirect(txHash) // Tier1+Tier2 only, throws on RPC error
+      const direct = await this.getTransactionDirect(txHash)
       if (direct) return { status: 'confirmed', data: direct }
-    } catch {
-      return { status: 'unavailable' }
+    } catch (error) {
+      this.logger.warn({ txHash, error }, 'verifyTransaction: Tier 1/2 lookup failed; falling through to block scan')
     }
 
     let head: number
@@ -407,8 +409,9 @@ export class PocketBlockchain {
 
     const endHeight = Math.min(startHeight + maxBlocks - 1, head)
     if (endHeight < startHeight) {
-      // tx height ahead of head: window not yet producible → not covered
-      return { status: 'unavailable' }
+      // Caught up to the chain head: no new blocks to scan. This is a HEALTHY
+      // answer ("absent so far"), not an RPC outage — do not inflate backoff.
+      return { status: 'absent', coveredUpToHeight: startHeight - 1 }
     }
 
     const comet = await this.getCometClient()
