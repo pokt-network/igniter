@@ -120,14 +120,22 @@ export async function CompleteImportAttempt(
     })
   }
 
+  let importedAddresses: string[] = []
   if (nodesToInsert.length > 0) {
-    await db
+    // The nodes.address unique constraint silently drops rows whose address already
+    // exists under ANOTHER user (getExistingNodes only sees this user's rows).
+    // Derive the completed set from what actually landed.
+    const inserted = await db
       .insert(nodesTable)
       .values(nodesToInsert)
       .onConflictDoNothing()
+      .returning({ address: nodesTable.address })
+    importedAddresses = inserted.map((r) => r.address)
+    const dropped = nodesToInsert.filter((n) => !importedAddresses.includes(n.address))
+    if (dropped.length > 0) {
+      console.warn('CompleteImportAttempt: addresses skipped (already owned by another account)', dropped.map((n) => n.address))
+    }
   }
-
-  const importedAddresses = nodesToInsert.map((s) => s.address)
   await importAttemptsDal.markCompleted(attemptId, importedAddresses)
 }
 
