@@ -683,6 +683,8 @@ export class PocketBlockchain {
         code: result.code,
         message: result.rawLog,
         success: true,
+        signedAtHeight: currentHeight,
+        timeoutHeight: currentHeight + 5,
       }
     } catch (e: any) {
       const errorMessage = e.log && e.message ? `${e.log} - ${e.message}` : e.message ?? 'Unknown error'
@@ -693,6 +695,8 @@ export class PocketBlockchain {
           success: false,
           code: e.code,
           message: errorMessage,
+          signedAtHeight: currentHeight,
+          timeoutHeight: currentHeight + 5,
         }
       }
 
@@ -702,6 +706,8 @@ export class PocketBlockchain {
           success: false,
           message: `Transaction timed out. This does not indicate a failure. Details: ${errorMessage}`,
           code: 42, // Timeout Transaction error code. See: https://github.com/cosmos/cosmos-sdk/blob/main/types/errors/errors.go
+          signedAtHeight: currentHeight,
+          timeoutHeight: currentHeight + 5,
         }
       }
 
@@ -711,8 +717,27 @@ export class PocketBlockchain {
         transactionHash: '',
         success: false,
         message: `An unknown error occurred: ${errorMessage}`,
+        signedAtHeight: currentHeight,
+        timeoutHeight: currentHeight + 5,
       }
     }
+  }
+
+  /**
+   * Sequence-consumed evidence for a broadcast tx. If account.sequence > txSequence,
+   * the tx can NEVER land in a block after `observedAtHeight` (its sequence was
+   * consumed — by itself or a replacement). Soundness contract for the caller:
+   * a failure verdict additionally requires hash-absence covered up to
+   * `observedAtHeight`, because the consumer might have been this very tx in a
+   * block the scan has not covered yet. `observedAtHeight` is sampled AT/AFTER the
+   * account read so coverage up to it includes every block the tx could occupy.
+   */
+  async isSequenceConsumed(signer: string, txSequence: number): Promise<{ consumed: boolean; observedAtHeight: number }> {
+    const client = await this.getStargateClient()
+    const account = await client.getAccount(signer)   // throws on RPC error → caller treats as unavailable
+    const observedAtHeight = await this.getHeight()
+    if (!account) return { consumed: false, observedAtHeight }
+    return { consumed: account.sequence > txSequence, observedAtHeight }
   }
 
   private async getSigningClient(

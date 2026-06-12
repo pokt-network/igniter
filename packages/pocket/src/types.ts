@@ -55,6 +55,10 @@ export interface SendTransactionResult {
   message?: string;
   codespace?: string;
   isTimeout?: boolean;
+  /** Chain head sampled immediately before signing — the lowest possible inclusion height anchor. */
+  signedAtHeight?: number;
+  /** timeoutHeight embedded in the signed tx; inclusion in any block > this height is impossible. */
+  timeoutHeight?: number;
 }
 
 export interface TransactionResult {
