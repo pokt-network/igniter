@@ -6,6 +6,7 @@ export interface NewStake {
   ownerAddress: string;
   stakeAmount: string;
   balance: number;
+  services: StakeOperation['value']['services'];
 }
 
 export interface NewUnstake {
@@ -67,12 +68,13 @@ export function extractTransactionStakingSuppliers(tx: Transaction) {
     const {body} = JSON.parse(tx.unsignedPayload);
     const nodes: Record<string, NewStake> = body.messages.reduce((nodes: Record<string, NewStake>, message: StakeOperation) => {
       if (message.typeUrl === STAKE_TYPE_URL) {
-        const {stake, operatorAddress, ownerAddress} = message.value;
+        const {stake, operatorAddress, ownerAddress, services} = message.value;
         nodes[operatorAddress] = {
           address: operatorAddress,
           ownerAddress,
           stakeAmount: stake.amount.toString(),
           balance: nodes[operatorAddress]?.balance || 0,
+          services,
         };
       }
 

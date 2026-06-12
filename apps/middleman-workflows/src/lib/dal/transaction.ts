@@ -59,6 +59,9 @@ export default class Transaction {
    * Returns the updated row iff THIS call performed the transition (affected 1 row),
    * undefined otherwise. The WHERE clause is the concurrency guard: a second caller
    * (overlapping sweep / both paths) sees 0 rows and must NOT run effects.
+   * IMPORTANT: callers MUST run downstream effects (node creation, provider notify)
+   * BEFORE this CAS — effects are idempotent, but a status flip before effects risks
+   * skipping them on retry when the CAS is no longer winnable.
    */
   async claimTerminalTransition(
     transactionId: number,

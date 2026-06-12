@@ -42,6 +42,7 @@ import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
 export * from './types'
 export * from './constants';
 export * from '@igniter/tx-verify';
+export { rPCTypeFromJSON } from './proto/generated/pocket/shared/service';
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.

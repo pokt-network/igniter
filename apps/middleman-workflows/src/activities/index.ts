@@ -24,10 +24,12 @@ import { extractTransactionStakingSuppliers, extractTransactionUnstakingSupplier
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
-import type { VerificationDecision } from '@igniter/tx-verify'
+import type { VerificationDecision, SupplierPathOutcome } from '@igniter/tx-verify'
 import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 import { NodesMinMax } from '@/lib/dal/nodes'
+import { verifyStakeGoalState } from './verifyStakeGoalStateHelper'
+import { parseSignerAndSequence } from './parseSignerAndSequence'
 
 export type Height = number
 
@@ -1155,7 +1157,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     return { statusResult }
   },
 
-  async notifyProviderOfFailedStakes(transactionId: number) {
+  async notifyProviderOfFailedStakes(transactionId: number, onlyAddresses?: string[]) {
     try {
       const transaction = await dal.transaction.getTransaction(transactionId)
 
@@ -1177,7 +1179,9 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
       const suppliers = extractTransactionStakingSuppliers(transaction)
 
-      const addresses = suppliers.map(({ address }) => address)
+      const addresses = suppliers
+        .map(({ address }) => address)
+        .filter((addr) => !onlyAddresses || onlyAddresses.includes(addr))
 
       if (addresses.length === 0) {
         return {
@@ -1234,28 +1238,77 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
   },
 
   /**
-   * Verifies a broadcast tx by its expected on-chain supplier effect. Returns null for
+   * Verifies a broadcast tx by its expected on-chain supplier goal-state. Returns null for
    * tx types with no supplier-state path (send / OperationalFunds) so the decision logic
-   * treats the supplier path as inapplicable.
+   * treats the supplier path as inapplicable. Uses goal-state semantics: the tx is
+   * confirmed if every operator's on-chain state matches intent, regardless of which tx
+   * produced it.
    */
-  async verifySupplierEffect(transactionId: number): Promise<VerifyOutcome<unknown> | null> {
+  async verifySupplierEffect(transactionId: number): Promise<SupplierPathOutcome | null> {
     const txn = await dal.transaction.getTransaction(transactionId)
-    if (!txn) {
-      throw new Error('verifySupplierEffect: tx not found')
+    if (!txn) throw new Error('verifySupplierEffect: tx not found')
+
+    if (txn.type === TransactionType.Stake || txn.type === TransactionType.Upstake) {
+      return verifyStakeGoalState(txn, (addr) => pocketRpcClient.getSupplier(addr))
     }
-    const parsed = supplierEffectFromTx(txn)
-    if (!parsed) return null
-    return pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
+
+    if (txn.type === TransactionType.Unstake) {
+      const [unstake] = extractTransactionUnstakingSuppliers(txn)
+      if (!unstake) return null
+      const effect = { kind: 'unstake' as const, minSessionEndHeight: txn.executionHeight ?? 0 }
+      const out = await pocketRpcClient.verifySupplierEffect(unstake.operatorAddress, effect)
+      if (out.status === 'confirmed') return { status: 'confirmed' }
+      if (out.status === 'absent') return { status: 'absent', absentOperators: [unstake.operatorAddress] }
+      return { status: 'unavailable' }
+    }
+
+    return null
   },
 
   /**
-   * Applies a verification decision computed by the pure `decideVerification`.
-   * Pending → record progress (counters/coverage) + maybe alert on chronic unavailability.
-   * Terminal → atomic CAS to the terminal status; only the caller that wins the CAS runs
-   * the downstream effects (node creation / provider notification).
+   * Extracts tx validity evidence (timeoutHeight, sequence) from the signed payload.
+   * Used to drive the hash-absent path in decideVerification toward expired/sequence-consumed
+   * verdicts without waiting for the full expiration window.
+   */
+  async checkTxValidityEvidence(transactionId: number): Promise<{
+    txTimeoutHeight: number | null
+    sequence: { consumed: boolean; observedAtHeight: number } | null
+  }> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn) return { txTimeoutHeight: null, sequence: null }
+
+    if (!txn.signedPayload) return { txTimeoutHeight: null, sequence: null }
+
+    const parsed = parseSignerAndSequence(txn.signedPayload)
+
+    if (parsed.timeoutHeight) return { txTimeoutHeight: parsed.timeoutHeight, sequence: null }
+
+    if (parsed.sequence == null) return { txTimeoutHeight: null, sequence: null }
+
+    let signer: string | null = null
+    try {
+      const { body } = JSON.parse(txn.unsignedPayload)
+      signer = body.messages[0]?.value?.signer ?? null
+    } catch { /* ignore */ }
+
+    if (!signer) return { txTimeoutHeight: null, sequence: null }
+
+    try {
+      const sequenceEvidence = await pocketRpcClient.isSequenceConsumed(signer, parsed.sequence)
+      return { txTimeoutHeight: null, sequence: sequenceEvidence }
+    } catch {
+      return { txTimeoutHeight: null, sequence: null }
+    }
+  },
+
+  /**
+   * Applies a verification decision computed by the pure `decideVerification` (v2 shape).
+   * Pending → record progress (coverage/unavailable) + maybe alert on chronic unavailability.
+   * Terminal → run downstream effects BEFORE the CAS so idempotent re-runs on retry are safe;
+   * only the caller that wins the CAS runs effects (zero-rows → already terminal, skip).
    */
   async applyVerificationDecision(transactionId: number, decision: VerificationDecision): Promise<void> {
-    if (decision.outcome === 'pending') {
+    if (decision.tx === 'pending') {
       await dal.transaction.recordVerificationProgress(transactionId, {
         lastCoveredHeight: decision.newLastCoveredHeight,
         incUnavailable: decision.incUnavailable,
@@ -1267,28 +1320,29 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const txn = await dal.transaction.getTransaction(transactionId)
     if (!txn) return
 
-    // Run effects BEFORE flipping status. The tx stays Pending until the CAS
-    // below commits, so if an effect (e.g. provider notify) fails after a partial
-    // run, the tx is simply re-swept and the idempotent effects re-run — whereas
-    // flipping first would let a retry lose the CAS and skip the unfinished
-    // effects entirely. Effects are idempotent (per-tx node guard + address
-    // upsert + onConflictDoNothing links), so re-running is safe.
-    await runTerminalEffects(txn, decision.outcome)
+    // Effects keyed off GOAL-STATE, not tx outcome: a tx that failed on-chain while a
+    // sibling achieved the goal must NOT release staked suppliers. Effects run before
+    // the CAS (idempotent; a partial run is re-swept).
+    if (decision.effects === 'apply-success' && txn.type === TransactionType.Stake) {
+      await activities.createNewNodesFromTransaction(txn.id)
+      await activities.notifyProviderOfStakedAddresses(txn.id)
+    } else if (decision.effects === 'apply-failure' && txn.type === TransactionType.Stake) {
+      await activities.notifyProviderOfFailedStakes(txn.id, decision.failedOperators)
+    } else if (decision.effects === 'apply-success' && txn.type === TransactionType.Unstake) {
+      await activities.updateUnstakingNodesFromTransaction(txn.id)
+      await activities.notifyProviderOfUntakingAddresses(txn.id)
+    }
 
-    const status = decision.outcome === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
+    const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
     const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
     const fields: { code?: number; consumedFee?: number; verificationHeight?: number; log?: string } = {
       verificationHeight,
-      log: decision.outcome === 'success'
-        ? 'verified'
-        : 'verification negative (window covered, no effect)',
+      log: decision.tx === 'success' ? 'verified'
+        : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
+        : 'verification negative (validity bound covered, no effect)',
     }
-    // Only persist code/fee when the hash path supplied them. A supplier-state
-    // confirmation has no code/gasUsed, so leave the existing values untouched
-    // instead of clobbering consumedFee to 0.
     if (decision.code !== undefined) fields.code = decision.code
     if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)
-
     await dal.transaction.claimTerminalTransition(transactionId, status, fields)
   },
   }
@@ -1304,33 +1358,6 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         'TX unverifiable: RPC repeatedly unavailable — operator attention needed',
         { transactionId, unavailableChecks: txn.unavailableChecks },
       )
-    }
-  }
-
-  /**
-   * Runs the downstream effects of a terminalized supplier tx. Moved out of
-   * ExecuteTransaction so the verifier owns the terminal transition. The DAL writes
-   * these trigger are idempotent (per-tx guard + address upsert), so a re-run is safe.
-   */
-  async function runTerminalEffects(
-    txn: Transaction,
-    outcome: 'success' | 'failure',
-  ): Promise<void> {
-    const success = outcome === 'success'
-
-    if (txn.type === TransactionType.Stake) {
-      if (success) {
-        await activities.createNewNodesFromTransaction(txn.id)
-        await activities.notifyProviderOfStakedAddresses(txn.id)
-      } else {
-        await activities.notifyProviderOfFailedStakes(txn.id)
-      }
-      return
-    }
-
-    if (txn.type === TransactionType.Unstake && success) {
-      await activities.updateUnstakingNodesFromTransaction(txn.id)
-      await activities.notifyProviderOfUntakingAddresses(txn.id)
     }
   }
 
