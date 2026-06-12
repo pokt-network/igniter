@@ -749,7 +749,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * height (or its execution height on the first sweep). Maps the pocket tri-state
    * result down to the minimal shape the pure decision logic consumes.
    */
-  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: bigint }>> {
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn?.hash) {
       throw new Error('verifyTxHash: tx missing hash')
@@ -757,9 +757,11 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const startHeight = txn.lastCoveredHeight != null ? txn.lastCoveredHeight + 1 : (txn.executionHeight ?? 0)
     const out = await pocketRpcClient.verifyTransaction(txn.hash, startHeight, TX_EXPIRATION_BLOCKS)
     if (out.status !== 'confirmed') return out
+    // gasUsed serialized as a string: a bigint cannot cross the Temporal activity
+    // boundary (default payload converter cannot encode BigInt).
     return {
       status: 'confirmed',
-      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed },
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString() },
     }
   },
 

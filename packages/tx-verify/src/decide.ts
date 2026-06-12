@@ -1,7 +1,7 @@
 import type { VerifyOutcome } from './verifyOutcome'
 
 export interface DecideInput {
-  hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: bigint }>
+  hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>
   /** null when the tx type has no supplier path (e.g. send / OperationalFunds) */
   supplier: VerifyOutcome<unknown> | null
   executionHeight: number
@@ -11,7 +11,7 @@ export interface DecideInput {
 export interface VerificationDecision {
   outcome: 'success' | 'failure' | 'pending'
   code?: number
-  gasUsed?: bigint
+  gasUsed?: string
   newLastCoveredHeight?: number
   /** RPC answered on the hash path (confirmed/absent) */
   advanceTxAttempt: boolean

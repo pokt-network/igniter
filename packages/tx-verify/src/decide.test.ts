@@ -7,13 +7,13 @@ const base = { executionHeight: 1000, expirationWindow: WINDOW }
 describe('decideVerification', () => {
   it('confirmed by hash → success', () => {
     const d = decideVerification({
-      hash: { status: 'confirmed', data: { success: true, code: 0, gasUsed: 5n } },
+      hash: { status: 'confirmed', data: { success: true, code: 0, gasUsed: '5' } },
       supplier: null,
       ...base,
     })
     expect(d.outcome).toBe('success')
     expect(d.code).toBe(0)
-    expect(d.gasUsed).toBe(5n)
+    expect(d.gasUsed).toBe('5')
   })
 
   it('confirmed by supplier (hash absent, not yet covered) → success', () => {
