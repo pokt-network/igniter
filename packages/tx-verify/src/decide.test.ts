@@ -1,77 +1,83 @@
-import { decideVerification } from './decide'
+import { decideVerification, TX_EXPIRATION_BLOCKS } from './decide'
 
-const WINDOW = 30
-// covered iff coveredUpToHeight >= executionHeight + WINDOW - 1 = 1029
-const base = { executionHeight: 1000, expirationWindow: WINDOW }
+const confirmedOk = { status: 'confirmed' as const, data: { success: true, code: 0, gasUsed: '100' } }
+const confirmedFailed = { status: 'confirmed' as const, data: { success: false, code: 5, gasUsed: '100' } }
+const absentAt = (h: number) => ({ status: 'absent' as const, coveredUpToHeight: h })
+const unavailable = { status: 'unavailable' as const }
+const base = { executionHeight: 1000, expirationWindow: TX_EXPIRATION_BLOCKS, txTimeoutHeight: 1005 as number | null, sequence: null }
 
-describe('decideVerification', () => {
-  it('confirmed by hash → success', () => {
-    const d = decideVerification({
-      hash: { status: 'confirmed', data: { success: true, code: 0, gasUsed: '5' } },
-      supplier: null,
-      ...base,
-    })
-    expect(d.outcome).toBe('success')
-    expect(d.code).toBe(0)
-    expect(d.gasUsed).toBe('5')
+describe('decideVerification v2', () => {
+  // D1: on-chain failed tx is a tx-failure, but effects depend on goal-state
+  it('hash confirmed success → tx success + apply-success', () => {
+    const d = decideVerification({ ...base, hash: confirmedOk, supplier: { status: 'confirmed' } })
+    expect(d).toMatchObject({ tx: 'success', effects: 'apply-success', code: 0, gasUsed: '100' })
+  })
+  it('hash confirmed code!=0, supplier confirmed → tx failure + apply-success (goal met by sibling)', () => {
+    const d = decideVerification({ ...base, hash: confirmedFailed, supplier: { status: 'confirmed' } })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'apply-success', code: 5 })
+  })
+  it('hash confirmed code!=0, supplier absent → tx failure + apply-failure', () => {
+    const d = decideVerification({ ...base, hash: confirmedFailed, supplier: { status: 'absent', absentOperators: ['pokt1a'] } })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'apply-failure', failedOperators: ['pokt1a'] })
+  })
+  it('hash confirmed code!=0, supplier unavailable → pending (never destructive effects on unknown goal)', () => {
+    const d = decideVerification({ ...base, hash: confirmedFailed, supplier: unavailable })
+    expect(d).toMatchObject({ tx: 'pending', incUnavailable: true })
+  })
+  it('hash confirmed code!=0, no supplier path → tx failure + none', () => {
+    const d = decideVerification({ ...base, hash: confirmedFailed, supplier: null })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'none', code: 5 })
   })
 
-  it('confirmed by supplier (hash absent, not yet covered) → success', () => {
-    const d = decideVerification({
-      hash: { status: 'absent', coveredUpToHeight: 1010 },
-      supplier: { status: 'confirmed', data: {} },
-      ...base,
-    })
-    expect(d.outcome).toBe('success')
+  // goal-state success without hash evidence
+  it('supplier confirmed, hash absent → tx success + apply-success, no code/gasUsed', () => {
+    const d = decideVerification({ ...base, hash: absentAt(1004), supplier: { status: 'confirmed' } })
+    expect(d).toMatchObject({ tx: 'success', effects: 'apply-success' })
+    expect(d.code).toBeUndefined()
+    expect(d.gasUsed).toBeUndefined()
   })
 
-  it('hash window covered + no supplier effect (answered) → failure', () => {
-    const d = decideVerification({
-      hash: { status: 'absent', coveredUpToHeight: 1029 },
-      supplier: { status: 'absent', coveredUpToHeight: 1029 },
-      ...base,
-    })
-    expect(d.outcome).toBe('failure')
+  // D4: failure soundness — timeoutHeight bound
+  it('absent, covered >= timeoutHeight, supplier absent → failure', () => {
+    const d = decideVerification({ ...base, hash: absentAt(1005), supplier: { status: 'absent' } })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'apply-failure' })
+  })
+  it('absent, covered < timeoutHeight → pending even if window-end covered', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: 1050, hash: absentAt(1029), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
   })
 
-  it('hash window covered, no supplier applicable (send) → failure', () => {
-    const d = decideVerification({
-      hash: { status: 'absent', coveredUpToHeight: 1029 },
-      supplier: null,
-      ...base,
-    })
-    expect(d.outcome).toBe('failure')
+  // D4: failure soundness — sequence rule (no timeoutHeight)
+  it('no timeout, sequence consumed, covered >= observedAtHeight → failure', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: null, sequence: { consumed: true, observedAtHeight: 1040 }, hash: absentAt(1040), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('failure')
+  })
+  it('no timeout, sequence consumed, covered < observedAtHeight → pending (tx may have landed in the gap)', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: null, sequence: { consumed: true, observedAtHeight: 1040 }, hash: absentAt(1029), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
+  })
+  it('no timeout, sequence not consumed → pending forever (tx can still land)', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: null, sequence: { consumed: false, observedAtHeight: 2000 }, hash: absentAt(1999), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
+  })
+  it('no timeout, no sequence evidence → pending', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: null, sequence: null, hash: absentAt(5000), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
   })
 
-  it('hash covered but supplier UNAVAILABLE → pending (incomplete negative evidence)', () => {
-    const d = decideVerification({
-      hash: { status: 'absent', coveredUpToHeight: 1029 },
-      supplier: { status: 'unavailable' },
-      ...base,
-    })
-    expect(d.outcome).toBe('pending')
+  // unavailable paths never terminalize
+  it('hash unavailable → pending + incUnavailable', () => {
+    const d = decideVerification({ ...base, hash: unavailable, supplier: { status: 'absent' } })
+    expect(d).toMatchObject({ tx: 'pending', incUnavailable: true })
+  })
+  it('supplier unavailable blocks failure', () => {
+    const d = decideVerification({ ...base, hash: absentAt(1005), supplier: unavailable })
+    expect(d).toMatchObject({ tx: 'pending', incUnavailable: true })
   })
 
-  it('hash UNAVAILABLE → pending, no counter advance', () => {
-    const d = decideVerification({
-      hash: { status: 'unavailable' },
-      supplier: null,
-      ...base,
-    })
-    expect(d.outcome).toBe('pending')
-    expect(d.advanceTxAttempt).toBe(false)
-    expect(d.incUnavailable).toBe(true)
-  })
-
-  it('hash absent within window → pending, advance coverage + counter', () => {
-    const d = decideVerification({
-      hash: { status: 'absent', coveredUpToHeight: 1012 },
-      supplier: null,
-      ...base,
-    })
-    expect(d.outcome).toBe('pending')
-    expect(d.newLastCoveredHeight).toBe(1012)
-    expect(d.advanceTxAttempt).toBe(true)
-    expect(d.incUnavailable).toBe(false)
+  // coverage bookkeeping
+  it('pending absent advances newLastCoveredHeight', () => {
+    const d = decideVerification({ ...base, txTimeoutHeight: 1050, hash: absentAt(1010), supplier: null })
+    expect(d.newLastCoveredHeight).toBe(1010)
   })
 })
