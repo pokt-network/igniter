@@ -25,6 +25,7 @@ import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
 import type { VerificationDecision, SupplierPathOutcome } from '@igniter/tx-verify'
+import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 import { NodesMinMax } from '@/lib/dal/nodes'
@@ -156,7 +157,7 @@ export const governanceActivities = (dal: DAL) => ({
 const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE_ALERT_THRESHOLD ?? 50)
 
 /** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
-const TX_EXPIRATION_BLOCKS = 30
+// TX_EXPIRATION_BLOCKS imported from @igniter/tx-verify above
 
 /**
  * Parses a transaction's unsigned payload into the expected on-chain supplier effect.

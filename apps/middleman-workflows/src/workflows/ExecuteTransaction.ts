@@ -4,8 +4,7 @@ import {
 } from '@temporalio/workflow'
 import { delegatorActivities } from "@/activities";
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
-
-const TX_EXPIRATION_BLOCKS = 30
+import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
 interface TransactionArgs {
   transactionId: number;

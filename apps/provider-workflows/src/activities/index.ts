@@ -2,6 +2,7 @@ import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, Sup
 import {isSequenceMismatchError, parseExpectedSequence} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
+import {TX_EXPIRATION_BLOCKS} from '@igniter/tx-verify'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
 import {KeysMinMax} from '@/lib/dal/keys'
@@ -51,7 +52,7 @@ export type GovernanceSyncResult = {
 const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE_ALERT_THRESHOLD ?? 50)
 
 /** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
-const TX_EXPIRATION_BLOCKS = 30
+// TX_EXPIRATION_BLOCKS imported from @igniter/tx-verify above
 
 /**
  * Maps a provider transaction + its key into the expected on-chain supplier effect.

@@ -1,12 +1,10 @@
 import { proxyActivities, log, WorkflowError } from '@temporalio/workflow'
 import { providerActivities } from '@/activities'
-import { decideVerification } from '@igniter/tx-verify'
+import { decideVerification, TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
 // we built to commonjs and p-limit for esm support
 // @ts-ignore
 import pLimit from 'p-limit'
-
-const TX_EXPIRATION_BLOCKS = 30
 const MAX_CONCURRENT = 10
 
 /**
