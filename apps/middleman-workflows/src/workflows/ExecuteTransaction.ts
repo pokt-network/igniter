@@ -25,6 +25,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     updateTransaction,
     executeTransaction,
     getBlockHeight,
+    getTxTimeoutHeight,
     notifyProviderOfFailedStakes,
   } = proxyActivities<ReturnType<typeof delegatorActivities>>({
     startToCloseTimeout: "30s",
@@ -72,10 +73,17 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     return { ...transaction, status: TransactionStatus.Failure, code: result.code };
   }
 
-  // Broadcast succeeded: persist hash + height and hand off to the verifier.
+  // Broadcast succeeded: parse timeoutHeight from the signed payload (embedded at signing
+  // by KeplrWalletConnection; null for external-wallet txs that omit it).
+  const timeoutHeight = await getTxTimeoutHeight(transactionId);
+
+  // Persist hash + height + timeoutHeight and hand off to the verifier.
+  // executionHeight was sampled BEFORE broadcast (line ~47) — this must not move after
+  // broadcast or the anchor would be ≥ the first possible inclusion height.
   await updateTransaction(transactionId, {
     executionHeight: txHeight,
     hash: result.transactionHash,
+    timeoutHeight,
   });
 
   return { ...transaction, hash: result.transactionHash, executionHeight: txHeight };

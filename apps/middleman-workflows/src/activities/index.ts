@@ -413,6 +413,18 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     await dal.provider.updateProviders(providers)
   },
   /**
+   * Reads the timeoutHeight embedded in the signed payload for a transaction.
+   * Reuses parseSignerAndSequence's TxBody decode path. Returns null when the
+   * payload is absent, unparseable, or has no embedded timeout (external-wallet txs).
+   */
+  async getTxTimeoutHeight(transactionId: number): Promise<number | null> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn?.signedPayload) return null
+    const { timeoutHeight } = parseSignerAndSequence(txn.signedPayload)
+    return timeoutHeight
+  },
+
+  /**
    * Updates a transaction with the given payload.
    *
    * @param {number} transactionId - The unique identifier of the transaction to be updated.
