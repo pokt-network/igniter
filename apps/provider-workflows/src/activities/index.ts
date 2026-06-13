@@ -828,6 +828,40 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
     const parsed = supplierEffectFromKey(txn, key)
     if (!parsed) return null
+
+    // OwnerInitialStake: deep-compare intended vs on-chain service config rather than
+    // checking mere presence (services.length > 0). A supplier with stale services from
+    // a prior stake would satisfy the weak check; this ensures the INTENDED config applied.
+    if (parsed.effect.kind === 'stake-services-present') {
+      let supplier: import('@igniter/pocket').Supplier | null
+      try {
+        supplier = await pocketRpcClient.getSupplier(parsed.operatorAddress)
+      } catch {
+        return { status: 'unavailable' }
+      }
+      if (!supplier || supplier.ownerAddress !== parsed.effect.ownerAddress) {
+        return { status: 'absent', absentOperators: [parsed.operatorAddress] }
+      }
+      const intended = getExpectedServicesFromKey(key)
+      const compare = new CompareSupplierServiceConfigHandler()
+      // Check active services
+      const activeMatch = compare.execute({
+        serviceConfigSetA: intended,
+        serviceConfigSetB: supplier.services ?? [],
+      }).isEqual
+      if (activeMatch) return { status: 'confirmed' }
+      // Check pending activation entries in serviceConfigHistory
+      const pendingMatch = (supplier.serviceConfigHistory ?? []).some((entry: ServiceConfigUpdate) => {
+        if (!entry.service) return false
+        return compare.execute({
+          serviceConfigSetA: intended,
+          serviceConfigSetB: [entry.service],
+        }).isEqual
+      })
+      if (pendingMatch) return { status: 'confirmed' }
+      return { status: 'absent', absentOperators: [parsed.operatorAddress] }
+    }
+
     const out = await pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
     if (out.status === 'confirmed') return { status: 'confirmed' }
     if (out.status === 'absent') return { status: 'absent', absentOperators: [parsed.operatorAddress] }

@@ -99,6 +99,107 @@ describe('supplierEffectFromKey v2', () => {
   })
 })
 
+// ---- verifySupplierEffect deep-compare tests (Task 15) ----
+
+import { providerActivities } from './index'
+import { CompareSupplierServiceConfigHandler } from '@igniter/domain/provider/operations'
+import { getExpectedServicesFromKey } from '@igniter/domain/provider/utils'
+import type { KeyWithGroup } from '@igniter/db/provider/schema'
+
+const OPERATOR = 'pokt1operator'
+const OWNER = 'pokt1owner'
+
+const intendedService = { serviceId: 'svc1', endpoints: [{ url: 'https://example.com', rpcType: 1, configs: [] }], revShare: [{ address: OWNER, revSharePercentage: 100 }] }
+const staleService = { serviceId: 'stale', endpoints: [{ url: 'https://stale.com', rpcType: 1, configs: [] }], revShare: [{ address: OWNER, revSharePercentage: 100 }] }
+
+function makeActivities(getSupplierResult: 'throw' | null | object) {
+  const mockCompare = jest.fn().mockReturnValue({ isEqual: false })
+  ;(CompareSupplierServiceConfigHandler as jest.Mock).mockImplementation(() => ({ execute: mockCompare }))
+  ;(getExpectedServicesFromKey as jest.Mock).mockReturnValue([intendedService])
+
+  const mockDal = {
+    transactions: {
+      getTransaction: jest.fn().mockResolvedValue({
+        id: 1, keyAddress: OPERATOR, type: TransactionType.Stake,
+        reason: RemediationHistoryEntryReason.OwnerInitialStake,
+        hash: 'abc', executionHeight: 1000, status: 'pending',
+      }),
+    },
+    keys: {
+      loadKey: jest.fn().mockResolvedValue({
+        address: OPERATOR,
+        stakeOwner: OWNER,
+        group: { services: [] },
+      } as unknown as KeyWithGroup),
+    },
+  } as any
+
+  const mockPocket = {
+    getSupplier: getSupplierResult === 'throw'
+      ? jest.fn().mockRejectedValue(new Error('rpc error'))
+      : jest.fn().mockResolvedValue(getSupplierResult),
+    verifySupplierEffect: jest.fn(),
+  } as any
+
+  return { activities: providerActivities(mockDal, mockPocket), mockCompare }
+}
+
+describe('verifySupplierEffect — OwnerInitialStake deep-compare (Task 15)', () => {
+  it('(a) intended config matches active services → confirmed', async () => {
+    const { activities, mockCompare } = makeActivities({
+      ownerAddress: OWNER,
+      services: [intendedService],
+      serviceConfigHistory: [],
+    })
+    // First compare (active services) returns isEqual: true
+    mockCompare.mockReturnValueOnce({ isEqual: true })
+    const result = await activities.verifySupplierEffect(1)
+    expect(result).toEqual({ status: 'confirmed' })
+  })
+
+  it('(b) supplier has stale/different services → absent', async () => {
+    const { activities, mockCompare } = makeActivities({
+      ownerAddress: OWNER,
+      services: [staleService],
+      serviceConfigHistory: [],
+    })
+    // All compares return isEqual: false (stale)
+    mockCompare.mockReturnValue({ isEqual: false })
+    const result = await activities.verifySupplierEffect(1)
+    expect(result).toEqual({ status: 'absent', absentOperators: [OPERATOR] })
+  })
+
+  it('(c) active services empty but pending serviceConfigHistory entry matches → confirmed', async () => {
+    const { activities, mockCompare } = makeActivities({
+      ownerAddress: OWNER,
+      services: [],
+      serviceConfigHistory: [{ service: intendedService, activationHeight: 1010, deactivationHeight: 0 }],
+    })
+    // First compare (active, empty array) → not equal; second compare (history entry) → equal
+    mockCompare
+      .mockReturnValueOnce({ isEqual: false }) // active services check
+      .mockReturnValueOnce({ isEqual: true })  // pending history check
+    const result = await activities.verifySupplierEffect(1)
+    expect(result).toEqual({ status: 'confirmed' })
+  })
+
+  it('(d) owner mismatch → absent', async () => {
+    const { activities } = makeActivities({
+      ownerAddress: 'pokt1differentowner',
+      services: [intendedService],
+      serviceConfigHistory: [],
+    })
+    const result = await activities.verifySupplierEffect(1)
+    expect(result).toEqual({ status: 'absent', absentOperators: [OPERATOR] })
+  })
+
+  it('getSupplier throws → unavailable', async () => {
+    const { activities } = makeActivities('throw')
+    const result = await activities.verifySupplierEffect(1)
+    expect(result).toEqual({ status: 'unavailable' })
+  })
+})
+
 // ---- Keys.flipState tests ----
 
 import Keys from '@/lib/dal/keys'
