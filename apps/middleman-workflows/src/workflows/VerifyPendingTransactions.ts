@@ -48,6 +48,8 @@ export async function VerifyPendingTransactions() {
           expirationWindow: TX_EXPIRATION_BLOCKS,
           txTimeoutHeight: evidence.txTimeoutHeight,
           sequence: evidence.sequence,
+          txTimeoutTimestamp: null,
+          chainTimeAtCoverage: null,
         })
         await applyVerificationDecision(t.id, decision)
       }),

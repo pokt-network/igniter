@@ -1,4 +1,4 @@
-import {proxyActivities, WorkflowIdReusePolicy} from "@temporalio/workflow";
+import {proxyActivities, WorkflowIdReusePolicy, ParentClosePolicy} from "@temporalio/workflow";
 import { delegatorActivities } from '@/activities';
 import {executeChild, log, WorkflowError} from "@temporalio/workflow";
 
@@ -30,6 +30,7 @@ export async function ExecutePendingTransactions(args: ExecutePendingTransaction
         workflowId,
         args: [{ transactionId: id }],
         workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
+        parentClosePolicy: ParentClosePolicy.ABANDON,
         retry: {
           maximumAttempts: 5,
         },
