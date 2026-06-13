@@ -136,7 +136,7 @@ export default class Transactions {
 
   /** Sweeper hygiene: a Pending row with no hash older than T means the activity
    *  died between claim and arm (worker crash). T must exceed one full activity
-   *  attempt (startToCloseTimeout 390s) — retries skip via the claim, so the
+   *  attempt (startToCloseTimeout 120s) — retries skip via the claim, so the
    *  broadcast can only have happened inside the first attempt's window. */
   async expireStaleBroadcasts(olderThanMinutes = 15): Promise<number> {
     const res = await this.dbClient.db.update(transactionsTable)

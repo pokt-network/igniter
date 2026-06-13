@@ -38,6 +38,7 @@ import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
 import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
+import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
 export * from './types'
 export * from './constants';
@@ -673,12 +674,12 @@ export class PocketBlockchain {
           accountNumber,
           sequence: explicitSequence,
           chainId,
-        }, BigInt(currentHeight + 5))
+        }, BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
         const txBytes = TxRaw.encode(txRaw).finish()
         this.logger.debug({ signer }, 'stakeSupplier: Broadcasting transaction with explicit sequence')
         result = await signingClient.broadcastTx(txBytes)
       } else {
-        result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + 5))
+        result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
       }
 
       this.logger.info({ result },'stakeSupplier: Execution ended. Transaction sent.')
@@ -689,7 +690,7 @@ export class PocketBlockchain {
         message: result.rawLog,
         success: true,
         signedAtHeight: currentHeight,
-        timeoutHeight: currentHeight + 5,
+        timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
       }
     } catch (e: any) {
       const errorMessage = e.log && e.message ? `${e.log} - ${e.message}` : e.message ?? 'Unknown error'
@@ -701,7 +702,7 @@ export class PocketBlockchain {
           code: e.code,
           message: errorMessage,
           signedAtHeight: currentHeight,
-          timeoutHeight: currentHeight + 5,
+          timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
         }
       }
 
@@ -712,7 +713,7 @@ export class PocketBlockchain {
           message: `Transaction timed out. This does not indicate a failure. Details: ${errorMessage}`,
           code: 42, // Timeout Transaction error code. See: https://github.com/cosmos/cosmos-sdk/blob/main/types/errors/errors.go
           signedAtHeight: currentHeight,
-          timeoutHeight: currentHeight + 5,
+          timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
         }
       }
 
@@ -723,7 +724,7 @@ export class PocketBlockchain {
         success: false,
         message: `An unknown error occurred: ${errorMessage}`,
         signedAtHeight: currentHeight,
-        timeoutHeight: currentHeight + 5,
+        timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
       }
     }
   }

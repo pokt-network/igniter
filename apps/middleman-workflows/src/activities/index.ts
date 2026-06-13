@@ -1309,6 +1309,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       await activities.notifyProviderOfStakedAddresses(txn.id)
     } else if (decision.effects === 'apply-failure' && txn.type === TransactionType.Stake) {
       await activities.notifyProviderOfFailedStakes(txn.id, decision.failedOperators)
+    // Upstake has no creation site today; apply-failure for it is intentionally effects-free.
     } else if (decision.effects === 'apply-success' && txn.type === TransactionType.Unstake) {
       await activities.updateUnstakingNodesFromTransaction(txn.id)
       await activities.notifyProviderOfUntakingAddresses(txn.id)
