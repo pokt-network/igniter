@@ -20,6 +20,7 @@ export async function VerifyPendingTransactions() {
     listPendingWithHash,
     verifyTxHash,
     verifySupplierEffect,
+    checkTxValidityEvidence,
     applyVerificationDecision,
   } = proxyActivities<ReturnType<typeof providerActivities>>({
     startToCloseTimeout: '120s',
@@ -34,12 +35,19 @@ export async function VerifyPendingTransactions() {
     txs.map((t) =>
       limit(async () => {
         const hash = await verifyTxHash(t.id)
-        const supplier = hash.status === 'confirmed' ? null : await verifySupplierEffect(t.id)
+        // Supplier path runs whenever we cannot confirm success from the hash alone:
+        // also when hash confirmed code!=0 (sibling may have achieved goal-state).
+        const supplier = hash.status === 'confirmed' && hash.data.success ? null : await verifySupplierEffect(t.id)
+        // Evidence only when failure is in reach (avoids an unnecessary account query on every sweep).
+        const needEvidence = hash.status === 'absent' || (hash.status === 'confirmed' && !hash.data.success)
+        const evidence = needEvidence ? await checkTxValidityEvidence(t.id) : { txTimeoutHeight: null, sequence: null }
         const decision = decideVerification({
           hash,
           supplier,
           executionHeight: t.executionHeight!,
           expirationWindow: TX_EXPIRATION_BLOCKS,
+          txTimeoutHeight: evidence.txTimeoutHeight,
+          sequence: evidence.sequence,
         })
         await applyVerificationDecision(t.id, decision)
       }),

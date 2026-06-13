@@ -63,10 +63,18 @@ export function supplierEffectFromKey(
   key: Pick<Key, 'address' | 'stakeOwner'>,
 ): { operatorAddress: string; effect: SupplierEffect } | null {
   if (tx.type === TransactionType.Stake) {
-    return {
-      operatorAddress: key.address,
-      effect: { kind: 'stake', ownerAddress: key.stakeOwner ?? '' },
+    // Goal-state per remediation reason:
+    //  - OwnerInitialStake: trigger condition is supplier-present-with-ZERO-services
+    //    (upsertSupplierStatus), so the goal is services present — NOT mere existence.
+    //  - ServiceMismatch / AddressGroupMigration: a config-update over an existing
+    //    supplier; existence proves nothing about THIS tx → hash-only (null).
+    if (tx.reason === RemediationHistoryEntryReason.OwnerInitialStake) {
+      return {
+        operatorAddress: key.address,
+        effect: { kind: 'stake-services-present', ownerAddress: key.stakeOwner ?? '' },
+      }
     }
+    return null
   }
 
   if (tx.type === TransactionType.Unstake) {
@@ -766,11 +774,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
   },
 
   /**
-   * Verifies a broadcast tx by its expected on-chain supplier effect. Returns null for
-   * tx types with no supplier-state path so the decision logic treats the supplier path
-   * as inapplicable.
+   * Verifies a broadcast tx by its expected on-chain supplier goal-state. Returns null for
+   * tx types with no supplier-state path (e.g. ServiceMismatch/AddressGroupMigration stake txs,
+   * or non-supplier tx types) so the decision logic treats the supplier path as inapplicable.
+   * Maps pocket's tri-state result into SupplierPathOutcome for decide v2.
    */
-  async verifySupplierEffect(transactionId: number): Promise<VerifyOutcome<unknown> | null> {
+  async verifySupplierEffect(transactionId: number): Promise<import('@igniter/tx-verify').SupplierPathOutcome | null> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn) {
       throw new Error('verifySupplierEffect: tx not found')
@@ -781,18 +790,35 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
     const parsed = supplierEffectFromKey(txn, key)
     if (!parsed) return null
-    return pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
+    const out = await pocketRpcClient.verifySupplierEffect(parsed.operatorAddress, parsed.effect)
+    if (out.status === 'confirmed') return { status: 'confirmed' }
+    if (out.status === 'absent') return { status: 'absent', absentOperators: [parsed.operatorAddress] }
+    return { status: 'unavailable' }
   },
 
   /**
-   * Applies a verification decision computed by the pure `decideVerification`.
-   * Pending → record progress (counters/coverage) + maybe alert on chronic unavailability.
-   * Terminal → run the provider key-state effect FIRST, then atomically CAS the tx to its
-   * terminal status. Effects-before-CAS so a failure mid-effect re-sweeps and re-runs the
-   * idempotent effect instead of losing it to a lost CAS.
+   * Failure-bound evidence for a provider tx. Provider txs are self-signed and have
+   * a timeoutHeight column (Cosmos ante rejects inclusion after that height). There is
+   * no signedPayload column, so sequence evidence is unavailable — failure relies solely
+   * on timeoutHeight coverage.
+   */
+  async checkTxValidityEvidence(transactionId: number): Promise<{
+    txTimeoutHeight: number | null
+    sequence: { consumed: boolean; observedAtHeight: number } | null
+  }> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    return { txTimeoutHeight: txn?.timeoutHeight ?? null, sequence: null }
+  },
+
+  /**
+   * Applies a verification decision computed by the pure `decideVerification` (v2 shape).
+   * Pending → record progress (coverage/unavailable decay) + maybe alert on chronic unavailability.
+   * Terminal → run the provider key-state effect FIRST (keyed off goal-state effects, not tx outcome),
+   * then atomically CAS the tx to its terminal status. Effects-before-CAS so a failure mid-effect
+   * re-sweeps and re-runs the idempotent effect instead of losing it to a lost CAS.
    */
   async applyVerificationDecision(transactionId: number, decision: VerificationDecision): Promise<void> {
-    if (decision.outcome === 'pending') {
+    if (decision.tx === 'pending') {
       await dal.transactions.recordVerificationProgress(transactionId, {
         lastCoveredHeight: decision.newLastCoveredHeight,
         incUnavailable: decision.incUnavailable,
@@ -804,51 +830,40 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn) return
 
-    const success = decision.outcome === 'success'
+    // Effects keyed off GOAL-STATE, not tx outcome: a tx that failed on-chain while a
+    // sibling achieved the goal must NOT drag the key to RemediationFailed.
+    if (decision.effects !== 'none') {
+      await flipKeyForTx(txn, decision.effects)
+    }
 
-    // Run the key-state effect BEFORE flipping tx status. The tx stays Pending until
-    // the CAS below commits, so a failure after a partial run is re-swept and the
-    // idempotent flip re-runs (set state is idempotent; filtering an already-removed
-    // entry is a no-op) — whereas flipping first would let a retry lose the CAS and
-    // skip the unfinished effect entirely.
-    await flipKeyForTx(txn, decision.outcome)
-
-    const status = success ? TransactionStatus.Success : TransactionStatus.Failure
+    const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
     await dal.transactions.claimTerminalTransition(transactionId, status, {
       code: decision.code,
-      message: success ? 'verified' : 'verification negative',
+      message: decision.tx === 'success' ? 'verified'
+        : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
+        : 'verification negative (validity bound covered, no effect)',
     })
   },
   }
 
   /**
-   * Provider terminal effect: flips the key state for a verified/failed stake tx.
-   * Success → KeyState.Staked + drop the remediation entry that triggered this tx.
-   * Failure → KeyState.RemediationFailed (keep the entry for retry). Idempotent.
+   * Provider terminal effect: flips the key state for a verified stake tx.
+   * Keyed off goal-state effects (not raw tx outcome) so a tx that failed on-chain
+   * while a sibling achieved the goal still flips to Staked (not RemediationFailed).
+   * State-CAS: keys that moved to Unstaking/Unstaked/AttentionNeeded since broadcast
+   * must NOT be overwritten — those transitions take priority.
    */
   async function flipKeyForTx(
     txn: Transaction,
-    outcome: 'success' | 'failure',
+    effects: 'apply-success' | 'apply-failure',
   ): Promise<void> {
-    const key = await dal.keys.loadKey(txn.keyAddress)
-    if (!key) {
-      log.warn('flipKeyForTx: key not found', { keyAddress: txn.keyAddress })
-      return
+    const blockedStates = [KeyState.Unstaking, KeyState.Unstaked, KeyState.AttentionNeeded]
+    const flipped = effects === 'apply-success'
+      ? await dal.keys.flipState(txn.keyAddress, KeyState.Staked, { notFromStates: blockedStates, removeEntryReason: txn.reason ?? undefined })
+      : await dal.keys.flipState(txn.keyAddress, KeyState.RemediationFailed, { notFromStates: blockedStates })
+    if (!flipped) {
+      log.info('flipKeyForTx: key state moved on since broadcast; flip skipped', { keyAddress: txn.keyAddress, effects })
     }
-
-    const height = txn.executionHeight ?? (await pocketRpcClient.getHeight().catch(() => -1))
-
-    if (outcome === 'success') {
-      await dal.keys.updateKey(txn.keyAddress, {
-        state: KeyState.Staked,
-        remediationHistory: (key.remediationHistory ?? []).filter((rh) => rh.reason !== txn.reason),
-      }, height)
-      return
-    }
-
-    await dal.keys.updateKey(txn.keyAddress, {
-      state: KeyState.RemediationFailed,
-    }, height)
   }
 
   /**

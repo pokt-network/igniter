@@ -70,11 +70,25 @@ describe('PocketBlockchain.verifySupplierEffect', () => {
     getSupplierSpy = jest.spyOn(bc, 'getSupplier')
   })
 
-  it('stake: owner matches → confirmed', async () => {
-    getSupplierSpy.mockResolvedValue(makeSupplier())
-    const effect: SupplierEffect = { kind: 'stake', ownerAddress: OWNER }
+  it('stake-services-present: owner matches and services present → confirmed', async () => {
+    getSupplierSpy.mockResolvedValue(makeSupplier({ services: [{ serviceId: 'svc1', endpoints: [], revShare: [] }] }))
+    const effect: SupplierEffect = { kind: 'stake-services-present', ownerAddress: OWNER }
     const r = await bc.verifySupplierEffect(OPERATOR, effect)
     expect(r.status).toBe('confirmed')
+  })
+
+  it('stake-services-present: owner matches but services empty → absent', async () => {
+    getSupplierSpy.mockResolvedValue(makeSupplier({ services: [], serviceConfigHistory: [] }))
+    const effect: SupplierEffect = { kind: 'stake-services-present', ownerAddress: OWNER }
+    const r = await bc.verifySupplierEffect(OPERATOR, effect, 999)
+    expect(r).toEqual({ status: 'absent', coveredUpToHeight: 999 })
+  })
+
+  it('stake-services-present: owner mismatch → absent', async () => {
+    getSupplierSpy.mockResolvedValue(makeSupplier({ ownerAddress: 'pokt1other' }))
+    const effect: SupplierEffect = { kind: 'stake-services-present', ownerAddress: OWNER }
+    const r = await bc.verifySupplierEffect(OPERATOR, effect, 999)
+    expect(r).toEqual({ status: 'absent', coveredUpToHeight: 999 })
   })
 
   it('upstake: staked >= min → confirmed', async () => {

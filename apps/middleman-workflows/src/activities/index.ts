@@ -163,38 +163,6 @@ const TX_EXPIRATION_BLOCKS = 30
  * Returns null when the tx has no supplier-state path (send / OperationalFunds), so the
  * verifier knows to skip the supplier verification path for it.
  */
-export function supplierEffectFromTx(
-  txn: Transaction,
-): { operatorAddress: string; effect: SupplierEffect } | null {
-  // Stake and Upstake share the MsgStakeSupplier type-url; the DB tx type disambiguates.
-  if (txn.type === TransactionType.Stake || txn.type === TransactionType.Upstake) {
-    const [stake] = extractTransactionStakingSuppliers(txn)
-    if (!stake) return null
-    if (txn.type === TransactionType.Upstake) {
-      return {
-        operatorAddress: stake.address,
-        effect: { kind: 'upstake', ownerAddress: stake.ownerAddress, minStakeUpokt: BigInt(stake.stakeAmount) },
-      }
-    }
-    return {
-      operatorAddress: stake.address,
-      effect: { kind: 'stake', ownerAddress: stake.ownerAddress },
-    }
-  }
-
-  if (txn.type === TransactionType.Unstake) {
-    const [unstake] = extractTransactionUnstakingSuppliers(txn)
-    if (!unstake) return null
-    // Our unstake sets a session end at/after the broadcast height; use it as the
-    // floor so a node already unbonding from an earlier session can't false-confirm.
-    return {
-      operatorAddress: unstake.operatorAddress,
-      effect: { kind: 'unstake', minSessionEndHeight: txn.executionHeight ?? 0 },
-    }
-  }
-
-  return null
-}
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
   const activities = {

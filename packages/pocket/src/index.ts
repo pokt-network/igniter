@@ -583,8 +583,12 @@ export class PocketBlockchain {
     if (!supplier) return { status: 'absent', coveredUpToHeight }
 
     switch (effect.kind) {
-      case 'stake':
-        return supplier.ownerAddress === effect.ownerAddress
+      case 'stake-services-present':
+        // Goal: supplier exists, owner matches, AND has services on-chain (or pending
+        // in serviceConfigHistory). Existence alone would false-confirm an OwnerInitialStake
+        // because the supplier pre-exists with zero services — that is the trigger condition.
+        return supplier.ownerAddress === effect.ownerAddress &&
+          ((supplier.services?.length ?? 0) > 0 || (supplier.serviceConfigHistory?.length ?? 0) > 0)
           ? { status: 'confirmed', data: supplier }
           : { status: 'absent', coveredUpToHeight }
       case 'upstake': {

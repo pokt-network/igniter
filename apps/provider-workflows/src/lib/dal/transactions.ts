@@ -91,9 +91,11 @@ export default class Transactions {
   }
 
   /**
-   * Re-entry guard for remediation: true when a key already has a broadcast,
-   * still-pending transaction owned by the verifier. Prevents double-staking
-   * the same key while its previous stake tx is awaiting verification.
+   * Re-entry guard for remediation: true when a key already has ANY still-pending
+   * transaction (with or without a hash — the write-ahead slot also blocks re-entry).
+   * Prevents double-staking the same key while its previous stake tx is awaiting
+   * verification or while the WAL row is live. Fail-closed: a hash-less row means
+   * a broadcast is in flight and we must not start another.
    */
   async hasPendingTx(keyId: number): Promise<boolean> {
     const [row] = await this.dbClient.db
@@ -102,7 +104,6 @@ export default class Transactions {
       .where(and(
         eq(transactionsTable.keyId, keyId),
         eq(transactionsTable.status, TransactionStatus.Pending),
-        isNotNull(transactionsTable.hash),
       ))
       .limit(1)
     return row !== undefined
