@@ -67,6 +67,7 @@ export interface VerificationDecision {
  * Any unavailable path keeps the tx pending (indefinitely).
  */
 export function decideVerification(input: DecideInput): VerificationDecision {
+  if (input.txTimeoutTimestamp != null && input.txTimeoutHeight != null) throw new Error('decideVerification: txTimeoutTimestamp and txTimeoutHeight are mutually exclusive')
   const { hash, supplier, txTimeoutHeight, sequence, txTimeoutTimestamp, chainTimeAtCoverage } = input
 
   const supplierApplicable = supplier !== null

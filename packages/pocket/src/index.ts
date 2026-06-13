@@ -118,14 +118,13 @@ const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
  */
 function isUnorderedDedupRejection(e: unknown): boolean {
   if (!(e instanceof Error)) return false
-  const err = e as Error & { code?: number; codespace?: string }
-  const msg = (err.message ?? '').toLowerCase()
-  // BroadcastTxError shape: e.code (number), e.codespace (string), e.log (string)
-  // cosmos-sdk ErrUnorderedTxExist: code=19, codespace="sdk"
-  // log message from x/auth/ante/unordered.go: "tx already exists in cache"
-  if (err.codespace === 'sdk' && err.code === 19) return true
-  if (msg.includes('tx already exists in cache')) return true
-  if (msg.includes('errunorderedtxexist')) return true
+  const err = e as Error & { code?: number; codespace?: string; rawLog?: string }
+  // code 19 = cometbft ErrTxInCache (same bytes in mempool)
+  // code 18 = cosmos-sdk ErrInvalidRequest from verifyUnorderedNonce ("failed to add unordered nonce")
+  if (err.codespace === 'sdk' && (err.code === 19 || err.code === 18)) return true
+  const msg = String(err?.message ?? err?.rawLog ?? '').toLowerCase()
+  if (msg.includes('failed to add unordered nonce')) return true
+  if (msg.includes('tx already in mempool') || msg.includes('already exists in cache')) return true
   return false
 }
 
@@ -454,6 +453,7 @@ export class PocketBlockchain {
 
     const comet = await this.getCometClient()
     const normalizedHash = txHash.toUpperCase()
+    let lastBlockTime: Date | undefined
     for (let h = startHeight; h <= endHeight; h++) {
       let block
       try {
@@ -461,6 +461,11 @@ export class PocketBlockchain {
       } catch (error) {
         this.logger.warn({ txHash, height: h, error }, 'verifyTransaction: block fetch failed')
         return { status: 'unavailable' } // could not cover the window
+      }
+      // Track the time of the last successfully fetched block so callers can use
+      // chain block time (not wall-clock) for unordered tx expiry decisions.
+      if (block.block?.header?.time) {
+        lastBlockTime = new Date(block.block.header.time.getTime())
       }
       const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
       if (match === 'no-match') continue
@@ -473,7 +478,23 @@ export class PocketBlockchain {
       }
       return { status: 'confirmed', data: match }
     }
-    return { status: 'absent', coveredUpToHeight: endHeight }
+    return { status: 'absent', coveredUpToHeight: endHeight, coveredBlockTime: lastBlockTime }
+  }
+
+  /**
+   * Returns the chain block time of the latest block (NOT wall-clock).
+   * Used by isSignedTxExpired to determine if an unordered tx's timeout_timestamp
+   * has passed per chain time, avoiding clock-skew split-brain.
+   */
+  async getLatestBlockTime(): Promise<Date | null> {
+    try {
+      const comet = await this.getCometClient()
+      const status = await comet.status()
+      const t = status.syncInfo?.latestBlockTime
+      return t ? new Date(t.getTime()) : null
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -761,7 +782,7 @@ export class PocketBlockchain {
 
       this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: broadcast failed')
       return {
-        transactionHash: '',
+        transactionHash,
         success: false,
         code: e.code,
         message: e.message ?? 'broadcast failed',

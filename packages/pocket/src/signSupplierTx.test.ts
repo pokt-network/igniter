@@ -195,11 +195,11 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     expect(result.message).toBe('already broadcast (unordered dedup)')
   })
 
-  it('dedup detection: ErrUnorderedTxExist in message is treated as success', async () => {
+  it('dedup detection: code=18 "failed to add unordered nonce" is treated as success', async () => {
     const signedPayload = await getSignedPayload()
     jest.clearAllMocks()
     mockBroadcastTx.mockRejectedValue(
-      Object.assign(new Error('ErrUnorderedTxExist: duplicate'), { code: 19, codespace: 'sdk' })
+      Object.assign(new Error('failed to add unordered nonce: nonce already used'), { code: 18, codespace: 'sdk' })
     )
 
     const bc = await createInstance()
@@ -232,6 +232,6 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     const result = await bc.broadcastSupplierTx(signedPayload)
 
     expect(result.success).toBe(false)
-    expect(result.transactionHash).toBe('')
+    expect(result.transactionHash).toMatch(/^[0-9A-F]{64}$/)
   })
 })
