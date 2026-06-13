@@ -117,8 +117,9 @@ export default class ImportSupplierAttempts {
       .onConflictDoUpdate({
         target: nodesTable.address,
         set: {
-          status: sql`excluded.status`,
-          stakeAmount: sql`excluded."stakeAmount"`,
+          // Only the field the import actually KNOWS. status/stakeAmount are
+          // chain-sync-owned placeholders in this payload — clobbering them resets
+          // a synced row to Staked/'0' (permanent for suppliers gone from chain).
           ownerAddress: sql`excluded."ownerAddress"`,
           updatedAt: new Date(),
         },
