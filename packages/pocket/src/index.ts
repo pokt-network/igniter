@@ -7,8 +7,9 @@ import {
   SigningStargateClient,
   StargateClient, TimeoutError,
 } from '@cosmjs/stargate'
-import {DirectSecp256k1Wallet, GeneratedType, Registry} from '@cosmjs/proto-signing'
-import {TxRaw} from 'cosmjs-types/cosmos/tx/v1beta1/tx'
+import {DirectSecp256k1Wallet, encodePubkey, GeneratedType, makeAuthInfoBytes, makeSignDoc, Registry} from '@cosmjs/proto-signing'
+import { fromBase64 } from '@cosmjs/encoding'
+import { TxBody, TxRaw } from '@pocket/proto/generated/cosmos/tx/v1beta1/tx'
 import {
   Comet38Client,
   connectComet,
@@ -92,6 +93,41 @@ async function mapWithConcurrency<T, R>(
 
 /** Max concurrent `comet.block()` fetches per Tier-3 block scan (issue #304). */
 const BLOCK_SCAN_CONCURRENCY = 8
+
+/**
+ * Encodes a raw secp256k1 public key as an amino pubkey object.
+ * Inlined to avoid a direct dependency on @cosmjs/amino (available only transitively).
+ */
+function encodeSecp256k1Pubkey(pubkey: Uint8Array): { type: string; value: string } {
+  return { type: 'tendermint/PubKeySecp256k1', value: Buffer.from(pubkey).toString('base64') }
+}
+
+/** Unordered-tx validity window. 9 min < cosmos-sdk DefaultMaxTimeoutDuration (10 min). */
+const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
+
+/**
+ * Returns true if the error is a cosmos-sdk unordered-tx duplicate rejection.
+ *
+ * FLAGGED ASSUMPTION: The exact error shape for a cosmos-sdk v0.53+ unordered
+ * duplicate (same (timeoutTimestamp.UnixNano(), sender)) is not verifiable from
+ * the JS surface alone. Based on cosmos-sdk x/auth/ante/unordered.go the error is
+ * registered as ErrUnorderedTxExist and is returned as a BroadcastTxError with
+ * code 19 (codespace "sdk") and log containing "tx already exists in cache" (the
+ * errorsmod.Wrapf message from the unordered handler). This is a best-effort match;
+ * if pocket-network's fork uses a different code, update the code number here.
+ */
+function isUnorderedDedupRejection(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  const err = e as Error & { code?: number; codespace?: string }
+  const msg = (err.message ?? '').toLowerCase()
+  // BroadcastTxError shape: e.code (number), e.codespace (string), e.log (string)
+  // cosmos-sdk ErrUnorderedTxExist: code=19, codespace="sdk"
+  // log message from x/auth/ante/unordered.go: "tx already exists in cache"
+  if (err.codespace === 'sdk' && err.code === 19) return true
+  if (msg.includes('tx already exists in cache')) return true
+  if (msg.includes('errunorderedtxexist')) return true
+  return false
+}
 
 /**
  * Creates a Protobuf-based RPC client for querying a blockchain using a QueryClient.
@@ -609,6 +645,134 @@ export class PocketBlockchain {
     }
   }
 
+  /** Injectable clock — default Date.now(). Override in tests for determinism. */
+  protected nowMs(): number {
+    return Date.now()
+  }
+
+  /**
+   * Signs a supplier stake tx with unordered=true (no sequence needed).
+   * Returns signed bytes + hash WITHOUT broadcasting.
+   * The caller must persist these before calling broadcastSupplierTx.
+   */
+  async signSupplierTx(params: StakeSupplierParams): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, signer, ...value } = params
+
+    if (!isValidPrivateKey(signerPrivateKey)) throw new Error('Invalid secp256k1 private key')
+    if (!signer) throw new Error('`signer` (bech32) is required')
+
+    const pkBytes = Uint8Array.from(Buffer.from(signerPrivateKey, 'hex'))
+    const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
+    const typeUrl = '/pocket.supplier.MsgStakeSupplier'
+
+    const registry = new Registry([
+      [typeUrl, MsgStakeSupplier as unknown as GeneratedType],
+    ])
+
+    const signingClient = await this.getSigningClient(wallet, registry)
+
+    const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
+
+    const timeoutTimestamp = new Date(this.nowMs() + UNORDERED_TIMEOUT_MS)
+
+    // Estimate gas; fallback 350_000 matches old stakeSupplier behavior
+    let gasEstimation: number
+    try {
+      gasEstimation = await signingClient.simulate(signer, [msg], '')
+    } catch (simErr: any) {
+      this.logger.warn({ signer, error: simErr?.message ?? simErr }, 'signSupplierTx: simulate failed, using fallback gas')
+      gasEstimation = 350_000
+    }
+    const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
+
+    // Build TxBody with LOCAL proto (has unordered + timeoutTimestamp fields)
+    const msgAny = registry.encodeAsAny(msg)
+    const bodyBytes = TxBody.encode(TxBody.fromPartial({
+      messages: [msgAny as any],
+      memo: '',
+      unordered: true,
+      timeoutTimestamp,
+    })).finish()
+
+    // Get accountNumber (sequence is not used for unordered; passes 0 in authInfo)
+    const { accountNumber } = await signingClient.getSequence(signer)
+    const chainId = await signingClient.getChainId()
+
+    const [account] = await wallet.getAccounts()
+    if (!account) throw new Error('signSupplierTx: wallet has no accounts')
+
+    const pubkey = encodePubkey(encodeSecp256k1Pubkey(account.pubkey))
+    const authInfoBytes = makeAuthInfoBytes(
+      [{ pubkey, sequence: 0 }],
+      fee.amount,
+      Number(fee.gas),
+      fee.granter,
+      fee.payer,
+    )
+    const signDoc = makeSignDoc(bodyBytes, authInfoBytes, chainId, accountNumber)
+    const { signature, signed } = await wallet.signDirect(signer, signDoc)
+
+    const txBytes = TxRaw.encode(TxRaw.fromPartial({
+      bodyBytes: signed.bodyBytes,
+      authInfoBytes: signed.authInfoBytes,
+      signatures: [fromBase64(signature.signature)],
+    })).finish()
+
+    const transactionHash = toHex(sha256(txBytes)).toUpperCase()
+    const signedPayload = Buffer.from(txBytes).toString('base64')
+
+    this.logger.info({ signer, transactionHash, timeoutTimestamp }, 'signSupplierTx: signed unordered tx')
+
+    return { signedPayload, transactionHash, timeoutTimestamp }
+  }
+
+  /**
+   * Broadcasts a pre-signed tx (from signSupplierTx). Idempotent: a cosmos-sdk
+   * unordered-dedup rejection (same timeoutTimestamp+sender seen twice) is treated
+   * as success so re-broadcast of identical bytes is safe.
+   */
+  async broadcastSupplierTx(signedPayloadBase64: string): Promise<SendTransactionResult> {
+    const txBytes = Uint8Array.from(Buffer.from(signedPayloadBase64, 'base64'))
+    const transactionHash = toHex(sha256(txBytes)).toUpperCase()
+
+    const client = await this.getStargateClient()
+
+    try {
+      const result = await (client as any).broadcastTx(txBytes)
+      return {
+        transactionHash: result.transactionHash ?? transactionHash,
+        code: result.code,
+        message: result.rawLog,
+        success: result.code === 0,
+      }
+    } catch (e: any) {
+      // Cosmos SDK unordered dedup: broadcast of identical (timeoutTimestamp, sender) bytes
+      // is rejected because the tx is already tracked in the unordered nonce cache.
+      // Treat as idempotent success — the tx is (or will be) included on-chain.
+      if (isUnorderedDedupRejection(e)) {
+        this.logger.info({ transactionHash }, 'broadcastSupplierTx: unordered dedup (already broadcast), treating as success')
+        return {
+          transactionHash,
+          code: 0,
+          message: 'already broadcast (unordered dedup)',
+          success: true,
+        }
+      }
+
+      this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: broadcast failed')
+      return {
+        transactionHash: '',
+        success: false,
+        code: e.code,
+        message: e.message ?? 'broadcast failed',
+      }
+    }
+  }
+
+  /**
+   * @deprecated Use signSupplierTx + broadcastSupplierTx (Task 3 canonical lifecycle).
+   * remediateSupplier (the only caller) will switch in Task 7.
+   */
   async stakeSupplier(params: StakeSupplierParams, explicitSequence?: number): Promise<SendTransactionResult> {
     const { signerPrivateKey, signer, ...value } = params
 
@@ -623,6 +787,7 @@ export class PocketBlockchain {
     const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
     const typeUrl = '/pocket.supplier.MsgStakeSupplier'
 
+    let currentHeight = 0
     try {
       const [account] = await wallet.getAccounts()
 
@@ -645,7 +810,7 @@ export class PocketBlockchain {
       const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
 
       // TODO: Create signed memo
-      const currentHeight = await this.getHeight();
+      currentHeight = await this.getHeight();
 
       this.logger.debug({
         currentHeight,
@@ -675,7 +840,7 @@ export class PocketBlockchain {
           sequence: explicitSequence,
           chainId,
         }, BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
-        const txBytes = TxRaw.encode(txRaw).finish()
+        const txBytes = TxRaw.encode(TxRaw.fromPartial(txRaw as any)).finish()
         this.logger.debug({ signer }, 'stakeSupplier: Broadcasting transaction with explicit sequence')
         result = await signingClient.broadcastTx(txBytes)
       } else {
