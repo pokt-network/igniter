@@ -33,6 +33,11 @@ export const transactionsTable = pgTable('transactions', {
   unavailableChecks: integer('unavailable_checks').notNull().default(0),
   lastVerificationAt: timestamp('last_verification_at'),
   createdAt: timestamp('created_at').defaultNow(),
+  // Canonical-lifecycle columns (sign happens in the ExecuteTransaction child):
+  signedPayload: text('signed_payload'),        // base64 TxRaw bytes; reused on re-broadcast (idempotency)
+  timeoutTimestamp: timestamp('timeout_timestamp', { withTimezone: true }), // unordered failure bound (chain-time)
+  params: text('params'),                        // JSON of frozen sign inputs (services/owner/operator/addressGroup) captured at INTENT creation
+  reasons: text('reasons'),                      // JSON string[] of all remediation reasons collapsed into this tx
 }, (table) => ({
   verifierSweepIdx: index('transactions_verifier_sweep_idx').on(table.status, table.lastVerificationAt).where(sql`"hash" IS NOT NULL`),
   pendingPerKeyUq: uniqueIndex('transactions_key_pending_uq').on(table.keyId).where(sql`status = 'pending'`),
