@@ -12,6 +12,8 @@ import {redactStakeSupplierParams} from "@/lib/redactors";
 import {getExpectedServicesFromKey} from '@igniter/domain/provider/utils'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
 
+const errInfo = (e: unknown) => e instanceof Error ? { message: e.message, stack: e.stack } : e
+
 export type Height = number
 
 export type LoadKeysInRangeParams = {
@@ -659,7 +661,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         } catch (e) {
           log.warn('remediateSupplier: Update Supplier failed while clearing OwnerInitialStake!', {
             params,
-            error: e,
+            error: errInfo(e),
           })
           throw ApplicationFailure.retryable(
             `Failed while updating the supplier status for ${params.address}.`,
