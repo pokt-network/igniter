@@ -1,4 +1,4 @@
-import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
+import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect, SendTransactionResult} from '@igniter/pocket'
 import {isSequenceMismatchError, parseExpectedSequence} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
@@ -85,6 +85,23 @@ export function supplierEffectFromKey(
   }
 
   return null
+}
+
+/**
+ * Trivial retry helper: retries `fn` up to `attempts` times with a 2s delay.
+ * Throws the last error if all attempts fail.
+ */
+async function retry<T>(attempts: number, fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 2000))
+    }
+  }
+  throw lastErr
 }
 
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => {
@@ -603,77 +620,96 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       servicesToStakeCount: stakeParams.services.length,
     })
 
-    // Re-entry guard: if this key already has a broadcast, still-pending tx awaiting
-    // verification, do NOT re-stake — the verifier owns its terminal transition.
-    if (await dal.transactions.hasPendingTx(key.id)) {
-      log.info('remediateSupplier: key has a pending verification tx, skipping re-stake', { address: params.address })
+    const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
+    const isManual = activeEntry?.message?.includes('requested by operator') ?? false
+
+    // ---- Write-ahead claim: THE mutual-exclusion point (unique partial index). ----
+    // Atomically reserves the Pending slot before broadcast. Any concurrent remediation
+    // activity (other schedule, abandoned child, activity retry) gets null and must skip —
+    // the claim is idempotent on retry only because a retry sees a fresh slot (the previous
+    // slot was either armed with the broadcast hash or released by failBroadcastSlot).
+    const slotId = await dal.transactions.claimBroadcastSlot({
+      keyId: key.id,
+      keyAddress: key.address,
+      type: TransactionType.Stake,
+      status: TransactionStatus.Pending,
+      reason: activeEntry?.reason ?? null,
+      trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
+      executionHeight: params.height,   // provisional; overwritten with signedAtHeight on arm
+    })
+    if (slotId === null) {
+      log.info('remediateSupplier: pending tx slot already claimed for key, skipping re-stake', { address: params.address })
       return
     }
 
-    let txResult = await pocketRpcClient.stakeSupplier(stakeParams)
+    let txResult: SendTransactionResult
+    try {
+      txResult = await pocketRpcClient.stakeSupplier(stakeParams)
 
-    // Retry once with the expected sequence if we hit a sequence mismatch error
-    if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
-      const expectedSequence = parseExpectedSequence(txResult.message)
-      log.warn('remediateSupplier: Sequence mismatch detected', {
-        address: params.address,
-        originalError: txResult.message,
-        parsedExpectedSequence: expectedSequence,
-      })
-      if (expectedSequence != null) {
-        log.info('remediateSupplier: Retrying stake transaction with expected sequence', {
-          address: params.address,
-          expectedSequence,
-        })
-        txResult = await pocketRpcClient.stakeSupplier(stakeParams, expectedSequence)
-        log.info('remediateSupplier: Retry stake transaction result', {
-          address: params.address,
-          success: txResult.success,
-          code: txResult.code,
-          message: txResult.message,
-        })
-        // If the retry also fails with a sequence mismatch, throw so Temporal can re-attempt
-        // with a fresh sequence fetch. This handles cases where the sequence advances by 2+
-        // between attempts (e.g., concurrent remediation activities for the same owner).
-        if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
-          throw ApplicationFailure.retryable(
-            `remediateSupplier: Sequence mismatch persisted after retry for ${params.address}: ${txResult.message}`,
-          )
-        }
-      } else {
-        log.error('remediateSupplier: Could not parse expected sequence from error message, skipping retry', {
+      // Retry once with the expected sequence if we hit a sequence mismatch error
+      if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
+        const expectedSequence = parseExpectedSequence(txResult.message)
+        log.warn('remediateSupplier: Sequence mismatch detected', {
           address: params.address,
           originalError: txResult.message,
+          parsedExpectedSequence: expectedSequence,
         })
+        if (expectedSequence != null) {
+          log.info('remediateSupplier: Retrying stake transaction with expected sequence', {
+            address: params.address,
+            expectedSequence,
+          })
+          txResult = await pocketRpcClient.stakeSupplier(stakeParams, expectedSequence)
+          log.info('remediateSupplier: Retry stake transaction result', {
+            address: params.address,
+            success: txResult.success,
+            code: txResult.code,
+            message: txResult.message,
+          })
+          // If the retry also fails with a sequence mismatch, throw so Temporal can re-attempt
+          // with a fresh sequence fetch. This handles cases where the sequence advances by 2+
+          // between attempts (e.g., concurrent remediation activities for the same owner).
+          if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
+            throw ApplicationFailure.retryable(
+              `remediateSupplier: Sequence mismatch persisted after retry for ${params.address}: ${txResult.message}`,
+            )
+          }
+        } else {
+          log.error('remediateSupplier: Could not parse expected sequence from error message, skipping retry', {
+            address: params.address,
+            originalError: txResult.message,
+          })
+        }
       }
+    } catch (e) {
+      // Pre/at-broadcast throw with unknown outcome: release the slot so the retry
+      // (which will claim a fresh slot) is not deadlocked by our own WAL row.
+      await dal.transactions.failBroadcastSlot(slotId, `broadcast threw: ${String(e)}`).catch(() => {})
+      throw e
     }
 
     log.debug('remediateSupplier: Stake transaction result', {txResult})
 
-    const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
-    const isManual = activeEntry?.message?.includes('requested by operator') ?? false
-
-    // Broadcast got a hash → record the tx as Pending and hand it to the verifier.
-    // Do NOT flip key state, do NOT clear the remediation entry, do NOT throw:
-    // the verifier owns the terminal transition (KeyState.Staked / RemediationFailed).
+    // TimeoutError returns success:false WITH a txId — the tx MAY land. Treat any
+    // result carrying a hash as broadcast-happened (verifier owns it), never Failure.
     if (txResult.transactionHash) {
-      try {
-        await dal.transactions.insert({
-          keyId: key.id,
-          keyAddress: key.address,
-          type: TransactionType.Stake,
-          status: TransactionStatus.Pending,
-          reason: activeEntry?.reason ?? null,
-          trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
-          hash: txResult.transactionHash,
-          code: txResult.code ?? null,
-          message: txResult.message ?? null,
-          executionHeight: params.height,
+      // Arm the WAL row with the broadcast facts. signedAtHeight anchors the scan window
+      // correctly — it is the height sampled inside stakeSupplier before signing, which is
+      // the lowest possible inclusion height. Using params.height (sweep height) would risk
+      // anchoring AFTER the tx's first possible inclusion block. (Task 9 requirement.)
+      await retry(3, () => dal.transactions.armBroadcast(slotId, {
+        hash: txResult.transactionHash,
+        executionHeight: txResult.signedAtHeight ?? params.height,
+        timeoutHeight: txResult.timeoutHeight ?? null,
+        code: txResult.code ?? null,
+        message: txResult.message ?? null,
+      })).catch((e) => {
+        // On persistent arm failure: log CRITICAL and leave the row Pending-null-hash —
+        // it FAILS CLOSED (blocks re-stake) until expireStaleBroadcasts + operator review.
+        log.error('remediateSupplier: CRITICAL — failed to arm WAL row after broadcast; row left as stale pending', {
+          slotId, address: params.address, error: e,
         })
-      } catch (e) {
-        // Transaction recording is best-effort — don't fail remediation if it errors
-        log.warn('remediateSupplier: Failed to record pending transaction', { address: params.address, error: e })
-      }
+      })
 
       // Update only the benign fields; leave state + remediation history untouched.
       try {
@@ -696,25 +732,9 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
     }
 
-    // No transactionHash → broadcast failed. Keep the OLD behavior: record Failure,
-    // mark the key RemediationFailed (keep the remediation entry), and throw.
-    try {
-      await dal.transactions.insert({
-        keyId: key.id,
-        keyAddress: key.address,
-        type: TransactionType.Stake,
-        status: TransactionStatus.Failure,
-        reason: activeEntry?.reason ?? null,
-        trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
-        hash: null,
-        code: txResult.code ?? null,
-        message: txResult.message ?? null,
-        executionHeight: params.height,
-      })
-    } catch (e) {
-      // Transaction recording is best-effort — don't fail remediation if it errors
-      log.warn('remediateSupplier: Failed to record transaction', { address: params.address, error: e })
-    }
+    // Broadcast definitively rejected (no hash): release the slot as Failure and keep
+    // the OLD behavior: mark the key RemediationFailed (keep the remediation entry), throw.
+    await dal.transactions.failBroadcastSlot(slotId, txResult.message ?? 'broadcast rejected').catch(() => {})
 
     const update: Partial<InsertKey> = {
       lastUpdatedHeight: params.height,
@@ -742,6 +762,23 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       `Remediation transaction failed for ${params.address}. Key state: ${update.state}. Tx code: ${txResult.code}, message: ${txResult.message}`,
       'stake_tx_failed',
     )
+  },
+
+  /**
+   * Sweeper hygiene: expire Pending rows that have no hash and are older than
+   * olderThanMinutes (default 15). These are WAL rows whose activity died between
+   * claim and arm (worker crash). Must be called at the top of VerifyPendingTransactions
+   * so orphaned slots are not left blocking re-entry indefinitely.
+   * Logs an error per expired row so operators can investigate.
+   */
+  async expireStaleBroadcasts(): Promise<void> {
+    const count = await dal.transactions.expireStaleBroadcasts()
+    if (count > 0) {
+      log.error(
+        'expireStaleBroadcasts: expired stale write-ahead rows — broadcast outcome unknown, operator review required',
+        { count },
+      )
+    }
   },
 
   /**

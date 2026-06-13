@@ -17,6 +17,7 @@ const MAX_CONCURRENT = 10
  */
 export async function VerifyPendingTransactions() {
   const {
+    expireStaleBroadcasts,
     listPendingWithHash,
     verifyTxHash,
     verifySupplierEffect,
@@ -26,6 +27,11 @@ export async function VerifyPendingTransactions() {
     startToCloseTimeout: '120s',
     retry: { maximumAttempts: 3 },
   })
+
+  // Hygiene: expire WAL rows whose broadcast outcome is unknown (worker crashed
+  // between claim and arm). Must run before listing pending-with-hash so the
+  // sweep never attempts to verify a hash-less row. Log per expired row.
+  await expireStaleBroadcasts()
 
   const txs = await listPendingWithHash()
   if (txs.length === 0) return
