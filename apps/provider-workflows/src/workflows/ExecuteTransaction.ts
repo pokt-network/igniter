@@ -19,10 +19,19 @@ export async function ExecuteTransaction({ transactionId }: Args) {
     if (await isSignedTxExpired(transactionId)) {
       await clearSignedTx(transactionId)   // A3: re-sign branch
       await signSupplierTx(transactionId)
+      const afterSign = await getTransaction(transactionId)
+      if (afterSign && afterSign.status === TransactionStatus.Pending && afterSign.hash) {
+        await broadcastSupplierTx(transactionId)
+      }
+    } else {
+      await broadcastSupplierTx(transactionId)
     }
   } else {
     await signSupplierTx(transactionId)
+    const afterSign = await getTransaction(transactionId)
+    if (afterSign && afterSign.status === TransactionStatus.Pending && afterSign.hash) {
+      await broadcastSupplierTx(transactionId)
+    }
   }
-  await broadcastSupplierTx(transactionId)
   // does NOT wait for verification — the sweeper owns the terminal transition.
 }
