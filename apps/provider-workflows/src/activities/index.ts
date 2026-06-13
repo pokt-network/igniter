@@ -1,5 +1,4 @@
-import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect, SendTransactionResult} from '@igniter/pocket'
-import {isSequenceMismatchError, parseExpectedSequence} from '@igniter/pocket'
+import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
 import {TX_EXPIRATION_BLOCKS} from '@igniter/tx-verify'
@@ -88,22 +87,6 @@ export function supplierEffectFromKey(
   return null
 }
 
-/**
- * Trivial retry helper: retries `fn` up to `attempts` times with a 2s delay.
- * Throws the last error if all attempts fail.
- */
-async function retry<T>(attempts: number, fn: () => Promise<T>): Promise<T> {
-  let lastErr: unknown
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn()
-    } catch (e) {
-      lastErr = e
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 2000))
-    }
-  }
-  throw lastErr
-}
 
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => {
   const activities = {
@@ -161,6 +144,95 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    */
   async getLatestBlock(): Promise<Height> {
     return pocketRpcClient.getHeight()
+  },
+
+  // ---------------------------------------------------------------------------
+  // Canonical lifecycle activities (Task 4)
+  // ---------------------------------------------------------------------------
+
+  /** Read a single transaction row by id — used by child workflow to inspect state. */
+  async getTransaction(transactionId: number) {
+    return dal.transactions.getTransaction(transactionId)
+  },
+
+  /** Dispatcher queue: all pending rows (with or without hash). */
+  async listPending() {
+    return dal.transactions.listPending()
+  },
+
+  /**
+   * Parent activity: build frozen params + create the INTENT row.
+   * Returns the new tx id, or null if a pending row already exists for this key
+   * (the (key_id) WHERE pending unique index enforces mutual exclusion).
+   */
+  async createIntentTx(p: { keyAddress: string; reasons: RemediationHistoryEntryReason[]; params: StakeSupplierParams }): Promise<number | null> {
+    const key = await dal.keys.loadKey(p.keyAddress)
+    if (!key) throw ApplicationFailure.nonRetryable(`createIntentTx: key not found for ${p.keyAddress}`, 'not_found')
+    return dal.transactions.createIntent({
+      keyId: key.id,
+      keyAddress: key.address,
+      type: TransactionType.Stake,
+      reason: p.reasons[0] ?? null,
+      trigger: TransactionTrigger.Automatic,
+      executionHeight: null,
+      params: JSON.stringify(p.params),
+      reasons: JSON.stringify(p.reasons),
+    })
+  },
+
+  /**
+   * Child activity: sign (unordered) the row's frozen params; persist bytes + hash + timeout
+   * BEFORE broadcast so re-broadcast is idempotent.
+   */
+  async signSupplierTx(transactionId: number): Promise<void> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn?.params) throw new Error(`signSupplierTx: tx ${transactionId} missing params`)
+    const params: StakeSupplierParams = JSON.parse(txn.params)
+    const head = await pocketRpcClient.getHeight()
+    const signed = await pocketRpcClient.signSupplierTx(params)
+    await dal.transactions.recordSigned(transactionId, {
+      signedPayload: signed.signedPayload,
+      hash: signed.transactionHash,
+      executionHeight: head,
+      timeoutTimestamp: signed.timeoutTimestamp,
+    })
+  },
+
+  /**
+   * Child activity: broadcast the persisted signed bytes (idempotent re-broadcast).
+   * A hard rejection with no hash → terminal failure; verifier owns success/absence.
+   */
+  async broadcastSupplierTx(transactionId: number): Promise<void> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn?.signedPayload) throw new Error(`broadcastSupplierTx: tx ${transactionId} missing signedPayload`)
+    const res = await pocketRpcClient.broadcastSupplierTx(txn.signedPayload)
+    if (!res.transactionHash) {
+      // Hard reject (not a dedup) → terminal failure; remediation re-detects on next sweep.
+      await dal.transactions.claimTerminalTransition(transactionId, TransactionStatus.Failure, {
+        code: res.code ?? undefined,
+        message: res.message ?? 'broadcast rejected',
+      })
+    }
+  },
+
+  /**
+   * Returns true when the signed tx has expired per CHAIN block time (not wall-clock).
+   * Uses getLatestBlockTime() so the comparison is chain-sourced, eliminating
+   * clock-skew split-brain.
+   */
+  async isSignedTxExpired(transactionId: number): Promise<boolean> {
+    const txn = await dal.transactions.getTransaction(transactionId)
+    if (!txn?.timeoutTimestamp) return false
+    const chainTime = await pocketRpcClient.getLatestBlockTime()
+    if (!chainTime) return false // RPC down → never declare expiry
+    return chainTime.getTime() > txn.timeoutTimestamp.getTime()
+  },
+
+  /**
+   * Clear the stale signed tx so the ExecuteTransaction child re-signs fresh (A3 re-sign branch).
+   */
+  async clearSignedTx(transactionId: number): Promise<void> {
+    await dal.transactions.clearSigned(transactionId)
   },
   /**
    * Counts the number of keys in the database and return the min and max id.
@@ -616,170 +688,20 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       )
     }
 
-    log.debug('remediateSupplier: Executing stake transaction', {
+    log.debug('remediateSupplier: Building stake intent', {
       stakeParams: redactStakeSupplierParams(stakeParams),
       servicesToStakeCount: stakeParams.services.length,
     })
 
-    const activeEntry = ownerInitialStakeEntry || serviceMismatchEntry || addressGroupMigrationEntry
-    const isManual = activeEntry?.message?.includes('requested by operator') ?? false
-
-    // ---- Write-ahead claim: THE mutual-exclusion point (unique partial index). ----
-    // Atomically reserves the Pending slot before broadcast. Any concurrent remediation
-    // activity (other schedule, abandoned child, activity retry) gets null and must skip —
-    // the claim is idempotent on retry only because a retry sees a fresh slot (the previous
-    // slot was either armed with the broadcast hash or released by failBroadcastSlot).
-    const slotId = await dal.transactions.claimBroadcastSlot({
-      keyId: key.id,
-      keyAddress: key.address,
-      type: TransactionType.Stake,
-      status: TransactionStatus.Pending,
-      reason: activeEntry?.reason ?? null,
-      trigger: isManual ? TransactionTrigger.Manual : TransactionTrigger.Automatic,
-      executionHeight: params.height,   // provisional; overwritten with signedAtHeight on arm
-    })
-    if (slotId === null) {
-      log.info('remediateSupplier: pending tx slot already claimed for key, skipping re-stake', { address: params.address })
+    const reasons = [ownerInitialStakeEntry, serviceMismatchEntry, addressGroupMigrationEntry]
+      .filter(Boolean).map((e) => e!.reason)
+    const created = await activities.createIntentTx({ keyAddress: key.address, reasons, params: stakeParams })
+    if (created === null) {
+      log.info('remediateSupplier: pending tx already exists for key, skipping', { address: params.address })
       return
     }
-
-    let txResult: SendTransactionResult
-    try {
-      txResult = await pocketRpcClient.stakeSupplier(stakeParams)
-
-      // Retry once with the expected sequence if we hit a sequence mismatch error
-      if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
-        const expectedSequence = parseExpectedSequence(txResult.message)
-        log.warn('remediateSupplier: Sequence mismatch detected', {
-          address: params.address,
-          originalError: txResult.message,
-          parsedExpectedSequence: expectedSequence,
-        })
-        if (expectedSequence != null) {
-          log.info('remediateSupplier: Retrying stake transaction with expected sequence', {
-            address: params.address,
-            expectedSequence,
-          })
-          txResult = await pocketRpcClient.stakeSupplier(stakeParams, expectedSequence)
-          log.info('remediateSupplier: Retry stake transaction result', {
-            address: params.address,
-            success: txResult.success,
-            code: txResult.code,
-            message: txResult.message,
-          })
-          // If the retry also fails with a sequence mismatch, throw so Temporal can re-attempt
-          // with a fresh sequence fetch. This handles cases where the sequence advances by 2+
-          // between attempts (e.g., concurrent remediation activities for the same owner).
-          if (!txResult.success && txResult.message && isSequenceMismatchError(txResult.message)) {
-            throw ApplicationFailure.retryable(
-              `remediateSupplier: Sequence mismatch persisted after retry for ${params.address}: ${txResult.message}`,
-            )
-          }
-        } else {
-          log.error('remediateSupplier: Could not parse expected sequence from error message, skipping retry', {
-            address: params.address,
-            originalError: txResult.message,
-          })
-        }
-      }
-    } catch (e) {
-      // Pre/at-broadcast throw with unknown outcome: release the slot so the retry
-      // (which will claim a fresh slot) is not deadlocked by our own WAL row.
-      await dal.transactions.failBroadcastSlot(slotId, `broadcast threw: ${String(e)}`).catch(() => {})
-      throw e
-    }
-
-    log.debug('remediateSupplier: Stake transaction result', {txResult})
-
-    // TimeoutError returns success:false WITH a txId — the tx MAY land. Treat any
-    // result carrying a hash as broadcast-happened (verifier owns it), never Failure.
-    if (txResult.transactionHash) {
-      // Arm the WAL row with the broadcast facts. signedAtHeight anchors the scan window
-      // correctly — it is the height sampled inside stakeSupplier before signing, which is
-      // the lowest possible inclusion height. Using params.height (sweep height) would risk
-      // anchoring AFTER the tx's first possible inclusion block. (Task 9 requirement.)
-      await retry(3, () => dal.transactions.armBroadcast(slotId, {
-        hash: txResult.transactionHash,
-        executionHeight: txResult.signedAtHeight ?? params.height,
-        timeoutHeight: txResult.timeoutHeight ?? null,
-        code: txResult.code ?? null,
-        message: txResult.message ?? null,
-      })).catch((e) => {
-        // On persistent arm failure: log CRITICAL and leave the row Pending-null-hash —
-        // it FAILS CLOSED (blocks re-stake) until expireStaleBroadcasts + operator review.
-        log.error('remediateSupplier: CRITICAL — failed to arm WAL row after broadcast; row left as stale pending', {
-          slotId, address: params.address, error: e,
-        })
-      })
-
-      // Update only the benign fields; leave state + remediation history untouched.
-      try {
-        await dal.keys.updateKey(params.address, {
-          lastUpdatedHeight: params.height,
-          balanceUpokt: BigInt(balance),
-        }, params.height)
-      } catch (e) {
-        log.warn('remediateSupplier: Update Supplier failed while recording pending tx!', { params, error: e })
-        throw ApplicationFailure.retryable(
-          `Failed while updating the supplier status for ${params.address}.`,
-          'db_update_failed',
-        )
-      }
-
-      log.info('remediateSupplier: Stake broadcast; pending verification', { params, hash: txResult.transactionHash })
-      return {
-        success: true,
-        message: 'Stake transaction broadcast; pending verification.',
-      }
-    }
-
-    // Broadcast definitively rejected (no hash): release the slot as Failure and keep
-    // the OLD behavior: mark the key RemediationFailed (keep the remediation entry), throw.
-    await dal.transactions.failBroadcastSlot(slotId, txResult.message ?? 'broadcast rejected').catch(() => {})
-
-    const update: Partial<InsertKey> = {
-      lastUpdatedHeight: params.height,
-      balanceUpokt: BigInt(balance),
-      state: KeyState.RemediationFailed,
-      // Keep the remediation entry so the next cycle can retry
-    }
-
-    log.debug(`remediateSupplier: Stake transaction failed to broadcast for: ${key.address} ${JSON.stringify(txResult)}`)
-
-    log.debug('remediateSupplier: Updating supplier', { params, update }) // NOTE: adding the update could result in an error due to BIGINT
-    try {
-      await dal.keys.updateKey(params.address, update, params.height)
-      log.debug('remediateSupplier: Update Supplier done!', { params })
-    } catch (e) {
-      log.warn('remediateSupplier: Update Supplier failed!', { params, error: e })
-      throw ApplicationFailure.retryable(
-        `Failed while updating the supplier status for ${params.address}. Key state: ${update.state}. Stake tx success: ${txResult.success}, message: ${txResult.message}`,
-        'db_update_failed',
-      )
-    }
-
-    log.warn('remediateSupplier: Stake transaction failed', { params, txResult })
-    throw ApplicationFailure.nonRetryable(
-      `Remediation transaction failed for ${params.address}. Key state: ${update.state}. Tx code: ${txResult.code}, message: ${txResult.message}`,
-      'stake_tx_failed',
-    )
-  },
-
-  /**
-   * Sweeper hygiene: expire Pending rows that have no hash and are older than
-   * olderThanMinutes (default 15). These are WAL rows whose activity died between
-   * claim and arm (worker crash). Must be called at the top of VerifyPendingTransactions
-   * so orphaned slots are not left blocking re-entry indefinitely.
-   * Logs an error per expired row so operators can investigate.
-   */
-  async expireStaleBroadcasts(): Promise<void> {
-    const count = await dal.transactions.expireStaleBroadcasts()
-    if (count > 0) {
-      log.error(
-        'expireStaleBroadcasts: expired stale write-ahead rows — broadcast outcome unknown, operator review required',
-        { count },
-      )
-    }
+    log.info('remediateSupplier: INTENT created; dispatcher will broadcast+verify', { address: params.address, txId: created })
+    return { success: true, message: 'Stake intent recorded; pending broadcast.' }
   },
 
   /**
@@ -794,14 +716,21 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * Verifies a broadcast tx by hash, scanning from one block past its last covered
    * height (or its execution height on the first sweep). Maps the pocket tri-state
    * result down to the minimal shape the pure decision logic consumes.
+   *
+   * Provider txs are unordered: maxBlocks=12 (spec decision-6). The absent result
+   * now carries coveredBlockTime (chain block time at coveredUpToHeight) so callers
+   * can supply chainTimeAtCoverage to decideVerification without a wall-clock.
    */
-  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>> {
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }> & { chainTimeAtCoverage?: Date | null }> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn?.hash) {
       throw new Error('verifyTxHash: tx missing hash')
     }
     const startHeight = txn.lastCoveredHeight != null ? txn.lastCoveredHeight + 1 : (txn.executionHeight ?? 0)
-    const out = await pocketRpcClient.verifyTransaction(txn.hash, startHeight, TX_EXPIRATION_BLOCKS)
+    const out = await pocketRpcClient.verifyTransaction(txn.hash, startHeight, 12)
+    if (out.status === 'absent') {
+      return { ...out, chainTimeAtCoverage: out.coveredBlockTime ?? null }
+    }
     if (out.status !== 'confirmed') return out
     // gasUsed serialized as a string: a bigint cannot cross the Temporal activity
     // boundary (default payload converter cannot encode BigInt).
@@ -869,17 +798,24 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
   },
 
   /**
-   * Failure-bound evidence for a provider tx. Provider txs are self-signed and have
-   * a timeoutHeight column (Cosmos ante rejects inclusion after that height). There is
-   * no signedPayload column, so sequence evidence is unavailable — failure relies solely
-   * on timeoutHeight coverage.
+   * Failure-bound evidence for a provider tx. Provider txs are now UNORDERED:
+   * the failure bound is chain-block-time vs txTimeoutTimestamp (not height).
+   * chainTimeAtCoverage is passed in from the verifyTxHash result to avoid a
+   * separate RPC call and to keep the comparison to chain time (not wall-clock).
    */
-  async checkTxValidityEvidence(transactionId: number): Promise<{
+  async checkTxValidityEvidence(transactionId: number, chainTimeAtCoverage?: Date | null): Promise<{
     txTimeoutHeight: number | null
+    txTimeoutTimestamp: Date | null
     sequence: { consumed: boolean; observedAtHeight: number } | null
+    chainTimeAtCoverage: Date | null
   }> {
     const txn = await dal.transactions.getTransaction(transactionId)
-    return { txTimeoutHeight: txn?.timeoutHeight ?? null, sequence: null }
+    return {
+      txTimeoutHeight: null,
+      txTimeoutTimestamp: txn?.timeoutTimestamp ?? null,
+      sequence: null,
+      chainTimeAtCoverage: chainTimeAtCoverage ?? null,
+    }
   },
 
   /**

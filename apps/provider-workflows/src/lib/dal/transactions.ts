@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNotNull, sql } from 'drizzle-orm'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/provider/schema'
 import { transactionsTable, InsertTransaction, Transaction as TransactionModel } from '@igniter/db/provider/schema'
@@ -18,6 +18,47 @@ export default class Transactions {
     this.logger.debug('insert: Execution Started', { keyAddress: tx.keyAddress, type: tx.type })
     await this.dbClient.db.insert(transactionsTable).values(tx)
     this.logger.debug('insert: Execution Finished', { keyAddress: tx.keyAddress, type: tx.type })
+  }
+
+  /**
+   * Parent: create the INTENT row (pending, no hash). onConflictDoNothing on the
+   * (key_id) WHERE pending partial index → returns id, or null if a pending row exists.
+   */
+  async createIntent(values: Omit<InsertTransaction, 'status' | 'hash'> & { params: string; reasons: string }): Promise<number | null> {
+    const [row] = await this.dbClient.db.insert(transactionsTable)
+      .values({ ...values, status: TransactionStatus.Pending, hash: null })
+      .onConflictDoNothing()
+      .returning({ id: transactionsTable.id })
+    return row?.id ?? null
+  }
+
+  /**
+   * Dispatcher queue: ALL pending rows (with OR without hash) — the child's
+   * guard decides sign-vs-broadcast.
+   */
+  async listPending(): Promise<TransactionModel[]> {
+    return this.dbClient.db.select().from(transactionsTable)
+      .where(eq(transactionsTable.status, TransactionStatus.Pending))
+  }
+
+  /**
+   * Child step 2: persist signed bytes + hash + timeout BEFORE broadcast.
+   * CAS WHERE status=pending to avoid clobbering a terminal row.
+   */
+  async recordSigned(id: number, f: { signedPayload: string; hash: string; executionHeight: number; timeoutTimestamp: Date }): Promise<void> {
+    await this.dbClient.db.update(transactionsTable)
+      .set({ signedPayload: f.signedPayload, hash: f.hash, executionHeight: f.executionHeight, timeoutTimestamp: f.timeoutTimestamp })
+      .where(and(eq(transactionsTable.id, id), eq(transactionsTable.status, TransactionStatus.Pending)))
+  }
+
+  /**
+   * Re-sign-on-expiry: clear the stale signed tx so the child re-signs fresh.
+   * CAS WHERE status=pending to be safe.
+   */
+  async clearSigned(id: number): Promise<void> {
+    await this.dbClient.db.update(transactionsTable)
+      .set({ signedPayload: null, hash: null, timeoutTimestamp: null })
+      .where(and(eq(transactionsTable.id, id), eq(transactionsTable.status, TransactionStatus.Pending)))
   }
 
   async getTransaction(transactionId: number) {
@@ -88,66 +129,6 @@ export default class Transactions {
         lastVerificationAt: new Date(),
       })
       .where(eq(transactionsTable.id, transactionId))
-  }
-
-  /**
-   * Re-entry guard for remediation: true when a key already has ANY still-pending
-   * transaction (with or without a hash — the write-ahead slot also blocks re-entry).
-   * Prevents double-staking the same key while its previous stake tx is awaiting
-   * verification or while the WAL row is live. Fail-closed: a hash-less row means
-   * a broadcast is in flight and we must not start another.
-   */
-  /**
-   * Write-ahead claim: atomically inserts the Pending row for this key BEFORE
-   * broadcast. The partial unique index transactions_key_pending_uq makes this the
-   * single point of mutual exclusion — a concurrent remediation (other schedule,
-   * abandoned child from a previous sweep, activity retry) gets null and MUST skip.
-   */
-  async claimBroadcastSlot(values: InsertTransaction): Promise<number | null> {
-    const [row] = await this.dbClient.db.insert(transactionsTable)
-      .values({ ...values, status: TransactionStatus.Pending, hash: null })
-      .onConflictDoNothing()
-      .returning({ id: transactionsTable.id })
-    return row?.id ?? null
-  }
-
-  /** Post-broadcast arm: CAS the WAL row with the broadcast facts. If the sweep
-   *  expired the row mid-flight (0 rows), re-arm unconditionally by id — the
-   *  broadcast demonstrably happened and the verifier must own it. */
-  async armBroadcast(id: number, facts: { hash: string; executionHeight: number; timeoutHeight: number | null; code: number | null; message: string | null }): Promise<void> {
-    const res = await this.dbClient.db.update(transactionsTable)
-      .set({ ...facts, status: TransactionStatus.Pending })
-      .where(and(eq(transactionsTable.id, id), eq(transactionsTable.status, TransactionStatus.Pending)))
-      .returning({ id: transactionsTable.id })
-    if (res.length === 0) {
-      await this.dbClient.db.update(transactionsTable)
-        .set({ ...facts, status: TransactionStatus.Pending })
-        .where(eq(transactionsTable.id, id))
-    }
-  }
-
-  /** Pre-broadcast failure / unknown outcome: release the slot. CAS so a row the
-   *  verifier already owns is never clobbered. */
-  async failBroadcastSlot(id: number, message: string): Promise<void> {
-    await this.dbClient.db.update(transactionsTable)
-      .set({ status: TransactionStatus.Failure, message })
-      .where(and(eq(transactionsTable.id, id), eq(transactionsTable.status, TransactionStatus.Pending), isNull(transactionsTable.hash)))
-  }
-
-  /** Sweeper hygiene: a Pending row with no hash older than T means the activity
-   *  died between claim and arm (worker crash). T must exceed one full activity
-   *  attempt (startToCloseTimeout 120s) — retries skip via the claim, so the
-   *  broadcast can only have happened inside the first attempt's window. */
-  async expireStaleBroadcasts(olderThanMinutes = 15): Promise<number> {
-    const res = await this.dbClient.db.update(transactionsTable)
-      .set({ status: TransactionStatus.Failure, message: 'broadcast outcome unknown (stale write-ahead row)' })
-      .where(and(
-        eq(transactionsTable.status, TransactionStatus.Pending),
-        isNull(transactionsTable.hash),
-        sql`${transactionsTable.createdAt} < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'`,
-      ))
-      .returning({ id: transactionsTable.id })
-    return res.length
   }
 
   async hasPendingTx(keyId: number): Promise<boolean> {

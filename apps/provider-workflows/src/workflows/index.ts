@@ -1,3 +1,5 @@
+export * from './ExecutePendingTransactions'
+export * from './ExecuteTransaction'
 export * from './GovernanceSync'
 export * from './SupplierRemediation'
 export * from './SupplierRemediationRange'

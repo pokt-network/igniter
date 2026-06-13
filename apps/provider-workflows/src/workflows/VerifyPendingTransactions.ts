@@ -15,7 +15,6 @@ const MAX_CONCURRENT = 10
  */
 export async function VerifyPendingTransactions() {
   const {
-    expireStaleBroadcasts,
     listPendingWithHash,
     verifyTxHash,
     verifySupplierEffect,
@@ -25,11 +24,6 @@ export async function VerifyPendingTransactions() {
     startToCloseTimeout: '120s',
     retry: { maximumAttempts: 3 },
   })
-
-  // Hygiene: expire WAL rows whose broadcast outcome is unknown (worker crashed
-  // between claim and arm). Must run before listing pending-with-hash so the
-  // sweep never attempts to verify a hash-less row. Log per expired row.
-  await expireStaleBroadcasts()
 
   const txs = await listPendingWithHash()
   if (txs.length === 0) return
@@ -44,14 +38,21 @@ export async function VerifyPendingTransactions() {
         const supplier = hash.status === 'confirmed' && hash.data.success ? null : await verifySupplierEffect(t.id)
         // Evidence only when failure is in reach (avoids an unnecessary account query on every sweep).
         const needEvidence = hash.status === 'absent' || (hash.status === 'confirmed' && !hash.data.success)
-        const evidence = needEvidence ? await checkTxValidityEvidence(t.id) : { txTimeoutHeight: null, sequence: null }
+        // For absent: pass the chain block time at coverage so decideVerification uses chain time
+        // (not wall-clock) for the unordered timeout_timestamp bound.
+        const chainTimeAtCoverage = hash.status === 'absent' && 'chainTimeAtCoverage' in hash ? (hash as any).chainTimeAtCoverage ?? null : null
+        const evidence = needEvidence
+          ? await checkTxValidityEvidence(t.id, chainTimeAtCoverage)
+          : { txTimeoutHeight: null, txTimeoutTimestamp: null, sequence: null, chainTimeAtCoverage: null }
         const decision = decideVerification({
           hash,
           supplier,
           executionHeight: t.executionHeight!,
           expirationWindow: TX_EXPIRATION_BLOCKS,
           txTimeoutHeight: evidence.txTimeoutHeight,
+          txTimeoutTimestamp: evidence.txTimeoutTimestamp,
           sequence: evidence.sequence,
+          chainTimeAtCoverage: evidence.chainTimeAtCoverage,
         })
         await applyVerificationDecision(t.id, decision)
       }),
