@@ -773,7 +773,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
     const key = await dal.keys.loadKey(txn.keyAddress)
     if (!key) {
-      throw new Error('verifySupplierEffect: key not found')
+      // Key removed mid-flight (deterministic — never recovers). Do NOT throw: a throw here
+      // rejects this tx in the sweep, and a sweep where every tx rejects makes
+      // VerifyPendingTransactions fail, which under ScheduleOverlapPolicy.SKIP would stall
+      // all future sweeps. Returning null routes the decision to the hash + timeout bound
+      // (→ success if the hash landed, else a clean failure once the timeout passes).
+      log.warn(`verifySupplierEffect: key not found for tx ${transactionId} (${txn.keyAddress}); falling back to hash-only verification`)
+      return null
     }
     const parsed = supplierEffectFromKey(txn, key)
     if (!parsed) return null

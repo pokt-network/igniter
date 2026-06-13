@@ -195,6 +195,22 @@ describe('verifySupplierEffect — OwnerInitialStake deep-compare (Task 15)', ()
     const result = await activities.verifySupplierEffect(1)
     expect(result).toEqual({ status: 'unavailable' })
   })
+
+  it('key not found (removed mid-flight) → null, not a throw (hash-only fallback; avoids wedging the sweep)', async () => {
+    const mockDal = {
+      transactions: {
+        getTransaction: jest.fn().mockResolvedValue({
+          id: 1, keyAddress: OPERATOR, type: TransactionType.Stake,
+          reason: RemediationHistoryEntryReason.OwnerInitialStake,
+          hash: 'abc', executionHeight: 1000, status: 'pending',
+        }),
+      },
+      keys: { loadKey: jest.fn().mockResolvedValue(null) },
+    } as any
+    const mockPocket = { getSupplier: jest.fn(), verifySupplierEffect: jest.fn() } as any
+    const activities = providerActivities(mockDal, mockPocket)
+    await expect(activities.verifySupplierEffect(1)).resolves.toBeNull()
+  })
 })
 
 // ---- Keys.flipState tests ----

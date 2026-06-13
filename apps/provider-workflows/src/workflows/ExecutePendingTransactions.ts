@@ -1,4 +1,4 @@
-import { proxyActivities, executeChild, log, WorkflowError, WorkflowIdReusePolicy, ParentClosePolicy } from '@temporalio/workflow'
+import { proxyActivities, executeChild, log, ApplicationFailure, WorkflowIdReusePolicy, ParentClosePolicy } from '@temporalio/workflow'
 import { providerActivities } from '@/activities'
 
 // @ts-expect-error p-limit is ESM-only; its default export has no CJS types under this build's module resolution
@@ -38,13 +38,23 @@ export async function ExecutePendingTransactions() {
     )
   )
 
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      log.warn('ExecutePendingTransactions: child workflow failed', { reason: String(r.reason) })
-    }
+  const failedReasons = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => String(r.reason))
+  for (const reason of failedReasons) {
+    log.warn('ExecutePendingTransactions: child workflow failed', { reason })
   }
 
-  if (results.length > 0 && results.every((r) => r.status === 'rejected')) {
-    throw new WorkflowError('ExecutePendingTransactions: all child workflows failed')
+  // Non-retryable ApplicationFailure (NOT WorkflowError — not exported by
+  // @temporalio/workflow; `new WorkflowError()` throws TypeError and wedges the
+  // workflow task forever under ScheduleOverlapPolicy.SKIP). A failed execution lets
+  // the next scheduled dispatch run fresh.
+  if (results.length > 0 && failedReasons.length === results.length) {
+    throw new ApplicationFailure(
+      'ExecutePendingTransactions: all child workflows failed',
+      'fatal_error',
+      true,
+      [failedReasons],
+    )
   }
 }

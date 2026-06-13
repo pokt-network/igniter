@@ -1,4 +1,4 @@
-import { proxyActivities, log, WorkflowError } from '@temporalio/workflow'
+import { proxyActivities, log, ApplicationFailure } from '@temporalio/workflow'
 import { providerActivities } from '@/activities'
 import { decideVerification, TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
@@ -59,15 +59,25 @@ export async function VerifyPendingTransactions() {
     ),
   )
 
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      log.warn('VerifyPendingTransactions: tx verification failed', { reason: String(r.reason) })
-    }
+  const failedReasons = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => String(r.reason))
+  for (const reason of failedReasons) {
+    log.warn('VerifyPendingTransactions: tx verification failed', { reason })
   }
 
   // Match the SupplierStatus pattern: tolerate partial failure, but surface a
-  // systemic one (all failed → RPC/DB down) instead of completing green.
-  if (results.length > 0 && results.every((r) => r.status === 'rejected')) {
-    throw new WorkflowError('VerifyPendingTransactions: all transactions failed')
+  // systemic one (all failed → RPC/DB down) instead of completing green. Use a
+  // non-retryable ApplicationFailure (NOT WorkflowError — which is not exported by
+  // @temporalio/workflow; `new WorkflowError()` throws TypeError, wedging the
+  // workflow task forever under ScheduleOverlapPolicy.SKIP). A failed execution lets
+  // the next scheduled sweep run fresh.
+  if (results.length > 0 && failedReasons.length === results.length) {
+    throw new ApplicationFailure(
+      'VerifyPendingTransactions: all transactions failed',
+      'fatal_error',
+      true,
+      [failedReasons],
+    )
   }
 }
