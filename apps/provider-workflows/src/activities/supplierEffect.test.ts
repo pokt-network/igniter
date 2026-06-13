@@ -4,10 +4,7 @@
  */
 
 // Mock heavy external dependencies that aren't relevant to these unit tests
-jest.mock('@igniter/pocket', () => ({
-  isSequenceMismatchError: jest.fn(),
-  parseExpectedSequence: jest.fn(),
-}))
+jest.mock('@igniter/pocket', () => ({}))
 jest.mock('@temporalio/activity', () => ({
   ApplicationFailure: { nonRetryable: jest.fn(), retryable: jest.fn() },
   log: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },

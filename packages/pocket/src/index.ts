@@ -765,6 +765,8 @@ export class PocketBlockchain {
         code: result.code,
         message: result.rawLog,
         success: result.code === 0,
+        // A non-zero code from broadcastTx is a definitive CheckTx/DeliverTx rejection.
+        rejected: result.code !== 0,
       }
     } catch (e: any) {
       // Cosmos SDK unordered dedup: broadcast of identical (timeoutTimestamp, sender) bytes
@@ -777,6 +779,33 @@ export class PocketBlockchain {
           code: 0,
           message: 'already broadcast (unordered dedup)',
           success: true,
+          rejected: false,
+        }
+      }
+
+      // A BroadcastTxError is a hard CheckTx rejection — the tx will never land on-chain.
+      if (e instanceof BroadcastTxError) {
+        this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: hard CheckTx rejection')
+        return {
+          transactionHash,
+          success: false,
+          rejected: true,
+          code: e.code,
+          message: e.message ?? 'broadcast rejected',
+        }
+      }
+
+      // A TimeoutError means the RPC timed out waiting for commit confirmation, but the tx
+      // may already have been accepted into the mempool and can still land on-chain.
+      // Do NOT mark as rejected — the verifier will resolve it via chain-time bound.
+      if (e instanceof TimeoutError) {
+        this.logger.warn({ transactionHash, message: e.message }, 'broadcastSupplierTx: RPC timeout (tx may still land, not rejected)')
+        return {
+          transactionHash,
+          success: false,
+          rejected: false,
+          code: undefined,
+          message: `RPC timeout waiting for commit confirmation — tx may still land: ${e.message}`,
         }
       }
 
@@ -784,6 +813,7 @@ export class PocketBlockchain {
       return {
         transactionHash,
         success: false,
+        rejected: false,
         code: e.code,
         message: e.message ?? 'broadcast failed',
       }

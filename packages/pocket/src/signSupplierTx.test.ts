@@ -57,6 +57,7 @@ jest.mock('@igniter/logger', () => ({
 import { PocketBlockchain } from './index'
 import { TxBody, TxRaw } from './proto/generated/cosmos/tx/v1beta1/tx'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
+import { BroadcastTxError, TimeoutError } from '@cosmjs/stargate'
 
 // Deterministic test private key (valid secp256k1 key)
 const TEST_PRIVATE_KEY = 'a'.repeat(64)
@@ -232,6 +233,33 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     const result = await bc.broadcastSupplierTx(signedPayload)
 
     expect(result.success).toBe(false)
+    expect(result.transactionHash).toMatch(/^[0-9A-F]{64}$/)
+  })
+
+  it('BroadcastTxError: sets rejected=true (hard CheckTx rejection — tx will never land)', async () => {
+    const signedPayload = await getSignedPayload()
+    jest.clearAllMocks()
+    mockBroadcastTx.mockRejectedValue(new BroadcastTxError(11, 'sdk', 'out of gas in ante handler'))
+
+    const bc = await createInstance()
+    const result = await bc.broadcastSupplierTx(signedPayload)
+
+    expect(result.success).toBe(false)
+    expect(result.rejected).toBe(true)
+    expect(result.transactionHash).toMatch(/^[0-9A-F]{64}$/)
+  })
+
+  it('TimeoutError: sets rejected=false (RPC timeout — tx may still land on-chain)', async () => {
+    const signedPayload = await getSignedPayload()
+    jest.clearAllMocks()
+    // TimeoutError constructor: (message, txId)
+    mockBroadcastTx.mockRejectedValue(new TimeoutError('timeout waiting for commit', 'DEADBEEF'.repeat(8)))
+
+    const bc = await createInstance()
+    const result = await bc.broadcastSupplierTx(signedPayload)
+
+    expect(result.success).toBe(false)
+    expect(result.rejected).toBe(false)
     expect(result.transactionHash).toMatch(/^[0-9A-F]{64}$/)
   })
 })

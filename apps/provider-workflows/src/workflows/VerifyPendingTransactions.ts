@@ -40,7 +40,7 @@ export async function VerifyPendingTransactions() {
         const needEvidence = hash.status === 'absent' || (hash.status === 'confirmed' && !hash.data.success)
         // For absent: pass the chain block time at coverage so decideVerification uses chain time
         // (not wall-clock) for the unordered timeout_timestamp bound.
-        const chainTimeAtCoverage = hash.status === 'absent' && 'chainTimeAtCoverage' in hash ? (hash as any).chainTimeAtCoverage ?? null : null
+        const chainTimeAtCoverage = hash.status === 'absent' ? hash.chainTimeAtCoverage ?? null : null
         const evidence = needEvidence
           ? await checkTxValidityEvidence(t.id, chainTimeAtCoverage)
           : { txTimeoutHeight: null, txTimeoutTimestamp: null, sequence: null, chainTimeAtCoverage: null }

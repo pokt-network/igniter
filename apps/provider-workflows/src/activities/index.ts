@@ -200,19 +200,23 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
   /**
    * Child activity: broadcast the persisted signed bytes (idempotent re-broadcast).
-   * A hard rejection with no hash → terminal failure; verifier owns success/absence.
+   * A hard CheckTx rejection (res.rejected===true) → terminal failure immediately.
+   * A RPC timeout or other transient failure (res.rejected===false/undefined) → do nothing;
+   * the tx may still land on-chain and the verifier resolves it via chain-time bound.
    */
   async broadcastSupplierTx(transactionId: number): Promise<void> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn?.signedPayload) throw new Error(`broadcastSupplierTx: tx ${transactionId} missing signedPayload`)
     const res = await pocketRpcClient.broadcastSupplierTx(txn.signedPayload)
-    if (!res.transactionHash) {
-      // Hard reject (not a dedup) → terminal failure; remediation re-detects on next sweep.
+    if (res.rejected) {
+      // Hard CheckTx reject (BroadcastTxError / non-zero code) — tx will never land.
+      // Terminal failure; remediation re-detects on next sweep.
       await dal.transactions.claimTerminalTransition(transactionId, TransactionStatus.Failure, {
         code: res.code ?? undefined,
         message: res.message ?? 'broadcast rejected',
       })
     }
+    // On timeout or other non-rejected failure: do nothing — verifier owns resolution.
   },
 
   /**
