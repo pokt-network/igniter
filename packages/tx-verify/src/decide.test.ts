@@ -4,7 +4,7 @@ const confirmedOk = { status: 'confirmed' as const, data: { success: true, code:
 const confirmedFailed = { status: 'confirmed' as const, data: { success: false, code: 5, gasUsed: '100' } }
 const absentAt = (h: number) => ({ status: 'absent' as const, coveredUpToHeight: h })
 const unavailable = { status: 'unavailable' as const }
-const base = { executionHeight: 1000, expirationWindow: TX_EXPIRATION_BLOCKS, txTimeoutHeight: 1005 as number | null, sequence: null }
+const base = { executionHeight: 1000, expirationWindow: TX_EXPIRATION_BLOCKS, txTimeoutHeight: 1005 as number | null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }
 
 describe('decideVerification v2', () => {
   // D1: on-chain failed tx is a tx-failure, but effects depend on goal-state
@@ -79,5 +79,27 @@ describe('decideVerification v2', () => {
   it('pending absent advances newLastCoveredHeight', () => {
     const d = decideVerification({ ...base, txTimeoutHeight: 1050, hash: absentAt(1010), supplier: null })
     expect(d.newLastCoveredHeight).toBe(1010)
+  })
+})
+
+describe('decideVerification — unordered (timeoutTimestamp) bound', () => {
+  const T = new Date('2026-06-13T00:09:00Z') // timeout_timestamp
+  const baseU = { executionHeight: 1000, expirationWindow: 12, txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: T }
+
+  it('absent, chain time past timeout, supplier absent → failure', () => {
+    const d = decideVerification({ ...baseU, hash: absentAt(1010), chainTimeAtCoverage: new Date('2026-06-13T00:09:01Z'), supplier: { status: 'absent' } })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'apply-failure' })
+  })
+  it('absent, chain time BEFORE timeout → pending (tx can still land)', () => {
+    const d = decideVerification({ ...baseU, hash: absentAt(1010), chainTimeAtCoverage: new Date('2026-06-13T00:08:59Z'), supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
+  })
+  it('absent, chainTimeAtCoverage null (RPC could not read block time) → pending, never false-fail', () => {
+    const d = decideVerification({ ...baseU, hash: absentAt(1010), chainTimeAtCoverage: null, supplier: { status: 'absent' } })
+    expect(d.tx).toBe('pending')
+  })
+  it('unordered confirmed success unchanged', () => {
+    const d = decideVerification({ ...baseU, hash: confirmedOk, chainTimeAtCoverage: T, supplier: { status: 'confirmed' } })
+    expect(d).toMatchObject({ tx: 'success', effects: 'apply-success' })
   })
 })

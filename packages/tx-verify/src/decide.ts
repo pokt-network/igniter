@@ -11,7 +11,9 @@ export interface DecideInput {
   hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>
   /** null when the tx type has no supplier path (e.g. send / OperationalFunds) */
   supplier: SupplierPathOutcome | null
+  /** advisory only, not read — kept so existing callers compile without changes */
   executionHeight: number
+  /** advisory only, not read — kept so existing callers compile without changes */
   expirationWindow: number
   /**
    * timeoutHeight embedded in the signed tx (Cosmos ante rejects inclusion in any
@@ -26,6 +28,17 @@ export interface DecideInput {
    * (the tx could have been the consumer in the uncovered gap).
    */
   sequence: { consumed: boolean; observedAtHeight: number } | null
+  /**
+   * timeout_timestamp embedded in an UNORDERED tx. Cosmos ante rejects inclusion
+   * once chain block time passes it. null for ordered txs (use txTimeoutHeight/sequence).
+   */
+  txTimeoutTimestamp: Date | null
+  /**
+   * Chain block time at the hash path's coveredUpToHeight (NOT verifier wall-clock).
+   * null when the RPC could not read it → unordered failure can never be declared
+   * (stays pending), eliminating clock-skew split-brain.
+   */
+  chainTimeAtCoverage: Date | null
 }
 
 export interface VerificationDecision {
@@ -46,12 +59,15 @@ export interface VerificationDecision {
  * Pure transition logic. `tx` is per-tx truth; `effects` is goal-state truth —
  * they diverge when a sibling tx achieved the goal after this tx failed.
  * Failure requires COMPLETE negative evidence under a healthy RPC AND a proof
- * that the tx cannot land later (timeoutHeight covered, or sequence consumed
- * with coverage up to the observation height). Any unavailable path keeps the
- * tx pending (indefinitely). The verdict is height-based, never counter-based.
+ * that the tx cannot land later via one of three bounds:
+ *   (1) height bound — txTimeoutHeight covered (ordered txs with embedded timeout);
+ *   (2) sequence bound — account sequence consumed and coverage reaches the observation;
+ *   (3) timestamp bound — chain block time at coverage exceeds txTimeoutTimestamp
+ *       (unordered txs; uses chain time, NEVER wall-clock, to avoid clock-skew split-brain).
+ * Any unavailable path keeps the tx pending (indefinitely).
  */
 export function decideVerification(input: DecideInput): VerificationDecision {
-  const { hash, supplier, txTimeoutHeight, sequence } = input
+  const { hash, supplier, txTimeoutHeight, sequence, txTimeoutTimestamp, chainTimeAtCoverage } = input
 
   const supplierApplicable = supplier !== null
   const anyUnavailable =
@@ -88,12 +104,19 @@ export function decideVerification(input: DecideInput): VerificationDecision {
   // 4. Failure: hash absent over a window the tx provably cannot land outside of,
   //    AND the goal-state answered absent (or no goal-state exists).
   if (hash.status === 'absent') {
-    const requiredCoverage =
+    const supplierNegativeOrNA = !supplierApplicable || supplier!.status === 'absent'
+    // Unordered: bound is chain-block-time vs timeout_timestamp (never wall-clock).
+    const unorderedExpired =
+      txTimeoutTimestamp != null &&
+      chainTimeAtCoverage != null &&
+      chainTimeAtCoverage.getTime() > txTimeoutTimestamp.getTime()
+    // Ordered: bound is height coverage vs timeoutHeight, or sequence-consumed.
+    const orderedRequiredCoverage =
       txTimeoutHeight != null ? txTimeoutHeight
       : sequence?.consumed ? sequence.observedAtHeight
       : Number.POSITIVE_INFINITY
-    const supplierNegativeOrNA = !supplierApplicable || supplier!.status === 'absent'
-    if (hash.coveredUpToHeight >= requiredCoverage && supplierNegativeOrNA) {
+    const orderedExpired = txTimeoutTimestamp == null && hash.coveredUpToHeight >= orderedRequiredCoverage
+    if ((unorderedExpired || orderedExpired) && supplierNegativeOrNA) {
       return {
         tx: 'failure',
         effects: supplierApplicable ? 'apply-failure' : 'none',
