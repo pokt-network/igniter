@@ -188,10 +188,12 @@ export default class Keys {
   ): Promise<boolean> {
     const setFields: Record<string, unknown> = { state: toState }
     if (opts.removeEntryReason) {
+      // remediationHistory is a `json` column (not jsonb); cast to jsonb for the
+      // array ops, then back to json for assignment.
       setFields['remediationHistory'] = sql`COALESCE((
-        SELECT jsonb_agg(e) FROM jsonb_array_elements(${keysTable.remediationHistory}) e
+        SELECT jsonb_agg(e) FROM jsonb_array_elements(${keysTable.remediationHistory}::jsonb) e
         WHERE e->>'reason' <> ${opts.removeEntryReason}
-      ), '[]'::jsonb)`
+      ), '[]'::jsonb)::json`
     }
     const rows = await this.dbClient.db.update(keysTable)
       .set(setFields as Partial<schema.InsertKey>)
