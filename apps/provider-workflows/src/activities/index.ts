@@ -189,7 +189,21 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     if (!txn?.params) throw new Error(`signSupplierTx: tx ${transactionId} missing params`)
     const params: StakeSupplierParams = JSON.parse(txn.params)
     const head = await pocketRpcClient.getHeight()
-    const signed = await pocketRpcClient.signSupplierTx(params)
+    let signed: Awaited<ReturnType<typeof pocketRpcClient.signSupplierTx>>
+    try {
+      signed = await pocketRpcClient.signSupplierTx(params)
+    } catch (err: any) {
+      const msg: string = err?.message ?? String(err)
+      if (msg.includes("does not exist on chain")) {
+        // Signer account never funded — will never be signable. Abandon the intent
+        // so the key's pending-unique index is freed for the next remediation cycle.
+        await dal.transactions.abandonIntent(transactionId, {
+          message: 'sign failed: signer account not found on chain',
+        })
+        return
+      }
+      throw err
+    }
     await dal.transactions.recordSigned(transactionId, {
       signedPayload: signed.signedPayload,
       hash: signed.transactionHash,

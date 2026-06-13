@@ -68,7 +68,9 @@ export interface VerificationDecision {
  */
 export function decideVerification(input: DecideInput): VerificationDecision {
   if (input.txTimeoutTimestamp != null && input.txTimeoutHeight != null) throw new Error('decideVerification: txTimeoutTimestamp and txTimeoutHeight are mutually exclusive')
-  const { hash, supplier, txTimeoutHeight, sequence, txTimeoutTimestamp, chainTimeAtCoverage } = input
+  const chainTime = input.chainTimeAtCoverage != null ? new Date(input.chainTimeAtCoverage as any) : null
+  const txTimeoutTs = input.txTimeoutTimestamp != null ? new Date(input.txTimeoutTimestamp as any) : null
+  const { hash, supplier, txTimeoutHeight, sequence } = input
 
   const supplierApplicable = supplier !== null
   const anyUnavailable =
@@ -108,15 +110,15 @@ export function decideVerification(input: DecideInput): VerificationDecision {
     const supplierNegativeOrNA = !supplierApplicable || supplier!.status === 'absent'
     // Unordered: bound is chain-block-time vs timeout_timestamp (never wall-clock).
     const unorderedExpired =
-      txTimeoutTimestamp != null &&
-      chainTimeAtCoverage != null &&
-      chainTimeAtCoverage.getTime() > txTimeoutTimestamp.getTime()
+      txTimeoutTs != null &&
+      chainTime != null &&
+      chainTime.getTime() > txTimeoutTs.getTime()
     // Ordered: bound is height coverage vs timeoutHeight, or sequence-consumed.
     const orderedRequiredCoverage =
       txTimeoutHeight != null ? txTimeoutHeight
       : sequence?.consumed ? sequence.observedAtHeight
       : Number.POSITIVE_INFINITY
-    const orderedExpired = txTimeoutTimestamp == null && hash.coveredUpToHeight >= orderedRequiredCoverage
+    const orderedExpired = txTimeoutTs == null && hash.coveredUpToHeight >= orderedRequiredCoverage
     if ((unorderedExpired || orderedExpired) && supplierNegativeOrNA) {
       return {
         tx: 'failure',

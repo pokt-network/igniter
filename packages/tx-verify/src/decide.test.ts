@@ -103,3 +103,33 @@ describe('decideVerification — unordered (timeoutTimestamp) bound', () => {
     expect(d).toMatchObject({ tx: 'success', effects: 'apply-success' })
   })
 })
+
+describe('decideVerification — Temporal serialization boundary (ISO string inputs)', () => {
+  const T_ISO = '2026-06-13T00:09:00.000Z'
+  const CHAIN_ISO = '2026-06-13T00:09:01.000Z'
+  const baseU = { executionHeight: 1000, expirationWindow: 12, txTimeoutHeight: null, sequence: null }
+  const absentAt = (h: number) => ({ status: 'absent' as const, coveredUpToHeight: h })
+
+  it('ISO string dates: unordered failure still works after Temporal round-trip', () => {
+    const d = decideVerification({
+      ...baseU,
+      hash: absentAt(1010),
+      // simulate Temporal serializing Date → ISO string and back
+      txTimeoutTimestamp: T_ISO as any,
+      chainTimeAtCoverage: CHAIN_ISO as any,
+      supplier: { status: 'absent', absentOperators: ['pokt1a'] },
+    })
+    expect(d).toMatchObject({ tx: 'failure', effects: 'apply-failure' })
+  })
+
+  it('ISO string dates: chain time before timeout stays pending', () => {
+    const d = decideVerification({
+      ...baseU,
+      hash: absentAt(1010),
+      txTimeoutTimestamp: T_ISO as any,
+      chainTimeAtCoverage: '2026-06-13T00:08:59.000Z' as any,
+      supplier: { status: 'absent', absentOperators: ['pokt1a'] },
+    })
+    expect(d.tx).toBe('pending')
+  })
+})

@@ -112,6 +112,24 @@ export default class Transactions {
   }
 
   /**
+   * Terminalize a pre-broadcast INTENT row (no hash yet) — used when signing fails
+   * for a reason that makes retrying pointless (e.g. signer account not on-chain).
+   * Does NOT require a hash; CAS on status=pending ensures idempotency.
+   */
+  async abandonIntent(
+    transactionId: number,
+    fields: { message: string },
+  ): Promise<void> {
+    await this.dbClient.db
+      .update(transactionsTable)
+      .set({ status: TransactionStatus.Failure, message: fields.message })
+      .where(and(
+        eq(transactionsTable.id, transactionId),
+        eq(transactionsTable.status, TransactionStatus.Pending),
+      ))
+  }
+
+  /**
    * Pending-path counter/coverage update (no status change). Drizzle skips
    * `undefined` set fields, so passing `undefined` leaves a column untouched.
    */
