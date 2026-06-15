@@ -55,6 +55,20 @@ export interface SendTransactionResult {
   message?: string;
   codespace?: string;
   isTimeout?: boolean;
+  /**
+   * True when the tx was definitively rejected by CheckTx / BroadcastTxError and can NEVER land
+   * on-chain (hard reject). False/undefined for dedup-success, TimeoutError, or any other case
+   * where the tx may still land. Callers must treat undefined as non-rejected.
+   */
+  rejected?: boolean;
+  /** Chain head sampled immediately before signing — the lowest possible inclusion height anchor. */
+  signedAtHeight?: number;
+  /** timeoutHeight embedded in the signed tx; inclusion in any block > this height is impossible. */
+  timeoutHeight?: number;
+  /** base64-encoded signed TxRaw bytes — persisted so re-broadcast replays identical bytes. */
+  signedPayload?: string;
+  /** unordered tx timeout_timestamp (chain-time validity bound). */
+  timeoutTimestamp?: Date;
 }
 
 export interface TransactionResult {

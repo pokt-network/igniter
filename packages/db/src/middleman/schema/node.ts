@@ -32,7 +32,7 @@ export type NodeService = {
 
 export const nodesTable = pgTable('nodes', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  address: varchar({ length: 255 }).notNull(),
+  address: varchar({ length: 255 }).notNull().unique(),
   ownerAddress: varchar({ length: 255 }).notNull(),
   status: nodeStatusEnum().notNull(),
   stakeAmount: varchar().notNull(),

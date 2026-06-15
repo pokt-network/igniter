@@ -6,6 +6,7 @@ import { toHex } from '@cosmjs/encoding'
 // ---------------------------------------------------------------------------
 
 const mockGetTx = jest.fn()
+const mockGetHeight = jest.fn()
 const mockBlock = jest.fn()
 const mockBlockResults = jest.fn()
 const mockDisconnect = jest.fn()
@@ -18,6 +19,7 @@ jest.mock('@cosmjs/stargate', () => {
     StargateClient: {
       create: jest.fn().mockResolvedValue({
         getTx: mockGetTx,
+        getHeight: mockGetHeight,
         disconnect: mockDisconnect,
       }),
     },
@@ -71,6 +73,9 @@ const txHash = toHex(txHashBytes).toUpperCase()
 describe('PocketBlockchain.getTransaction', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    // Default: chain head far ahead so the Tier-3 block scan walks its full
+    // window unless a test overrides it to exercise the head-cap.
+    mockGetHeight.mockResolvedValue(10_000_000)
   })
 
   // 1. Tier 1 success
@@ -268,5 +273,61 @@ describe('PocketBlockchain.getTransaction', () => {
       success: true,
       code: 0,
     })
+  })
+
+  // 8. Block scan caps at chain head: never fetch future heights
+  it('does not scan past the current chain head during block scan', async () => {
+    mockGetTx.mockResolvedValue(null)
+    mockFetch.mockResolvedValue({ ok: false })
+    mockBlock.mockResolvedValue({ block: { txs: [] } }) // tx never present
+
+    const startHeight = 1000
+    // Head is only 2 blocks past the start: window must be 1000..1002 inclusive.
+    mockGetHeight.mockResolvedValue(startHeight + 2)
+
+    const bc = await createInstance('http://api.example.com')
+    const result = await bc.getTransaction(txHash, startHeight)
+
+    expect(result).toBeNull()
+    expect(mockBlock).toHaveBeenCalledWith(startHeight)
+    expect(mockBlock).toHaveBeenCalledWith(startHeight + 1)
+    expect(mockBlock).toHaveBeenCalledWith(startHeight + 2)
+    // The default maxBlocks is 30, but the head cap must stop the scan at +2.
+    expect(mockBlock).not.toHaveBeenCalledWith(startHeight + 3)
+    expect(mockBlock).toHaveBeenCalledTimes(3)
+  })
+
+  // 9. Tx height ahead of chain head: scan is skipped entirely
+  it('skips the block scan when the tx height is ahead of the chain head', async () => {
+    mockGetTx.mockResolvedValue(null)
+    mockFetch.mockResolvedValue({ ok: false })
+
+    const startHeight = 5000
+    mockGetHeight.mockResolvedValue(startHeight - 1) // head below tx height
+
+    const bc = await createInstance('http://api.example.com')
+    const result = await bc.getTransaction(txHash, startHeight)
+
+    expect(result).toBeNull()
+    expect(mockBlock).not.toHaveBeenCalled()
+  })
+
+  // 10. getHeight failure: fall back to scanning the full maxBlocks window
+  it('scans the full window when reading the chain head fails', async () => {
+    mockGetTx.mockResolvedValue(null)
+    mockFetch.mockResolvedValue({ ok: false })
+    mockBlock.mockResolvedValue({ block: { txs: [] } }) // tx never present
+    mockGetHeight.mockRejectedValue(new Error('rpc unreachable')) // head unknown
+
+    const startHeight = 2000
+    const bc = await createInstance('http://api.example.com')
+    const result = await bc.getTransaction(txHash, startHeight)
+
+    expect(result).toBeNull()
+    // Fallback window is the full default maxBlocks (30): startHeight .. startHeight+29.
+    expect(mockBlock).toHaveBeenCalledWith(startHeight)
+    expect(mockBlock).toHaveBeenCalledWith(startHeight + 29)
+    expect(mockBlock).not.toHaveBeenCalledWith(startHeight + 30)
+    expect(mockBlock).toHaveBeenCalledTimes(30)
   })
 })

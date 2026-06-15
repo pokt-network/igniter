@@ -317,8 +317,10 @@ export function ReviewStep({
         </div>
       </div>
 
+      {/* Gate only on the submit requirement (selected nodes). The nodes/duration
+          queries are display-only and must not block unstaking when they fail. */}
       <UnstakingProcess
-        disabled={isLoading || isError}
+        disabled={!selectedNodeAddresses?.length}
         selectedNodeAddresses={selectedNodeAddresses}
         ownerAddress={ownerAddress}
         onUnstakeCompleted={onUnstakeCompleted}

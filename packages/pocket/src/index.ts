@@ -7,8 +7,9 @@ import {
   SigningStargateClient,
   StargateClient, TimeoutError,
 } from '@cosmjs/stargate'
-import {DirectSecp256k1Wallet, GeneratedType, Registry} from '@cosmjs/proto-signing'
-import {TxRaw} from 'cosmjs-types/cosmos/tx/v1beta1/tx'
+import {DirectSecp256k1Wallet, encodePubkey, GeneratedType, makeAuthInfoBytes, makeSignDoc, Registry} from '@cosmjs/proto-signing'
+import { fromBase64 } from '@cosmjs/encoding'
+import { TxBody, TxRaw } from '@pocket/proto/generated/cosmos/tx/v1beta1/tx'
 import {
   Comet38Client,
   connectComet,
@@ -37,9 +38,13 @@ import {StakeSupplierParams} from "@pocket/types";
 import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
+import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
+import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
 export * from './types'
 export * from './constants';
+export * from '@igniter/tx-verify';
+export { rPCTypeFromJSON } from './proto/generated/pocket/shared/service';
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.
@@ -57,6 +62,70 @@ export function parseExpectedSequence(errorMessage: string): number | null {
  */
 export function isSequenceMismatchError(errorMessage: string): boolean {
   return errorMessage.includes('account sequence mismatch')
+}
+
+/**
+ * Maps `items` through `fn` with at most `limit` calls in flight at once, preserving
+ * input order in the returned array. Used to bound the Tier-3 block scan's parallel
+ * `comet.block()` fan-out: firing all ~30 heights at once (and up to MAX_CONCURRENT
+ * ExecuteTransactions doing the same) could burst hundreds of concurrent RPCs at a
+ * single node and trip its rate limits. A small pool keeps most of the latency win
+ * of parallelism without the unbounded burst (issue #304).
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = next++
+      if (i >= items.length) return
+      results[i] = await fn(items[i]!)
+    }
+  }
+  const workerCount = Math.min(limit, items.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
+/** Max concurrent `comet.block()` fetches per Tier-3 block scan (issue #304). */
+const BLOCK_SCAN_CONCURRENCY = 8
+
+/**
+ * Encodes a raw secp256k1 public key as an amino pubkey object.
+ * Inlined to avoid a direct dependency on @cosmjs/amino (available only transitively).
+ */
+function encodeSecp256k1Pubkey(pubkey: Uint8Array): { type: string; value: string } {
+  return { type: 'tendermint/PubKeySecp256k1', value: Buffer.from(pubkey).toString('base64') }
+}
+
+/** Unordered-tx validity window. 9 min < cosmos-sdk DefaultMaxTimeoutDuration (10 min). */
+const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
+
+/**
+ * Returns true if the error is a cosmos-sdk unordered-tx duplicate rejection.
+ *
+ * FLAGGED ASSUMPTION: The exact error shape for a cosmos-sdk v0.53+ unordered
+ * duplicate (same (timeoutTimestamp.UnixNano(), sender)) is not verifiable from
+ * the JS surface alone. Based on cosmos-sdk x/auth/ante/unordered.go the error is
+ * registered as ErrUnorderedTxExist and is returned as a BroadcastTxError with
+ * code 19 (codespace "sdk") and log containing "tx already exists in cache" (the
+ * errorsmod.Wrapf message from the unordered handler). This is a best-effort match;
+ * if pocket-network's fork uses a different code, update the code number here.
+ */
+function isUnorderedDedupRejection(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  const err = e as Error & { code?: number; codespace?: string; rawLog?: string }
+  // code 19 = cometbft ErrTxInCache (same bytes in mempool)
+  // code 18 = cosmos-sdk ErrInvalidRequest from verifyUnorderedNonce ("failed to add unordered nonce")
+  if (err.codespace === 'sdk' && (err.code === 19 || err.code === 18)) return true
+  const msg = String(err?.message ?? err?.rawLog ?? '').toLowerCase()
+  if (msg.includes('failed to add unordered nonce')) return true
+  if (msg.includes('tx already in mempool') || msg.includes('already exists in cache')) return true
+  return false
 }
 
 /**
@@ -292,30 +361,18 @@ export class PocketBlockchain {
    * @returns Transaction details or null if not found
    */
   async getTransaction(txHash: string, height?: number): Promise<TransactionResult | null> {
-    const client = await this.getStargateClient()
-
-    // Tier 1: RPC tx_index
+    // Tier 1 + Tier 2: keep the back-compat behavior of swallowing an RPC error
+    // (Tier 1) and continuing to the lower tiers instead of failing the lookup.
+    let direct: TransactionResult | null = null
     try {
-      const tx = await client.getTx(txHash)
-      if (tx) {
-        return {
-          hash: txHash,
-          height: tx.height,
-          index: tx.txIndex,
-          gasUsed: tx.gasUsed,
-          gasWanted: tx.gasWanted,
-          success: tx.code === 0,
-          code: tx.code,
-        }
-      }
+      direct = await this.getTransactionDirect(txHash)
     } catch (error) {
       this.logger.warn({ txHash, error }, 'Tier 1 (RPC getTx) failed')
+      // Tier 1 errored; still attempt Tier 2 (REST API).
+      const apiResult = await this.getTransactionViaApi(txHash)
+      if (apiResult) return apiResult
     }
-
-    // Tier 2: REST API
-    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
-    const apiResult = await this.getTransactionViaApi(txHash)
-    if (apiResult) return apiResult
+    if (direct) return direct
 
     // Tier 3: Block scan
     if (height) {
@@ -326,6 +383,145 @@ export class PocketBlockchain {
 
     this.logger.warn({ txHash, height }, 'All tiers failed to find transaction')
     return null
+  }
+
+  /**
+   * Tier 1 (RPC tx_index) + Tier 2 (REST API) lookup. Unlike {@link getTransaction},
+   * this THROWS if the Tier 1 RPC call errors (so callers can distinguish an
+   * unreachable RPC from an answered "not found"). Returns null only when both
+   * tiers answered and the tx was not present.
+   */
+  private async getTransactionDirect(txHash: string): Promise<TransactionResult | null> {
+    const client = await this.getStargateClient()
+
+    // Tier 1: RPC tx_index (throws on RPC error).
+    const tx = await client.getTx(txHash)
+    if (tx) {
+      return {
+        hash: txHash,
+        height: tx.height,
+        index: tx.txIndex,
+        gasUsed: tx.gasUsed,
+        gasWanted: tx.gasWanted,
+        success: tx.code === 0,
+        code: tx.code,
+      }
+    }
+
+    // Tier 2: REST API
+    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
+    const apiResult = await this.getTransactionViaApi(txHash)
+    if (apiResult) return apiResult
+
+    return null
+  }
+
+  /**
+   * Tri-state hash verification over [startHeight, min(chainHead, startHeight+maxBlocks-1)].
+   * confirmed  → tx found (Tier 1 RPC, Tier 2 API, or Tier 3 block scan)
+   * absent     → every height in the (head-capped) window was scanned, tx not present
+   * unavailable→ the chain head or any block in the window could not be read
+   */
+  async verifyTransaction(
+    txHash: string,
+    startHeight: number,
+    maxBlocks = 30,
+  ): Promise<VerifyOutcome<TransactionResult>> {
+    // Tier 1 + Tier 2: a direct hit short-circuits. A Tier-1 RPC error does NOT
+    // abort verification: the Tier-3 block scan below is the authoritative coverage
+    // mechanism (works even when tx indexing is disabled on the RPC node).
+    try {
+      const direct = await this.getTransactionDirect(txHash)
+      if (direct) return { status: 'confirmed', data: direct }
+    } catch (error) {
+      this.logger.warn({ txHash, error }, 'verifyTransaction: Tier 1/2 lookup failed; falling through to block scan')
+    }
+
+    let head: number
+    try {
+      head = await this.getHeight()
+    } catch {
+      return { status: 'unavailable' }
+    }
+
+    const endHeight = Math.min(startHeight + maxBlocks - 1, head)
+    if (endHeight < startHeight) {
+      // Caught up to the chain head: no new blocks to scan. This is a HEALTHY
+      // answer ("absent so far"), not an RPC outage — do not inflate backoff.
+      return { status: 'absent', coveredUpToHeight: startHeight - 1 }
+    }
+
+    const comet = await this.getCometClient()
+    const normalizedHash = txHash.toUpperCase()
+    let lastBlockTime: Date | undefined
+    for (let h = startHeight; h <= endHeight; h++) {
+      let block
+      try {
+        block = await comet.block(h)
+      } catch (error) {
+        this.logger.warn({ txHash, height: h, error }, 'verifyTransaction: block fetch failed')
+        return { status: 'unavailable' } // could not cover the window
+      }
+      // Track the time of the last successfully fetched block so callers can use
+      // chain block time (not wall-clock) for unordered tx expiry decisions.
+      if (block.block?.header?.time) {
+        lastBlockTime = new Date(block.block.header.time.getTime())
+      }
+      const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
+      if (match === 'no-match') continue
+      // Hash matched in this block but its result row is missing — the tx IS
+      // on-chain, we just can't read its outcome. That is NOT negative evidence;
+      // treat as unavailable so the verifier keeps retrying instead of failing.
+      if (match === 'result-missing') {
+        this.logger.warn({ txHash, height: h }, 'verifyTransaction: matched tx has no block result entry')
+        return { status: 'unavailable' }
+      }
+      return { status: 'confirmed', data: match }
+    }
+    return { status: 'absent', coveredUpToHeight: endHeight, coveredBlockTime: lastBlockTime }
+  }
+
+  /**
+   * Returns the chain block time of the latest block (NOT wall-clock).
+   * Used by isSignedTxExpired to determine if an unordered tx's timeout_timestamp
+   * has passed per chain time, avoiding clock-skew split-brain.
+   */
+  async getLatestBlockTime(): Promise<Date | null> {
+    try {
+      const comet = await this.getCometClient()
+      const status = await comet.status()
+      const t = status.syncInfo?.latestBlockTime
+      return t ? new Date(t.getTime()) : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Scans the already-fetched `block` at `height` for the tx whose SHA256 equals
+   * `normalizedHash`. Returns the built TransactionResult on a hit, 'no-match' if
+   * the hash is not in this block, or 'result-missing' if the hash matched but
+   * blockResults had no entry at the matched index.
+   */
+  private async matchTxInBlock(
+    comet: Awaited<ReturnType<typeof this.getCometClient>>,
+    block: Awaited<ReturnType<Awaited<ReturnType<typeof this.getCometClient>>['block']>>,
+    height: number,
+    normalizedHash: string,
+    txHash: string,
+  ): Promise<TransactionResult | 'no-match' | 'result-missing'> {
+    const txs = block.block.txs
+    for (let i = 0; i < txs.length; i++) {
+      const bytes = txs[i]
+      if (!bytes) continue
+      if (toHex(sha256(bytes)).toUpperCase() === normalizedHash) {
+        const results = await comet.blockResults(height)
+        const txData = results.results[i]
+        if (!txData) return 'result-missing'
+        return { hash: txHash, height, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code }
+      }
+    }
+    return 'no-match'
   }
 
   private async getTransactionViaApi(txHash: string): Promise<TransactionResult | null> {
@@ -356,36 +552,45 @@ export class PocketBlockchain {
     const comet = await this.getCometClient()
     const normalizedHash = txHash.toUpperCase()
 
-    for (let h = startHeight; h < startHeight + maxBlocks; h++) {
+
+    let latestHeight: number
+    try {
+      latestHeight = await this.getHeight()
+    } catch (error) {
+      this.logger.warn({ txHash, startHeight, error }, 'Block scan: failed to read chain head, scanning full window')
+      latestHeight = startHeight + maxBlocks - 1
+    }
+
+    const endHeight = Math.min(startHeight + maxBlocks - 1, latestHeight)
+    if (endHeight < startHeight) {
+      // The tx height is ahead of the current head; nothing to scan yet.
+      return null
+    }
+
+    const heights: number[] = []
+    for (let h = startHeight; h <= endHeight; h++) heights.push(h)
+
+    // Fetch candidate blocks in parallel, but bounded
+    const blocks = await mapWithConcurrency(heights, BLOCK_SCAN_CONCURRENCY, async (h) => {
       try {
-        const block = await comet.block(h)
-        const txs = block.block.txs
-        for (let i = 0; i < txs.length; i++) {
-          const txBytes = txs[i]
-          if (!txBytes) continue
-          const hash = toHex(sha256(txBytes)).toUpperCase()
-          if (hash === normalizedHash) {
-            const results = await comet.blockResults(h)
-            const txData = results.results[i]
-            if (!txData) {
-              this.logger.warn({ txHash, height: h, index: i }, 'Block results missing entry for matched TX')
-              return null
-            }
-            return {
-              hash: txHash,
-              height: h,
-              index: i,
-              gasUsed: txData.gasUsed,
-              gasWanted: txData.gasWanted,
-              success: txData.code === 0,
-              code: txData.code,
-            }
-          }
-        }
+        return { h, block: await comet.block(h) }
       } catch (error) {
         this.logger.warn({ txHash, height: h, error }, 'Block scan error at height')
-        continue
+        return { h, block: null }
       }
+    })
+
+    // Iterate in ascending height order so we deterministically return the first
+    // (lowest-height) match, preserving the previous sequential behavior.
+    for (const { h, block } of blocks) {
+      if (!block) continue
+      const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
+      if (match === 'no-match') continue
+      if (match === 'result-missing') {
+        this.logger.warn({ txHash, height: h }, 'Block results missing entry for matched TX')
+        return null
+      }
+      return match
     }
     return null
   }
@@ -410,6 +615,215 @@ export class PocketBlockchain {
     }
   }
 
+  /**
+   * Tri-state state-based verification of a supplier-mutating tx's expected effect.
+   * confirmed  → the supplier state reflects the expected effect
+   * absent     → the RPC answered (supplier found or NotFound) but the effect is not present
+   * unavailable→ the supplier query could not be read (non-NotFound error)
+   *
+   * Note: {@link getSupplier} returns `null` on `code = NotFound` (answered-absent) and
+   * rethrows otherwise (unavailable).
+   */
+  async verifySupplierEffect(
+    operatorAddress: string,
+    effect: SupplierEffect,
+    height?: number,
+  ): Promise<VerifyOutcome<Supplier>> {
+    let supplier: Supplier | null
+    try {
+      supplier = await this.getSupplier(operatorAddress, height)
+    } catch {
+      return { status: 'unavailable' }
+    }
+    // Not load-bearing: decideVerification ignores the supplier path's coveredUpToHeight
+    // (only the hash path's window-coverage drives the failure verdict). 0 = "queried latest".
+    const coveredUpToHeight = height ?? 0
+    if (!supplier) return { status: 'absent', coveredUpToHeight }
+
+    switch (effect.kind) {
+      case 'stake-services-present':
+        // Goal: supplier exists, owner matches, AND has services on-chain (or pending
+        // in serviceConfigHistory). Existence alone would false-confirm an OwnerInitialStake
+        // because the supplier pre-exists with zero services — that is the trigger condition.
+        return supplier.ownerAddress === effect.ownerAddress &&
+          ((supplier.services?.length ?? 0) > 0 || (supplier.serviceConfigHistory?.length ?? 0) > 0)
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
+      case 'upstake': {
+        const staked = BigInt(supplier.stake?.amount ?? '0')
+        return supplier.ownerAddress === effect.ownerAddress && staked >= effect.minStakeUpokt
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
+      }
+      case 'unstake':
+        // Guard against a pre-existing unstake: a node already unbonding from an
+        // earlier session would show unstakeSessionEndHeight > 0 even if THIS
+        // unstake never landed. Our unstake sets a session end at/after the
+        // broadcast height, so require it to clear that floor before confirming.
+        return supplier.unstakeSessionEndHeight >= effect.minSessionEndHeight
+          ? { status: 'confirmed', data: supplier }
+          : { status: 'absent', coveredUpToHeight }
+    }
+  }
+
+  /** Injectable clock — default Date.now(). Override in tests for determinism. */
+  protected nowMs(): number {
+    return Date.now()
+  }
+
+  /**
+   * Signs a supplier stake tx with unordered=true (no sequence needed).
+   * Returns signed bytes + hash WITHOUT broadcasting.
+   * The caller must persist these before calling broadcastSupplierTx.
+   */
+  async signSupplierTx(params: StakeSupplierParams): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, signer, ...value } = params
+
+    if (!isValidPrivateKey(signerPrivateKey)) throw new Error('Invalid secp256k1 private key')
+    if (!signer) throw new Error('`signer` (bech32) is required')
+
+    const pkBytes = Uint8Array.from(Buffer.from(signerPrivateKey, 'hex'))
+    const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
+    const typeUrl = '/pocket.supplier.MsgStakeSupplier'
+
+    const registry = new Registry([
+      [typeUrl, MsgStakeSupplier as unknown as GeneratedType],
+    ])
+
+    const signingClient = await this.getSigningClient(wallet, registry)
+
+    const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
+
+    const timeoutTimestamp = new Date(this.nowMs() + UNORDERED_TIMEOUT_MS)
+
+    // Estimate gas; fallback 350_000 matches old stakeSupplier behavior
+    let gasEstimation: number
+    try {
+      gasEstimation = await signingClient.simulate(signer, [msg], '')
+    } catch (simErr: any) {
+      this.logger.warn({ signer, error: simErr?.message ?? simErr }, 'signSupplierTx: simulate failed, using fallback gas')
+      gasEstimation = 350_000
+    }
+    const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
+
+    // Build TxBody with LOCAL proto (has unordered + timeoutTimestamp fields)
+    const msgAny = registry.encodeAsAny(msg)
+    const bodyBytes = TxBody.encode(TxBody.fromPartial({
+      messages: [msgAny as any],
+      memo: '',
+      unordered: true,
+      timeoutTimestamp,
+    })).finish()
+
+    // Get accountNumber (sequence is not used for unordered; passes 0 in authInfo)
+    const { accountNumber } = await signingClient.getSequence(signer)
+    const chainId = await signingClient.getChainId()
+
+    const [account] = await wallet.getAccounts()
+    if (!account) throw new Error('signSupplierTx: wallet has no accounts')
+
+    const pubkey = encodePubkey(encodeSecp256k1Pubkey(account.pubkey))
+    const authInfoBytes = makeAuthInfoBytes(
+      [{ pubkey, sequence: 0 }],
+      fee.amount,
+      Number(fee.gas),
+      fee.granter,
+      fee.payer,
+    )
+    const signDoc = makeSignDoc(bodyBytes, authInfoBytes, chainId, accountNumber)
+    const { signature, signed } = await wallet.signDirect(signer, signDoc)
+
+    const txBytes = TxRaw.encode(TxRaw.fromPartial({
+      bodyBytes: signed.bodyBytes,
+      authInfoBytes: signed.authInfoBytes,
+      signatures: [fromBase64(signature.signature)],
+    })).finish()
+
+    const transactionHash = toHex(sha256(txBytes)).toUpperCase()
+    const signedPayload = Buffer.from(txBytes).toString('base64')
+
+    this.logger.info({ signer, transactionHash, timeoutTimestamp }, 'signSupplierTx: signed unordered tx')
+
+    return { signedPayload, transactionHash, timeoutTimestamp }
+  }
+
+  /**
+   * Broadcasts a pre-signed tx (from signSupplierTx). Idempotent: a cosmos-sdk
+   * unordered-dedup rejection (same timeoutTimestamp+sender seen twice) is treated
+   * as success so re-broadcast of identical bytes is safe.
+   */
+  async broadcastSupplierTx(signedPayloadBase64: string): Promise<SendTransactionResult> {
+    const txBytes = Uint8Array.from(Buffer.from(signedPayloadBase64, 'base64'))
+    const transactionHash = toHex(sha256(txBytes)).toUpperCase()
+
+    const client = await this.getStargateClient()
+
+    try {
+      const result = await (client as any).broadcastTx(txBytes)
+      return {
+        transactionHash: result.transactionHash ?? transactionHash,
+        code: result.code,
+        message: result.rawLog,
+        success: result.code === 0,
+        // A non-zero code from broadcastTx is a definitive CheckTx/DeliverTx rejection.
+        rejected: result.code !== 0,
+      }
+    } catch (e: any) {
+      // Cosmos SDK unordered dedup: broadcast of identical (timeoutTimestamp, sender) bytes
+      // is rejected because the tx is already tracked in the unordered nonce cache.
+      // Treat as idempotent success — the tx is (or will be) included on-chain.
+      if (isUnorderedDedupRejection(e)) {
+        this.logger.info({ transactionHash }, 'broadcastSupplierTx: unordered dedup (already broadcast), treating as success')
+        return {
+          transactionHash,
+          code: 0,
+          message: 'already broadcast (unordered dedup)',
+          success: true,
+          rejected: false,
+        }
+      }
+
+      // A BroadcastTxError is a hard CheckTx rejection — the tx will never land on-chain.
+      if (e instanceof BroadcastTxError) {
+        this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: hard CheckTx rejection')
+        return {
+          transactionHash,
+          success: false,
+          rejected: true,
+          code: e.code,
+          message: e.message ?? 'broadcast rejected',
+        }
+      }
+
+      // A TimeoutError means the RPC timed out waiting for commit confirmation, but the tx
+      // may already have been accepted into the mempool and can still land on-chain.
+      // Do NOT mark as rejected — the verifier will resolve it via chain-time bound.
+      if (e instanceof TimeoutError) {
+        this.logger.warn({ transactionHash, message: e.message }, 'broadcastSupplierTx: RPC timeout (tx may still land, not rejected)')
+        return {
+          transactionHash,
+          success: false,
+          rejected: false,
+          code: undefined,
+          message: `RPC timeout waiting for commit confirmation — tx may still land: ${e.message}`,
+        }
+      }
+
+      this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: broadcast failed')
+      return {
+        transactionHash,
+        success: false,
+        rejected: false,
+        code: e.code,
+        message: e.message ?? 'broadcast failed',
+      }
+    }
+  }
+
+  /**
+   * @deprecated Use signSupplierTx + broadcastSupplierTx (Task 3 canonical lifecycle).
+   * remediateSupplier (the only caller) will switch in Task 7.
+   */
   async stakeSupplier(params: StakeSupplierParams, explicitSequence?: number): Promise<SendTransactionResult> {
     const { signerPrivateKey, signer, ...value } = params
 
@@ -424,6 +838,7 @@ export class PocketBlockchain {
     const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
     const typeUrl = '/pocket.supplier.MsgStakeSupplier'
 
+    let currentHeight = 0
     try {
       const [account] = await wallet.getAccounts()
 
@@ -446,7 +861,7 @@ export class PocketBlockchain {
       const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
 
       // TODO: Create signed memo
-      const currentHeight = await this.getHeight();
+      currentHeight = await this.getHeight();
 
       this.logger.debug({
         currentHeight,
@@ -475,12 +890,12 @@ export class PocketBlockchain {
           accountNumber,
           sequence: explicitSequence,
           chainId,
-        }, BigInt(currentHeight + 5))
-        const txBytes = TxRaw.encode(txRaw).finish()
+        }, BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
+        const txBytes = TxRaw.encode(TxRaw.fromPartial(txRaw as any)).finish()
         this.logger.debug({ signer }, 'stakeSupplier: Broadcasting transaction with explicit sequence')
         result = await signingClient.broadcastTx(txBytes)
       } else {
-        result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + 5))
+        result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
       }
 
       this.logger.info({ result },'stakeSupplier: Execution ended. Transaction sent.')
@@ -490,6 +905,8 @@ export class PocketBlockchain {
         code: result.code,
         message: result.rawLog,
         success: true,
+        signedAtHeight: currentHeight,
+        timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
       }
     } catch (e: any) {
       const errorMessage = e.log && e.message ? `${e.log} - ${e.message}` : e.message ?? 'Unknown error'
@@ -500,6 +917,8 @@ export class PocketBlockchain {
           success: false,
           code: e.code,
           message: errorMessage,
+          signedAtHeight: currentHeight,
+          timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
         }
       }
 
@@ -509,6 +928,8 @@ export class PocketBlockchain {
           success: false,
           message: `Transaction timed out. This does not indicate a failure. Details: ${errorMessage}`,
           code: 42, // Timeout Transaction error code. See: https://github.com/cosmos/cosmos-sdk/blob/main/types/errors/errors.go
+          signedAtHeight: currentHeight,
+          timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
         }
       }
 
@@ -518,8 +939,27 @@ export class PocketBlockchain {
         transactionHash: '',
         success: false,
         message: `An unknown error occurred: ${errorMessage}`,
+        signedAtHeight: currentHeight,
+        timeoutHeight: currentHeight + TX_EXPIRATION_BLOCKS,
       }
     }
+  }
+
+  /**
+   * Sequence-consumed evidence for a broadcast tx. If account.sequence > txSequence,
+   * the tx can NEVER land in a block after `observedAtHeight` (its sequence was
+   * consumed — by itself or a replacement). Soundness contract for the caller:
+   * a failure verdict additionally requires hash-absence covered up to
+   * `observedAtHeight`, because the consumer might have been this very tx in a
+   * block the scan has not covered yet. `observedAtHeight` is sampled AT/AFTER the
+   * account read so coverage up to it includes every block the tx could occupy.
+   */
+  async isSequenceConsumed(signer: string, txSequence: number): Promise<{ consumed: boolean; observedAtHeight: number }> {
+    const client = await this.getStargateClient()
+    const account = await client.getAccount(signer)   // throws on RPC error → caller treats as unavailable
+    const observedAtHeight = await this.getHeight()
+    if (!account) return { consumed: false, observedAtHeight }
+    return { consumed: account.sequence > txSequence, observedAtHeight }
   }
 
   private async getSigningClient(

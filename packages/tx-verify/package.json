@@ -1,0 +1,36 @@
+{
+  "name": "@igniter/tx-verify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/cjs/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "require": "./dist/cjs/src/index.js",
+      "default": "./dist/cjs/src/index.js",
+      "import": "./dist/cjs/src/index.js"
+    }
+  },
+  "types": "./dist/types/src/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist",
+    "build": "tsc -p tsconfig.build.cjs.json && tsc-alias -p tsconfig.build.cjs.json --outDir ./dist/cjs --verbose",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "check-types": "tsc --noEmit",
+    "test": "jest --runInBand"
+  },
+  "devDependencies": {
+    "@igniter/eslint-config": "workspace:*",
+    "@igniter/typescript-config": "workspace:*",
+    "@types/jest": "^30.0.0",
+    "@types/node": "22.14.1",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.4",
+    "tsc-alias": "^1.8.15"
+  }
+}

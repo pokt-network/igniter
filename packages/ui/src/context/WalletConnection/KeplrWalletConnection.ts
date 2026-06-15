@@ -15,6 +15,7 @@ import {PubKey} from "@igniter/pocket/proto/cosmos/crypto/secp256k1/keys";
 import {MsgSend} from "@igniter/pocket/proto/cosmos/bank/v1beta1/tx";
 import {Coin} from "@igniter/pocket/proto/cosmos/base/v1beta1/coin";
 import { WalletConnection, WalletSettings } from './WalletConnection'
+import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
 export type AccountSequenceRawBody = {
   account: {
@@ -218,7 +219,12 @@ export class KeplrWalletConnection extends WalletConnection {
     const { accountNumber, sequence } = await this._getSequence(address);
 
     const memo = memoObj ? JSON.stringify(memoObj) : "";
-    const bodyBytes = this._registry!.encodeTxBody({ messages: msgs, memo });
+    // Embed timeoutHeight so the verifier can anchor failure verdicts without waiting
+    // for the full sequence-consumed check. PocketWalletConnection hands signing to
+    // the external wallet and cannot control this field — those txs rely on the
+    // sequence rule in checkTxValidityEvidence (see: parseSignerAndSequence activity).
+    const currentHeight = await this._getBlockHeight();
+    const bodyBytes = this._registry!.encodeTxBody({ messages: msgs, memo, timeoutHeight: BigInt(currentHeight + TX_EXPIRATION_BLOCKS) });
 
     const anyPubkey = {
       typeUrl: "/cosmos.crypto.secp256k1.PubKey",
@@ -308,6 +314,23 @@ export class KeplrWalletConnection extends WalletConnection {
     }
 
     return gas;
+  };
+
+  /**
+   * Fetches the current chain head height via the Cosmos REST API.
+   * Used to embed timeoutHeight at signing time so the verifier can anchor failure verdicts.
+   */
+  private async _getBlockHeight(): Promise<number> {
+    if (!this._apiUrl) {
+      throw new Error('API URL not configured.');
+    }
+    const res = await fetch(`${this._apiUrl}/cosmos/base/tendermint/v1beta1/blocks/latest`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Fetch block height failed (${res.status}): ${text || 'no body'}`);
+    }
+    const data = await res.json();
+    return Number(data.block.header.height);
   };
 
   private async _getSequence(address: string): Promise<{

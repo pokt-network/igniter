@@ -171,4 +171,37 @@ export default class Keys {
     this.logger.debug('updateKey: Execution Finished', {address, update, lastUpdatedHeight})
     return result
   }
+
+  /**
+   * Terminal verifier flip: a state-machine edge, NOT a chain-sync write — so no
+   * lastUpdatedHeight guard (it made the flip a guaranteed silent no-op once any
+   * status sweep advanced the key). Instead the precondition is the state set the
+   * verifier owns: a key that moved to Unstaking/Unstaked/AttentionNeeded since
+   * broadcast must NOT be dragged back. remediationHistory entry removal is done
+   * in SQL so a concurrently-added entry is never lost.
+   * Returns true iff the flip took effect (1 row updated).
+   */
+  async flipState(
+    address: string,
+    toState: KeyState,
+    opts: { notFromStates: KeyState[]; removeEntryReason?: string },
+  ): Promise<boolean> {
+    const setFields: Record<string, unknown> = { state: toState }
+    if (opts.removeEntryReason) {
+      // remediationHistory is a `json` column (not jsonb); cast to jsonb for the
+      // array ops, then back to json for assignment.
+      setFields['remediationHistory'] = sql`COALESCE((
+        SELECT jsonb_agg(e) FROM jsonb_array_elements(${keysTable.remediationHistory}::jsonb) e
+        WHERE e->>'reason' <> ${opts.removeEntryReason}
+      ), '[]'::jsonb)::json`
+    }
+    const rows = await this.dbClient.db.update(keysTable)
+      .set(setFields as Partial<schema.InsertKey>)
+      .where(and(
+        eq(keysTable.address, address),
+        notInArray(keysTable.state, opts.notFromStates),
+      ))
+      .returning({ id: keysTable.id })
+    return rows.length > 0
+  }
 }
