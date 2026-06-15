@@ -54,6 +54,23 @@ describe('getRevShare', () => {
     const result = getRevShare(ags, 'pokt1operator');
     expect(result).toEqual([{ address: 'pokt1operator', revSharePercentage: 10 }]);
   });
+
+  it('kleomedes/Marco config: supplier share + configured rev share both land on the provider side', () => {
+    // Supplier Share 50% (addSupplierShare) + a 50% rev share to the provider's own address.
+    const ags = {
+      revShare: [{ address: 'pokt1kleomedes', share: 50 }],
+      addSupplierShare: true,
+      supplierShare: 50,
+    } as unknown as AddressGroupService;
+
+    const result = getRevShare(ags, 'pokt1operator');
+    // supplierShare -> operator (the node, provider-run); configured share -> kleomedes.
+    // Both are provider-side and already sum to 100, leaving the client (owner remainder) 0%.
+    expect(result).toEqual([
+      { address: 'pokt1kleomedes', revSharePercentage: 50 },
+      { address: 'pokt1operator', revSharePercentage: 50 },
+    ]);
+  });
 });
 
 describe('deduplicateRevShare', () => {

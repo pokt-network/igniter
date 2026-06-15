@@ -5,3 +5,4 @@ export * from './ExecutePendingTransactions';
 export * from './SupplierStatus'
 export * from './SupplierStatusRange'
 export * from './ImportSupplierRecovery'
+export * from './VerifyPendingTransactions'

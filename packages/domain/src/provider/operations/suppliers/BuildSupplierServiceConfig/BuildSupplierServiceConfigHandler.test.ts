@@ -113,6 +113,31 @@ describe('BuildSupplierServiceConfigHandler', () => {
         );
     });
 
+    it('leaves the client (owner) with 0% when supplier share + rev shares total 100% (kleomedes/Marco case)', () => {
+        // Marco configured Supplier Share 50% + a 50% rev share to his own (provider) address.
+        // getRevShare turns supplierShare into an operator entry and keeps the configured share,
+        // so the two provider-side entries already sum to 100% and the owner remainder is 0.
+        mockedGetRevShare.mockReturnValue([
+            { address: 'pokt1kleomedes', revSharePercentage: 50 },
+            { address: operatorAddress, revSharePercentage: 50 },
+        ]);
+
+        const result = handler.execute({ ...input, requestRevShare: [] });
+        const cfg = result[0]!;
+
+        // Owner (client) gets the remainder = 0, so no owner entry is added.
+        expect(cfg.revShare.find((r: ServiceRevenueShare) => r.address === ownerAddress)).toBeUndefined();
+        // Provider side consumes the full 100%.
+        const total = cfg.revShare.reduce((s: number, r: ServiceRevenueShare) => s + r.revSharePercentage, 0);
+        expect(total).toBe(100);
+        expect(cfg.revShare).toEqual(
+            expect.arrayContaining([
+                { address: 'pokt1kleomedes', revSharePercentage: 50 },
+                { address: operatorAddress, revSharePercentage: 50 },
+            ]),
+        );
+    });
+
     it('filters out zero-percentage entries returned by helpers', () => {
         mockedGetRevShare.mockReturnValue([
             { address: operatorAddress, revSharePercentage: 0 },

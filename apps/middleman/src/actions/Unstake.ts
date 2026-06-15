@@ -22,11 +22,13 @@ export interface UnstakeDurationData {
  * Calculates the estimated unstake duration in seconds
  * Formula: num_blocks_per_session * supplier_unbonding_period_sessions * (timeToBlock / 1000)
  */
-export async function GetUnstakeDuration(): Promise<UnstakeDurationData> {
+export async function GetUnstakeDuration(): Promise<UnstakeDurationData | null> {
   const applicationSettings = await getApplicationSettings()
 
   if (!applicationSettings?.indexerApiUrl) {
-    throw new Error('GraphQL API URL not configured')
+    // Duration is display-only (estimated unbonding time). Without the indexer
+    // configured, return null instead of throwing so the unstake flow still works.
+    return null
   }
 
   const latestBlock = await getLatestBlock(applicationSettings.indexerApiUrl)

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/cjs",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "paths": {
+      "@tx-verify/*": ["src/*"]
+    },
+    "sourceMap": true,
+    "declaration": true,
+    "declarationDir": "./dist/types",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

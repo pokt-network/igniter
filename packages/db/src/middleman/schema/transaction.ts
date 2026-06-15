@@ -1,12 +1,13 @@
 import {
   AnyPgColumn,
+  index,
   integer,
   pgTable,
   text,
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   providerFeeEnum,
   transactionStatusEnum,
@@ -28,6 +29,11 @@ export const transactionsTable = pgTable("transactions", {
   executionTimestamp: timestamp(),
   verificationHeight: integer(),
   verificationTimestamp: timestamp(),
+  lastCoveredHeight: integer(),
+  // inclusion in any block > timeoutHeight is impossible (Cosmos ante); null = no embedded bound (failure needs sequence evidence)
+  timeoutHeight: integer(),
+  unavailableChecks: integer().notNull().default(0),
+  lastVerificationAt: timestamp(),
 
   //Self-referencing foreign key workaround: https://orm.drizzle.team/docs/indexes-constraints#foreign-key
   dependsOn: integer().references((): AnyPgColumn => transactionsTable.id),
@@ -43,7 +49,9 @@ export const transactionsTable = pgTable("transactions", {
   createdAt: timestamp().defaultNow(),
   updatedAt: timestamp().defaultNow().$onUpdateFn(() => new Date()),
   createdBy: varchar().references(() => usersTable.identity).notNull(),
-});
+}, (table) => ({
+  verifierSweepIdx: index('mw_transactions_verifier_sweep_idx').on(table.status, table.lastVerificationAt).where(sql`"hash" IS NOT NULL`),
+}));
 
 export const transactionsRelations = relations(
   transactionsTable,

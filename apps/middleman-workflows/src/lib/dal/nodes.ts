@@ -159,9 +159,33 @@ export default class Node {
    */
   async insert(nodes: InsertNode[], transactionId?: number) {
     return this.dbClient.db.transaction(async (tx) => {
+      // Idempotency guard: if this tx already linked nodes, do nothing and return them.
+      if (transactionId) {
+        const existing = await tx
+          .select({ nodeId: transactionsToNodesTable.nodeId })
+          .from(transactionsToNodesTable)
+          .where(eq(transactionsToNodesTable.transactionId, transactionId));
+
+        if (existing.length > 0) {
+          return tx
+            .select({ id: nodesTable.id, address: nodesTable.address })
+            .from(nodesTable)
+            .where(inArray(nodesTable.id, existing.map(e => e.nodeId)));
+        }
+      }
+
       const insertedNodes = await tx
         .insert(nodesTable)
         .values(nodes)
+        .onConflictDoUpdate({
+          target: nodesTable.address,
+          set: {
+            status: sql`excluded.status`,
+            stakeAmount: sql`excluded."stakeAmount"`,
+            ownerAddress: sql`excluded."ownerAddress"`,
+            updatedAt: new Date(),
+          },
+        })
         .returning({ id: nodesTable.id, address: nodesTable.address });
 
       if (transactionId && insertedNodes.length > 0) {
@@ -172,7 +196,8 @@ export default class Node {
 
         await tx
           .insert(transactionsToNodesTable)
-          .values(relations);
+          .values(relations)
+          .onConflictDoNothing();
       }
 
       return insertedNodes;
@@ -216,7 +241,8 @@ export default class Node {
 
         await tx
           .insert(transactionsToNodesTable)
-          .values(relations);
+          .values(relations)
+          .onConflictDoNothing();
       }
 
       return addresses;

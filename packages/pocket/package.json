@@ -50,6 +50,7 @@
     "@cosmjs/stargate": "^0.33.1",
     "@cosmjs/tendermint-rpc": "^0.33.1",
     "@igniter/logger": "workspace:*",
+    "@igniter/tx-verify": "workspace:*",
     "cosmjs-types": "0.10.1"
   },
   "devDependencies": {

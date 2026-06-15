@@ -80,3 +80,6 @@ igniter-landing.html
 .claude/worktrees/
 SESSION-SUMMARY.md
 *.png
+
+# local files/research/issues/logs
+.local
