@@ -8,7 +8,7 @@ import {
 import {
   providerActivities,
 } from '@/activities'
-import { SupplierRemediationByRange } from '@/workflows/SupplierRemediationRange'
+import { SupplierRemediationByRange, RemediationRangeResult } from '@/workflows/SupplierRemediationRange'
 import {makeRangesBySize} from "@/lib/utils";
 
 // we built to commonjs and p-limit for esm support
@@ -46,6 +46,12 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
       retry: {
         maximumAttempts: 3,
       },
+    })
+
+  const { sendNotifications: sendNotificationsBestEffort } =
+    proxyActivities<ReturnType<typeof providerActivities>>({
+      startToCloseTimeout: '30s',
+      retry: { maximumAttempts: 1 },
     })
 
   log.info('SupplierRemediation:  Execution Started')
@@ -128,13 +134,14 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
       }
 
       try {
-        await handle.result();
+        return await handle.result();
       } catch (error: any) {
         log.error('An error occurred while executing child workflow', {
           ...childLoggerContext,
           error: error.message,
           stack: error.stack,
         })
+        return { succeeded: [], failed: [] }
       }
     })
   })
@@ -166,6 +173,70 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
       true,
       [failedReasons],
     )
+  }
+
+  // Aggregate results for notifications
+  const aggregated: RemediationRangeResult = { succeeded: [], failed: [] }
+  for (const settled of r) {
+    if (settled.status !== 'fulfilled') continue
+    aggregated.succeeded.push(...settled.value.succeeded)
+    aggregated.failed.push(...settled.value.failed)
+  }
+
+  const total = aggregated.succeeded.length + aggregated.failed.length
+  if (total > 0) {
+    const reasonLabels: Record<RemediationHistoryEntryReason, string> = {
+      [RemediationHistoryEntryReason.ServiceMismatch]: 'Service Mismatch',
+      [RemediationHistoryEntryReason.DelegatorAddressMissing]: 'Delegator Address Missing',
+      [RemediationHistoryEntryReason.OwnerInitialStake]: 'Owner Initial Stake',
+      [RemediationHistoryEntryReason.SupplierStakeTooLow]: 'Supplier Stake Too Low',
+      [RemediationHistoryEntryReason.SupplierFundsTooLow]: 'Supplier Funds Too Low',
+      [RemediationHistoryEntryReason.AddressGroupMigration]: 'Address Group Migration',
+    }
+
+    // Build a map of reason → { succeeded, failed }
+    // Succeeded: grouped by the reason actually applied per address
+    // Failed: attributed to all input reasons (activity threw before a reason could be determined)
+    const byReason: Record<string, { succeeded: string[]; failed: string[] }> = {}
+
+    for (const reason of input.reasons) {
+      byReason[reason] = { succeeded: [], failed: [] }
+    }
+
+    for (const { address, reasons } of aggregated.succeeded) {
+      for (const reason of reasons) {
+        if (!byReason[reason]) byReason[reason] = { succeeded: [], failed: [] }
+        byReason[reason].succeeded.push(address)
+      }
+    }
+
+    for (const address of aggregated.failed) {
+      for (const reason of input.reasons) {
+        byReason[reason]!.failed.push(address)
+      }
+    }
+
+    const reasonSummaryLines = Object.entries(byReason)
+      .filter(([, { succeeded, failed }]) => succeeded.length > 0 || failed.length > 0)
+      .map(([reason, { succeeded, failed }]) => {
+        const label = reasonLabels[reason as RemediationHistoryEntryReason] ?? reason
+        const parts = []
+        if (succeeded.length > 0) parts.push(`✓ ${succeeded.length} succeeded`)
+        if (failed.length > 0) parts.push(`✗ ${failed.length} failed`)
+        return `\n• ${label}: ${parts.join(', ')}`
+      })
+
+    await sendNotificationsBestEffort({
+      type: 'remediation_summary',
+      summary: {
+        title: 'Remediation Complete',
+        body: [
+          `Remediation run at block ${height} processed ${total} supplier${total > 1 ? 's' : ''}.`,
+          ...reasonSummaryLines,
+        ].join(''),
+      },
+      metadata: { byReason, height },
+    })
   }
 
   log.info('SupplierRemediation: Execution Ended', { height, minId, maxId, failedReasons })

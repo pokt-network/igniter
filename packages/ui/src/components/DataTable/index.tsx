@@ -49,6 +49,15 @@ export interface SortOption<TData> {
   isDefault?: boolean;
 }
 
+export interface ManualPaginationProps {
+  /** Total number of rows across all pages */
+  total: number
+  pageIndex: number
+  pageSize: number
+  onPageChange: (pageIndex: number) => void
+  onPageSizeChange: (pageSize: number) => void
+}
+
 export interface DataTableProps<TData extends object, TValue> {
   columns: (ColumnDef<TData, TValue> & CsvColumnDef<TData>)[];
   data: TData[];
@@ -75,6 +84,10 @@ export interface DataTableProps<TData extends object, TValue> {
   itemActions?: (row: TData) => React.ReactNode
   /** Disable entire table interaction */
   isDisabled?: boolean
+  /** When provided, switches to server-side pagination. The caller owns page state and fetching. */
+  manualPagination?: ManualPaginationProps
+  /** Optional per-row className callback for highlighting specific rows */
+  getRowClassName?: (row: TData) => string
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -96,7 +109,10 @@ export default function DataTable<TData extends object, TValue>({
   actions,
   itemActions,
   isDisabled,
+  manualPagination,
+  getRowClassName,
 }: DataTableProps<TData, TValue>) {
+  const isServerPaginated = !!manualPagination
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
   const [sorting, setSorting] = React.useState<SortingState>(
@@ -152,11 +168,15 @@ export default function DataTable<TData extends object, TValue>({
     getSortedRowModel: getSortedRowModel(),
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn,
-    autoResetPageIndex: true,
+    autoResetPageIndex: !isServerPaginated,
+    ...(isServerPaginated && {
+      manualPagination: true,
+      pageCount: Math.ceil(manualPagination!.total / manualPagination!.pageSize),
+    }),
     initialState: {
       pagination: {
-        pageSize: 25,
-        pageIndex: 0,
+        pageSize: isServerPaginated ? manualPagination!.pageSize : 25,
+        pageIndex: isServerPaginated ? manualPagination!.pageIndex : 0,
       },
       columnVisibility,
     },
@@ -164,6 +184,12 @@ export default function DataTable<TData extends object, TValue>({
       columnFilters,
       sorting,
       globalFilter,
+      ...(isServerPaginated && {
+        pagination: {
+          pageIndex: manualPagination!.pageIndex,
+          pageSize: manualPagination!.pageSize,
+        },
+      }),
     },
   });
 
@@ -216,7 +242,10 @@ export default function DataTable<TData extends object, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+            className={clsx(
+              isDisabled ? 'opacity-50 cursor-not-allowed' : '',
+              getRowClassName?.(row.original) ?? '',
+            )}
           >
             {row.getVisibleCells().map((cell) => (
               <TableCell key={cell.id}>
@@ -364,15 +393,15 @@ export default function DataTable<TData extends object, TValue>({
       <div className="flex items-center justify-end space-x-2">
         <div className="flex items-center gap-2">
           <RowsPerPage
-            currentPageSize={tableState.pagination.pageSize}
-            totalRows={table.getPrePaginationRowModel().rows.length}
-            onPageSizeChange={(pageSize) => table.setPageSize(pageSize)}
+            currentPageSize={isServerPaginated ? manualPagination!.pageSize : tableState.pagination.pageSize}
+            totalRows={isServerPaginated ? manualPagination!.total : table.getPrePaginationRowModel().rows.length}
+            onPageSizeChange={isServerPaginated ? manualPagination!.onPageSizeChange : (pageSize) => table.setPageSize(pageSize)}
             disabled={isLoading || isError}
           />
           <Pagination
-            totalPages={totalPages}
-            currentPage={currentPage}
-            onPageChange={(pageIndex) => table.setPageIndex(pageIndex)}
+            totalPages={isServerPaginated ? Math.ceil(manualPagination!.total / manualPagination!.pageSize) : totalPages}
+            currentPage={isServerPaginated ? manualPagination!.pageIndex : currentPage}
+            onPageChange={isServerPaginated ? manualPagination!.onPageChange : (pageIndex) => table.setPageIndex(pageIndex)}
             disabled={isLoading || isError}
           />
         </div>

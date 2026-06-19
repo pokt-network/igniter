@@ -1,16 +1,21 @@
+import { randomUUID } from 'crypto'
 import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
+import { DEFAULT_NOTIFICATION_FLAGS } from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
 import {TX_EXPIRATION_BLOCKS} from '@igniter/tx-verify'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
 import {KeysMinMax} from '@/lib/dal/keys'
-import {KeyState, RemediationHistoryEntryReason, TransactionType, TransactionStatus, TransactionTrigger} from '@igniter/db/provider/enums'
+import {KeyState, RemediationHistoryEntryReason, TransactionType, TransactionStatus, TransactionTrigger, NotificationChannelType} from '@igniter/db/provider/enums'
 import {BuildSupplierServiceConfigHandler, CompareSupplierServiceConfigHandler} from '@igniter/domain/provider/operations';
 import {addOrUpdateRemediationHistory} from "@/lib/utils";
 import {redactStakeSupplierParams} from "@/lib/redactors";
 import {getExpectedServicesFromKey} from '@igniter/domain/provider/utils'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
+import { DiscordChannel, TelegramChannel, EmailChannel, createSmtpTransport } from '@igniter/notifications'
+import type { NotificationEvent } from '@/lib/types/notifications'
+import { buildRichMessage } from '@/lib/richMessageBuilder'
 
 const errInfo = (e: unknown) => e instanceof Error ? { message: e.message, stack: e.stack } : e
 
@@ -571,6 +576,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.info('remediateSupplier: Supplier not found on-chain, skipping remediation', {params})
       return {
         success: true,
+        remediated: false,
         message: 'Supplier not found on-chain — nothing to remediate.'
       }
     }
@@ -579,6 +585,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.info('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
       return {
         success: true,
+        remediated: false,
         message: 'No remediation history found.'
       }
     }
@@ -633,6 +640,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       })
       return {
         success: true,
+        remediated: false,
         message: 'No actionable remediation for this supplier.',
       }
     }
@@ -669,7 +677,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           )
         }
 
-        return { success: true, message: 'Supplier already configured; remediation cleared.' }
+        return { success: true, remediated: true, appliedReasons: [RemediationHistoryEntryReason.OwnerInitialStake], message: 'Supplier already configured; remediation cleared.' }
       }
     }
 
@@ -877,6 +885,110 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
         : 'verification negative (validity bound covered, no effect)',
     })
+  },
+
+  async sendNotifications(event: NotificationEvent): Promise<void> {
+    try {
+      const allChannels = await dal.notificationChannels.loadEnabledChannels()
+
+      const channels = allChannels.filter((c) => {
+        const flags = { ...DEFAULT_NOTIFICATION_FLAGS, ...(c.notificationFlags ?? {}) }
+        return flags[event.type] ?? false
+      })
+
+      if (channels.length === 0) {
+        log.debug('sendNotifications: No enabled channels subscribed to this event type, skipping', { type: event.type })
+        return
+      }
+
+      const smtpConfig = channels.some((c) => c.type === NotificationChannelType.Email)
+        ? await dal.notificationChannels.loadSmtpConfig()
+        : null
+
+      // Pre-generate UUID so the message link can be built before saving to DB
+      const uuid = randomUUID()
+
+      const providerAppUrl = process.env.PROVIDER_APP_URL?.replace(/\/$/, '')
+      let providerName: string | null = null
+      try {
+        providerName = (await dal.settings.loadSettings())?.name ?? null
+      } catch (e) {
+        log.warn('sendNotifications: Failed to load settings for provider name, continuing without it', { e })
+      }
+      const richMessage = buildRichMessage(event, uuid, providerAppUrl, providerName)
+
+      // Send to each channel individually and record per-channel delivery status
+      const channelResults: Array<{ id: number; name: string; type: string; status: 'sent' | 'error'; error?: string }> = []
+
+      // All email channels share one SMTP server and differ only in recipients,
+      // so build a single pooled transport once and reuse it across the loop —
+      // one TCP+TLS+AUTH handshake for the whole run instead of one per channel.
+      // Closed in the finally below.
+      const emailSmtp = smtpConfig
+        ? {
+            host: smtpConfig.host,
+            port: smtpConfig.port,
+            secure: smtpConfig.secure,
+            username: smtpConfig.username,
+            password: smtpConfig.password,
+            fromAddress: smtpConfig.fromAddress,
+            fromName: smtpConfig.fromName ?? undefined,
+          }
+        : null
+      const emailTransporter = emailSmtp ? createSmtpTransport(emailSmtp, { pool: true }) : null
+
+      try {
+        for (const channel of channels) {
+          try {
+            if (channel.type === NotificationChannelType.Discord) {
+              const config = channel.config as { webhookUrl: string }
+              await new DiscordChannel({ webhookUrl: config.webhookUrl }).send(richMessage)
+            } else if (channel.type === NotificationChannelType.Telegram) {
+              const config = channel.config as { botToken: string; chatId: string }
+              await new TelegramChannel({ botToken: config.botToken, chatId: config.chatId }).send(richMessage)
+            } else if (channel.type === NotificationChannelType.Email) {
+              if (!emailSmtp || !emailTransporter) {
+                throw new Error('SMTP configuration not found')
+              }
+              const config = channel.config as { to: string[]; cc?: string[]; bcc?: string[] }
+              await new EmailChannel(
+                {
+                  to: config.to,
+                  cc: config.cc,
+                  bcc: config.bcc,
+                  smtp: emailSmtp,
+                },
+                emailTransporter,
+              ).send(richMessage)
+            }
+            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'sent' })
+          } catch (err) {
+            const error = err instanceof Error ? err.message : String(err)
+            log.warn('sendNotifications: Channel delivery failed', { channelId: channel.id, channelType: channel.type, error })
+            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'error', error })
+          }
+        }
+      } finally {
+        emailTransporter?.close()
+      }
+
+      // Save event with per-channel delivery status
+      try {
+        await dal.notificationChannels.insertNotificationEvent({
+          uuid,
+          type: event.type,
+          metadata: event.metadata,
+          channels: channelResults,
+        })
+      } catch (dbErr) {
+        log.error('sendNotifications: Failed to save notification event to DB', { dbErr, type: event.type })
+      }
+
+      const errorCount = channelResults.filter((r) => r.status === 'error').length
+      log.info('sendNotifications: Done', { type: event.type, uuid, total: channelResults.length, errors: errorCount })
+    } catch (err) {
+      log.error('sendNotifications: Unexpected error — notifications skipped', { err, type: event.type })
+    }
   },
   }
 

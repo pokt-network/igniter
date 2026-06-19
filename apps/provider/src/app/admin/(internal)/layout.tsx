@@ -12,6 +12,7 @@ import NotificationsProvider from '@igniter/ui/context/Notifications/index'
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins'
 import { ThemeToggle } from '@igniter/ui/theme-toggle'
 import QuickDetailProvider from "@/app/admin/details/QuickDetailProviderBridge"
+import NotificationEventsBridge from "@/components/NotificationEventsBridge"
 
 export default function RootLayout({
   children,
@@ -42,6 +43,7 @@ export default function RootLayout({
                           <div className={"w-full h-full flex overflow-x-hidden"}>
                             <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-[calc(100dvw)] md:w-[calc(100dvw-255px)]">
                               <RegisterPlugins />
+                              <NotificationEventsBridge />
                               {children}
                             </div>
                           </div>
