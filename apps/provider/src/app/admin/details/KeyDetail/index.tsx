@@ -14,6 +14,7 @@ import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationH
 import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants";
 import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal"
 import { MigrateKeyButton } from "@/app/admin/details/KeyDetail/MigrateKeyButton";
+import { UnstakeKeyButton } from "@/app/admin/details/KeyDetail/UnstakeKeyButton";
 
 export interface KeyDetail {
   type: 'key'
@@ -70,6 +71,7 @@ export default function KeyDetail(key: KeyWithRelations) {
   } = key;
 
   const isStakedKey = [KeyState.Staked, KeyState.RemediationFailed, KeyState.AttentionNeeded, KeyState.Unstaked].includes(state);
+  const isUnstakeable = [KeyState.Staked, KeyState.RemediationFailed, KeyState.AttentionNeeded].includes(state);
   const description = stateDescription[state]
 
   const generalKeyDetails: Array<SummaryRow> = [
@@ -202,6 +204,10 @@ export default function KeyDetail(key: KeyWithRelations) {
           currentGroupId={addressGroup.id}
           currentGroupName={addressGroup.name}
         />
+      )}
+
+      {isUnstakeable && (
+        <UnstakeKeyButton keyId={id} address={address} />
       )}
 
       {isStakedKey && delegator && (

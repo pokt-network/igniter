@@ -161,6 +161,10 @@ export enum RemediationHistoryEntryReason {
   SupplierStakeTooLow = '1004',
   SupplierFundsTooLow = '1005',
   AddressGroupMigration = '1006',
+  // Transaction reasons (not remediation-history reasons): used as the `reason` on
+  // provider-initiated unstake / return-funds transactions for display in the tx table.
+  ManualUnstake = '2001',
+  ReturnSupplierFunds = '2002',
 }
 
 /**
@@ -279,6 +283,7 @@ export enum TransactionResult {
 export enum TransactionType {
   Stake = 'stake',
   Unstake = 'unstake',
+  ReturnFunds = 'return_funds',
 }
 
 export const transactionTypeEnum = pgEnum('tx_type', enumToPgEnum(TransactionType))

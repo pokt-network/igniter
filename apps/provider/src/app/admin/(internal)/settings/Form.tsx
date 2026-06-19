@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Button } from '@igniter/ui/components/button'
 import {
@@ -14,6 +14,7 @@ import {
   FormMessage,
 } from '@igniter/ui/components/form'
 import { Input } from '@igniter/ui/components/input'
+import { Switch } from '@igniter/ui/components/switch'
 import { useQuery } from '@tanstack/react-query'
 import {
   GetApplicationSettings,
@@ -52,6 +53,7 @@ const FormSchema = z.object({
   appIdentity: z.string().optional(),
   ownerIdentity: z.string().optional(),
   updatedAtHeight: z.string().optional(),
+  returnSupplierFundsToOwner: z.boolean().optional(),
 })
 
 type FormValues = z.infer<typeof FormSchema>;
@@ -95,6 +97,7 @@ export default function SettingsForm() {
       appIdentity: settings?.appIdentity || '',
       ownerIdentity: settings?.ownerIdentity || '',
       updatedAtHeight: settings?.updatedAtHeight || '',
+      returnSupplierFundsToOwner: settings?.returnSupplierFundsToOwner ?? false,
     },
     values: settings ? {
       name: settings.name || '',
@@ -111,6 +114,7 @@ export default function SettingsForm() {
       appIdentity: settings.appIdentity || '',
       ownerIdentity: settings.ownerIdentity || '',
       updatedAtHeight: settings.updatedAtHeight || '',
+      returnSupplierFundsToOwner: settings.returnSupplierFundsToOwner ?? false,
     } : undefined,
   })
 
@@ -487,6 +491,31 @@ export default function SettingsForm() {
               </div>
             </FormItem>
           )} />
+        </div>
+
+        <div className="h-px bg-border-primary" />
+
+        {/* Unstake Behavior */}
+        <div className="flex flex-col gap-4">
+          <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Unstake Behavior</span>
+
+          <div className="flex flex-row items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">Return supplier funds to owner on unstake</span>
+              <span className="text-xs text-text-tertiary">
+                When a supplier is unstaked, automatically send the operator account&apos;s remaining
+                balance back to the owner. Used as the default for manual unstakes; the middleman shows
+                this setting to stakers.
+              </span>
+            </div>
+            <Controller
+              control={form.control}
+              name="returnSupplierFundsToOwner"
+              render={({ field }) => (
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              )}
+            />
+          </div>
         </div>
 
         <div className="h-px bg-border-primary" />

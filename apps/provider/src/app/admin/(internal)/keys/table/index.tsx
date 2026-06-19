@@ -3,13 +3,16 @@
 import { ListKeys, CountKeys } from '@/actions/Keys'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React from 'react'
-import DataTable from '@igniter/ui/components/DataTable/index'
+import DataTable, { selectionColumn } from '@igniter/ui/components/DataTable/index'
 import LoadNewButton from '@igniter/ui/components/DataTable/LoadNewButton'
 import { columns, getFilters, sorts } from './columns'
 import { ListBasicAddressGroups } from '@/actions/AddressGroups'
 import { KeyWithRelations } from '@igniter/db/provider/schema'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
+import { useKeysSelection } from '@/app/admin/(internal)/keys/KeysSelectionContext'
+import type { ColumnDef } from '@tanstack/react-table'
+import type { CsvColumnDef } from '@igniter/ui/lib/csv'
 
 export default function KeysTable() {
   const queryClient = useQueryClient()
@@ -29,6 +32,7 @@ export default function KeysTable() {
   }, [addressParam])
 
   const [acknowledgedCount, setAcknowledgedCount] = React.useState<number | null>(null)
+  const { setSelectedKeyIds } = useKeysSelection()
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['keys'],
@@ -104,9 +108,21 @@ export default function KeysTable() {
     return [keys[idx]!, ...keys.slice(0, idx), ...keys.slice(idx + 1)]
   }, [keys, highlightedAddress])
 
+  const onSelectionChange = React.useCallback(
+    (selectedRows: KeyWithRelations[]) => {
+      setSelectedKeyIds(selectedRows.map((r) => r.id))
+    },
+    [setSelectedKeyIds],
+  )
+
+  const tableColumns = React.useMemo(
+    () => [selectionColumn<KeyWithRelations>(), ...columns] as Array<ColumnDef<KeyWithRelations, unknown> & CsvColumnDef<KeyWithRelations>>,
+    [],
+  )
+
   return (
     <DataTable
-      columns={columns}
+      columns={tableColumns}
       data={displayKeys}
       filters={getFilters(data?.addressesGroup || [], keys)}
       sorts={sorts}
@@ -122,6 +138,9 @@ export default function KeysTable() {
           ? 'border-l-4 border-l-blue-500 bg-blue-500/10'
           : ''
       }
+      enableRowSelection
+      getRowId={(row) => String(row.id)}
+      onSelectionChange={onSelectionChange}
     />
   )
 }

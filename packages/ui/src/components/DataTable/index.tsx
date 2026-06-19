@@ -11,8 +11,10 @@ import {
   getSortedRowModel,
   ColumnFiltersState,
   SortingState,
+  RowSelectionState,
   flexRender,
 } from "@tanstack/react-table";
+import { Checkbox } from '@igniter/ui/components/checkbox'
 
 import {
   Table,
@@ -29,6 +31,27 @@ import { Skeleton } from '../skeleton'
 import { Button } from '../button'
 import ExportButton from '../ExportButton'
 import RowsPerPage from './RowsPerPage'
+
+export function selectionColumn<TData>(): ColumnDef<TData, unknown> {
+  return {
+    id: '__select__',
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+  }
+}
 
 export interface FilterItem<TData> {
   label: React.ReactNode;
@@ -88,6 +111,12 @@ export interface DataTableProps<TData extends object, TValue> {
   manualPagination?: ManualPaginationProps
   /** Optional per-row className callback for highlighting specific rows */
   getRowClassName?: (row: TData) => string
+  /** Enable row selection with checkboxes. Pair with selectionColumn() prepended to your columns array. */
+  enableRowSelection?: boolean
+  /** Derive a stable string key from a row; passed to tanstack getRowId. */
+  getRowId?: (row: TData) => string
+  /** Called whenever the selection changes; receives the selected row originals. */
+  onSelectionChange?: (selectedRows: TData[]) => void
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -111,6 +140,9 @@ export default function DataTable<TData extends object, TValue>({
   isDisabled,
   manualPagination,
   getRowClassName,
+  enableRowSelection,
+  getRowId,
+  onSelectionChange,
 }: DataTableProps<TData, TValue>) {
   const isServerPaginated = !!manualPagination
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
@@ -132,6 +164,7 @@ export default function DataTable<TData extends object, TValue>({
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [searchInput, setSearchInput] = React.useState('')
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
 
   const globalFilterFn = React.useMemo(() => {
     if (!searchableColumns?.length) return undefined
@@ -190,8 +223,19 @@ export default function DataTable<TData extends object, TValue>({
           pageSize: manualPagination!.pageSize,
         },
       }),
+      ...(enableRowSelection ? { rowSelection } : {}),
     },
+    ...(enableRowSelection ? {
+      enableRowSelection: true,
+      onRowSelectionChange: setRowSelection,
+      getRowId,
+    } : {}),
   });
+
+  React.useEffect(() => {
+    if (!enableRowSelection || !onSelectionChange) return
+    onSelectionChange(table.getSelectedRowModel().rows.map((r) => r.original))
+  }, [rowSelection, enableRowSelection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tableState = table.getState();
 

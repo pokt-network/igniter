@@ -19,6 +19,7 @@ const StatusStyles: Record<string, string> = {
 const TypeLabels: Record<string, string> = {
   [TransactionType.Stake]: 'Stake',
   [TransactionType.Unstake]: 'Unstake',
+  [TransactionType.ReturnFunds]: 'Return Funds',
 }
 
 const ReasonLabels: Record<string, string> = {
@@ -28,6 +29,8 @@ const ReasonLabels: Record<string, string> = {
   [RemediationHistoryEntryReason.SupplierStakeTooLow]: 'Stake Too Low',
   [RemediationHistoryEntryReason.SupplierFundsTooLow]: 'Funds Too Low',
   [RemediationHistoryEntryReason.AddressGroupMigration]: 'Address Group Migration',
+  [RemediationHistoryEntryReason.ManualUnstake]: 'Manual Unstake',
+  [RemediationHistoryEntryReason.ReturnSupplierFunds]: 'Return Funds',
 }
 
 const TriggerLabels: Record<string, string> = {

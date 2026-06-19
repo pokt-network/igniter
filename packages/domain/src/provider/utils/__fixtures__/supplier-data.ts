@@ -84,6 +84,7 @@ function makeKeyWithGroup(overrides: Record<string, unknown>): KeyWithGroup {
     services: [],
     exportedAt: null,
     exportCount: null,
+    retiredAt: null,
     addressGroup: {
       id: 1,
       name: 'default-group',

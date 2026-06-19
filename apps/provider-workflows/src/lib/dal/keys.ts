@@ -5,6 +5,7 @@ import {
   and,
   eq,
   gt,
+  isNull,
   lte,
   ne,
 } from 'drizzle-orm/sql/expressions/conditions'
@@ -145,6 +146,7 @@ export default class Keys {
       afterId === null ? gt(keysTable.id, -2147483648) : gt(keysTable.id, afterId),
       lte(keysTable.id, endId),
       notInArray(keysTable.state, states),
+      isNull(keysTable.retiredAt),
     )
 
     const result = this.dbClient.db
@@ -203,5 +205,18 @@ export default class Keys {
       ))
       .returning({ id: keysTable.id })
     return rows.length > 0
+  }
+
+  /**
+   * Sets `retiredAt` once for a key (set-once). The `isNull(retiredAt)` guard
+   * makes this idempotent: a key whose retiredAt is already set is never
+   * overwritten, so it is safe to call from both the unstake-tx success effect
+   * and the chain-detected `Unstaked` reconciliation.
+   */
+  async setRetiredAt(address: string): Promise<void> {
+    await this.dbClient.db
+      .update(keysTable)
+      .set({ retiredAt: new Date() })
+      .where(and(eq(keysTable.address, address), isNull(keysTable.retiredAt)))
   }
 }

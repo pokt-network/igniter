@@ -130,6 +130,7 @@ export const keysTable = pgTable('keys', {
   services: json('services').$type<SupplierServiceConfig[]>().default([]),
   exportedAt: timestamp(),
   exportCount: integer().default(0),
+  retiredAt: timestamp('retired_at'),
 })
 
 /**

@@ -105,6 +105,23 @@ export function ReviewStep({
     return selectedNodes.reduce((sum, node) => sum + parseFloat(node.stakeAmount), 0);
   }, [selectedNodes]);
 
+  // Collect unique providers from selected nodes to show their return-funds policy
+  const uniqueProviders = useMemo(() => {
+    const seen = new Set<string>();
+    const providers: Array<{ identity: string; name: string; returnSupplierFundsToOwner: boolean }> = [];
+    for (const node of selectedNodes) {
+      if (node.provider && node.provider.identity && !seen.has(node.provider.identity)) {
+        seen.add(node.provider.identity);
+        providers.push({
+          identity: node.provider.identity,
+          name: node.provider.name,
+          returnSupplierFundsToOwner: node.provider.returnSupplierFundsToOwner,
+        });
+      }
+    }
+    return providers;
+  }, [selectedNodes]);
+
   const formattedDuration = unstakeDurationData ? formatDuration(unstakeDurationData.durationSeconds) : null;
 
   const isLoading = isLoadingNodes || isLoadingDuration;
@@ -136,6 +153,22 @@ export function ReviewStep({
           </span>
         )}
       </div>
+
+      {uniqueProviders.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {uniqueProviders.map((provider) => (
+            provider.returnSupplierFundsToOwner ? (
+              <p key={provider.identity} className="text-xs text-text-secondary">
+                This provider will return the supplier&apos;s remaining account balance to the owner once the unstake is confirmed.
+              </p>
+            ) : (
+              <p key={provider.identity} className="text-xs text-text-secondary">
+                This provider will not return the supplier&apos;s remaining account balance automatically.
+              </p>
+            )
+          ))}
+        </div>
+      )}
 
       <div className="relative flex h-[64px] min-h-[64px] gradient-border-slate">
         <div className="absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between">
