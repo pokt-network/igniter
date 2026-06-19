@@ -83,3 +83,4 @@ SESSION-SUMMARY.md
 
 # local files/research/issues/logs
 .local
+*.tsbuildinfo
