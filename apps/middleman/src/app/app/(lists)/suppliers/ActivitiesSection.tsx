@@ -94,10 +94,10 @@ export default function ActivitiesSection() {
             <TableHead className={HEAD_CLASS}>Supplier</TableHead>
             <TableHead className={HEAD_CLASS}>Owner</TableHead>
             <TableHead className={HEAD_CLASS}>Provider</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
             <TableHead className={clsx(HEAD_CLASS, 'text-right')}>Amount</TableHead>
             <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
             <TableHead className={HEAD_CLASS}>Submitted</TableHead>
-            <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -121,6 +121,11 @@ export default function ActivitiesSection() {
                     {row.providerName ?? DASH}
                   </span>
                 </TableCell>
+                <TableCell>
+                  <span className={clsx('flex justify-center font-medium', statusClass)}>
+                    {statusLabel}
+                  </span>
+                </TableCell>
                 <TableCell className="text-right">
                   {row.stakeAmountUpokt != null ? (
                     <Amount value={amountToPokt(row.stakeAmountUpokt)} />
@@ -141,11 +146,6 @@ export default function ActivitiesSection() {
                 <TableCell>
                   <span className="font-mono text-slightly-muted-foreground">
                     {submittedStr ?? DASH}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className={clsx('flex justify-center font-medium', statusClass)}>
-                    {statusLabel}
                   </span>
                 </TableCell>
               </TableRow>
