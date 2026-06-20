@@ -19,6 +19,7 @@ export default function TransactionsTable() {
         queryKey: ["user-transactions"],
         queryFn: GetUserTransactions,
         refetchOnWindowFocus: false,
+        refetchInterval: 15000,
     });
     const {items, updateItem} = useDetailContext()
 
@@ -108,7 +109,7 @@ export default function TransactionsTable() {
                             return acc
                         }, 0),
                         operations,
-                        hash: tx.hash || '',
+                        hash: tx.hash,
                         estimatedFee: tx.estimatedFee,
                         consumedFee: tx.consumedFee,
                         provider: tx.provider?.name || 'Height Pending',

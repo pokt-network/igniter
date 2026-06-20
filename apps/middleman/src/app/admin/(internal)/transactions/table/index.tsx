@@ -104,7 +104,7 @@ export default function TransactionsTable() {
               return acc
             }, 0),
             operations,
-            hash: tx.hash || '',
+            hash: tx.hash,
             estimatedFee: tx.estimatedFee,
             consumedFee: tx.consumedFee,
             provider: tx.provider?.name || 'Height Pending',

@@ -21,7 +21,7 @@ export type Transaction = {
     executionHeight: string;
     createdAt: Date;
     totalValue: number;
-    hash: string,
+    hash: string | null,
     estimatedFee: number,
     consumedFee?: number,
     provider: string,
