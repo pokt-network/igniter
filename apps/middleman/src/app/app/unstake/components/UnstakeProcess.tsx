@@ -16,6 +16,7 @@ import Loading from '@/app/app/unstake/components/Loading';
 import { allStagesSucceeded, getFailedStage } from "@/app/app/unstake/utils";
 import { UnstakingProcessStatus } from "@/app/app/unstake/components/ReviewStep/UnstakingProcess";
 import { GetUserNodes } from '@/actions/Nodes';
+import { usePendingGuards } from '@/lib/pending/usePendingGuards';
 
 enum UnstakeActivitySteps {
   // Initial sentinel: the flow shows a loader while the user-nodes query resolves, then
@@ -41,6 +42,7 @@ export interface UnstakeProcessProps {
 
 export function UnstakeProcess({ open, onOpenChange, preselectedAddresses }: Readonly<UnstakeProcessProps>) {
   const { connectedIdentities, isConnected } = useWalletConnection();
+  const { isOperatorPending, isOwnerBusy } = usePendingGuards();
   const router = useRouter();
 
   const [step, setStep] = useState<UnstakeActivitySteps>(UnstakeActivitySteps.Routing);
@@ -66,25 +68,32 @@ export function UnstakeProcess({ open, onOpenChange, preselectedAddresses }: Rea
   });
 
   // Owner addresses that still have staked nodes (for the bulk selection path).
+  // Exclude owners that have a pending tx — their signer is busy.
   const ownerAddressesWithNodes = useMemo(() => {
     if (!nodes || !connectedIdentities) return [];
     const set = new Set<string>();
     nodes
-      .filter(node => node.status === 'staked' && connectedIdentities.includes(node.ownerAddress))
+      .filter(node =>
+        node.status === 'staked' &&
+        connectedIdentities.includes(node.ownerAddress) &&
+        !isOwnerBusy(node.ownerAddress)
+      )
       .forEach(node => set.add(node.ownerAddress));
     return Array.from(set);
-  }, [nodes, connectedIdentities]);
+  }, [nodes, connectedIdentities, isOwnerBusy]);
 
   const shouldSkipOwnerSelection = ownerAddressesWithNodes.length === 1;
 
   // Staked preselected suppliers. Status-filtered so a stale already-unstaking/unstaked
   // supplier never reaches Review (where it would produce a chain-rejected tx).
+  // Also exclude operators with a pending tx to prevent double-firing.
   const preselectedStakedAddresses = useMemo(() => {
     if (!isPreselected || !nodes) return [];
     return preselectedAddresses!.filter(addr =>
-      nodes.some(node => node.address === addr && node.status === 'staked')
+      nodes.some(node => node.address === addr && node.status === 'staked') &&
+      !isOperatorPending(addr)
     );
-  }, [isPreselected, nodes, preselectedAddresses]);
+  }, [isPreselected, nodes, preselectedAddresses, isOperatorPending]);
 
   const totalStakeAmount = useMemo(() => {
     if (!nodes) return 0;

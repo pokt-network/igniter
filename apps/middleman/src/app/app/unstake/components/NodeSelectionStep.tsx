@@ -9,6 +9,7 @@ import { useState, useMemo } from "react";
 import { getShortAddress, toCurrencyFormat } from "@igniter/ui/lib/utils";
 import AvatarByString from "@igniter/ui/components/AvatarByString";
 import { GetUserNodes } from "@/actions/Nodes";
+import { usePendingGuards } from "@/lib/pending/usePendingGuards";
 
 type UserNodes = Awaited<ReturnType<typeof GetUserNodes>>;
 
@@ -37,14 +38,18 @@ export function NodeSelectionStep({
 }: Readonly<NodeSelectionStepProps>) {
   const [searchTerm, setSearchTerm] = useState("");
   const [internalSelectedNodes, setInternalSelectedNodes] = useState<string[]>(selectedNodes);
+  const { isOperatorPending } = usePendingGuards();
 
   // Filter nodes based on owner address and search term
   const filteredNodes = useMemo(() => {
     if (!nodes) return [];
 
-    // Only show staked nodes from the selected owner address
+    // Only show staked nodes from the selected owner address; exclude pending operators
     const ownerNodes = nodes.filter(
-      node => node.status === 'staked' && node.ownerAddress === ownerAddress
+      node =>
+        node.status === 'staked' &&
+        node.ownerAddress === ownerAddress &&
+        !isOperatorPending(node.address)
     );
 
     if (!searchTerm.trim()) return ownerNodes;
@@ -55,7 +60,7 @@ export function NodeSelectionStep({
       if (node.provider?.name?.toLowerCase().includes(lowerSearch)) return true;
       return false;
     });
-  }, [nodes, ownerAddress, searchTerm]);
+  }, [nodes, ownerAddress, searchTerm, isOperatorPending]);
 
   const handleToggleNode = (node: { address: string }) => {
     setInternalSelectedNodes(prev =>

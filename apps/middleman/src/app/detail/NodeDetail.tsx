@@ -24,6 +24,8 @@ import { GetSupplierChanges, AcknowledgeAllByNode } from '@/actions/SupplierChan
 import { formatDuration } from '@/lib/utils/time'
 import { GetNode } from '@/actions/Nodes'
 import { Skeleton } from '@igniter/ui/components/skeleton'
+import { usePendingGuards } from '@/lib/pending/usePendingGuards'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
 export interface NodeDetailBody {
   [key: string]: unknown;
@@ -259,6 +261,8 @@ export default function NodeDetail({
   const [unstakeOpen, setUnstakeOpen] = useState(false);
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
   const [isShowingServices, setIsShowingServices] = useState(false);
+  const { isOperatorPending, isOwnerBusy } = usePendingGuards();
+  const isUnstakeBlocked = isOperatorPending(address) || isOwnerBusy(ownerAddress);
 
   const {
     data: unstakeDurationData,
@@ -503,9 +507,24 @@ export default function NodeDetail({
           </p>
           <hr className={'border-border-primary'} />
           <div className={'flex flex-row items-center gap-2 p-2'}>
-            <ActionButton onClick={() => setUnstakeOpen(true)}>
-              Unstake
-            </ActionButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1">
+                  <ActionButton
+                    onClick={() => setUnstakeOpen(true)}
+                    disabled={isUnstakeBlocked}
+                    className={isUnstakeBlocked ? 'pointer-events-none opacity-50' : undefined}
+                  >
+                    Unstake
+                  </ActionButton>
+                </span>
+              </TooltipTrigger>
+              {isUnstakeBlocked && (
+                <TooltipContent>
+                  Operation in progress for this owner; wait for it to confirm.
+                </TooltipContent>
+              )}
+            </Tooltip>
             <QuickInfoPopOverIcon
               title={'Unstake'}
               description={'Unstake this supplier. If the provider returns funds, the remaining balance goes to the owner.'}

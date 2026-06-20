@@ -9,6 +9,7 @@ import { Button } from '@igniter/ui/components/button';
 import { Skeleton } from '@igniter/ui/components/skeleton';
 import AvatarByString from '@igniter/ui/components/AvatarByString';
 import { GetUserNodes } from '@/actions/Nodes';
+import { usePendingGuards } from '@/lib/pending/usePendingGuards';
 
 type UserNodes = Awaited<ReturnType<typeof GetUserNodes>>;
 
@@ -41,6 +42,7 @@ export function OwnerAddressSelectionStep({
 }: OwnerAddressSelectionStepProps) {
   const { connectedIdentity, connectedIdentities } = useWalletConnection();
   const [selectedOwnerAddress, setSelectedOwnerAddress] = useState(selectedOwnerAddressFromProps || '');
+  const { isOwnerBusy } = usePendingGuards();
 
   // Calculate node count and total staked amount per owner address
   const ownerAddressData = useMemo(() => {
@@ -57,9 +59,13 @@ export function OwnerAddressSelectionStep({
       });
     });
 
-    // Filter only staked nodes and aggregate data
+    // Filter only staked nodes for non-busy owners and aggregate data
     nodes
-      .filter(node => node.status === 'staked' && connectedIdentities.includes(node.ownerAddress))
+      .filter(node =>
+        node.status === 'staked' &&
+        connectedIdentities.includes(node.ownerAddress) &&
+        !isOwnerBusy(node.ownerAddress)
+      )
       .forEach(node => {
         const data = dataMap.get(node.ownerAddress);
         if (data) {
@@ -76,7 +82,7 @@ export function OwnerAddressSelectionStep({
         if (b.address === connectedIdentity) return 1;
         return b.nodeCount - a.nodeCount;
       });
-  }, [nodes, connectedIdentities, connectedIdentity]);
+  }, [nodes, connectedIdentities, connectedIdentity, isOwnerBusy]);
 
   return (
     <div className="flex relative flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
