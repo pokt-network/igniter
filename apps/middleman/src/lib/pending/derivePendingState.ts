@@ -7,6 +7,13 @@ export type PendingState = {
   pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: Date }>
 }
 
+export type PendingEntrySerialized = { kind: 'stake' | 'unstake'; txId: number; createdAt: string }
+export type PendingStateSerialized = {
+  byOperator: Record<string, PendingEntrySerialized>
+  byOwner: Record<string, number>
+  pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: string }>
+}
+
 export function derivePendingState(
   pendingTxs: Array<{ id: number; type: string; unsignedPayload: string; createdAt: Date }>,
 ): PendingState {
