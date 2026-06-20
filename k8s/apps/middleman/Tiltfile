@@ -99,6 +99,7 @@ k8s_resource(
     objects=[
       'middleman-config:configmap',
       'middleman-secrets:secret',
+      'middleman-bootstrap-config:configmap',
       'postgres-middleman-connection:secret',
     ],
     labels=['apps'],
