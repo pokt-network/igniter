@@ -2,11 +2,18 @@
 
 import DataTable from '@igniter/ui/components/DataTable/index'
 import { FilterGroup } from '@igniter/ui/components/DataTable/index'
-import { columns, NodeDetails, sorts } from './columns'
+import { getColumns, NodeDetails, sorts } from './columns'
 import { GetUserNodes } from '@/actions/Nodes'
+import { GetPendingState } from '@/actions/Pending'
 import { useQuery } from '@tanstack/react-query'
 import {ItemBase, useDetailContext} from '@igniter/ui/components/QuickDetails/Provider'
 import { useEffect, useMemo } from 'react'
+import type { PendingStateSerialized } from '@/lib/pending/derivePendingState'
+
+function hasPending(state: PendingStateSerialized | undefined): boolean {
+  if (!state) return false;
+  return Object.keys(state.byOperator).length > 0 || state.pendingStakeOperators.length > 0;
+}
 
 export default function NodesTable() {
   const { data, isError, isLoading, refetch } = useQuery({
@@ -14,6 +21,13 @@ export default function NodesTable() {
     queryFn: GetUserNodes,
     refetchInterval: 60000,
   });
+
+  const { data: pendingState } = useQuery({
+    queryKey: ['pendingState'],
+    queryFn: GetPendingState,
+    refetchInterval: (q) => hasPending(q.state.data) ? 7000 : false,
+  });
+
   const {items, updateItem} = useDetailContext()
 
   useEffect(() => {
@@ -116,6 +130,11 @@ export default function NodesTable() {
       },
     ];
   }, [nodes]);
+
+  const columns = useMemo(
+    () => getColumns(pendingState?.byOperator),
+    [pendingState?.byOperator],
+  );
 
   return (
     <DataTable

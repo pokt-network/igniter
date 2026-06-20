@@ -22,6 +22,8 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider';
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon';
+import { PendingBadge } from '@/app/app/(lists)/suppliers/PendingBadge';
+import type { PendingStateSerialized } from '@/lib/pending/derivePendingState';
 
 export type NodeDetails = Omit<NodeWithDetails, 'transactionsToNodes'> & {
   height: number;
@@ -46,7 +48,16 @@ const createAddressCellRenderer = (attribute: keyof Pick<NodeDetails, 'address' 
       );
 };
 
-export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
+export function getColumns(
+  pendingByOperator: PendingStateSerialized['byOperator'] | undefined,
+): (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] {
+  return columns(pendingByOperator);
+}
+
+function columns(
+  pendingByOperator: PendingStateSerialized['byOperator'] | undefined,
+): (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] {
+  return [
   {
     accessorKey: "address",
     header: "Address",
@@ -119,6 +130,14 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
     },
     cell: ({ row }) => {
       const status = row.getValue("status") as NodeStatus;
+      const pending = pendingByOperator?.[row.original.address];
+      if (pending) {
+        return (
+          <span className="flex justify-center gap-2">
+            <PendingBadge kind={pending.kind} />
+          </span>
+        );
+      }
       return (
         <span className="flex justify-center gap-2">
           {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -219,7 +238,8 @@ export const columns: (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] = [
       );
     },
   },
-];
+  ];
+}
 
 export const sorts: SortOption<NodeDetails>[][] = [
   [
