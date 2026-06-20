@@ -11,13 +11,13 @@ import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt, getShortAddress } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
 import { CaretSmallIcon } from '@igniter/ui/assets'
-import {useAddItemToDetail, useRemoveLastItemFromDetail} from '@igniter/ui/components/QuickDetails/Provider'
+import {useAddItemToDetail} from '@igniter/ui/components/QuickDetails/Provider'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { NodeService, Provider } from '@igniter/db/middleman/schema'
 import {TransactionDetailBody} from "@/app/detail/TransactionDetail"
-import { useRouter } from 'next/navigation'
+import { UnstakeProcess } from '@/app/app/unstake/components/UnstakeProcess'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetUnstakeDuration } from '@/actions/Unstake'
 import { GetSupplierChanges, AcknowledgeAllByNode } from '@/actions/SupplierChanges'
@@ -256,8 +256,7 @@ export default function NodeDetail({
    services,
 }: NodeDetailBody) {
   const addItem = useAddItemToDetail()
-  const removeLastItem = useRemoveLastItemFromDetail()
-  const router = useRouter()
+  const [unstakeOpen, setUnstakeOpen] = useState(false);
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
   const [isShowingServices, setIsShowingServices] = useState(false);
 
@@ -504,19 +503,19 @@ export default function NodeDetail({
           </p>
           <hr className={'border-border-primary'} />
           <div className={'flex flex-row items-center gap-2 p-2'}>
-            <ActionButton
-              onClick={() => {
-                removeLastItem()
-                router.push('/app/unstake')
-              }}
-            >
+            <ActionButton onClick={() => setUnstakeOpen(true)}>
               Unstake
             </ActionButton>
             <QuickInfoPopOverIcon
               title={'Unstake'}
-              description={'Navigate to the unstake page to unstake this node.'}
+              description={'Unstake this supplier. If the provider returns funds, the remaining balance goes to the owner.'}
             />
           </div>
+          <UnstakeProcess
+            open={unstakeOpen}
+            onOpenChange={setUnstakeOpen}
+            preselectedAddresses={[address]}
+          />
         </div>
       )}
     </div>

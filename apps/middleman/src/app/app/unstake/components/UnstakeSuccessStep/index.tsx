@@ -98,7 +98,7 @@ export function UnstakeSuccessStep({ nodeCount, totalStakeAmount, transaction, o
                   <CaretSmallIcon />
                 )}
                 <span className="text-[14px] text-[var(--text-tertiary)]">
-                  {`Unstake Node (${unstakeOperations.length})`}
+                  {`Unstake Supplier (${unstakeOperations.length})`}
                 </span>
               </span>
             </span>

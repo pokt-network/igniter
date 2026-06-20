@@ -99,8 +99,8 @@ export function NodeSelectionStep({
       <ActivityHeader
         onBack={onBack}
         onClose={onClose}
-        title="Select Nodes"
-        subtitle="Choose the nodes you want to unstake."
+        title="Select Suppliers"
+        subtitle="Choose the suppliers you want to unstake."
       />
 
       <Input
@@ -122,7 +122,7 @@ export function NodeSelectionStep({
       {isError && (
         <div className="flex flex-col bg-error-bg p-4 rounded-[8px]">
           <span className="text-[14px] font-medium text-[var(--text-primary)]">
-            Failed to load nodes
+            Failed to load suppliers
           </span>
           <Button onClick={onRetry} className="mt-2 w-fit">
             Retry
@@ -135,7 +135,7 @@ export function NodeSelectionStep({
           {filteredNodes.length === 0 && (
             <div className="flex flex-col bg-[var(--bg-surface)] p-4 rounded-[8px]">
               <span className="text-[14px] text-[var(--text-tertiary)]">
-                {searchTerm ? "No nodes found matching your search." : "You don't have any staked nodes to unstake."}
+                {searchTerm ? "No suppliers found matching your search." : "You don't have any staked suppliers to unstake."}
               </span>
             </div>
           )}
@@ -169,6 +169,7 @@ export function NodeSelectionStep({
                       <Checkbox
                         checked={internalSelectedNodes.includes(node.address)}
                         onCheckedChange={() => handleToggleNode(node)}
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row items-center gap-2">
@@ -205,7 +206,7 @@ export function NodeSelectionStep({
         disabled={internalSelectedNodes.length === 0}
         className="w-full"
       >
-        Continue ({internalSelectedNodes.length} nodes)
+        Continue ({internalSelectedNodes.length} supplier{internalSelectedNodes.length === 1 ? '' : 's'})
       </Button>
     </div>
   );

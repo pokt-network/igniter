@@ -10,8 +10,9 @@ import { GetUnstakeDuration } from "@/actions/Unstake";
 import { GetUserNodes } from "@/actions/Nodes";
 import { formatDuration } from "@/lib/utils/time";
 import { useMemo, useState } from "react";
-import { getShortAddress, toCurrencyFormat } from "@igniter/ui/lib/utils";
+import { toCurrencyFormat, amountToPokt } from "@igniter/ui/lib/utils";
 import AvatarByString from "@igniter/ui/components/AvatarByString";
+import Address from "@igniter/ui/components/Address";
 import { UnstakingProcess, UnstakingProcessStatus } from "@/app/app/unstake/components/ReviewStep/UnstakingProcess";
 import { Transaction } from "@igniter/db/middleman/schema";
 import React from "react";
@@ -27,7 +28,7 @@ export interface ReviewStepProps {
   ownerAddress: string;
   errorMessage?: string;
   onUnstakeCompleted: (status: UnstakingProcessStatus, transaction?: Transaction) => void;
-  onBack: () => void;
+  onBack?: () => void;
   onClose: () => void;
 }
 
@@ -105,21 +106,28 @@ export function ReviewStep({
     return selectedNodes.reduce((sum, node) => sum + parseFloat(node.stakeAmount), 0);
   }, [selectedNodes]);
 
-  // Collect unique providers from selected nodes to show their return-funds policy
+  // Collect unique providers from selected nodes with their return-funds policy and the
+  // residual operator balance the return-funds drain would move to the owner. The exact
+  // amount can't be known up front: the unstake fee is gas-based, and when funds ARE
+  // returned a second (return-funds) fee applies — so this is shown as an approximation.
   const uniqueProviders = useMemo(() => {
-    const seen = new Set<string>();
-    const providers: Array<{ identity: string; name: string; returnSupplierFundsToOwner: boolean }> = [];
+    const map = new Map<string, { identity: string; name: string; returnSupplierFundsToOwner: boolean; residualUpokt: number }>();
     for (const node of selectedNodes) {
-      if (node.provider && node.provider.identity && !seen.has(node.provider.identity)) {
-        seen.add(node.provider.identity);
-        providers.push({
+      if (!node.provider || !node.provider.identity) continue;
+      const balance = Number(node.balance ?? 0);
+      const existing = map.get(node.provider.identity);
+      if (existing) {
+        existing.residualUpokt += balance;
+      } else {
+        map.set(node.provider.identity, {
           identity: node.provider.identity,
           name: node.provider.name,
           returnSupplierFundsToOwner: node.provider.returnSupplierFundsToOwner,
+          residualUpokt: balance,
         });
       }
     }
-    return providers;
+    return Array.from(map.values());
   }, [selectedNodes]);
 
   const formattedDuration = unstakeDurationData ? formatDuration(unstakeDurationData.durationSeconds) : null;
@@ -138,13 +146,15 @@ export function ReviewStep({
 
       <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
         {!errorMessage && (
-          <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
-            Upon clicking Unstake, you will be prompted to sign a transaction with your wallet to finalize the unstake operation.
-            {formattedDuration && (
-              <>
-                {' '}After approximately <span className="font-mono text-[var(--text-primary)]">{formattedDuration}</span>, your tokens will be returned to the owner address.
-              </>
-            )}
+          <span className="inline-flex flex-wrap items-center gap-x-1 text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
+            <span>Upon clicking Unstake, you will be prompted to sign a transaction with your wallet to finalize the unstake operation. After approximately</span>
+            <span className={`font-mono font-semibold ${formattedDuration ? 'text-[var(--text-primary)]' : 'text-yellow-400'}`}>{formattedDuration ?? 'N/A'}</span>
+            <QuickInfoPopOverIcon
+              title="How the unstake duration is calculated"
+              description="Estimated from the number of blocks per session, the supplier's unbonding period in sessions, and the average block time measured over the last 30 days of block data."
+              url=""
+            />
+            <span>, your tokens will be returned to the owner address.</span>
           </span>
         )}
         {errorMessage && (
@@ -155,18 +165,52 @@ export function ReviewStep({
       </div>
 
       {uniqueProviders.length > 0 && (
-        <div className="flex flex-col gap-1">
-          {uniqueProviders.map((provider) => (
-            provider.returnSupplierFundsToOwner ? (
-              <p key={provider.identity} className="text-xs text-text-secondary">
-                This provider will return the supplier&apos;s remaining account balance to the owner once the unstake is confirmed.
-              </p>
+        <div className="flex flex-col gap-2">
+          {uniqueProviders.map((provider) => {
+            const hasResidual = provider.residualUpokt > 0;
+            const approxAmount = toCurrencyFormat(amountToPokt(provider.residualUpokt));
+            return provider.returnSupplierFundsToOwner ? (
+              <div
+                key={provider.identity}
+                className="flex flex-col gap-1 rounded-[8px] border border-green-500/30 bg-green-500/10 p-[11px_16px]"
+              >
+                <div className="flex flex-row items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-green-400">
+                    Funds returned to owner
+                  </span>
+                  {hasResidual && (
+                    <span className="text-xs font-mono text-green-400 whitespace-nowrap">
+                      ~{approxAmount} $POKT
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-text-secondary">
+                  This provider returns the supplier&apos;s remaining account balance (minus
+                  network fees) to the owner once the unstake is confirmed.
+                </span>
+              </div>
             ) : (
-              <p key={provider.identity} className="text-xs text-text-secondary">
-                This provider will not return the supplier&apos;s remaining account balance automatically.
-              </p>
-            )
-          ))}
+              <div
+                key={provider.identity}
+                className="flex flex-col gap-1 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 p-[11px_16px]"
+              >
+                <div className="flex flex-row items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-yellow-400">
+                    Funds not returned
+                  </span>
+                  {hasResidual && (
+                    <span className="text-xs font-mono text-yellow-400 whitespace-nowrap">
+                      ~{approxAmount} $POKT
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-text-secondary">
+                  This provider does not return funds. The supplier&apos;s remaining balance
+                  (minus the unstake fee) stays with the operator address.
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -199,7 +243,7 @@ export function ReviewStep({
             <div className="flex gap-2 mt-2">
               {isErrorNodes && (
                 <Button onClick={onRetryNodes} className="h-[30px]">
-                  Retry Nodes
+                  Retry Suppliers
                 </Button>
               )}
               {isErrorDuration && (
@@ -227,12 +271,7 @@ export function ReviewStep({
                   url=""
                 />
               </div>
-              <span className="flex flex-row items-center text-[14px] text-[var(--text-primary)]">
-                <AvatarByString string={group.ownerAddress} />
-                <span className="ml-2 font-mono">
-                  {getShortAddress(group.ownerAddress, 5)}
-                </span>
-              </span>
+              <Address address={group.ownerAddress} showAvatar />
             </div>
 
             <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
@@ -255,7 +294,7 @@ export function ReviewStep({
 
             <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
               <span className="text-[14px] text-[var(--text-tertiary)]">
-                Nodes
+                Suppliers
               </span>
               <span className="text-[14px] text-[var(--text-primary)]">
                 {group.nodes.length}
@@ -281,7 +320,7 @@ export function ReviewStep({
                 <CaretSmallIcon />
               )}
               <span className="text-[14px] text-[var(--text-tertiary)]">
-                Node Details ({selectedNodeAddresses.length} nodes)
+                Supplier Details ({selectedNodeAddresses.length} supplier{selectedNodeAddresses.length === 1 ? '' : 's'})
               </span>
             </span>
           </div>
@@ -304,11 +343,9 @@ export function ReviewStep({
                     >
                       <div className="flex flex-row items-center gap-2">
                         <CornerIcon />
-                        <AvatarByString string={node.address} />
+                        <AvatarByString string={node.address} size={18} />
                         <div className="flex flex-col">
-                          <span className="font-mono text-[14px] text-[var(--text-primary)]">
-                            {getShortAddress(node.address, 5)}
-                          </span>
+                          <Address address={node.address} />
                           <span className="text-[12px] text-[var(--text-tertiary)]">
                             {node.provider?.name || 'Unknown Provider'}
                           </span>

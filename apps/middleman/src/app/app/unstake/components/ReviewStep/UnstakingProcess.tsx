@@ -219,7 +219,7 @@ export function UnstakingProcess({
   return (
     <Dialog open={open} onOpenChange={handleOpenChanged}>
       <DialogTrigger asChild>
-        <Button disabled={disabled}>Unstake</Button>
+        <Button className="bg-red-600 text-white border-transparent hover:bg-red-700" disabled={disabled}>Unstake</Button>
       </DialogTrigger>
       <DialogContent
         onInteractOutside={(event) => event.preventDefault()}
