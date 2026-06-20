@@ -5,6 +5,9 @@ import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { GetPendingState } from '@/actions/Pending'
 import Address from '@igniter/ui/components/Address'
+import TransactionHash from '@igniter/ui/components/TransactionHash'
+import Amount from '@igniter/ui/components/Amount'
+import { amountToPokt } from '@igniter/ui/lib/utils'
 import {
   Table,
   TableBody,
@@ -17,7 +20,8 @@ import type { PendingStateSerialized } from '@/lib/pending/derivePendingState'
 
 function hasPending(state: PendingStateSerialized | undefined): boolean {
   if (!state) return false
-  return Object.keys(state.byOperator).length > 0 || state.pendingStakeOperators.length > 0
+  return (state.pendingOperations?.length ?? 0) > 0 ||
+    Object.keys(state.byOperator).length > 0
 }
 
 // Mirror the provider transactions table colored-text status idiom
@@ -25,12 +29,9 @@ function hasPending(state: PendingStateSerialized | undefined): boolean {
 // In-progress = yellow, capitalized, NOT uppercase, NOT a pill.
 const IN_PROGRESS_STATUS_STYLE = 'text-yellow-400'
 
-type RowItem = {
-  key: string
-  typeLabel: 'Stake' | 'Unstake'
-  statusLabel: 'Staking…' | 'Unstaking…'
-  operatorAddress: string
-}
+const DASH = '—'
+
+const HEAD_CLASS = 'text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4'
 
 export default function ActivitiesSection() {
   const { data: pendingState } = useQuery({
@@ -39,33 +40,8 @@ export default function ActivitiesSection() {
     refetchInterval: (q) => (hasPending(q.state.data) ? 7000 : false),
   })
 
-  const rows = useMemo<RowItem[]>(() => {
-    if (!pendingState) return []
-
-    // Dedupe by operatorAddress; prefer unstake over stake.
-    const map = new Map<string, RowItem>()
-
-    for (const op of pendingState.pendingStakeOperators) {
-      map.set(op.operatorAddress, {
-        key: op.operatorAddress,
-        typeLabel: 'Stake',
-        statusLabel: 'Staking…',
-        operatorAddress: op.operatorAddress,
-      })
-    }
-
-    for (const [operator, entry] of Object.entries(pendingState.byOperator)) {
-      if (entry.kind === 'unstake') {
-        map.set(operator, {
-          key: operator,
-          typeLabel: 'Unstake',
-          statusLabel: 'Unstaking…',
-          operatorAddress: operator,
-        })
-      }
-    }
-
-    return Array.from(map.values())
+  const rows = useMemo(() => {
+    return pendingState?.pendingOperations ?? []
   }, [pendingState])
 
   // Render nothing when idle.
@@ -87,33 +63,58 @@ export default function ActivitiesSection() {
       <Table containerClassName="max-h-[260px]">
         <TableHeader>
           <TableRow className="bg-transparent">
-            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4">
-              Type
-            </TableHead>
-            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4">
-              Supplier
-            </TableHead>
-            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4 text-center">
-              Status
-            </TableHead>
+            <TableHead className={HEAD_CLASS}>Supplier</TableHead>
+            <TableHead className={HEAD_CLASS}>Owner</TableHead>
+            <TableHead className={HEAD_CLASS}>Provider</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, 'text-right')}>Amount</TableHead>
+            <TableHead className={HEAD_CLASS}>Tx Hash</TableHead>
+            <TableHead className={HEAD_CLASS}>Submitted</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.key}>
-              <TableCell>
-                <span className="text-slightly-muted-foreground">{row.typeLabel}</span>
-              </TableCell>
-              <TableCell>
-                <Address address={row.operatorAddress} />
-              </TableCell>
-              <TableCell>
-                <span className={clsx('flex justify-center font-medium', IN_PROGRESS_STATUS_STYLE)}>
-                  {row.statusLabel}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))}
+          {rows.map((row) => {
+            const statusLabel = row.kind === 'stake' ? 'Staking…' : 'Unstaking…'
+            const submittedStr = row.createdAt
+              ? new Date(row.createdAt).toLocaleString()
+              : null
+
+            return (
+              <TableRow key={row.operatorAddress}>
+                <TableCell>
+                  <Address address={row.operatorAddress} />
+                </TableCell>
+                <TableCell>
+                  {row.ownerAddress ? <Address address={row.ownerAddress} /> : DASH}
+                </TableCell>
+                <TableCell>
+                  <span className="text-slightly-muted-foreground">
+                    {row.providerName ?? DASH}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.stakeAmountUpokt != null ? (
+                    <Amount value={amountToPokt(row.stakeAmountUpokt)} />
+                  ) : (
+                    DASH
+                  )}
+                </TableCell>
+                <TableCell>
+                  {row.hash ? <TransactionHash hash={row.hash} /> : DASH}
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-slightly-muted-foreground">
+                    {submittedStr ?? DASH}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className={clsx('flex justify-center font-medium', IN_PROGRESS_STATUS_STYLE)}>
+                    {statusLabel}
+                  </span>
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </div>

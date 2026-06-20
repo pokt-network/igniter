@@ -21,5 +21,9 @@ export async function GetPendingState(): Promise<PendingStateSerialized> {
       ...item,
       createdAt: item.createdAt ? item.createdAt.toISOString() : null,
     })),
+    pendingOperations: state.pendingOperations.map((op) => ({
+      ...op,
+      createdAt: op.createdAt ? op.createdAt.toISOString() : null,
+    })),
   }
 }
