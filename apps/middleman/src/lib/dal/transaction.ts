@@ -8,6 +8,14 @@ export async function countTransactions(): Promise<number> {
   return value
 }
 
+export async function countTransactionsByUser(userIdentity: string): Promise<number> {
+  const result = await getDb()
+    .select({ value: count() })
+    .from(transactionsTable)
+    .where(eq(transactionsTable.createdBy, userIdentity))
+  return result[0]?.value ?? 0
+}
+
 export async function getTransactionsByUser(userIdentity: string) {
   return getDb().query.transactionsTable.findMany({
     where: eq(transactionsTable.createdBy, userIdentity),

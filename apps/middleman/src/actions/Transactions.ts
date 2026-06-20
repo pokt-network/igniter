@@ -1,6 +1,6 @@
 'use server'
 
-import {countTransactions, getTransactions, getTransactionsByUser} from '@/lib/dal/transaction'
+import {countTransactions, countTransactionsByUser, getTransactions, getTransactionsByUser} from '@/lib/dal/transaction'
 import {requireAuth, requireAdmin} from "@/lib/utils/actions";
 
 export async function GetUserTransactions() {
@@ -16,4 +16,9 @@ export async function GetTransactions() {
 export async function CountTransactions() {
   await requireAdmin()
   return countTransactions()
+}
+
+export async function CountUserTransactions() {
+  const userIdentity = await requireAuth()
+  return countTransactionsByUser(userIdentity)
 }

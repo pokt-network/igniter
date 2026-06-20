@@ -8,7 +8,8 @@ import { Badge } from '@igniter/ui/components/badge'
 import Address from '@igniter/ui/components/Address'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { Skeleton } from '@igniter/ui/components/skeleton'
-import { TransactionType, TransactionStatus } from '@igniter/db/middleman/enums'
+import { TransactionType } from '@igniter/db/middleman/enums'
+import { transactionStatusBadge } from '@/lib/transactions/statusBadge'
 import type { PendingStateSerialized } from '@/lib/pending/derivePendingState'
 
 function hasPending(state: PendingStateSerialized | undefined): boolean {
@@ -30,20 +31,6 @@ function formatDate(dateStr: string | null | undefined | Date): string {
   const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleString()
-}
-
-const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'destructive' | 'secondary'> = {
-  [TransactionStatus.Pending]: 'warning',
-  [TransactionStatus.Success]: 'success',
-  [TransactionStatus.Failure]: 'destructive',
-  [TransactionStatus.NotExecuted]: 'secondary',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  [TransactionStatus.Pending]: 'Pending',
-  [TransactionStatus.Success]: 'Success',
-  [TransactionStatus.Failure]: 'Failed',
-  [TransactionStatus.NotExecuted]: 'Not Executed',
 }
 
 const SUPPLIER_TX_TYPES = new Set<string>([
@@ -137,8 +124,7 @@ export default function ActivitiesSection() {
 
           {/* Recent stake/unstake/upstake transactions */}
           {recentTxs.map((tx) => {
-            const statusVariant = STATUS_VARIANT[tx.status] ?? 'secondary'
-            const statusLabel = STATUS_LABEL[tx.status] ?? tx.status
+            const { variant: statusVariant, label: statusLabel } = transactionStatusBadge(tx.status)
             return (
               <div
                 key={tx.id}
