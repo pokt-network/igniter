@@ -155,6 +155,13 @@
       "when": 1781820856444,
       "tag": "0021_naive_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781976055247,
+      "tag": "0022_sparkling_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

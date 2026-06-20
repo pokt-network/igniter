@@ -192,6 +192,8 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
       [RemediationHistoryEntryReason.SupplierStakeTooLow]: 'Supplier Stake Too Low',
       [RemediationHistoryEntryReason.SupplierFundsTooLow]: 'Supplier Funds Too Low',
       [RemediationHistoryEntryReason.AddressGroupMigration]: 'Address Group Migration',
+      [RemediationHistoryEntryReason.ManualUnstake]: 'Manual Unstake',
+      [RemediationHistoryEntryReason.ReturnSupplierFunds]: 'Return Supplier Funds',
     }
 
     // Build a map of reason → { succeeded, failed }
