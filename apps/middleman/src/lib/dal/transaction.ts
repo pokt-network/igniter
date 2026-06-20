@@ -37,7 +37,7 @@ export async function getPendingTransactionsByUser(userIdentity: string) {
 
 export async function getPendingAndRecentlySettledTransactionsByUser(
   userIdentity: string,
-  settledWithinMs = 15000,
+  settledWithinMs = 120000,
 ) {
   const cutoff = new Date(Date.now() - settledWithinMs)
   return getDb().query.transactionsTable.findMany({

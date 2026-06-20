@@ -50,6 +50,12 @@ const DASH = '—'
 
 const HEAD_CLASS = 'text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4'
 
+// Tx Hash column needs a stable width so the "—" placeholder reserves the same
+// horizontal space the rendered <TransactionHash> (truncated mono "0x12345...abcde"
+// + gap + copy icon) will occupy. This prevents a column resize / neighbor shift
+// when the hash populates late (after broadcast). Applied to header + cell.
+const TX_HASH_COL_CLASS = 'min-w-[12rem] w-[12rem]'
+
 export default function ActivitiesSection() {
   const { data: pendingState } = useQuery({
     queryKey: ['pendingState'],
@@ -89,7 +95,7 @@ export default function ActivitiesSection() {
             <TableHead className={HEAD_CLASS}>Owner</TableHead>
             <TableHead className={HEAD_CLASS}>Provider</TableHead>
             <TableHead className={clsx(HEAD_CLASS, 'text-right')}>Amount</TableHead>
-            <TableHead className={HEAD_CLASS}>Tx Hash</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
             <TableHead className={HEAD_CLASS}>Submitted</TableHead>
             <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
           </TableRow>
@@ -122,10 +128,12 @@ export default function ActivitiesSection() {
                     DASH
                   )}
                 </TableCell>
-                {/* Tx Hash: align consistently whether hash is present or "—".
-                    Wrap in a flex container at cell-height so the copy button
-                    inside TransactionHash does not shift the row baseline. */}
-                <TableCell>
+                {/* Tx Hash: align consistently whether hash is present or "—",
+                    and reserve a stable column width so the late-arriving hash
+                    drops in without resizing the column or shifting neighbors.
+                    The flex container at cell-height keeps the copy button inside
+                    TransactionHash from shifting the row baseline. */}
+                <TableCell className={TX_HASH_COL_CLASS}>
                   <div className="flex items-center min-h-[1.5rem]">
                     {row.hash ? <TransactionHash hash={row.hash} /> : <span>{DASH}</span>}
                   </div>
