@@ -14,12 +14,12 @@ export async function GetPendingState(): Promise<PendingStateSerialized> {
     byOperator: Object.fromEntries(
       Object.entries(state.byOperator).map(([op, entry]) => [
         op,
-        { ...entry, createdAt: entry.createdAt.toISOString() },
+        { ...entry, createdAt: entry.createdAt ? entry.createdAt.toISOString() : null },
       ]),
     ),
     pendingStakeOperators: state.pendingStakeOperators.map((item) => ({
       ...item,
-      createdAt: item.createdAt.toISOString(),
+      createdAt: item.createdAt ? item.createdAt.toISOString() : null,
     })),
   }
 }

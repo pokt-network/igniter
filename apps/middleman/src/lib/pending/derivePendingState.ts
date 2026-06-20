@@ -1,25 +1,25 @@
 import { extractTransactionSuppliers } from '@igniter/commons/transactions/extractSuppliers'
 
-export type PendingEntry = { kind: 'stake' | 'unstake'; txId: number; createdAt: Date }
+export type PendingEntry = { kind: 'stake' | 'unstake'; txId: number; createdAt: Date | null }
 export type PendingState = {
   byOperator: Record<string, PendingEntry>
   byOwner: Record<string, number>
-  pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: Date }>
+  pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: Date | null }>
 }
 
-export type PendingEntrySerialized = { kind: 'stake' | 'unstake'; txId: number; createdAt: string }
+export type PendingEntrySerialized = { kind: 'stake' | 'unstake'; txId: number; createdAt: string | null }
 export type PendingStateSerialized = {
   byOperator: Record<string, PendingEntrySerialized>
   byOwner: Record<string, number>
-  pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: string }>
+  pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: string | null }>
 }
 
 export function derivePendingState(
-  pendingTxs: Array<{ id: number; type: string; unsignedPayload: string; createdAt: Date }>,
+  pendingTxs: Array<{ id: number; type: string; unsignedPayload: string; createdAt: Date | null }>,
 ): PendingState {
   const byOperator: Record<string, PendingEntry> = {}
   const byOwner: Record<string, number> = {}
-  const pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: Date }> = []
+  const pendingStakeOperators: Array<{ operatorAddress: string; ownerAddress: string; txId: number; createdAt: Date | null }> = []
 
   for (const tx of pendingTxs) {
     const { kind, ownerAddress, operatorAddresses } = extractTransactionSuppliers(tx)
