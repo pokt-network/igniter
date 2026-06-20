@@ -4,6 +4,7 @@ import NodesTable from '@/app/app/(lists)/suppliers/table'
 import ProviderStats from '@/app/app/(lists)/suppliers/ProviderStats'
 import ChainOverview from '@/app/app/(lists)/suppliers/ChainOverview'
 import RecentChanges from '@/app/app/(lists)/suppliers/RecentChanges'
+import ActivitiesSection from '@/app/app/(lists)/suppliers/ActivitiesSection'
 import { GetAppName } from '@/actions/ApplicationSettings'
 import Link from 'next/link'
 import { Button } from '@igniter/ui/components/button'
@@ -45,6 +46,7 @@ export default async function Page() {
         <Suspense>
           <RecentChanges />
         </Suspense>
+        <ActivitiesSection />
         <NodesTable />
       </PageContent>
     </>
