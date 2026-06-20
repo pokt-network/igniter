@@ -700,11 +700,19 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       !key.retiredAt
     ) {
       await maybeCreateReturnFundsIntent(key.address) // no explicit choice -> obey settings flag
+      // Retire-on-unbonding (set-once, isNull guard): retire the key the moment it enters
+      // unbonding — NOT only at the terminal Unstaked state. This closes the no-double-drain
+      // gap on this automatic path: the pending-unique index only blocks a CONCURRENT pending
+      // drain, so without retiring here, every SupplierStatus sweep across the multi-minute
+      // Unstaking window re-fired maybeCreateReturnFundsIntent; once the first drain SUCCEEDED
+      // (no longer pending) the next sweep created a second drain that then failed with
+      // "spendable 0 <= fee". Setting retiredAt now makes the next sweep's !key.retiredAt skip.
+      await dal.keys.setRetiredAt(key.address)
     }
 
-    // Retire-on-terminal: once fully unstaked on-chain, set retiredAt (set-once; the
-    // isNull(retiredAt) guard in setRetiredAt makes this idempotent across both this path
-    // and the unstake-tx success effect in flipKeyForTx).
+    // Retire-on-terminal: safety net for a key that reaches Unstaked while already retired
+    // by another path (e.g. the provider-UI unstake-tx success effect in flipKeyForTx).
+    // setRetiredAt is set-once (isNull(retiredAt) guard), so this is idempotent.
     if (update.state === KeyState.Unstaked) {
       await dal.keys.setRetiredAt(key.address)
     }
