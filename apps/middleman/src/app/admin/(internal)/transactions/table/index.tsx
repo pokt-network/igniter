@@ -119,6 +119,7 @@ export default function TransactionsTable() {
       isError={isError}
       refetch={refetch}
       csvFilename={'admin_transactions'}
+      columnVisibility={{ provider: false }}
       searchableColumns={['hash', 'provider']}
       searchPlaceholder="Search by hash or provider..."
       countLabel="transactions"

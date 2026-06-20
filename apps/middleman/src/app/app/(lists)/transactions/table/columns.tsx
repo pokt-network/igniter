@@ -68,7 +68,7 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
         csvFormatterFn: ({status}) => status.charAt(0).toUpperCase() + status.slice(1),
     },
     {
-        id: "hash",
+        accessorKey: "hash",
         header: "Tx Hash",
         cell: ({ row }) => {
             const hash = row.original.hash;

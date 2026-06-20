@@ -17,6 +17,7 @@ import { useWalletConnection } from "@igniter/ui/context/WalletConnection/index"
 import { StageStatus } from "@/app/app/unstake/types";
 import { stageFailed, stageSucceeded } from "@/app/app/unstake/utils";
 import { useNotifications } from "@igniter/ui/context/Notifications/index";
+import { useQueryClient } from "@tanstack/react-query";
 import { CreateUnstakeTransaction } from '@/actions/Unstake'
 
 export interface UnstakingProcessStatus {
@@ -51,6 +52,7 @@ export function UnstakingProcess({
   });
   const [currentStep, setCurrentStep] = useState<UnstakingProcessStep>(UnstakingProcessStep.transactionSignature);
   const { signTransaction } = useWalletConnection();
+  const queryClient = useQueryClient();
   const [transaction, setTransaction] = useState<DbTransaction | null>(null);
   const [signedTransaction, setSignedTransaction] = useState<SignedTransaction | null>(null);
   const { addNotification } = useNotifications();
@@ -111,6 +113,9 @@ export function UnstakingProcess({
           ...prev,
           schedulingTransactionStatus: 'success',
         }));
+
+        queryClient.invalidateQueries({ queryKey: ['pendingState'] });
+        queryClient.invalidateQueries({ queryKey: ['nodes'] });
 
         setCurrentStep(UnstakingProcessStep.Completed);
       } catch (err) {
