@@ -2,14 +2,17 @@
 
 import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { clsx } from 'clsx'
 import { GetPendingState } from '@/actions/Pending'
-import { GetUserTransactions } from '@/actions/Transactions'
-import { Badge } from '@igniter/ui/components/badge'
 import Address from '@igniter/ui/components/Address'
-import TransactionHash from '@igniter/ui/components/TransactionHash'
-import { Skeleton } from '@igniter/ui/components/skeleton'
-import { TransactionType } from '@igniter/db/middleman/enums'
-import { transactionStatusBadge } from '@/lib/transactions/statusBadge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@igniter/ui/components/table'
 import type { PendingStateSerialized } from '@/lib/pending/derivePendingState'
 
 function hasPending(state: PendingStateSerialized | undefined): boolean {
@@ -17,143 +20,102 @@ function hasPending(state: PendingStateSerialized | undefined): boolean {
   return Object.keys(state.byOperator).length > 0 || state.pendingStakeOperators.length > 0
 }
 
-function pendingCount(state: PendingStateSerialized): number {
-  // Dedupe by operatorAddress: pendingStakeOperators addresses may also appear in byOperator
-  const addresses = new Set<string>([
-    ...Object.keys(state.byOperator),
-    ...state.pendingStakeOperators.map((p) => p.operatorAddress),
-  ])
-  return addresses.size
+// Mirror the provider transactions table colored-text status idiom
+// (apps/provider/.../transactions/table/columns.tsx StatusStyles/StatusLabels).
+// In-progress = yellow, capitalized, NOT uppercase, NOT a pill.
+const IN_PROGRESS_STATUS_STYLE = 'text-yellow-400'
+
+type RowItem = {
+  key: string
+  typeLabel: 'Stake' | 'Unstake'
+  statusLabel: 'Staking…' | 'Unstaking…'
+  operatorAddress: string
 }
-
-function formatDate(dateStr: string | null | undefined | Date): string {
-  if (!dateStr) return '—'
-  const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString()
-}
-
-const SUPPLIER_TX_TYPES = new Set<string>([
-  TransactionType.Stake,
-  TransactionType.Unstake,
-  TransactionType.Upstake,
-])
-
-const cardClasses =
-  'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ActivitiesSection() {
-  const { data: pendingState, isLoading: pendingLoading } = useQuery({
+  const { data: pendingState } = useQuery({
     queryKey: ['pendingState'],
     queryFn: GetPendingState,
     refetchInterval: (q) => (hasPending(q.state.data) ? 7000 : false),
   })
 
-  const { data: transactions, isLoading: txLoading } = useQuery({
-    queryKey: ['user-transactions'],
-    queryFn: GetUserTransactions,
-    refetchInterval: 15000,
-  })
+  const rows = useMemo<RowItem[]>(() => {
+    if (!pendingState) return []
 
-  const recentTxs = useMemo(() => {
-    if (!transactions) return []
-    return transactions
-      .filter((tx) => SUPPLIER_TX_TYPES.has(tx.type))
-      .sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0
-        return bTime - aTime
+    // Dedupe by operatorAddress; prefer unstake over stake.
+    const map = new Map<string, RowItem>()
+
+    for (const op of pendingState.pendingStakeOperators) {
+      map.set(op.operatorAddress, {
+        key: op.operatorAddress,
+        typeLabel: 'Stake',
+        statusLabel: 'Staking…',
+        operatorAddress: op.operatorAddress,
       })
-      .slice(0, 20)
-  }, [transactions])
+    }
 
-  const pendingStakeOps = pendingState?.pendingStakeOperators ?? []
+    for (const [operator, entry] of Object.entries(pendingState.byOperator)) {
+      if (entry.kind === 'unstake') {
+        map.set(operator, {
+          key: operator,
+          typeLabel: 'Unstake',
+          statusLabel: 'Unstaking…',
+          operatorAddress: operator,
+        })
+      }
+    }
 
-  const isLoading = pendingLoading || txLoading
-  const totalPending = pendingState ? pendingCount(pendingState) : 0
+    return Array.from(map.values())
+  }, [pendingState])
 
-  // Nothing to show
-  if (!isLoading && totalPending === 0 && recentTxs.length === 0) return null
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3">
-        <h3 className="text-lg font-semibold">Activities</h3>
-        <div className={cardClasses}>
-          <div className="flex flex-col gap-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full !bg-[color:#383838] rounded-lg" />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // Render nothing when idle.
+  if (rows.length === 0) return null
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <h3 className="text-lg font-semibold">Activities</h3>
-        {totalPending > 0 && (
-          <Badge variant="warning">
-            {totalPending} pending
-          </Badge>
-        )}
-      </div>
+      {/* Section heading — matches RecentChanges / Services Overview style */}
+      <h3 className="text-lg font-semibold">
+        In progress
+        <span className="text-sm font-normal text-text-tertiary ml-2">· {rows.length}</span>
+      </h3>
 
-      <div className={cardClasses}>
-        <div className="flex flex-col divide-y divide-[color:--divider]">
-          {/* Pending stakes with no node row yet */}
-          {pendingStakeOps.map((op) => (
-            <div
-              key={op.operatorAddress}
-              className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-            >
-              <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-text-secondary shrink-0">Stake</span>
-                <Address address={op.operatorAddress} />
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-text-tertiary">
-                  {formatDate(op.createdAt)}
+      {/* Hand-built using the shared Table primitives (the same ones DataTable
+          renders internally) + DataTable's exact header-cell classes. DataTable's
+          own toolbar + pagination chrome would still render with no props, so we
+          reuse the Table primitives directly for a compact, chrome-free strip that
+          is visually identical to our tables. ~5 rows then internal scroll. */}
+      <Table containerClassName="max-h-[260px]">
+        <TableHeader>
+          <TableRow className="bg-transparent">
+            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4">
+              Type
+            </TableHead>
+            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4">
+              Supplier
+            </TableHead>
+            <TableHead className="text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4 text-center">
+              Status
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.key}>
+              <TableCell>
+                <span className="text-slightly-muted-foreground">{row.typeLabel}</span>
+              </TableCell>
+              <TableCell>
+                <Address address={row.operatorAddress} />
+              </TableCell>
+              <TableCell>
+                <span className={clsx('flex justify-center font-medium', IN_PROGRESS_STATUS_STYLE)}>
+                  {row.statusLabel}
                 </span>
-                <Badge variant="warning">Staking…</Badge>
-              </div>
-            </div>
+              </TableCell>
+            </TableRow>
           ))}
-
-          {/* Recent stake/unstake/upstake transactions */}
-          {recentTxs.map((tx) => {
-            const { variant: statusVariant, label: statusLabel } = transactionStatusBadge(tx.status)
-            return (
-              <div
-                key={tx.id}
-                className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-text-secondary shrink-0">{tx.type}</span>
-                  {tx.hash && <TransactionHash hash={tx.hash} />}
-                  {tx.provider && (
-                    <span className="text-xs text-text-tertiary truncate">
-                      {tx.provider.name}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-text-tertiary">
-                    {formatDate(tx.createdAt)}
-                  </span>
-                  <Badge variant={statusVariant}>{statusLabel}</Badge>
-                </div>
-              </div>
-            )
-          })}
-
-          {totalPending === 0 && recentTxs.length === 0 && (
-            <p className="text-sm text-text-tertiary py-3">No recent supplier activity.</p>
-          )}
-        </div>
-      </div>
+        </TableBody>
+      </Table>
     </div>
   )
 }
