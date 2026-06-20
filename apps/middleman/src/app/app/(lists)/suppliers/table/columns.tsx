@@ -51,12 +51,6 @@ const createAddressCellRenderer = (attribute: keyof Pick<NodeDetails, 'address' 
 export function getColumns(
   pendingByOperator: PendingStateSerialized['byOperator'] | undefined,
 ): (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] {
-  return columns(pendingByOperator);
-}
-
-function columns(
-  pendingByOperator: PendingStateSerialized['byOperator'] | undefined,
-): (ColumnDef<NodeDetails> & CsvColumnDef<NodeDetails>)[] {
   return [
   {
     accessorKey: "address",
