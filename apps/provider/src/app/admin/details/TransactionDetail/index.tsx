@@ -183,7 +183,7 @@ export default function TransactionDetail({ tx }: TransactionDetailProps) {
     },
     {
       label: 'Unavailable Checks',
-      value: <span className="font-mono">{unavailableChecks}</span>,
+      value: <span className="font-mono">{unavailableChecks || '—'}</span>,
     },
     {
       label: 'Last Verification',
@@ -209,7 +209,7 @@ export default function TransactionDetail({ tx }: TransactionDetailProps) {
       <div className="relative flex h-[64px] mt-[-5px] gradient-border-slate">
         <div className="absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between">
           <span className="text-[20px] text-text-secondary">
-            {StatusLabels[status] || status}
+            {TypeLabels[type] || type}
           </span>
           <Badge variant={variant} className="text-sm px-3 py-1">
             {StatusLabels[status] || status}
