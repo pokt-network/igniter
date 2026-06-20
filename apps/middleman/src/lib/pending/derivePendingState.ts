@@ -13,6 +13,7 @@ export type PendingOperation = {
   ownerAddress: string | null
   providerName: string | null
   stakeAmountUpokt: string | null
+  opFundsUpokt: string | null
   hash: string | null
   createdAt: Date | null
 }
@@ -33,6 +34,7 @@ export type PendingOperationSerialized = {
   ownerAddress: string | null
   providerName: string | null
   stakeAmountUpokt: string | null
+  opFundsUpokt: string | null
   hash: string | null
   createdAt: string | null
 }
@@ -93,6 +95,7 @@ export function derivePendingState(
             ownerAddress: info.ownerAddress,
             providerName: tx.provider?.name ?? null,
             stakeAmountUpokt: info.stakeAmount,
+            opFundsUpokt: info.opFundsUpokt,
             hash: tx.hash,
             createdAt: tx.createdAt,
           })
@@ -109,6 +112,7 @@ export function derivePendingState(
           ownerAddress: info.signer,
           providerName: tx.provider?.name ?? null,
           stakeAmountUpokt: null,
+          opFundsUpokt: null,
           hash: tx.hash,
           createdAt: tx.createdAt,
         })

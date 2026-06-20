@@ -91,13 +91,15 @@ export default function ActivitiesSection() {
       <Table containerClassName="max-h-[260px]">
         <TableHeader>
           <TableRow className="bg-transparent">
+            {/* Column order: Tx Hash · Submitted · Supplier · Owner · Provider · Amount · Op Funds · Status */}
+            <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
+            <TableHead className={HEAD_CLASS}>Submitted</TableHead>
             <TableHead className={HEAD_CLASS}>Supplier</TableHead>
             <TableHead className={HEAD_CLASS}>Owner</TableHead>
             <TableHead className={HEAD_CLASS}>Provider</TableHead>
-            <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
             <TableHead className={clsx(HEAD_CLASS, 'text-right')}>Amount</TableHead>
-            <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
-            <TableHead className={HEAD_CLASS}>Submitted</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, 'text-right')}>Op Funds</TableHead>
+            <TableHead className={clsx(HEAD_CLASS, 'text-center')}>Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -110,6 +112,17 @@ export default function ActivitiesSection() {
 
             return (
               <TableRow key={row.operatorAddress}>
+                {/* Tx Hash: stable min-width; "—" when null */}
+                <TableCell className={TX_HASH_COL_CLASS}>
+                  <div className="flex items-center min-h-[1.5rem]">
+                    {row.hash ? <TransactionHash hash={row.hash} /> : <span>{DASH}</span>}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-slightly-muted-foreground">
+                    {submittedStr ?? DASH}
+                  </span>
+                </TableCell>
                 <TableCell>
                   <Address address={row.operatorAddress} />
                 </TableCell>
@@ -121,11 +134,6 @@ export default function ActivitiesSection() {
                     {row.providerName ?? DASH}
                   </span>
                 </TableCell>
-                <TableCell>
-                  <span className={clsx('flex justify-center font-medium', statusClass)}>
-                    {statusLabel}
-                  </span>
-                </TableCell>
                 <TableCell className="text-right">
                   {row.stakeAmountUpokt != null ? (
                     <Amount value={amountToPokt(row.stakeAmountUpokt)} />
@@ -133,19 +141,16 @@ export default function ActivitiesSection() {
                     DASH
                   )}
                 </TableCell>
-                {/* Tx Hash: align consistently whether hash is present or "—",
-                    and reserve a stable column width so the late-arriving hash
-                    drops in without resizing the column or shifting neighbors.
-                    The flex container at cell-height keeps the copy button inside
-                    TransactionHash from shifting the row baseline. */}
-                <TableCell className={TX_HASH_COL_CLASS}>
-                  <div className="flex items-center min-h-[1.5rem]">
-                    {row.hash ? <TransactionHash hash={row.hash} /> : <span>{DASH}</span>}
-                  </div>
+                <TableCell className="text-right">
+                  {row.opFundsUpokt != null ? (
+                    <Amount value={amountToPokt(row.opFundsUpokt)} />
+                  ) : (
+                    DASH
+                  )}
                 </TableCell>
                 <TableCell>
-                  <span className="font-mono text-slightly-muted-foreground">
-                    {submittedStr ?? DASH}
+                  <span className={clsx('flex justify-center font-medium', statusClass)}>
+                    {statusLabel}
                   </span>
                 </TableCell>
               </TableRow>

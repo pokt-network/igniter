@@ -8,6 +8,7 @@ export interface NewStake {
   stakeAmount: string;
   balance: number;
   services: StakeOperation['value']['services'];
+  opFundsUpokt: string | null;
 }
 
 export interface NewUnstake {
@@ -67,15 +68,33 @@ export interface UnstakeOperation {
 export function extractTransactionStakingSuppliers(tx: { unsignedPayload: string }): NewStake[] {
   try {
     const {body} = JSON.parse(tx.unsignedPayload);
-    const nodes: Record<string, NewStake> = body.messages.reduce((nodes: Record<string, NewStake>, message: StakeOperation) => {
+    const messages: Array<StakeOperation | SendOperation> = body.messages;
+
+    // Build a map of operatorAddress → op funds amount from MsgSend messages
+    const opFundsMap: Record<string, string> = {};
+    for (const msg of messages) {
+      if (msg.typeUrl === SEND_TYPE_URL) {
+        const send = msg as SendOperation;
+        // We'll match sends by toAddress after we know the operator addresses
+        // Store all sends keyed by toAddress for later lookup
+        const coin = send.value.amount[0];
+        if (coin) {
+          opFundsMap[send.value.toAddress] = coin.amount.toString();
+        }
+      }
+    }
+
+    const nodes: Record<string, NewStake> = messages.reduce((nodes: Record<string, NewStake>, message) => {
       if (message.typeUrl === STAKE_TYPE_URL) {
-        const {stake, operatorAddress, ownerAddress, services} = message.value;
+        const stakeMsg = message as StakeOperation;
+        const {stake, operatorAddress, ownerAddress, services} = stakeMsg.value;
         nodes[operatorAddress] = {
           address: operatorAddress,
           ownerAddress,
           stakeAmount: stake.amount.toString(),
           balance: nodes[operatorAddress]?.balance || 0,
           services,
+          opFundsUpokt: opFundsMap[operatorAddress] ?? null,
         };
       }
 

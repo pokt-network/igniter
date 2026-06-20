@@ -1,23 +1,35 @@
 import { derivePendingState } from './derivePendingState'
-import { UNSTAKE_TYPE_URL, STAKE_TYPE_URL } from '@igniter/commons/transactions/extractSuppliers'
+import { UNSTAKE_TYPE_URL, STAKE_TYPE_URL, SEND_TYPE_URL } from '@igniter/commons/transactions/extractSuppliers'
 
 const mk = (
   id: number,
   typeUrl: string,
   ops: Array<[string, string]>,
   type: string,
-  opts: { hash?: string | null; provider?: { name: string } | null; stakeAmount?: number; status?: string } = {},
-) => ({
-  id, type, createdAt: new Date(0),
-  status: opts.status ?? 'pending',
-  hash: opts.hash ?? null,
-  provider: opts.provider ?? null,
-  unsignedPayload: JSON.stringify({ body: { messages: ops.map(([signerOrOwner, op]) =>
+  opts: { hash?: string | null; provider?: { name: string } | null; stakeAmount?: number; status?: string; opFundsUpokt?: number } = {},
+) => {
+  const messages: unknown[] = ops.map(([signerOrOwner, op]) =>
     typeUrl === UNSTAKE_TYPE_URL
       ? { typeUrl, value: { signer: signerOrOwner, operatorAddress: op } }
       : { typeUrl, value: { ownerAddress: signerOrOwner, operatorAddress: op, stake: { denom: 'upokt', amount: opts.stakeAmount ?? 1 }, services: [] } }
-  ) } }),
-})
+  )
+  // Append MsgSend for op funds if requested (stake only)
+  if (typeUrl === STAKE_TYPE_URL && opts.opFundsUpokt != null) {
+    for (const [, op] of ops) {
+      messages.push({
+        typeUrl: SEND_TYPE_URL,
+        value: { fromAddress: ops[0]![0], toAddress: op, amount: [{ denom: 'upokt', amount: opts.opFundsUpokt }] },
+      })
+    }
+  }
+  return {
+    id, type, createdAt: new Date(0),
+    status: opts.status ?? 'pending',
+    hash: opts.hash ?? null,
+    provider: opts.provider ?? null,
+    unsignedPayload: JSON.stringify({ body: { messages } }),
+  }
+}
 
 test('marks unstaking operators + owner', () => {
   const s = derivePendingState([mk(7, UNSTAKE_TYPE_URL, [['pokt1own', 'pokt1op']], 'Unstake')])
@@ -48,6 +60,7 @@ test('pendingOperations: stake op carries ownerAddress, stakeAmountUpokt, provid
     operatorAddress: 'pokt1opS',
     ownerAddress: 'pokt1owner',
     stakeAmountUpokt: '5000000',
+    opFundsUpokt: null,
     providerName: 'MyProvider',
     hash: 'abc123',
     createdAt: new Date(0),
@@ -68,6 +81,7 @@ test('pendingOperations: unstake op carries ownerAddress (signer), null amount, 
     operatorAddress: 'pokt1opU',
     ownerAddress: 'pokt1signer',
     stakeAmountUpokt: null,
+    opFundsUpokt: null,
     providerName: 'ProviderB',
     hash: 'def456',
     createdAt: new Date(0),
@@ -174,4 +188,32 @@ test('mix: pending op in guards + pendingOperations; settled op only in pendingO
   // Settled op NOT in guards
   expect(s.byOperator['pokt1opB']).toBeUndefined()
   expect(s.byOwner['pokt1ownB']).toBeUndefined()
+})
+
+test('pendingOperations: stake op carries opFundsUpokt when MsgSend targets operator', () => {
+  const s = derivePendingState([
+    mk(40, STAKE_TYPE_URL, [['pokt1ownC', 'pokt1opC']], 'Stake', {
+      hash: 'opFundsHash',
+      stakeAmount: 2000000,
+      opFundsUpokt: 750000,
+    }),
+  ])
+  expect(s.pendingOperations).toHaveLength(1)
+  expect(s.pendingOperations[0]).toMatchObject({
+    kind: 'stake',
+    operatorAddress: 'pokt1opC',
+    stakeAmountUpokt: '2000000',
+    opFundsUpokt: '750000',
+  })
+})
+
+test('pendingOperations: stake op has opFundsUpokt null when no MsgSend present', () => {
+  const s = derivePendingState([
+    mk(41, STAKE_TYPE_URL, [['pokt1ownD', 'pokt1opD']], 'Stake', {
+      hash: 'noOpFundsHash',
+      stakeAmount: 3000000,
+    }),
+  ])
+  expect(s.pendingOperations).toHaveLength(1)
+  expect(s.pendingOperations[0]!.opFundsUpokt).toBeNull()
 })

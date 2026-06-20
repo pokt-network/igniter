@@ -1,4 +1,4 @@
-import { extractTransactionSuppliers, STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from './extractSuppliers'
+import { extractTransactionSuppliers, extractTransactionStakingSuppliers, STAKE_TYPE_URL, UNSTAKE_TYPE_URL, SEND_TYPE_URL } from './extractSuppliers'
 
 const unstakeTx = {
   type: 'Unstake',
@@ -53,4 +53,83 @@ test('non-stake/unstake tx returns kind other', () => {
   expect(r.kind).toBe('other')
   expect(r.ownerAddress).toBeNull()
   expect(r.operatorAddresses).toEqual([])
+})
+
+test('opFundsUpokt is populated when a MsgSend toAddress matches the operator', () => {
+  const stakeTxWithSend = {
+    type: 'Stake',
+    unsignedPayload: JSON.stringify({ body: { messages: [
+      {
+        typeUrl: STAKE_TYPE_URL,
+        value: {
+          signer: 'pokt1owner',
+          ownerAddress: 'pokt1owner',
+          operatorAddress: 'pokt1opD',
+          stake: { denom: 'upokt', amount: 2000000 },
+          services: [],
+        },
+      },
+      {
+        typeUrl: SEND_TYPE_URL,
+        value: {
+          fromAddress: 'pokt1owner',
+          toAddress: 'pokt1opD',
+          amount: [{ denom: 'upokt', amount: 500000 }],
+        },
+      },
+    ] } }),
+  }
+  const results = extractTransactionStakingSuppliers(stakeTxWithSend)
+  expect(results).toHaveLength(1)
+  expect(results[0]!.opFundsUpokt).toBe('500000')
+})
+
+test('opFundsUpokt is null when no MsgSend targets the operator', () => {
+  const stakeTxNoSend = {
+    type: 'Stake',
+    unsignedPayload: JSON.stringify({ body: { messages: [
+      {
+        typeUrl: STAKE_TYPE_URL,
+        value: {
+          signer: 'pokt1owner',
+          ownerAddress: 'pokt1owner',
+          operatorAddress: 'pokt1opE',
+          stake: { denom: 'upokt', amount: 3000000 },
+          services: [],
+        },
+      },
+    ] } }),
+  }
+  const results = extractTransactionStakingSuppliers(stakeTxNoSend)
+  expect(results).toHaveLength(1)
+  expect(results[0]!.opFundsUpokt).toBeNull()
+})
+
+test('opFundsUpokt is null when MsgSend toAddress does not match the operator', () => {
+  const stakeTxWrongSend = {
+    type: 'Stake',
+    unsignedPayload: JSON.stringify({ body: { messages: [
+      {
+        typeUrl: STAKE_TYPE_URL,
+        value: {
+          signer: 'pokt1owner',
+          ownerAddress: 'pokt1owner',
+          operatorAddress: 'pokt1opF',
+          stake: { denom: 'upokt', amount: 4000000 },
+          services: [],
+        },
+      },
+      {
+        typeUrl: SEND_TYPE_URL,
+        value: {
+          fromAddress: 'pokt1owner',
+          toAddress: 'pokt1someOtherAddress',
+          amount: [{ denom: 'upokt', amount: 100000 }],
+        },
+      },
+    ] } }),
+  }
+  const results = extractTransactionStakingSuppliers(stakeTxWrongSend)
+  expect(results).toHaveLength(1)
+  expect(results[0]!.opFundsUpokt).toBeNull()
 })
