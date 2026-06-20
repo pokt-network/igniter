@@ -16,18 +16,35 @@ import {
   TableHeader,
   TableRow,
 } from '@igniter/ui/components/table'
-import type { PendingStateSerialized } from '@/lib/pending/derivePendingState'
+import type { PendingStateSerialized, PendingOperationSerialized } from '@/lib/pending/derivePendingState'
 
-function hasPending(state: PendingStateSerialized | undefined): boolean {
+function hasPendingOrLinger(state: PendingStateSerialized | undefined): boolean {
   if (!state) return false
-  return (state.pendingOperations?.length ?? 0) > 0 ||
-    Object.keys(state.byOperator).length > 0
+  return (state.pendingOperations?.length ?? 0) > 0
 }
 
-// Mirror the provider transactions table colored-text status idiom
-// (apps/provider/.../transactions/table/columns.tsx StatusStyles/StatusLabels).
-// In-progress = yellow, capitalized, NOT uppercase, NOT a pill.
-const IN_PROGRESS_STATUS_STYLE = 'text-yellow-400'
+function pendingCount(state: PendingStateSerialized | undefined): number {
+  if (!state) return 0
+  return Object.keys(state.byOperator).length
+}
+
+// Status-aware label and color per design spec:
+// pending+stake → "Staking…" yellow, pending+unstake → "Unstaking…" yellow
+// success+stake → "Staked" green, success+unstake → "Unstaked" green
+// failure → "Failed" red
+function getStatusLabel(op: PendingOperationSerialized): string {
+  if (op.status === 'failure') return 'Failed'
+  if (op.status === 'success') {
+    return op.kind === 'stake' ? 'Staked' : 'Unstaked'
+  }
+  return op.kind === 'stake' ? 'Staking…' : 'Unstaking…'
+}
+
+function getStatusClass(op: PendingOperationSerialized): string {
+  if (op.status === 'failure') return 'text-red-400'
+  if (op.status === 'success') return 'text-emerald-400'
+  return 'text-yellow-400'
+}
 
 const DASH = '—'
 
@@ -37,22 +54,27 @@ export default function ActivitiesSection() {
   const { data: pendingState } = useQuery({
     queryKey: ['pendingState'],
     queryFn: GetPendingState,
-    refetchInterval: (q) => (hasPending(q.state.data) ? 7000 : false),
+    refetchInterval: (q) => (hasPendingOrLinger(q.state.data) ? 7000 : false),
   })
 
   const rows = useMemo(() => {
     return pendingState?.pendingOperations ?? []
   }, [pendingState])
 
-  // Render nothing when idle.
+  const count = pendingCount(pendingState)
+
+  // Render nothing when no pending and no recently-settled rows.
   if (rows.length === 0) return null
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Section heading — matches RecentChanges / Services Overview style */}
+      {/* Section heading — matches RecentChanges / Services Overview style.
+          Badge shows PENDING count only; settled-linger rows don't inflate it. */}
       <h3 className="text-lg font-semibold">
         In progress
-        <span className="text-sm font-normal text-text-tertiary ml-2">· {rows.length}</span>
+        {count > 0 && (
+          <span className="text-sm font-normal text-text-tertiary ml-2">· {count}</span>
+        )}
       </h3>
 
       {/* Hand-built using the shared Table primitives (the same ones DataTable
@@ -74,7 +96,8 @@ export default function ActivitiesSection() {
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
-            const statusLabel = row.kind === 'stake' ? 'Staking…' : 'Unstaking…'
+            const statusLabel = getStatusLabel(row)
+            const statusClass = getStatusClass(row)
             const submittedStr = row.createdAt
               ? new Date(row.createdAt).toLocaleString()
               : null
@@ -99,8 +122,13 @@ export default function ActivitiesSection() {
                     DASH
                   )}
                 </TableCell>
+                {/* Tx Hash: align consistently whether hash is present or "—".
+                    Wrap in a flex container at cell-height so the copy button
+                    inside TransactionHash does not shift the row baseline. */}
                 <TableCell>
-                  {row.hash ? <TransactionHash hash={row.hash} /> : DASH}
+                  <div className="flex items-center min-h-[1.5rem]">
+                    {row.hash ? <TransactionHash hash={row.hash} /> : <span>{DASH}</span>}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <span className="font-mono text-slightly-muted-foreground">
@@ -108,7 +136,7 @@ export default function ActivitiesSection() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <span className={clsx('flex justify-center font-medium', IN_PROGRESS_STATUS_STYLE)}>
+                  <span className={clsx('flex justify-center font-medium', statusClass)}>
                     {statusLabel}
                   </span>
                 </TableCell>

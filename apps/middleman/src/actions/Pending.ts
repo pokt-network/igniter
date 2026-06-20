@@ -1,13 +1,13 @@
 'use server'
 
 import { requireAuth } from '@/lib/utils/actions'
-import { getPendingTransactionsByUser } from '@/lib/dal/transaction'
+import { getPendingAndRecentlySettledTransactionsByUser } from '@/lib/dal/transaction'
 import { derivePendingState, type PendingStateSerialized } from '@/lib/pending/derivePendingState'
 
 export async function GetPendingState(): Promise<PendingStateSerialized> {
   const userIdentity = await requireAuth()
-  const pendingTxs = await getPendingTransactionsByUser(userIdentity)
-  const state = derivePendingState(pendingTxs)
+  const txs = await getPendingAndRecentlySettledTransactionsByUser(userIdentity)
+  const state = derivePendingState(txs)
 
   return {
     byOwner: state.byOwner,

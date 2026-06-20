@@ -8,6 +8,7 @@ export type PendingEntry = { kind: 'stake' | 'unstake'; txId: number; createdAt:
 
 export type PendingOperation = {
   kind: 'stake' | 'unstake'
+  status: 'pending' | 'success' | 'failure'
   operatorAddress: string
   ownerAddress: string | null
   providerName: string | null
@@ -27,6 +28,7 @@ export type PendingEntrySerialized = { kind: 'stake' | 'unstake'; txId: number; 
 
 export type PendingOperationSerialized = {
   kind: 'stake' | 'unstake'
+  status: 'pending' | 'success' | 'failure'
   operatorAddress: string
   ownerAddress: string | null
   providerName: string | null
@@ -43,9 +45,10 @@ export type PendingStateSerialized = {
 }
 
 export function derivePendingState(
-  pendingTxs: Array<{
+  txs: Array<{
     id: number
     type: string
+    status: string
     unsignedPayload: string
     hash: string | null
     provider: { name: string } | null
@@ -59,18 +62,25 @@ export function derivePendingState(
   // pendingOperations map: operatorAddress → PendingOperation; unstake wins over stake
   const pendingOpsMap = new Map<string, PendingOperation>()
 
-  for (const tx of pendingTxs) {
+  for (const tx of txs) {
     const { kind, ownerAddress, operatorAddresses } = extractTransactionSuppliers(tx)
     if (kind === 'other' || !ownerAddress) continue
-    byOwner[ownerAddress] = tx.id
-    for (const op of operatorAddresses) {
-      byOperator[op] = { kind, txId: tx.id, createdAt: tx.createdAt }
-      if (kind === 'stake') {
-        pendingStakeOperators.push({ operatorAddress: op, ownerAddress, txId: tx.id, createdAt: tx.createdAt })
+
+    const txStatus = tx.status as 'pending' | 'success' | 'failure'
+    const isPending = txStatus === 'pending'
+
+    // byOwner and byOperator are PENDING-only — settled ops must NOT block actions
+    if (isPending) {
+      byOwner[ownerAddress] = tx.id
+      for (const op of operatorAddresses) {
+        byOperator[op] = { kind, txId: tx.id, createdAt: tx.createdAt }
+        if (kind === 'stake') {
+          pendingStakeOperators.push({ operatorAddress: op, ownerAddress, txId: tx.id, createdAt: tx.createdAt })
+        }
       }
     }
 
-    // Build pendingOperations entries
+    // Build pendingOperations entries — includes pending + recently-settled
     if (kind === 'stake') {
       const stakeInfos = extractTransactionStakingSuppliers(tx)
       for (const info of stakeInfos) {
@@ -78,6 +88,7 @@ export function derivePendingState(
         if (!pendingOpsMap.has(info.address) || pendingOpsMap.get(info.address)!.kind !== 'unstake') {
           pendingOpsMap.set(info.address, {
             kind: 'stake',
+            status: txStatus,
             operatorAddress: info.address,
             ownerAddress: info.ownerAddress,
             providerName: tx.provider?.name ?? null,
@@ -93,6 +104,7 @@ export function derivePendingState(
         // Unstake always wins
         pendingOpsMap.set(info.operatorAddress, {
           kind: 'unstake',
+          status: txStatus,
           operatorAddress: info.operatorAddress,
           ownerAddress: info.signer,
           providerName: tx.provider?.name ?? null,
