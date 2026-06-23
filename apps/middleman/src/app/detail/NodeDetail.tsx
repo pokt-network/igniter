@@ -401,9 +401,10 @@ export default function NodeDetail({
         className={
           clsx(
             'relative flex h-[64px] mt-[-5px]',
-            (displayStatus === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-slate',
-            displayStatus === NodeStatus.Unstaking && 'gradient-border-purple',
-            ((displayStatus === NodeStatus.Staked && !operationalFundsAmount) || displayStatus === NodeStatus.Unstaked) && 'gradient-border-orange',
+            (displayStatus === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-green',
+            (displayStatus === NodeStatus.Staked && !operationalFundsAmount) && 'gradient-border-red',
+            displayStatus === NodeStatus.Unstaking && 'gradient-border-orange',
+            displayStatus === NodeStatus.Unstaked && 'gradient-border-slate',
           )
         }
       >
