@@ -166,6 +166,16 @@ export default function DataTable<TData extends object, TValue>({
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
 
+  // Filter/sort controls are derived from client-loaded data, so the NUMBER of dropdowns
+  // differs between SSR (data empty → fewer groups) and the client (data populated → more).
+  // That count difference shifts position-based hydration and radix's useId() counter,
+  // producing hydration mismatches in the toolbar. Render these controls only after mount
+  // so SSR and the first client render are identical; they appear once data is in anyway.
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const globalFilterFn = React.useMemo(() => {
     if (!searchableColumns?.length) return undefined
     return (row: any, _columnId: string, filterValue: string) => {
@@ -369,7 +379,7 @@ export default function DataTable<TData extends object, TValue>({
               fileNameKey={csvFilename}
             />
           )}
-          {filters.map((filterGroup, groupIndex) => (
+          {mounted && filters.map((filterGroup, groupIndex) => (
             <FilterDropdown
               key={groupIndex}
               filterGroup={filterGroup}
@@ -380,7 +390,7 @@ export default function DataTable<TData extends object, TValue>({
             />
           ))}
           {
-            sorts.length > 0 && (
+            mounted && sorts.length > 0 && (
               <SortDropdown
                 sorts={sorts}
                 table={table}
