@@ -708,6 +708,29 @@ export async function countKeysForUnstake(filters: UnstakeFilters): Promise<numb
   return row?.count ?? 0
 }
 
+// Aggregate over the same filtered set as countKeysForUnstake, for the bulk unstake
+// review summary (total stake to be returned + total operator residual). Sums on bigint
+// columns come back as numeric; coerced to number (well within Number range at this scale).
+export async function getUnstakeSummary(
+  filters: UnstakeFilters,
+): Promise<{ count: number; totalStakeUpokt: number; totalResidualUpokt: number }> {
+  const db = getDbClient().db
+  const [row] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      totalStakeUpokt: sql<number>`coalesce(sum(${keysTable.stakeAmountUpokt}), 0)`,
+      totalResidualUpokt: sql<number>`coalesce(sum(${keysTable.balanceUpokt}), 0)`,
+    })
+    .from(keysTable)
+    .leftJoin(addressGroupTable, eq(keysTable.addressGroupId, addressGroupTable.id))
+    .where(and(...buildUnstakeConditions(filters)))
+  return {
+    count: row?.count ?? 0,
+    totalStakeUpokt: Number(row?.totalStakeUpokt ?? 0),
+    totalResidualUpokt: Number(row?.totalResidualUpokt ?? 0),
+  }
+}
+
 export async function listKeysForUnstake(filters: UnstakeFilters): Promise<Array<{ id: number; address: string; ownerAddress: string | null; stakeOwner: string | null; balanceUpokt: bigint | null }>> {
   const db = getDbClient().db
   return db

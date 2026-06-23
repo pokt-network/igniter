@@ -1,7 +1,7 @@
 'use server'
 
 import { type ActionResult, requireOwner, withRequireOwner } from '@/lib/utils/actionUtils'
-import { countKeysForUnstake, listKeysForUnstake, type UnstakeFilters } from '@/lib/dal/keys'
+import { countKeysForUnstake, getUnstakeSummary, listKeysForUnstake, type UnstakeFilters } from '@/lib/dal/keys'
 import { getTemporalClient, getTemporalConfig } from '@/lib/temporal'
 import { validateReturnFunds, type ReturnFundsInput } from '@/lib/unstakeValidation'
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
@@ -85,6 +85,14 @@ export async function GetUnstakeDuration(): Promise<UnstakeDurationData | null> 
 export async function CountKeysForUnstake(filters: UnstakeFilters): Promise<ActionResult<number>> {
   return withRequireOwner(async () => {
     return countKeysForUnstake(filters)
+  })
+}
+
+export async function GetUnstakeSummary(
+  filters: UnstakeFilters,
+): Promise<ActionResult<{ count: number; totalStakeUpokt: number; totalResidualUpokt: number }>> {
+  return withRequireOwner(async () => {
+    return getUnstakeSummary(filters)
   })
 }
 

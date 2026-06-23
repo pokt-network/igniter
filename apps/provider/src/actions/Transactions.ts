@@ -7,6 +7,7 @@ import {
   migrateRemediationHistory,
   listKeyAddressesWithPendingUnstake,
   getPendingAndRecentlySettledTransactions,
+  listTransactionsByKey,
 } from '@/lib/dal/transactions'
 import { type ActionResult, withRequireOwner } from '@/lib/utils/actionUtils'
 import type { Transaction } from '@igniter/db/provider/schema'
@@ -42,6 +43,20 @@ export async function MigrateRemediationHistory(): Promise<ActionResult<number>>
 export async function ListPendingUnstakeAddresses(): Promise<ActionResult<string[]>> {
   return withRequireOwner(async () => {
     return listKeyAddressesWithPendingUnstake()
+  })
+}
+
+/**
+ * Transactions for a single key (newest first), for the KeyDetail "Transactions" list.
+ * Server actions serialize Date natively and the provider transactions table has no bigint
+ * columns, so the rows can be returned as-is.
+ */
+export async function ListTransactionsByKey(keyAddress: string): Promise<ActionResult<Transaction[]>> {
+  return withRequireOwner(async () => {
+    const txs = await listTransactionsByKey(keyAddress)
+    // Drop the signed TxRaw bytes — the detail drawer never renders them, and they add
+    // ~1-4 KB per row to the client payload for no benefit.
+    return txs.map((t) => ({ ...t, signedPayload: null }))
   })
 }
 

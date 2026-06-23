@@ -8,9 +8,12 @@ import { DrawerDescription, DrawerHeader, DrawerTitle } from '@igniter/ui/compon
 import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
+import { Badge } from '@igniter/ui/components/badge'
 import {KeyWithRelations} from "@igniter/db/provider/schema"
 import {KeyState, KeyStateNameMap} from "@igniter/db/provider/enums"
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
+import { useAddItemToDetail } from "@igniter/ui/components/QuickDetails/Provider"
+import { ListTransactionsByKey } from "@/actions/Transactions"
 import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationHistoryList";
 import {KeyStateLabels, deriveKeyLifecycleStatus, RETIRED_LIFECYCLE_LABEL} from "@/app/admin/(internal)/keys/constants";
 import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal"
@@ -48,6 +51,18 @@ const stateDescription: Partial<Record<KeyState, string>> = {
   [KeyState.Unstaked]: 'This key has been unstaked from the network.',
 }
 
+const TX_TYPE_LABELS: Record<string, string> = {
+  stake: 'Stake',
+  unstake: 'Unstake',
+  return_funds: 'Return Funds',
+}
+
+function txStatusVariant(status: string): 'success' | 'destructive' | 'warning' {
+  if (status === 'success') return 'success'
+  if (status === 'failure') return 'destructive'
+  return 'warning'
+}
+
 export default function KeyDetail(snapshot: KeyWithRelations) {
   // The drawer opens with a point-in-time snapshot. Subscribe (read-only, no fetch via
   // skipToken) to the live keys cache so the panel reflects unstake/retire transitions
@@ -63,6 +78,18 @@ export default function KeyDetail(snapshot: KeyWithRelations) {
     queryFn: skipToken,
   })
   const key = keysData?.keys?.find((k) => k.address === snapshot.address) ?? snapshot
+
+  // Transactions for this key — each row opens the existing TransactionDetail drawer
+  // (stacked on top of this panel). Server actions serialize Date natively; no bigint on
+  // provider transactions, so rows pass straight through as the drawer's body.
+  const addItem = useAddItemToDetail()
+  const { data: keyTransactions } = useQuery({
+    queryKey: ['key-transactions', snapshot.address],
+    queryFn: async () => {
+      const r = await ListTransactionsByKey(snapshot.address)
+      return r.success ? r.data : []
+    },
+  })
 
   const {
     id,
@@ -305,6 +332,32 @@ export default function KeyDetail(snapshot: KeyWithRelations) {
           keyState={state}
           keyId={id}
         />
+      )}
+
+      {(keyTransactions?.length ?? 0) > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Transactions</span>
+          <div className="flex flex-col bg-bg-elevated rounded-[8px] divide-y divide-border-primary">
+            {keyTransactions!.map((tx) => (
+              <button
+                key={tx.id}
+                type="button"
+                onClick={() => addItem({ type: 'transaction', body: tx })}
+                className="flex flex-row items-center justify-between p-[8px_12px] text-sm hover:bg-bg-hover text-left transition-colors"
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span>{TX_TYPE_LABELS[tx.type] || tx.type}</span>
+                  {tx.createdAt && (
+                    <span className="text-xs text-text-tertiary font-mono">
+                      {new Date(tx.createdAt).toLocaleString()}
+                    </span>
+                  )}
+                </span>
+                <Badge variant={txStatusVariant(tx.status)}>{tx.status}</Badge>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       <PrivateKeyReveal keyId={id} />

@@ -9,9 +9,11 @@ import { Button } from '@igniter/ui/components/button'
 import { Checkbox } from '@igniter/ui/components/checkbox'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { AlertTriangle } from 'lucide-react'
-import { CountKeysForUnstake, UnstakeKeys, ListUnstakeAddresses } from '@/actions/Unstake'
+import { CountKeysForUnstake, GetUnstakeSummary, GetUnstakeDuration, UnstakeKeys, ListUnstakeAddresses } from '@/actions/Unstake'
 import Address from '@igniter/ui/components/Address'
-import { copyToClipboard } from '@igniter/ui/lib/utils'
+import { copyToClipboard, amountToPokt, toCurrencyFormat } from '@igniter/ui/lib/utils'
+import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
+import { formatDuration } from '@/lib/utils/time'
 import { type ReturnFundsInput } from '@/lib/unstakeValidation'
 import { ListAddressGroups } from '@/actions/AddressGroups'
 import { ListRelayMiners } from '@/actions/RelayMiners'
@@ -116,8 +118,34 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
 
   const count = hasSelection ? selectedKeyIds.length : filteredCount
 
+  // Aggregate stake / residual for the review screen (mirrors the single-key summary).
+  // Fetched lazily when the user reaches the confirm step.
+  const { data: summary, isLoading: isLoadingSummary } = useQuery({
+    queryKey: ['unstake-summary', effectiveFilters],
+    queryFn: async () => {
+      const r = await GetUnstakeSummary(effectiveFilters)
+      if (!r.success) throw new Error(r.error.message)
+      return r.data
+    },
+    enabled: status === 'confirm',
+    staleTime: 0,
+  })
+
+  // Estimated unbonding duration (display-only; null when the indexer is unset).
+  const { data: durationData, isLoading: isLoadingDuration } = useQuery({
+    queryKey: ['provider-unstake-duration'],
+    queryFn: GetUnstakeDuration,
+    enabled: status === 'confirm',
+    staleTime: 60_000,
+  })
+
+  const totalStakePokt = toCurrencyFormat(amountToPokt(summary?.totalStakeUpokt ?? 0), 2, 2)
+  const totalResidualPokt = toCurrencyFormat(amountToPokt(summary?.totalResidualUpokt ?? 0), 2, 2)
+  const formattedDuration = durationData ? formatDuration(durationData.durationSeconds) : null
+
   const returnFunds: ReturnFundsInput =
     rfMode === 'none' ? { mode: 'none' } : rfMode === 'owner' ? { mode: 'owner' } : { mode: 'custom', address: customAddr }
+  const returnsFunds = rfMode !== 'none'
 
   const submit = async () => {
     setStatus('progress')
@@ -273,6 +301,40 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
           <div className="flex items-center justify-between px-4 py-3 text-sm">
             <span className="text-text-secondary">Suppliers to unstake</span>
             <span className="font-semibold">{count}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 text-sm">
+            <span className="text-text-secondary">Tokens to Receive</span>
+            <span className="font-mono text-text-primary">
+              {isLoadingSummary ? '…' : <>{totalStakePokt} <span className="text-text-tertiary">$POKT</span></>}
+            </span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 text-sm gap-4">
+            <span className="text-text-secondary flex items-center gap-2">
+              {returnsFunds ? 'Returned to Owner' : 'Stays with Operator'}
+              <QuickInfoPopOverIcon
+                title={returnsFunds ? 'Funds returned to owner' : 'Funds not returned'}
+                description={returnsFunds
+                  ? "Returns each supplier's remaining account balance (minus network fees) to the owner once the unstake is confirmed."
+                  : "Each supplier's remaining balance (minus the unstake fee) stays with the operator address."}
+                url=""
+              />
+            </span>
+            <span className="font-mono text-text-primary">
+              {isLoadingSummary ? '…' : <>Approx. {totalResidualPokt} <span className="text-text-tertiary">$POKT</span></>}
+            </span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 text-sm gap-4">
+            <span className="text-text-secondary flex items-center gap-2">
+              Unstake in
+              <QuickInfoPopOverIcon
+                title="How the unstake duration is calculated"
+                description="Estimated from the blocks per session, the supplier's unbonding period in sessions, and the average block time over the last 30 days. Once confirmed, tokens return to the owner address."
+                url=""
+              />
+            </span>
+            <span className={`font-mono ${formattedDuration ? 'text-text-primary' : 'text-yellow-400'}`}>
+              {isLoadingDuration ? '…' : (formattedDuration ?? 'N/A')}
+            </span>
           </div>
           <div className="flex items-start justify-between px-4 py-3 text-sm gap-4">
             <span className="text-text-secondary shrink-0">Return funds</span>
