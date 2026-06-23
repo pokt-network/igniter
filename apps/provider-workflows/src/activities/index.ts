@@ -41,6 +41,14 @@ export type UpsertSupplierStatusResult = {
     state?: KeyState;
     remediationReasons?: RemediationHistoryEntryReason[];
   };
+  /**
+   * True only on the sweep where this key becomes "fully staked" — bonded AND with at
+   * least one service configured — when it was not fully staked the previous sweep.
+   * Services land a sweep after the bare bond, so this fires once, at completion, and
+   * drives the single "Suppliers Staked" notification (no premature 0-service alert, no
+   * re-alert on later service edits).
+   */
+  becameFullyStaked?: boolean;
   supplier?: Supplier;
 }
 
@@ -720,9 +728,20 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const currentState = update.state ?? prevState
     const currentRemediationReasons = (update.remediationHistory ?? key.remediationHistory ?? []).map((rh) => rh.reason)
 
+    // Stake completion: a supplier is only "fully staked" once it is bonded AND has at
+    // least one service configured. Services are written a sweep after the bare bond, so
+    // we flag completion on exactly the sweep where both conditions first hold (i.e. they
+    // did not hold last sweep). This is what the "Suppliers Staked" notification keys off.
+    const prevServiceCount = key.services?.length ?? 0
+    const currentServiceCount = (update.services ?? key.services)?.length ?? 0
+    const wasFullyStaked = prevState === KeyState.Staked && prevServiceCount > 0
+    const isFullyStaked = currentState === KeyState.Staked && currentServiceCount > 0
+    const becameFullyStaked = isFullyStaked && !wasFullyStaked
+
     const result: UpsertSupplierStatusResult = {
       state: currentState,
       remediationReasons: currentRemediationReasons,
+      becameFullyStaked,
     }
 
     const prevDiff: UpsertSupplierStatusResult['prev'] = {}
@@ -887,7 +906,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           )
         }
 
-        return { success: true, remediated: true, appliedReasons: [RemediationHistoryEntryReason.OwnerInitialStake], message: 'Supplier already configured; remediation cleared.' }
+        // No on-chain action was taken — this only clears a stale OwnerInitialStake flag.
+        // remediated:false so a no-op sweep does not surface a "1 succeeded" notification
+        // (notify only when a real remediation action occurred). appliedReasons is kept so
+        // remediateSupplier's return union stays stable for the range aggregator's type; it is
+        // never read for a remediated:false result (the aggregator gates on remediated === true).
+        return { success: true, remediated: false, appliedReasons: [RemediationHistoryEntryReason.OwnerInitialStake], message: 'Supplier already configured; nothing remediated (cleared stale OwnerInitialStake flag).' }
       }
     }
 

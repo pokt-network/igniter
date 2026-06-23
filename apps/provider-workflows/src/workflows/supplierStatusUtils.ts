@@ -17,17 +17,17 @@ export function classifyStatusResults(
     const address = addresses[i]!
     if (s.status !== 'fulfilled') continue
 
-    const { state, remediationReasons, prev } = s.value
+    const { state, remediationReasons, prev, becameFullyStaked } = s.value
+
+    // A stake is "complete" only once the supplier is bonded AND has services configured
+    // (services land a sweep after the bare bond). becameFullyStaked is true on exactly
+    // that sweep — this replaces the old "transitioned to Staked" check, which fired
+    // prematurely on the 0-service bond and then went silent when services arrived.
+    if (becameFullyStaked) {
+      result.staked.push(address)
+    }
 
     if (prev?.state !== undefined) {
-      const prevStateForStaked = [
-        KeyState.Available, KeyState.Delivered, KeyState.Staking,
-        KeyState.MissingStake, KeyState.Unstaked, KeyState.Unstaking,
-      ].includes(prev.state)
-      if (prevStateForStaked && state === KeyState.Staked) {
-        result.staked.push(address)
-      }
-
       const prevStateForUnstaked = [
         KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed,
       ].includes(prev.state)
@@ -66,7 +66,7 @@ export function buildStatusNotificationEvents(
       type: 'keys_staked',
       summary: {
         title: 'Suppliers Staked',
-        body: `${n(result.staked.length, 'supplier')} transitioned to Staked at block ${height}.`,
+        body: `${n(result.staked.length, 'supplier')} finished staking (services configured) at block ${height}.`,
       },
       metadata: { addresses: result.staked, height },
     })

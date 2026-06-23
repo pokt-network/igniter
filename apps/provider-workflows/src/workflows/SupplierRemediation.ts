@@ -218,27 +218,50 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
       }
     }
 
-    const reasonSummaryLines = Object.entries(byReason)
-      .filter(([, { succeeded, failed }]) => succeeded.length > 0 || failed.length > 0)
-      .map(([reason, { succeeded, failed }]) => {
-        const label = reasonLabels[reason as RemediationHistoryEntryReason] ?? reason
-        const parts = []
-        if (succeeded.length > 0) parts.push(`✓ ${succeeded.length} succeeded`)
-        if (failed.length > 0) parts.push(`✗ ${failed.length} failed`)
-        return `\n• ${label}: ${parts.join(', ')}`
-      })
+    // OwnerInitialStake completions are already announced by the "Suppliers Staked" event
+    // (keys_staked fires once a fresh stake has its services configured). Drop those
+    // SUCCESSES from the remediation summary so a brand-new stake doesn't double-notify;
+    // keep OwnerInitialStake FAILURES so a botched initial stake still surfaces here.
+    const notifiableByReason: Record<string, { succeeded: string[]; failed: string[] }> = {}
+    for (const [reason, { succeeded, failed }] of Object.entries(byReason)) {
+      const keepSucceeded =
+        reason === RemediationHistoryEntryReason.OwnerInitialStake ? [] : succeeded
+      if (keepSucceeded.length > 0 || failed.length > 0) {
+        notifiableByReason[reason] = { succeeded: keepSucceeded, failed }
+      }
+    }
 
-    await sendNotificationsBestEffort({
-      type: 'remediation_summary',
-      summary: {
-        title: 'Remediation Complete',
-        body: [
-          `Remediation run at block ${height} processed ${total} supplier${total > 1 ? 's' : ''}.`,
-          ...reasonSummaryLines,
-        ].join(''),
-      },
-      metadata: { byReason, height },
-    })
+    const notifiableAddresses = new Set<string>()
+    for (const { succeeded, failed } of Object.values(notifiableByReason)) {
+      succeeded.forEach((a) => notifiableAddresses.add(a))
+      failed.forEach((a) => notifiableAddresses.add(a))
+    }
+    const notifiableTotal = notifiableAddresses.size
+
+    // Nothing left to report (e.g. the run only completed fresh initial stakes) → no
+    // remediation notification; keys_staked already covered it.
+    if (notifiableTotal > 0) {
+      const reasonSummaryLines = Object.entries(notifiableByReason)
+        .map(([reason, { succeeded, failed }]) => {
+          const label = reasonLabels[reason as RemediationHistoryEntryReason] ?? reason
+          const parts = []
+          if (succeeded.length > 0) parts.push(`✓ ${succeeded.length} succeeded`)
+          if (failed.length > 0) parts.push(`✗ ${failed.length} failed`)
+          return `\n• ${label}: ${parts.join(', ')}`
+        })
+
+      await sendNotificationsBestEffort({
+        type: 'remediation_summary',
+        summary: {
+          title: 'Remediation Complete',
+          body: [
+            `Remediation run at block ${height} processed ${notifiableTotal} supplier${notifiableTotal > 1 ? 's' : ''}.`,
+            ...reasonSummaryLines,
+          ].join(''),
+        },
+        metadata: { byReason: notifiableByReason, height },
+      })
+    }
   }
 
   log.info('SupplierRemediation: Execution Ended', { height, minId, maxId, failedReasons })
