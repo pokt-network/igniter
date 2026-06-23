@@ -297,7 +297,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "isBootstrapped": {
           "name": "isBootstrapped",

@@ -1,1 +1,1 @@
-ALTER TABLE "providers" ADD COLUMN "returnSupplierFundsToOwner" boolean DEFAULT false NOT NULL;
+ALTER TABLE "providers" ADD COLUMN "returnSupplierFundsToOwner" boolean DEFAULT true NOT NULL;
