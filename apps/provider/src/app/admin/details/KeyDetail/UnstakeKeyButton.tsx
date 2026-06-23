@@ -22,8 +22,6 @@ interface UnstakeKeyButtonProps {
   returnFundsDefault?: boolean
   stakeAmountUpokt?: bigint | number | null
   balanceUpokt?: bigint | number | null
-  stakeOwner?: string | null
-  ownerAddress?: string | null
 }
 
 type Status = 'idle' | 'submitting' | 'success' | 'error'
@@ -34,8 +32,6 @@ export function UnstakeKeyButton({
   returnFundsDefault,
   stakeAmountUpokt,
   balanceUpokt,
-  stakeOwner,
-  ownerAddress,
 }: UnstakeKeyButtonProps) {
   const router = useRouter()
   const queryClient = useQueryClient()

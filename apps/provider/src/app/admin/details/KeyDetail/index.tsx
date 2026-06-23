@@ -280,8 +280,6 @@ export default function KeyDetail(snapshot: KeyWithRelations) {
           address={address}
           stakeAmountUpokt={stakeAmountUpokt}
           balanceUpokt={balanceUpokt}
-          stakeOwner={stakeOwner}
-          ownerAddress={ownerAddress}
         />
       )}
 

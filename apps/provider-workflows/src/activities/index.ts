@@ -739,9 +739,21 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     // Staked would falsely re-fire "Suppliers Staked". Only a genuinely-not-yet-staked
     // supplier reaching Staked-with-services counts as a completion.
     const STAKED_FAMILY = [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]
+    // States a key passes through while WE stake it, so reaching Staked-with-services is a
+    // genuine completion — plus the bare-bond case (already Staked with 0 services, services
+    // now landing). Excludes Imported: an Imported→Staked jump is the provider DISCOVERING a
+    // key already staked on-chain (e.g. importing pre-staked keys), not a fresh completion,
+    // so it must not fire "Suppliers Staked".
+    const STAKING_FLOW_STATES = [
+      KeyState.Available, KeyState.Delivered, KeyState.Staking,
+      KeyState.MissingStake, KeyState.Unstaked, KeyState.Unstaking,
+    ]
     const wasFullyStaked = STAKED_FAMILY.includes(prevState) && prevServiceCount > 0
     const isFullyStaked = currentState === KeyState.Staked && currentServiceCount > 0
-    const becameFullyStaked = isFullyStaked && !wasFullyStaked
+    const fromStakeCompletionPath =
+      STAKING_FLOW_STATES.includes(prevState) ||
+      (prevState === KeyState.Staked && prevServiceCount === 0)
+    const becameFullyStaked = isFullyStaked && !wasFullyStaked && fromStakeCompletionPath
 
     const result: UpsertSupplierStatusResult = {
       state: currentState,
