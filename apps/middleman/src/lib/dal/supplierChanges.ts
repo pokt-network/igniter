@@ -31,7 +31,7 @@ export async function getRecentChangesByUser(
       })
       .from(supplierChangesTable)
       .innerJoin(nodesTable, eq(supplierChangesTable.nodeId, nodesTable.id))
-      .where(eq(nodesTable.createdBy, userIdentity))
+      .where(and(eq(nodesTable.createdBy, userIdentity), isNull(supplierChangesTable.acknowledgedAt)))
       .groupBy(supplierChangesTable.batchId)
       .orderBy(sql`max(${supplierChangesTable.createdAt}) desc`)
       .limit(pageSize)
@@ -42,7 +42,7 @@ export async function getRecentChangesByUser(
       })
       .from(supplierChangesTable)
       .innerJoin(nodesTable, eq(supplierChangesTable.nodeId, nodesTable.id))
-      .where(eq(nodesTable.createdBy, userIdentity)),
+      .where(and(eq(nodesTable.createdBy, userIdentity), isNull(supplierChangesTable.acknowledgedAt))),
   ])
 
   const batchIds = batchPage.map((b) => b.batchId)
@@ -76,6 +76,7 @@ export async function getRecentChangesByUser(
       and(
         eq(nodesTable.createdBy, userIdentity),
         inArray(supplierChangesTable.batchId, batchIds),
+        isNull(supplierChangesTable.acknowledgedAt),
       ),
     )
     .orderBy(desc(supplierChangesTable.createdAt))
@@ -97,6 +98,7 @@ export async function getUnacknowledgedChangesByUser(userIdentity: string) {
       changeType: supplierChangesTable.changeType,
       serviceId: supplierChangesTable.serviceId,
       description: supplierChangesTable.description,
+      newValue: supplierChangesTable.newValue,
       batchId: supplierChangesTable.batchId,
       createdAt: supplierChangesTable.createdAt,
       nodeAddress: nodesTable.address,
