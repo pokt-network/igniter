@@ -463,7 +463,7 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
             <>
               <div className="flex-1" />
               <Button variant="outline" onClick={() => { setStatus('form'); setAck1(false); setAck2(false) }}>Back</Button>
-              <Button className="bg-red-600 text-white border-transparent hover:bg-red-700" disabled={!ack1 || !ack2} onClick={submit}>Unstake</Button>
+              <Button className="bg-red-600 text-white border-transparent hover:bg-red-700" disabled={!ack1 || !ack2 || confirmCount === 0} onClick={submit}>Unstake</Button>
             </>
           )}
           {status === 'progress' && (
