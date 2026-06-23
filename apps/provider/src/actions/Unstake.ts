@@ -74,6 +74,12 @@ export async function GetUnstakeDuration(): Promise<UnstakeDurationData | null> 
 
   const durationSeconds = blocksPerSession * unbondingSessions * timeToBlockSeconds
 
+  // A non-numeric indexer value would make durationSeconds NaN, which formatDuration
+  // renders as the misleading "< 1m". Treat it as unavailable (UI shows "N/A") instead.
+  if (!Number.isFinite(durationSeconds)) {
+    return null
+  }
+
   return {
     durationSeconds,
     numBlocksPerSession: blocksPerSession,

@@ -114,8 +114,9 @@ export default function NotificationEventsBridge() {
         showTypeIcon: true,
         content: eventContent(event),
         onDismiss: async () => {
-          // Dismiss / Dismiss all must persist (mark the event viewed); otherwise the
-          // next 60s poll re-fetches it and the banner reappears after a refresh.
+          // Dismiss / Dismiss all (and the View action, which removes the toast) must
+          // persist by marking the event viewed; otherwise the next poll re-fetches it
+          // and the banner reappears after a refresh.
           try {
             await MarkNotificationEventsViewed([event.id])
             queryClient.invalidateQueries({ queryKey: ['unviewed-notification-events'] })
@@ -132,11 +133,10 @@ export default function NotificationEventsBridge() {
             <Button
               key="view"
               size="sm"
-              onClick={async () => {
+              onClick={() => {
+                // remove() runs onDismiss, which already marks viewed + invalidates;
+                // just navigate (avoid double-marking / double-invalidating).
                 remove()
-                await MarkNotificationEventsViewed([event.id])
-                queryClient.invalidateQueries({ queryKey: ['unviewed-notification-events'] })
-                queryClient.invalidateQueries({ queryKey: ['notification-events'] })
                 router.push(`/admin/notifications?uuid=${event.uuid}`)
               }}
             >

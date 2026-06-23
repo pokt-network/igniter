@@ -734,7 +734,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     // did not hold last sweep). This is what the "Suppliers Staked" notification keys off.
     const prevServiceCount = key.services?.length ?? 0
     const currentServiceCount = (update.services ?? key.services)?.length ?? 0
-    const wasFullyStaked = prevState === KeyState.Staked && prevServiceCount > 0
+    // "Was already a configured supplier" includes the degraded states a staked supplier
+    // can sit in (AttentionNeeded / RemediationFailed) — otherwise a drift→recovery back to
+    // Staked would falsely re-fire "Suppliers Staked". Only a genuinely-not-yet-staked
+    // supplier reaching Staked-with-services counts as a completion.
+    const STAKED_FAMILY = [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]
+    const wasFullyStaked = STAKED_FAMILY.includes(prevState) && prevServiceCount > 0
     const isFullyStaked = currentState === KeyState.Staked && currentServiceCount > 0
     const becameFullyStaked = isFullyStaked && !wasFullyStaked
 
