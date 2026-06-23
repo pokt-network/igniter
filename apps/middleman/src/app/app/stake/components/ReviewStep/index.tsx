@@ -161,6 +161,8 @@ function useBalanceAndNetworkFee(
             }
         },
         networkFee: totalNetworkFee,
+        gasFee: simulateFee?.fee || 0,
+        stakingFee: (stakeSupplierFee || 0) * suppliersToBeStaked,
         balance: balance || 0,
         isLoadingBalance,
         errorBalance,
@@ -188,6 +190,8 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
         errorFee,
         feeErrorMessage,
         networkFee,
+        gasFee,
+        stakingFee,
         refetchFee,
         balance,
         isLoadingBalance,
@@ -296,7 +300,25 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                         </span>
                         <QuickInfoPopOverIcon
                             title="Network Fee"
-                            description="The amount of $POKT that will be charged as a network fee per transaction."
+                            description={
+                              <div className="flex flex-col gap-2 p-[12px_16px]">
+                                <div className="flex flex-row items-center justify-between">
+                                  <span className="text-[14px] text-text-tertiary">Gas</span>
+                                  <span className="font-mono text-[14px] text-text-primary">
+                                    {`${toCurrencyFormat(gasFee, 6, 2)} $POKT`}
+                                  </span>
+                                </div>
+                                <div className="flex flex-row items-center justify-between">
+                                  <span className="text-[14px] text-text-tertiary">Staking fee</span>
+                                  <span className="font-mono text-[14px] text-text-primary">
+                                    {`${toCurrencyFormat(stakingFee, 2, 2)} $POKT`}
+                                  </span>
+                                </div>
+                                <span className="text-[12px] text-text-tertiary leading-snug">
+                                  Gas is the cost to broadcast the transaction. The staking fee is a protocol charge applied per supplier staked.
+                                </span>
+                              </div>
+                            }
                             url={''}
                         />
                     </span>

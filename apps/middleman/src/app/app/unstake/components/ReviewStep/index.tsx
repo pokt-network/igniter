@@ -4,9 +4,12 @@ import { ActivityHeader } from "@igniter/ui/components/ActivityHeader";
 import { Button } from "@igniter/ui/components/button";
 import { Skeleton } from "@igniter/ui/components/skeleton";
 import { QuickInfoPopOverIcon } from "@igniter/ui/components/QuickInfoPopOverIcon";
+import { useWalletConnection } from "@igniter/ui/context/WalletConnection/index";
 import { CaretSmallIcon, CornerIcon } from "@igniter/ui/assets";
 import { useQuery } from "@tanstack/react-query";
 import { GetUnstakeDuration } from "@/actions/Unstake";
+import { SimulateFee } from "@/actions/Blockchain";
+import type { TransactionMessage } from "@/lib/models/Transactions";
 import { GetUserNodes } from "@/actions/Nodes";
 import { formatDuration } from "@/lib/utils/time";
 import { useMemo, useState } from "react";
@@ -37,9 +40,26 @@ interface OwnerAddressGroup {
   nodes: Array<{
     address: string;
     stakeAmount: string;
+    balance: number;
     provider?: { name?: string | null } | null;
   }>;
   totalStake: number;
+}
+
+function useUnstakeNetworkFee(selectedNodeAddresses: string[], ownerAddress: string) {
+  const { getPublicKey } = useWalletConnection()
+  return useQuery({
+    queryKey: ['unstake-simulate-fee', ownerAddress, selectedNodeAddresses],
+    enabled: selectedNodeAddresses.length > 0 && !!ownerAddress,
+    queryFn: async () => {
+      const pubKey = await getPublicKey(ownerAddress)
+      const messages: TransactionMessage[] = selectedNodeAddresses.map((operatorAddress) => ({
+        typeUrl: '/pocket.supplier.MsgUnstakeSupplier',
+        body: { operatorAddress, signer: ownerAddress },
+      }))
+      return await SimulateFee({ messages, signerPubKey: pubKey })
+    },
+  })
 }
 
 export function ReviewStep({
@@ -83,6 +103,7 @@ export function ReviewStep({
         existing.nodes.push({
           address: node.address,
           stakeAmount: node.stakeAmount,
+          balance: Number(node.balance ?? 0),
           provider: node.provider,
         });
         existing.totalStake += stakeAmount;
@@ -92,6 +113,7 @@ export function ReviewStep({
           nodes: [{
             address: node.address,
             stakeAmount: node.stakeAmount,
+            balance: Number(node.balance ?? 0),
             provider: node.provider,
           }],
           totalStake: stakeAmount,
@@ -135,8 +157,15 @@ export function ReviewStep({
   const isLoading = isLoadingNodes || isLoadingDuration;
   const isError = isErrorNodes || isErrorDuration;
 
+  const {
+    data: networkFeeData,
+    isLoading: isLoadingNetworkFee,
+    isError: isErrorNetworkFee,
+    refetch: refetchNetworkFee,
+  } = useUnstakeNetworkFee(selectedNodeAddresses, ownerAddress);
+
   return (
-    <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
+    <div className="flex flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-6 rounded-b-[12px] gap-4">
       <ActivityHeader
         onBack={onBack}
         onClose={onClose}
@@ -144,79 +173,18 @@ export function ReviewStep({
         subtitle="Please review the details of your unstake operation."
       />
 
-      <div className="flex flex-col bg-[var(--bg-surface)] p-0 rounded-[8px]">
-        {!errorMessage && (
-          <span className="inline-flex flex-wrap items-center gap-x-1 text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
-            <span>Upon clicking Unstake, you will be prompted to sign a transaction with your wallet to finalize the unstake operation. After approximately</span>
-            <span className={`font-mono font-semibold ${formattedDuration ? 'text-[var(--text-primary)]' : 'text-yellow-400'}`}>{formattedDuration ?? 'N/A'}</span>
-            <QuickInfoPopOverIcon
-              title="How the unstake duration is calculated"
-              description="Estimated from the number of blocks per session, the supplier's unbonding period in sessions, and the average block time measured over the last 30 days of block data."
-              url=""
-            />
-            <span>, your tokens will be returned to the owner address.</span>
-          </span>
-        )}
-        {errorMessage && (
+      {errorMessage && (
+        <div className="flex flex-col bg-[var(--bg-surface)] rounded-[8px]">
           <span className="text-[14px] text-[var(--text-tertiary)] p-[11px_16px]">
             {errorMessage}
           </span>
-        )}
-      </div>
-
-      {uniqueProviders.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {uniqueProviders.map((provider) => {
-            const hasResidual = provider.residualUpokt > 0;
-            const approxAmount = toCurrencyFormat(amountToPokt(provider.residualUpokt));
-            return provider.returnSupplierFundsToOwner ? (
-              <div
-                key={provider.identity}
-                className="flex flex-col gap-1 rounded-[8px] border border-green-500/30 bg-green-500/10 p-[11px_16px]"
-              >
-                <div className="flex flex-row items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-green-400">
-                    Funds returned to owner
-                  </span>
-                  {hasResidual && (
-                    <span className="text-xs font-mono text-green-400 whitespace-nowrap">
-                      ~{approxAmount} $POKT
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-text-secondary">
-                  This provider returns the supplier&apos;s remaining account balance (minus
-                  network fees) to the owner once the unstake is confirmed.
-                </span>
-              </div>
-            ) : (
-              <div
-                key={provider.identity}
-                className="flex flex-col gap-1 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 p-[11px_16px]"
-              >
-                <div className="flex flex-row items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-yellow-400">
-                    Funds not returned
-                  </span>
-                  {hasResidual && (
-                    <span className="text-xs font-mono text-yellow-400 whitespace-nowrap">
-                      ~{approxAmount} $POKT
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-text-secondary">
-                  This provider does not return funds. The supplier&apos;s remaining balance
-                  (minus the unstake fee) stays with the operator address.
-                </span>
-              </div>
-            );
-          })}
         </div>
       )}
 
-      <div className="relative flex h-[64px] min-h-[64px] gradient-border-slate">
-        <div className="absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between">
-          <span className="text-[20px] text-white">
+      {/* Unstake amount */}
+      <div className="relative flex h-[56px] min-h-[56px] gradient-border-slate">
+        <div className="absolute inset-0 flex flex-row items-center m-[0.5px] bg-[var(--background)] rounded-[8px] p-[14px_20px] justify-between">
+          <span className="text-[18px] text-white">
             Unstake
           </span>
           <span className="flex flex-row items-center gap-2">
@@ -224,10 +192,10 @@ export function ReviewStep({
               <Skeleton className="w-[100px] h-6 bg-bg-elevated" />
             ) : (
               <>
-                <span className="font-mono text-[20px] text-white">
+                <span className="font-mono text-[18px] text-white">
                   {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
                 </span>
-                <span className="font-mono text-[20px] text-white/60">
+                <span className="font-mono text-[18px] text-white/60">
                   $POKT
                 </span>
               </>
@@ -260,7 +228,7 @@ export function ReviewStep({
         {/* Owner Address Groups */}
         {ownerAddressGroups.map((group, index) => (
           <React.Fragment key={group.ownerAddress}>
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+            <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]">
               <div className="flex flex-row items-center gap-2">
                 <span className="text-[14px] text-[var(--text-tertiary)]">
                   Owner Address
@@ -274,7 +242,7 @@ export function ReviewStep({
               <Address address={group.ownerAddress} showAvatar />
             </div>
 
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+            <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]">
               <span className="text-[14px] text-[var(--text-tertiary)]">
                 Tokens to Receive
               </span>
@@ -292,7 +260,7 @@ export function ReviewStep({
               )}
             </div>
 
-            <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+            <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]">
               <span className="text-[14px] text-[var(--text-tertiary)]">
                 Suppliers
               </span>
@@ -307,10 +275,105 @@ export function ReviewStep({
           </React.Fragment>
         ))}
 
+        {/* Funds return policy */}
+        {uniqueProviders.map((provider) => {
+          const approxAmount = toCurrencyFormat(amountToPokt(provider.residualUpokt), 2, 2);
+          const returns = provider.returnSupplierFundsToOwner;
+          return (
+            <div
+              key={`funds-${provider.identity}`}
+              className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]"
+            >
+              <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
+                <span>{returns ? 'Returned to Owner' : 'Stays with Operator'}</span>
+                <QuickInfoPopOverIcon
+                  title={returns ? 'Funds returned to owner' : 'Funds not returned'}
+                  description={returns
+                    ? "This provider returns the supplier's remaining account balance (minus network fees) to the owner once the unstake is confirmed."
+                    : "This provider does not return funds. The supplier's remaining balance (minus the unstake fee) stays with the operator address."}
+                  url=""
+                />
+              </span>
+              <span className="flex flex-row gap-2">
+                <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                  Approx. {approxAmount}
+                </span>
+                <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
+                  $POKT
+                </span>
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Unstake duration */}
+        <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]">
+          <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
+            <span>Unstake in</span>
+            <QuickInfoPopOverIcon
+              title="How the unstake duration is calculated"
+              description="Estimated from the number of blocks per session, the supplier's unbonding period in sessions, and the average block time measured over the last 30 days of block data. Once confirmed, your tokens are returned to the owner address."
+              url=""
+            />
+          </span>
+          {isLoadingDuration ? (
+            <Skeleton className="w-[80px] h-5 bg-bg-elevated" />
+          ) : (
+            <span className={`font-mono text-[14px] ${formattedDuration ? 'text-[var(--text-primary)]' : 'text-yellow-400'}`}>
+              {formattedDuration ?? 'N/A'}
+            </span>
+          )}
+        </div>
+
+        {/* Network Fee */}
+        <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]">
+          <span className="flex flex-row items-center gap-2 text-[14px] text-[var(--text-tertiary)]">
+            <span>Network Fee</span>
+            <QuickInfoPopOverIcon
+              title="Network Fee"
+              description="The gas cost to broadcast the unstake transaction to the network."
+              url=""
+            />
+          </span>
+          {isLoadingNetworkFee ? (
+            <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
+          ) : isErrorNetworkFee ? (
+            <Button onClick={() => refetchNetworkFee()} className="h-[30px]">Retry</Button>
+          ) : (
+            <span className="flex flex-row gap-2">
+              <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                {toCurrencyFormat(networkFeeData?.fee ?? 0, 6, 2)}
+              </span>
+              <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
+                $POKT
+              </span>
+            </span>
+          )}
+        </div>
+
+        {/* Total */}
+        <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-surface)]">
+          <span className="text-[14px] font-medium text-[var(--text-tertiary)]">
+            Total
+          </span>
+          {isLoadingNodes ? (
+            <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
+          ) : (
+            <span className="flex flex-row gap-2">
+              <span className="font-mono text-[14px] font-medium text-[var(--text-primary)]">
+                {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
+              </span>
+              <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
+                $POKT
+              </span>
+            </span>
+          )}
+        </div>
+
         {/* Node Details Expandable */}
         <div className="border-t-2 border-[var(--border-primary)]">
           <div
-            className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] hover:cursor-pointer"
+            className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] hover:cursor-pointer"
             onClick={() => setIsShowingNodeDetails(!isShowingNodeDetails)}
           >
             <span className="flex flex-row items-center gap-2">
@@ -339,7 +402,7 @@ export function ReviewStep({
                   {group.nodes.map((node, nodeIndex) => (
                     <div
                       key={node.address}
-                      className="flex flex-row items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]"
+                      className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)]"
                     >
                       <div className="flex flex-row items-center gap-2">
                         <CornerIcon />
@@ -351,38 +414,31 @@ export function ReviewStep({
                           </span>
                         </div>
                       </div>
-                      <span className="flex flex-row gap-1">
-                        <span className="font-mono text-[14px] text-[var(--text-primary)]">
-                          {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="flex flex-row gap-1">
+                          <span className="text-[12px] text-[var(--text-tertiary)]">Stake</span>
+                          <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                            {toCurrencyFormat(parseFloat(node.stakeAmount) / 1e6, 2, 2)}
+                          </span>
+                          <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
+                            $POKT
+                          </span>
                         </span>
-                        <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
-                          $POKT
+                        <span className="flex flex-row gap-1">
+                          <span className="text-[12px] text-[var(--text-tertiary)]">Balance</span>
+                          <span className="font-mono text-[14px] text-[var(--text-primary)]">
+                            {toCurrencyFormat(amountToPokt(node.balance), 2, 2)}
+                          </span>
+                          <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
+                            $POKT
+                          </span>
                         </span>
-                      </span>
+                      </div>
                     </div>
                   ))}
                 </React.Fragment>
               ))}
             </>
-          )}
-        </div>
-
-        {/* Total */}
-        <div className="flex flex-row items-center justify-between px-4 py-3 bg-[var(--bg-surface)]">
-          <span className="text-[14px] font-medium text-[var(--text-tertiary)]">
-            Total
-          </span>
-          {isLoadingNodes ? (
-            <Skeleton className="w-[100px] h-5 bg-bg-elevated" />
-          ) : (
-            <span className="flex flex-row gap-2">
-              <span className="font-mono text-[14px] font-medium text-[var(--text-primary)]">
-                {toCurrencyFormat(totalStakeAmount / 1e6, 2, 2)}
-              </span>
-              <span className="font-mono text-[14px] text-[var(--text-tertiary)]">
-                $POKT
-              </span>
-            </span>
           )}
         </div>
       </div>
