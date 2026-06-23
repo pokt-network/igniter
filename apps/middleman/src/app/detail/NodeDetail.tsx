@@ -263,6 +263,11 @@ export default function NodeDetail({
   const [isShowingServices, setIsShowingServices] = useState(false);
   const { isOperatorPending, isOwnerBusy } = usePendingGuards();
   const isUnstakeBlocked = isOperatorPending(address) || isOwnerBusy(ownerAddress);
+  // A pending op on a Staked supplier is an in-flight unstake (a staked supplier can't be
+  // re-staked), so reflect it in the detail hero immediately — before the node status flips
+  // to Unstaking on tx verification — matching the suppliers-list "Unstaking…" badge.
+  const displayStatus =
+    isOperatorPending(address) && status === NodeStatus.Staked ? NodeStatus.Unstaking : status
 
   const {
     data: unstakeDurationData,
@@ -396,15 +401,15 @@ export default function NodeDetail({
         className={
           clsx(
             'relative flex h-[64px] mt-[-5px]',
-            (status === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-slate',
-            status === NodeStatus.Unstaking && 'gradient-border-purple',
-            ((status === NodeStatus.Staked && !operationalFundsAmount) || status === NodeStatus.Unstaked) && 'gradient-border-orange',
+            (displayStatus === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-slate',
+            displayStatus === NodeStatus.Unstaking && 'gradient-border-purple',
+            ((displayStatus === NodeStatus.Staked && !operationalFundsAmount) || displayStatus === NodeStatus.Unstaked) && 'gradient-border-orange',
           )
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
           <span className="text-[20px] text-white">
-            {status.slice(0, 1).toUpperCase() + status.slice(1)}
+            {displayStatus.slice(0, 1).toUpperCase() + displayStatus.slice(1)}
           </span>
           <div className="flex flex-row items-center gap-2">
             <p className="font-mono !text-[20px] text-white">
