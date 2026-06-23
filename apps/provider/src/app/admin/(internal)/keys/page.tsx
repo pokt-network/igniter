@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import React from 'react'
 import KeysTable from '@/app/admin/(internal)/keys/table'
+import ActivitiesSection from '@/app/admin/(internal)/keys/ActivitiesSection'
 import { GetAppName, GetApplicationSettings } from '@/actions/ApplicationSettings'
 import ClearRemediationButton from '@/app/admin/(internal)/keys/ClearRemediationButton'
 import AutoStakeToggle from '@/app/admin/(internal)/keys/AutoStakeToggle'
@@ -40,6 +41,7 @@ export default async function AddressesPage() {
         }
       />
       <PageContent>
+        <ActivitiesSection />
         <React.Suspense>
           <KeysTable />
         </React.Suspense>

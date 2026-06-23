@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@igniter/ui/components/select'
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@igniter/ui/components/dialog'
 import { Button } from '@igniter/ui/components/button'
@@ -50,6 +50,7 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
   const [result, setResult] = useState<{ accepted: number; skipped: number } | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
 
+  const queryClient = useQueryClient()
   const { selectedKeyIds, clearSelection } = useKeysSelection()
   const hasSelection = selectedKeyIds.length > 0
 
@@ -126,6 +127,9 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
     setResult(r.data)
     clearSelection()
     setStatus('done')
+    queryClient.invalidateQueries({ queryKey: ['keys-pending-unstake'] })
+    queryClient.invalidateQueries({ queryKey: ['keys-pending-state'] })
+    queryClient.invalidateQueries({ queryKey: ['keys'] })
   }
 
   const canProceed = count > 0 && !(rfMode === 'custom' && !customAddr.trim())

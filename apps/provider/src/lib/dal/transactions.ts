@@ -2,7 +2,7 @@ import { getDbClient } from '@/db'
 import { transactionsTable, keysTable, Transaction } from '@igniter/db/provider/schema'
 import { TransactionType, TransactionStatus } from '@igniter/db/provider/enums'
 import type { RemediationHistoryEntry } from '@igniter/db/provider/schema/keys'
-import { desc, eq, count, sql } from 'drizzle-orm'
+import { and, desc, eq, count, sql, or, gte, inArray } from 'drizzle-orm'
 
 export async function listTransactions(limit = 50, offset = 0): Promise<Transaction[]> {
   const dbClient = getDbClient()
@@ -28,6 +28,62 @@ export async function listTransactionsByKey(keyAddress: string): Promise<Transac
     .select()
     .from(transactionsTable)
     .where(eq(transactionsTable.keyAddress, keyAddress))
+    .orderBy(desc(transactionsTable.createdAt))
+}
+
+/**
+ * Returns the addresses of keys that have an unstake transaction that is PENDING or
+ * recently SUCCEEDED (within `lingerMs`). Used for fast in-progress "Unstaking…" feedback
+ * on the keys list before key.state flips on verification. The linger bridges the race
+ * where the unstake tx settles (no longer "pending") but the keys query hasn't yet
+ * refetched the new state/retiredAt — without it the row briefly flickers back to
+ * "Staked" between "Unstaking…" and "Retired". The per-row override only applies while
+ * state===Staked, so the linger is harmless once the real state flip lands.
+ */
+export async function listKeyAddressesWithPendingUnstake(lingerMs = 120000): Promise<string[]> {
+  const dbClient = getDbClient()
+  const cutoff = new Date(Date.now() - lingerMs)
+  const rows = await dbClient.db
+    .select({ keyAddress: transactionsTable.keyAddress })
+    .from(transactionsTable)
+    .where(
+      and(
+        eq(transactionsTable.type, TransactionType.Unstake),
+        or(
+          eq(transactionsTable.status, TransactionStatus.Pending),
+          and(
+            eq(transactionsTable.status, TransactionStatus.Success),
+            gte(transactionsTable.createdAt, cutoff),
+          ),
+        ),
+      ),
+    )
+  return rows.map((r) => r.keyAddress)
+}
+
+/**
+ * Returns full transaction rows that are PENDING or recently SETTLED (within `lingerMs`),
+ * across all transaction types (stake / unstake / return_funds). Powers the keys
+ * "In progress" section: pending rows show as "Staking…"/"Unstaking…" and recently-settled
+ * rows linger briefly ("Staked"/"Unstaked"/"Failed") so the user sees the operation finish
+ * before the row drops out. Provider transactions have NO updatedAt column, so the linger
+ * is keyed off created_at (matches listKeyAddressesWithPendingUnstake's window semantics).
+ */
+export async function getPendingAndRecentlySettledTransactions(lingerMs = 120000): Promise<Transaction[]> {
+  const dbClient = getDbClient()
+  const cutoff = new Date(Date.now() - lingerMs)
+  return dbClient.db
+    .select()
+    .from(transactionsTable)
+    .where(
+      or(
+        eq(transactionsTable.status, TransactionStatus.Pending),
+        and(
+          inArray(transactionsTable.status, [TransactionStatus.Success, TransactionStatus.Failure]),
+          gte(transactionsTable.createdAt, cutoff),
+        ),
+      ),
+    )
     .orderBy(desc(transactionsTable.createdAt))
 }
 
