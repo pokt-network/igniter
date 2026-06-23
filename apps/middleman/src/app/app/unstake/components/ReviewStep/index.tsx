@@ -354,7 +354,7 @@ export function ReviewStep({
         {/* Total */}
         <div className="flex flex-row items-center justify-between px-4 py-2.5 border-b border-[var(--border-primary)] bg-[var(--bg-surface)]">
           <span className="text-[14px] font-medium text-[var(--text-tertiary)]">
-            Total
+            Tokens to Receive
           </span>
           {isLoadingNodes ? (
             <Skeleton className="w-[100px] h-5 bg-bg-elevated" />

@@ -53,7 +53,13 @@ export async function listKeyAddressesWithPendingUnstake(lingerMs = 120000): Pro
           eq(transactionsTable.status, TransactionStatus.Pending),
           and(
             eq(transactionsTable.status, TransactionStatus.Success),
-            gte(transactionsTable.createdAt, cutoff),
+            // Linger off the settle time (lastVerificationAt) OR createdAt, so a tx that
+            // takes longer than lingerMs to verify still shows its settled state instead
+            // of vanishing — verification can outrun a created_at-only window.
+            or(
+              gte(transactionsTable.lastVerificationAt, cutoff),
+              gte(transactionsTable.createdAt, cutoff),
+            ),
           ),
         ),
       ),
@@ -80,7 +86,13 @@ export async function getPendingAndRecentlySettledTransactions(lingerMs = 120000
         eq(transactionsTable.status, TransactionStatus.Pending),
         and(
           inArray(transactionsTable.status, [TransactionStatus.Success, TransactionStatus.Failure]),
-          gte(transactionsTable.createdAt, cutoff),
+          // Linger off the settle time (lastVerificationAt) OR createdAt — a slow-verifying
+          // tx settles after its created_at window would have closed; keying off the
+          // verification time keeps its settled row visible for the linger.
+          or(
+            gte(transactionsTable.lastVerificationAt, cutoff),
+            gte(transactionsTable.createdAt, cutoff),
+          ),
         ),
       ),
     )

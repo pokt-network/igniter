@@ -155,9 +155,19 @@ export default function KeysTable() {
     [setSelectedKeyIds],
   )
 
+  // The companion query returns a fresh Set every 4s poll, so depending on the Set
+  // reference would rebuild every column def every 4s. Depend on a stable signature of the
+  // Set CONTENTS instead — columns only re-derive when the pending-unstake set actually
+  // changes. (getColumns uses the set solely for `.has(address)` checks, so a same-contents
+  // Set is interchangeable.)
+  const pendingUnstakeKey = React.useMemo(
+    () => Array.from(pendingUnstakeAddresses ?? []).sort().join(','),
+    [pendingUnstakeAddresses],
+  )
   const tableColumns = React.useMemo(
     () => [selectionColumn<KeyWithRelations>(), ...getColumns(pendingUnstakeAddresses)] as Array<ColumnDef<KeyWithRelations, unknown> & CsvColumnDef<KeyWithRelations>>,
-    [pendingUnstakeAddresses],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pendingUnstakeKey],
   )
 
   return (

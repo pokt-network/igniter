@@ -146,6 +146,11 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
   const returnFunds: ReturnFundsInput =
     rfMode === 'none' ? { mode: 'none' } : rfMode === 'owner' ? { mode: 'owner' } : { mode: 'custom', address: customAddr }
   const returnsFunds = rfMode !== 'none'
+  // On the review screen show the count that will ACTUALLY unstake (the server-filtered
+  // eligible set from the summary), not the raw selection — a selection can include keys
+  // that aren't unstakeable (already retired / wrong state), which the summary + submit
+  // both drop. Falls back to the live count until the summary loads.
+  const confirmCount = summary?.count ?? count
 
   const submit = async () => {
     setStatus('progress')
@@ -300,7 +305,7 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
         <div className="rounded-md border border-border-primary bg-bg-elevated divide-y divide-border-primary">
           <div className="flex items-center justify-between px-4 py-3 text-sm">
             <span className="text-text-secondary">Suppliers to unstake</span>
-            <span className="font-semibold">{count}</span>
+            <span className="font-semibold">{confirmCount}</span>
           </div>
           <div className="flex items-center justify-between px-4 py-3 text-sm">
             <span className="text-text-secondary">Tokens to Receive</span>
@@ -357,14 +362,14 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
             </div>
           </div>
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-xs text-text-secondary">{count} affected supplier address{count !== 1 ? 'es' : ''}</span>
+            <span className="text-xs text-text-secondary">{confirmCount} affected supplier address{confirmCount !== 1 ? 'es' : ''}</span>
             <Button
               variant="outline"
               size="sm"
               className="text-xs h-7"
               onClick={handleCopyAddresses}
             >
-              {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Error' : `Copy ${count} addresses`}
+              {copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Error' : `Copy ${confirmCount} addresses`}
             </Button>
           </div>
         </div>
@@ -373,13 +378,13 @@ export default function UnstakeForm({ onClose, returnFundsDefault }: UnstakeForm
           <AlertTriangle className="size-4 shrink-0 mt-0.5 text-red-400" />
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-semibold text-red-200">This action cannot be undone.</span>
-            <span className="text-xs text-red-300/80">This will schedule unstake transactions for {count} supplier(s).</span>
+            <span className="text-xs text-red-300/80">This will schedule unstake transactions for {confirmCount} supplier(s).</span>
           </div>
         </div>
         <div className="flex flex-col gap-3">
           <label className="flex items-center gap-3 text-sm cursor-pointer text-text-primary">
             <Checkbox checked={ack1} onCheckedChange={(v) => setAck1(!!v)} className="size-5 shrink-0 border-2 border-amber-400 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500" />
-            I understand {count} supplier(s) will be unstaked from the network.
+            I understand {confirmCount} supplier(s) will be unstaked from the network.
           </label>
           <label className="flex items-center gap-3 text-sm cursor-pointer text-text-primary">
             <Checkbox checked={ack2} onCheckedChange={(v) => setAck2(!!v)} className="size-5 shrink-0 border-2 border-amber-400 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500" />
