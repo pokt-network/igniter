@@ -189,7 +189,11 @@ export const WalletConnectionProvider = ({
       } as const;
 
       setCookie(WALLET_COOKIE_KEY, providerInfo.connection.name, cookieOptions)
-      setCookie(PROVIDER_COOKIE_KEY, providerInfo.name, cookieOptions)
+      // Persist the wallet provider's stable EIP-6963 rdns (permanent, globally
+      // unique) rather than its display name, so reconnect survives a wallet
+      // renaming itself across versions. Falls back to the name for providers
+      // that don't expose an rdns. Reconnect matches rdns-first (see #309).
+      setCookie(PROVIDER_COOKIE_KEY, providerInfo.rdns ?? providerInfo.name, cookieOptions)
 
       setAccountListener(providerInfo.provider)
 
@@ -216,7 +220,15 @@ export const WalletConnectionProvider = ({
     const providers = await getAvailableProviders()
 
     for (const providerInfo of providers) {
-      if (providerInfo.name === provider && providerInfo.connection.name === wallet) {
+      // Match on the wallet provider's stable identity (EIP-6963 rdns, falling
+      // back to display name) instead of the connection *class name*: that is
+      // a minified identifier that changes between production builds, so a cookie
+      // written by an earlier release never matches the current build (#309 —
+      // providers page stuck loading after an app update until the user
+      // disconnects/reconnects the wallet).
+      const matchesProvider =
+        providerInfo.rdns === provider || providerInfo.name === provider
+      if (matchesProvider) {
         connection = new providerInfo.connection(providerInfo.provider, settings)
 
         break;
@@ -272,7 +284,14 @@ export const WalletConnectionProvider = ({
       const { identity, provider, wallet } = expectedConnection;
       if (identity && provider && wallet) {
         (async () => {
-          await reconnect(identity, wallet, provider);
+          try {
+            await reconnect(identity, wallet, provider);
+          } catch {
+            // Auto-reconnect is best-effort: a failure here must not become an
+            // unhandled rejection that silently leaves the app in a connecting
+            // state forever. Stay disconnected so the UI can prompt to connect.
+            setIsConnected(false);
+          }
         })();
       }
     }
