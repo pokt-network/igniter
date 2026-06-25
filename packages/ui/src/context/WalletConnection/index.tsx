@@ -3,7 +3,7 @@
 import type { WalletConnection, WalletSettings } from './WalletConnection';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {SignedMemo, SignedTransaction, TransactionMessage} from "../../lib/models/Transactions";
-import { PROVIDER_COOKIE_KEY, WALLET_COOKIE_KEY } from './constants';
+import { PROVIDER_COOKIE_KEY } from './constants';
 import { KeplrWalletConnection } from './KeplrWalletConnection';
 import {PocketWalletConnection} from "./PocketWalletConnection";
 import { setCookie } from '../../lib/cookies'
@@ -58,7 +58,6 @@ export interface WalletConnectionContext {
   signTransaction(messages: TransactionMessage[], signer?: string, memo?: SignedMemo): Promise<SignedTransaction>;
   reconnect(
     address: string,
-    wallet: string,
     provider: string
   ): Promise<boolean>;
 }
@@ -101,7 +100,6 @@ export const WalletConnectionContext = createContext<WalletConnectionContext>({
   },
   reconnect: async (
     address: string,
-    wallet: string,
     provider: string
   )=> {
     console.warn('Method not implemented: reconnect. Something is wrong with the wallet connection provider.');
@@ -123,7 +121,6 @@ export interface WalletConnectionProviderProps {
   expectedConnection?: {
     identity: string
     provider: string
-    wallet: string
   },
   settings: WalletSettings
   children: ReactNode
@@ -188,7 +185,6 @@ export const WalletConnectionProvider = ({
         sameSite: 'Lax'
       } as const;
 
-      setCookie(WALLET_COOKIE_KEY, providerInfo.connection.name, cookieOptions)
       // Persist the wallet provider's stable EIP-6963 rdns (permanent, globally
       // unique) rather than its display name, so reconnect survives a wallet
       // renaming itself across versions. Falls back to the name for providers
@@ -212,7 +208,6 @@ export const WalletConnectionProvider = ({
 
   const reconnect = useCallback(async (
     address: string,
-    wallet: string,
     provider: string
   ) => {
     let connection: WalletConnection | undefined
@@ -281,11 +276,11 @@ export const WalletConnectionProvider = ({
 
   useEffect(() => {
     if (expectedConnection) {
-      const { identity, provider, wallet } = expectedConnection;
-      if (identity && provider && wallet) {
+      const { identity, provider } = expectedConnection;
+      if (identity && provider) {
         (async () => {
           try {
-            await reconnect(identity, wallet, provider);
+            await reconnect(identity, provider);
           } catch {
             // Auto-reconnect is best-effort: a failure here must not become an
             // unhandled rejection that silently leaves the app in a connecting
@@ -295,7 +290,7 @@ export const WalletConnectionProvider = ({
         })();
       }
     }
-  }, [expectedConnection?.wallet, expectedConnection?.provider, expectedConnection?.identity]);
+  }, [expectedConnection?.provider, expectedConnection?.identity]);
 
   useEffect(() => {
     return () => {
