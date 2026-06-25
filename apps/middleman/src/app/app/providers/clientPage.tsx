@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@igniter/ui/components/button';
 import { getShortAddress } from '@igniter/ui/lib/utils';
-import { CaretIcon, InfoIcon } from '@igniter/ui/assets';
+import { CaretIcon, InfoIcon, WarningIcon } from '@igniter/ui/assets';
 import { ProviderStatus } from '@igniter/db/middleman/enums';
 import AvatarByString from '@igniter/ui/components/AvatarByString';
 import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index';
@@ -15,7 +15,7 @@ import { ListProvidersWithPublicPlans, ProviderWithPublicPlans } from '@/actions
 import { ServicesPopover } from '@/app/app/stake/components/ServicesPopover';
 import { getApplicationSettings } from '@/actions/ApplicationSettings';
 import ProviderIcon from '@/app/assets/icons/dark/providers.svg';
-import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance } from '@/lib/utils/shareCalculations';
+import { calculateShares, calculateAddressGroupPerformance, calculateEffectiveYield, formatPerformance, hasNonUniformClientShare } from '@/lib/utils/shareCalculations';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
 export default function ClientProvidersPage() {
@@ -242,8 +242,8 @@ function ProviderCard({
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-[var(--text-primary)]">Client Share</span>
                         <span className="text-[13px] text-[var(--text-tertiary)]">
-                          The median share of rewards you will receive across all services in this plan.
-                          Calculated per service as: 100% − Provider Share − Supplier Share − Delegator Fee, then the median is taken.
+                          The share of rewards you receive on a service: 100% − Provider Share − Supplier Share − Delegator Fee.
+                          When it differs across a plan&apos;s services, the per-service breakdown is shown instead of a single rate.
                         </span>
                       </div>
                       <div className="flex flex-col gap-1">
@@ -301,6 +301,8 @@ function ProviderCard({
               const apr = effectiveYield !== null && minimumStake > 0
                 ? (effectiveYield * 365 / minimumStake) * 100
                 : null;
+              // Per-service client shares differ → no single rate represents the plan (#305).
+              const nonUniformClientShare = hasNonUniformClientShare(addressGroup, delegatorFee);
 
               return (
                 <div
@@ -351,20 +353,27 @@ function ProviderCard({
                     </Button>
                   </div>
                   {/* Metrics row */}
-                  <div className="flex flex-row gap-6 mt-1">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--text-tertiary)]">Est. Yield</span>
-                      <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
+                  {nonUniformClientShare ? (
+                    <div className="flex flex-row items-center gap-3 mt-1 bg-warning-bg p-[11px_16px] rounded-[8px]">
+                      <WarningIcon className="shrink-0" />
+                      <span className="text-[13px] text-[var(--text-primary)]">Revshare priced per service, please expand service.</span>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--text-tertiary)]">Client Share</span>
-                      <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
+                  ) : (
+                    <div className="flex flex-row gap-6 mt-1">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-tertiary)]">Est. Yield</span>
+                        <span className="font-mono text-[13px]">{effectiveYield !== null ? formatPerformance(effectiveYield) : '—'}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-tertiary)]">Client Share</span>
+                        <span className="font-mono text-[13px]">{shares.clientShare.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-[var(--text-tertiary)]">APR</span>
+                        <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-[var(--text-tertiary)]">APR</span>
-                      <span className="font-mono text-[13px]">{apr !== null ? `${apr.toFixed(1)}%` : '—'}</span>
-                    </div>
-                  </div>
+                  )}
                   {/* Services row */}
                   <ServicesPopover
                     addressGroupName={addressGroup.name}
@@ -373,6 +382,7 @@ function ProviderCard({
                     grossRewardsPerService={addressGroup.grossRewardsPerService}
                     rewardsSuppliersCount={addressGroup.rewardsSuppliersCount}
                     rewardsUpdatedAt={addressGroup.rewardsUpdatedAt}
+                    nonUniformClientShare={nonUniformClientShare}
                     planEstYield={effectiveYield !== null ? formatPerformance(effectiveYield) : null}
                     planClientShare={`${shares.clientShare.toFixed(1)}%`}
                     planPerformance={planPerformance !== null ? formatPerformance(planPerformance) : null}

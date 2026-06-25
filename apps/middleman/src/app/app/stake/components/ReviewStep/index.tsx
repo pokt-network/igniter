@@ -17,7 +17,7 @@ import { useApplicationSettings } from '@/app/context/ApplicationSettings'
 import { StakingProcess, StakingProcessStatus } from '@/app/app/stake/components/ReviewStep/StakingProcess'
 import { Transaction } from '@igniter/db/middleman/schema'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
-import { calculateShares } from '@/lib/utils/shareCalculations'
+import { calculateShares, hasNonUniformClientShare } from '@/lib/utils/shareCalculations'
 import { PlanDetailsSection } from '@/app/app/stake/components/PlanDetailsSection'
 
 const CLIENT_SHARE_WARNING_THRESHOLD = 0;
@@ -207,6 +207,12 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
     const selectedAddressGroup = selectedOffer.addressGroups.find(ag => ag.id === selectedAddressGroupId);
     const delegatorFee = applicationSettings?.fee ? Number(applicationSettings.fee) : 0;
     const shares = selectedAddressGroup ? calculateShares(selectedAddressGroup, delegatorFee) : null;
+    // When the plan's per-service client shares differ, the aggregate (and its
+    // 0% warning) is meaningless — PlanDetailsSection shows a per-service notice
+    // instead, so suppress the absolute "0%" warning here. See issue #305.
+    const nonUniformClientShare = selectedAddressGroup
+        ? hasNonUniformClientShare(selectedAddressGroup, delegatorFee)
+        : false;
 
     const prospectTransactions = useMemo(() => {
         return selectedOffer.stakeDistribution.reduce<number[]>((txs, stakeDistribution) => {
@@ -503,7 +509,7 @@ export function ReviewStep({onStakeCompleted, amount, selectedOffer, selectedAdd
                 ))}
             </div>
 
-            {shares && shares.clientShare <= CLIENT_SHARE_WARNING_THRESHOLD && (
+            {shares && !nonUniformClientShare && shares.clientShare <= CLIENT_SHARE_WARNING_THRESHOLD && (
               <div className="flex flex-row items-start gap-3 bg-warning-bg p-[11px_16px] rounded-[8px]">
                 <WarningIcon className="mt-[2px] shrink-0" />
                 <span className="text-[14px] text-[var(--text-primary)]">

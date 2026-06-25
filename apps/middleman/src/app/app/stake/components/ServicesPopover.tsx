@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@igniter/ui/components/popover';
-import { CaretSmallIcon } from '@igniter/ui/assets';
+import { CaretSmallIcon, WarningIcon } from '@igniter/ui/assets';
 
 const VISIBLE_COUNT = 18;
 
@@ -38,6 +38,9 @@ export interface ServicesPopoverProps {
   planClientShare?: string | null;
   planApr?: string | null;
   planPerformance?: string | null;
+  /** When true the plan's per-service client shares differ, so the aggregate
+   *  summary is replaced by a per-service notice (issue #305). */
+  nonUniformClientShare?: boolean;
   /** @deprecated no longer used, kept for call-site compatibility */
   triggerClassName?: string;
   /** @deprecated no longer used, kept for call-site compatibility */
@@ -121,7 +124,7 @@ function MetricsFooter({ rewardsFresh }: { rewardsFresh: boolean }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-[var(--text-secondary)]">Client Share</span>
-            <span className="text-[var(--text-tertiary)]">100% − Provider Share − Supplier Share − Delegator Fee. Median across all services.</span>
+            <span className="text-[var(--text-tertiary)]">100% − Provider Share − Supplier Share − Delegator Fee, per service. When it differs across services no single plan-level rate is shown.</span>
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-[var(--text-secondary)]">Performance</span>
@@ -148,6 +151,7 @@ export function ServicesPopover({
   planClientShare,
   planApr,
   planPerformance,
+  nonUniformClientShare = false,
 }: ServicesPopoverProps) {
   if (services.length === 0) return null;
 
@@ -219,12 +223,19 @@ export function ServicesPopover({
           <span className="text-[14px] font-medium text-[var(--text-primary)] p-[12px_16px] block">
             {addressGroupName} — Plan Summary
           </span>
-          <PlanSummaryBar
-            estYield={planEstYield}
-            clientShare={planClientShare}
-            apr={planApr}
-            performance={planPerformance}
-          />
+          {nonUniformClientShare ? (
+            <div className="flex flex-row items-center gap-2 px-4 py-2 mx-3 mb-2 rounded bg-warning-bg text-[12px] text-[var(--text-primary)]">
+              <WarningIcon className="shrink-0" />
+              <span>Revshare priced per service, please expand service.</span>
+            </div>
+          ) : (
+            <PlanSummaryBar
+              estYield={planEstYield}
+              clientShare={planClientShare}
+              apr={planApr}
+              performance={planPerformance}
+            />
+          )}
           <div className="grid grid-cols-[1fr_60px_repeat(3,_70px)] gap-2 px-4 pb-2 text-[11px] text-[var(--text-tertiary)] font-medium">
             <span>Service</span>
             <span className="text-right">Suppliers</span>
