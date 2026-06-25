@@ -13,6 +13,7 @@ import { ListServices } from "@/actions/Services";
 import { ListAddressGroups } from "@/actions/AddressGroups";
 import { ListRelayMiners } from "@/actions/RelayMiners";
 import { ListDelegators } from "@/actions/Delegators";
+import { ListNotificationChannels } from "@/actions/NotificationChannels";
 import ConfigureAppSettings from "./ConfigureAppSettings";
 import ConfigureAddressGroup from "./ConfigureAddressGroups";
 import ConfigureServices from "@/app/admin/setup/ConfigureServices";
@@ -20,6 +21,7 @@ import ConfigureDelegators from "@/app/admin/setup/ConfigureDelegators";
 import ConfigureBlockChain from "@/app/admin/setup/ConfigureBlockChain";
 import ConfigureRelayMiners from "@/app/admin/setup/ConfigureRelayMiners";
 import ConfigureRegions from "@/app/admin/setup/ConfigureRegions";
+import ConfigureNotifications from "@/app/admin/setup/ConfigureNotifications";
 
 const { useStepper, steps, utils } = defineStepper(
   {
@@ -51,6 +53,10 @@ const { useStepper, steps, utils } = defineStepper(
     title: "Delegators",
   },
   {
+    id: "notifications",
+    title: "Notifications",
+  },
+  {
     id: "complete-bootstrap",
     title: "Finish",
   }
@@ -58,17 +64,20 @@ const { useStepper, steps, utils } = defineStepper(
 
 const BootstrapSummary = ({ settings }: { settings?: ApplicationSettings }) => {
   const [counts, setCounts] = React.useState<Record<string, number>>({});
+  const [notifChannels, setNotifChannels] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     (async () => {
-      const [regions, relayMiners, services, addressGroups, delegators] = await Promise.all([
+      const [regions, relayMiners, services, addressGroups, delegators, channels] = await Promise.all([
         ListRegions().then(r => r.success ? r.data.length : 0),
         ListRelayMiners().then(r => r.success ? r.data.length : 0),
         ListServices().then(r => r.success ? r.data.length : 0),
         ListAddressGroups().then(r => r.success ? r.data.length : 0),
         ListDelegators().then(r => r.success ? r.data.length : 0),
+        ListNotificationChannels().then(r => r.success ? r.data.length : 0),
       ]);
       setCounts({ regions, relayMiners, services, addressGroups, delegators });
+      setNotifChannels(channels);
     })();
   }, []);
 
@@ -129,6 +138,23 @@ const BootstrapSummary = ({ settings }: { settings?: ApplicationSettings }) => {
             <p className="text-xs text-text-tertiary mt-1">{label}</p>
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h4 className="text-sm font-medium">Notifications</h4>
+        <div className="rounded-md p-4 flex flex-col gap-2.5" style={{ background: 'var(--bg-surface, rgba(255,255,255,0.03))', border: '1px solid var(--border-primary)' }}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-text-tertiary w-36 shrink-0">Channels configured</span>
+            <span className="text-sm">
+              {notifChannels === null ? '—' : notifChannels === 0 ? 'None' : `${notifChannels} channel${notifChannels > 1 ? 's' : ''}`}
+            </span>
+          </div>
+          {notifChannels === 0 && (
+            <p className="text-[11px] text-text-tertiary pt-1">
+              No channels configured — notifications will not be sent. You can add channels later in Settings.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -290,6 +316,12 @@ export const Stepper: React.FC = () => {
             ),
             delegators: () => (
               <ConfigureDelegators
+                goNext={stepper.next}
+                goBack={stepper.prev}
+              />
+            ),
+            notifications: () => (
+              <ConfigureNotifications
                 goNext={stepper.next}
                 goBack={stepper.prev}
               />

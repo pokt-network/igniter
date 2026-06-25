@@ -80,6 +80,7 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
   {
     accessorKey: "state",
     header: "State",
+    filterFn: 'equals',
     meta: {
       headerAlign: 'center'
     },

@@ -12,6 +12,11 @@ import ActivityDark from "@/app/assets/icons/dark/activity.svg";
 import NodesDark from "@/app/assets/icons/dark/nodes.svg";
 import SettingsDark from "@/app/assets/icons/dark/settings.svg";
 import ProvidersDark from "@/app/assets/icons/dark/providers.svg";
+import NotificationsDark from "@/app/assets/icons/dark/notifications.svg";
+import AddressGroupsDark from "@/app/assets/icons/dark/address-groups.svg";
+import RegionsDark from "@/app/assets/icons/dark/regions.svg";
+import RelayMinersDark from "@/app/assets/icons/dark/relay-miners.svg";
+import DelegatorsDark from "@/app/assets/icons/dark/delegators.svg";
 import AppSidebar from "@igniter/ui/components/AppSidebar";
 
 export interface AppSidebarRoute {
@@ -43,7 +48,7 @@ const mainRoutes = [
     id: "groups",
     title: "Address Groups",
     url: "/admin/groups",
-    icon: ActivityDark,
+    icon: AddressGroupsDark,
   },
   {
     title: "Services",
@@ -54,18 +59,23 @@ const mainRoutes = [
     id: "regions",
     title: "Regions",
     url: "/admin/regions",
-    icon: ActivityDark,
+    icon: RegionsDark,
   },
   {
     id: "miners",
     title: "Relay Miners",
     url: "/admin/miners",
-    icon: ActivityDark,
+    icon: RelayMinersDark,
   },
   {
     title: "Delegators",
     url: "/admin/delegators",
-    icon: SettingsDark,
+    icon: DelegatorsDark,
+  },
+  {
+    title: "Notifications",
+    url: "/admin/notifications",
+    icon: NotificationsDark,
   },
   {
     title: "Settings",
