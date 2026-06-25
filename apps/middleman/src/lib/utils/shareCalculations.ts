@@ -41,18 +41,61 @@ export interface PerformanceResult {
   isPartial: boolean;
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]!
-    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+/**
+ * Tolerance (in percentage points) below which two per-service client shares
+ * are treated as equal. Guards against float dust from the share arithmetic.
+ */
+const CLIENT_SHARE_UNIFORM_EPSILON = 0.05;
+
+/**
+ * Per-service client share = the clamped remainder
+ * `100 − providerForService − supplierForService − delegatorFee`.
+ * This is the single source of truth for "what the client/owner keeps on this
+ * service"; callers (aggregation, uniformity check, per-service table) reuse it.
+ */
+export function getPerServiceClientShares(
+  addressGroup: AddressGroup,
+  delegatorFee: number
+): number[] {
+  const services = addressGroup.addressGroupServices || [];
+  return services.map((service) => {
+    const providerShareForService =
+      service.revShare?.reduce((acc, rev) => acc + rev.share, 0) ?? 0;
+    const supplierShareForService = service.addSupplierShare
+      ? service.supplierShare || 0
+      : 0;
+    return Math.max(
+      0,
+      100 - providerShareForService - supplierShareForService - delegatorFee
+    );
+  });
 }
 
 /**
- * Calculates share percentages for an address group.
- * Client Share is the median of per-service client shares.
+ * True when a plan's services do NOT all yield the same client share.
+ *
+ * This is exactly the case where an aggregated 4-row breakdown cannot reconcile
+ * to 100%, so callers should show per-service detail instead of one number
+ * (issue #305). Per the agreed trigger, this compares the client-share
+ * *remainder* only — shifting the provider/supplier split between services while
+ * the client share stays equal is intentionally NOT flagged.
+ */
+export function hasNonUniformClientShare(
+  addressGroup: AddressGroup,
+  delegatorFee: number
+): boolean {
+  const shares = getPerServiceClientShares(addressGroup, delegatorFee);
+  if (shares.length <= 1) return false;
+  return Math.max(...shares) - Math.min(...shares) > CLIENT_SHARE_UNIFORM_EPSILON;
+}
+
+/**
+ * Calculates aggregated share percentages for an address group.
+ *
+ * Provider/Supplier are averaged across services; Client is the reconciling
+ * remainder `100 − provider − supplier − delegator`, so the four rows always
+ * sum to 100. This aggregate is only meaningful to display when the plan's
+ * per-service client shares are uniform — see {@link hasNonUniformClientShare}.
  */
 export function calculateShares(
   addressGroup: AddressGroup,
@@ -69,20 +112,6 @@ export function calculateShares(
     };
   }
 
-  // Compute per-service client shares for the median
-  const perServiceClientShares = services.map((service) => {
-    const providerShareForService =
-      service.revShare?.reduce((acc, rev) => acc + rev.share, 0) ?? 0;
-    const supplierShareForService = service.addSupplierShare
-      ? service.supplierShare || 0
-      : 0;
-    return Math.max(
-      0,
-      100 - providerShareForService - supplierShareForService - delegatorFee
-    );
-  });
-
-  // Averages kept for the breakdown display
   const totalProviderShare = services.reduce((sum, service) => {
     return sum + (service.revShare?.reduce((acc, rev) => acc + rev.share, 0) ?? 0);
   }, 0);
@@ -97,11 +126,17 @@ export function calculateShares(
         ) / servicesWithSupplierShare.length
       : 0;
 
+  // Client is the reconciling remainder of the displayed rows, clamped to 0.
+  const clientShare = Math.max(
+    0,
+    100 - avgProviderShare - avgSupplierShare - delegatorFee
+  );
+
   return {
     providerShare: avgProviderShare,
     supplierShare: avgSupplierShare,
     delegatorShare: delegatorFee,
-    clientShare: median(perServiceClientShares),
+    clientShare,
   };
 }
 
