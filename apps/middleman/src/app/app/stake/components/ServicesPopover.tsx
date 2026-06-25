@@ -226,7 +226,7 @@ export function ServicesPopover({
           {nonUniformClientShare ? (
             <div className="flex flex-row items-center gap-2 px-4 py-2 mx-3 mb-2 rounded bg-warning-bg text-[12px] text-[var(--text-primary)]">
               <WarningIcon className="shrink-0" />
-              <span>Revshare priced per service, please expand service.</span>
+              <span>Revshare priced per service</span>
             </div>
           ) : (
             <PlanSummaryBar

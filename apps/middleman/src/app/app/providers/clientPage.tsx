@@ -356,7 +356,7 @@ function ProviderCard({
                   {nonUniformClientShare ? (
                     <div className="flex flex-row items-center gap-3 mt-1 bg-warning-bg p-[11px_16px] rounded-[8px]">
                       <WarningIcon className="shrink-0" />
-                      <span className="text-[13px] text-[var(--text-primary)]">Revshare priced per service, please expand service.</span>
+                      <span className="text-[13px] text-[var(--text-primary)]">Revshare priced per service, please expand services list for details.</span>
                     </div>
                   ) : (
                     <div className="flex flex-row gap-6 mt-1">

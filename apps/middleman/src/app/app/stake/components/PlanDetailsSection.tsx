@@ -50,7 +50,7 @@ export function PlanDetailsSection({
         <span className="flex flex-row items-center gap-3 m-4 bg-warning-bg p-[11px_16px] rounded-[8px]">
           <WarningIcon className="shrink-0" />
           <span className="text-[14px] text-[var(--text-primary)]">
-            Revshare priced per service, please expand service.
+            Revshare priced per service, please expand services list for details.
           </span>
         </span>
       ) : (
