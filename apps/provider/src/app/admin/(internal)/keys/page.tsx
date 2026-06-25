@@ -36,7 +36,9 @@ export default async function AddressesPage() {
         }
       />
       <PageContent>
-        <KeysTable />
+        <React.Suspense>
+          <KeysTable />
+        </React.Suspense>
       </PageContent>
     </>
   )

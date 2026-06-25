@@ -3,9 +3,11 @@
 import QuickDetailProvider, {QuickDetailRendererMap} from '@igniter/ui/components/QuickDetails/Provider'
 import type { ProviderQuickDetailItem } from '@/app/admin/details/types'
 import KeyDetailsCard from './KeyDetail'
+import NotificationDetailCard from './NotificationDetail'
 
 const quickDetailRenderers: QuickDetailRendererMap<ProviderQuickDetailItem> = {
   key: ({body}) => <KeyDetailsCard {...body} />,
+  notification: ({body}) => <NotificationDetailCard {...body} />,
 }
 
 export default function QuickDetailProviderBridge(

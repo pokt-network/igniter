@@ -1,0 +1,9 @@
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="99.74%" id="srv-grad">
+            <stop stop-color="#7B8FAF" offset="0%"/>
+            <stop stop-color="#50627E" offset="100%"/>
+        </linearGradient>
+    </defs>
+    <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h13A1.5 1.5 0 0 1 18 3.5v4A1.5 1.5 0 0 1 16.5 9h-13A1.5 1.5 0 0 1 2 7.5v-4zm0 9A1.5 1.5 0 0 1 3.5 11h13a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 2 16.5v-4zM5.5 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm3-9a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" fill="url(#srv-grad)" fill-rule="nonzero"/>
+</svg>
