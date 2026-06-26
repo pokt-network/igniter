@@ -104,7 +104,7 @@ export default function TransactionsTable() {
               return acc
             }, 0),
             operations,
-            hash: tx.hash || '',
+            hash: tx.hash,
             estimatedFee: tx.estimatedFee,
             consumedFee: tx.consumedFee,
             provider: tx.provider?.name || 'Height Pending',
@@ -119,6 +119,7 @@ export default function TransactionsTable() {
       isError={isError}
       refetch={refetch}
       csvFilename={'admin_transactions'}
+      columnVisibility={{ provider: false }}
       searchableColumns={['hash', 'provider']}
       searchPlaceholder="Search by hash or provider..."
       countLabel="transactions"

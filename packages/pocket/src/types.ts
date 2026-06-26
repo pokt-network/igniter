@@ -1,7 +1,8 @@
 import { Supplier } from '@pocket/proto/generated/pocket/shared/supplier'
-import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
+import {MsgStakeSupplier, MsgUnstakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {Coin} from "@pocket/proto/generated/cosmos/base/v1beta1/coin";
 import {RPCType} from "@pocket/proto/generated/pocket/shared/service";
+import { MsgSend } from '@pocket/proto/generated/cosmos/bank/v1beta1/tx';
 
 export {
   SupplierServiceConfig,
@@ -98,5 +99,13 @@ export type StakeSupplierParams = {
   signerPrivateKey: string;
 } & MsgStakeSupplier;
 
+
+export type UnstakeSupplierParams = {
+  signerPrivateKey: string;
+} & MsgUnstakeSupplier;
+
+export type SendFundsParams = {
+  signerPrivateKey: string;
+} & MsgSend;
 
 export type ValidRPCTypes = keyof typeof RPCType | "0" | "1" | "2" | "3" | "4" | "5";

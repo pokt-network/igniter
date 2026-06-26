@@ -33,6 +33,7 @@ const UpdateSettingsSchema = z.object({
   minimumStake: z.number().optional(),
   updatedAtHeight: z.string().optional(),
   rewardAddresses: z.array(z.string().refine(isPoktBech32Address, "Invalid pokt address")).optional(),
+  returnSupplierFundsToOwner: z.boolean().optional(),
 })
 
 const CreateSettingsSchema = z.object({

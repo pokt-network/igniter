@@ -1,0 +1,9 @@
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="99.74%" id="notif-grad">
+            <stop stop-color="#7B8FAF" offset="0%"/>
+            <stop stop-color="#50627E" offset="100%"/>
+        </linearGradient>
+    </defs>
+    <path d="M10 1a1 1 0 0 1 1 1v.342A6.003 6.003 0 0 1 16 8v3.586l1.707 1.707A1 1 0 0 1 17 15h-4a3 3 0 0 1-6 0H3a1 1 0 0 1-.707-1.707L4 11.586V8a6.003 6.003 0 0 1 5-5.658V2a1 1 0 0 1 1-1zm0 16a1 1 0 0 0 1-1H9a1 1 0 0 0 1 1z" fill="url(#notif-grad)" fill-rule="evenodd"/>
+</svg>

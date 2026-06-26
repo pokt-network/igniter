@@ -1,6 +1,6 @@
 import React from 'react'
 import { cookies } from 'next/headers'
-import { PROVIDER_COOKIE_KEY, WALLET_COOKIE_KEY } from '@igniter/ui/context/WalletConnection/constants'
+import { PROVIDER_COOKIE_KEY } from '@igniter/ui/context/WalletConnection/constants'
 import { getApplicationSettings } from '@/actions/ApplicationSettings'
 import ClientWalletConnectionProvider from './client'
 import { auth } from '@/auth'
@@ -21,7 +21,6 @@ export default async function WalletConnectionProvider({children}: React.PropsWi
       expectedConnection={{
         identity: session?.user?.identity,
         provider: cookiesAwaited.get(PROVIDER_COOKIE_KEY)?.value,
-        wallet: cookiesAwaited.get(WALLET_COOKIE_KEY)?.value
       }}
       settings={{
         apiUrl: '/api/rpc',

@@ -22,7 +22,7 @@ import {
 } from 'drizzle-orm'
 import { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres'
 
-const { keysTable } = schema
+const { keysTable, addressGroupTable } = schema
 
 /**
  * Inserts multiple keys into the database using a transaction.
@@ -164,6 +164,7 @@ export async function lockAvailableKeys(
       and(
         eq(keysTable.addressGroupId, addressGroupId),
         eq(keysTable.state, KeyState.Available),
+        isNull(keysTable.retiredAt),
       ),
     )
     .limit(count)
@@ -494,6 +495,8 @@ function buildExportFilterConditions(filters: KeyExportFilters): SQL[] {
     conditions.push(isNotNull(keysTable.exportedAt))
   }
 
+  conditions.push(isNull(keysTable.retiredAt))
+
   return conditions
 }
 
@@ -563,6 +566,8 @@ function buildMigrationFilterConditions(filters: KeyMigrationFilters): SQL[] {
   if (filters.delegatorIdentity) {
     conditions.push(eq(keysTable.deliveredTo, filters.delegatorIdentity))
   }
+
+  conditions.push(isNull(keysTable.retiredAt))
 
   return conditions
 }
@@ -643,7 +648,7 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
       const keys = await tx
         .select({ id: keysTable.id, state: keysTable.state, remediationHistory: keysTable.remediationHistory })
         .from(keysTable)
-        .where(inArray(keysTable.id, chunkIds))
+        .where(and(inArray(keysTable.id, chunkIds), isNull(keysTable.retiredAt)))
         .for('update')
 
       const historyCase = buildRemediationHistoryCaseExpr(keys, migrationEntry)
@@ -652,7 +657,7 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
       await tx
         .update(keysTable)
         .set({ addressGroupId: targetAddressGroupId, remediationHistory: historyCase })
-        .where(inArray(keysTable.id, chunkIds))
+        .where(and(inArray(keysTable.id, chunkIds), isNull(keysTable.retiredAt)))
 
       if (stateResetIds.length > 0) {
         await tx
@@ -662,6 +667,7 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
             and(
               inArray(keysTable.id, stateResetIds),
               inArray(keysTable.state, STATES_REQUIRING_RESET),
+              isNull(keysTable.retiredAt),
             ),
           )
       }
@@ -669,6 +675,75 @@ export async function migrateKeysToAddressGroup(keyIds: number[], targetAddressG
   })
 
   return keyIds.length
+}
+
+export const __test = { buildMigrationFilterConditions, buildExportFilterConditions }
+
+export type UnstakeFilters = {
+  addressGroupId?: number
+  relayMinerId?: number
+  ownerAddress?: string
+  keyIds?: number[]
+}
+
+function buildUnstakeConditions(f: UnstakeFilters): SQL[] {
+  const conditions: SQL[] = [
+    inArray(keysTable.state, [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]),
+    isNull(keysTable.retiredAt),
+  ]
+  if (f.keyIds?.length) conditions.push(inArray(keysTable.id, f.keyIds))
+  if (f.addressGroupId) conditions.push(eq(keysTable.addressGroupId, f.addressGroupId))
+  if (f.ownerAddress) conditions.push(eq(keysTable.ownerAddress, f.ownerAddress))
+  if (f.relayMinerId) conditions.push(eq(addressGroupTable.relayMinerId, f.relayMinerId))
+  return conditions
+}
+
+export async function countKeysForUnstake(filters: UnstakeFilters): Promise<number> {
+  const db = getDbClient().db
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(keysTable)
+    .leftJoin(addressGroupTable, eq(keysTable.addressGroupId, addressGroupTable.id))
+    .where(and(...buildUnstakeConditions(filters)))
+  return row?.count ?? 0
+}
+
+// Aggregate over the same filtered set as countKeysForUnstake, for the bulk unstake
+// review summary (total stake to be returned + total operator residual). Sums on bigint
+// columns come back as numeric; coerced to number (well within Number range at this scale).
+export async function getUnstakeSummary(
+  filters: UnstakeFilters,
+): Promise<{ count: number; totalStakeUpokt: number; totalResidualUpokt: number }> {
+  const db = getDbClient().db
+  const [row] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      totalStakeUpokt: sql<number>`coalesce(sum(${keysTable.stakeAmountUpokt}), 0)`,
+      totalResidualUpokt: sql<number>`coalesce(sum(${keysTable.balanceUpokt}), 0)`,
+    })
+    .from(keysTable)
+    .leftJoin(addressGroupTable, eq(keysTable.addressGroupId, addressGroupTable.id))
+    .where(and(...buildUnstakeConditions(filters)))
+  return {
+    count: row?.count ?? 0,
+    totalStakeUpokt: Number(row?.totalStakeUpokt ?? 0),
+    totalResidualUpokt: Number(row?.totalResidualUpokt ?? 0),
+  }
+}
+
+export async function listKeysForUnstake(filters: UnstakeFilters): Promise<Array<{ id: number; address: string; ownerAddress: string | null; stakeOwner: string | null; balanceUpokt: bigint | null }>> {
+  const db = getDbClient().db
+  return db
+    .select({
+      id: keysTable.id,
+      address: keysTable.address,
+      ownerAddress: keysTable.ownerAddress,
+      stakeOwner: keysTable.stakeOwner,
+      balanceUpokt: keysTable.balanceUpokt,
+    })
+    .from(keysTable)
+    .leftJoin(addressGroupTable, eq(keysTable.addressGroupId, addressGroupTable.id))
+    .where(and(...buildUnstakeConditions(filters)))
 }
 
 export async function listDistinctOwnerAddresses(): Promise<string[]> {

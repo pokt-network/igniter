@@ -1,33 +1,139 @@
-load('ext://helm_resource', 'helm_resource', 'helm_repo')
-load('ext://k8s_attach', 'k8s_attach')
+# Temporal (localnet/dev) — single-binary dev server.
+#
+# Replaces the full Temporal helm chart (separate frontend/history/matching/worker
+# pods + schema jobs + postgres persistence). For local dev that topology is heavy
+# and fragile on kind/WSL2: ringpop membership races, an unset publicClient address
+# on the worker service (schedules never fire), and a namespace-init job that can't
+# reach the frontend. `temporal server start-dev` is all-in-one: no membership, no
+# schema jobs, namespaces pre-registered at launch, SQLite persistence.
+#
+# Contract preserved so the app workers need NO changes:
+#   - Service is named `temporal-frontend` on port 7233, so
+#     TEMPORAL_URL=temporal-frontend.default.svc.cluster.local:7233 still resolves.
+#   - The Tilt resource is named `temporal`, so app `resource_deps=['temporal']` hold.
+#
+# UI is built-in on :8233 (--ui-ip defaults to --ip, so 0.0.0.0 binds it too).
+# Persistence: IN-MEMORY (no --db-filename). SQLite-on-a-PVC was tried first but
+# every workflow-history write fsyncs to the PVC, and on kind/WSL2 that disk path
+# is so slow it throttled workflow-task throughput ~30x below activity throughput
+# (perpetual backlog, workflows stuck "Running" for minutes). In-memory removes the
+# fsync entirely. Trade-off: workflow state + schedules are lost if this pod
+# restarts — the app workers re-register their schedules on bootstrap, so the
+# durable-tx schedules come back automatically on next boot.
 
-# Add temporal repo
-helm_repo(
-  name='temporal',
-  url='https://go.temporal.io/helm-charts',
-  labels=['helm_repo'],
-  resource_name='helm-repo-temporal'
-)
+# Pin to a known tag for reproducibility; bump deliberately.
+TEMPORAL_IMAGE = 'temporalio/temporal:latest'
 
-# Add temporal helm release
-helm_resource(
-  name='temporal',
-  chart='temporal/temporal',
-  release_name='temporal',
-  flags=[
-    '--version=0.60.0',
-    '--values=./values.yaml'
+objects = []
+
+# Dev server Deployment.
+objects.append({
+  'apiVersion': 'apps/v1',
+  'kind': 'Deployment',
+  'metadata': {
+    'name': 'temporal',
+  },
+  'spec': {
+    'replicas': 1,
+    # Recreate: the PVC is ReadWriteOnce — never let a rolling update run two pods
+    # mounting it at once.
+    'strategy': {
+      'type': 'Recreate',
+    },
+    'selector': {
+      'matchLabels': {
+        'app': 'temporal',
+      },
+    },
+    'template': {
+      'metadata': {
+        'labels': {
+          'app': 'temporal',
+        },
+      },
+      'spec': {
+        'containers': [{
+          'name': 'temporal',
+          'image': TEMPORAL_IMAGE,
+          'command': ['temporal'],
+          'args': [
+            'server', 'start-dev',
+            '--ip', '0.0.0.0',
+            '--port', '7233',
+            '--ui-port', '8233',
+            '--namespace', 'middleman',
+            '--namespace', 'provider',
+            '--log-format', 'json',
+          ],
+          'ports': [
+            {'name': 'grpc', 'containerPort': 7233},
+            {'name': 'ui', 'containerPort': 8233},
+          ],
+          'readinessProbe': {
+            'tcpSocket': {
+              'port': 7233,
+            },
+            'initialDelaySeconds': 5,
+            'periodSeconds': 5,
+          },
+          'livenessProbe': {
+            'tcpSocket': {
+              'port': 7233,
+            },
+            'initialDelaySeconds': 15,
+            'periodSeconds': 20,
+          },
+        }],
+      },
+    },
+  },
+})
+
+# Frontend gRPC Service — MUST stay named `temporal-frontend` (TEMPORAL_URL contract).
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Service',
+  'metadata': {
+    'name': 'temporal-frontend',
+  },
+  'spec': {
+    'selector': {
+      'app': 'temporal',
+    },
+    'ports': [{
+      'name': 'grpc',
+      'port': 7233,
+      'targetPort': 7233,
+    }],
+  },
+})
+
+# Web UI Service.
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Service',
+  'metadata': {
+    'name': 'temporal-web',
+  },
+  'spec': {
+    'selector': {
+      'app': 'temporal',
+    },
+    'ports': [{
+      'name': 'ui',
+      'port': 8233,
+      'targetPort': 8233,
+    }],
+  },
+})
+
+k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
+
+k8s_resource(
+  'temporal',
+  port_forwards=['7233:7233', '8233:8233'],
+  labels=['tooling'],
+  links=[
+    link('localhost:8233', 'Temporal Web UI'),
   ],
-  resource_deps=['postgresql'],
-  pod_readiness='wait',
-  labels=['tooling']
 )
-
-k8s_attach(
-    name="temporal-web",
-    obj="deployment/temporal-web",
-    port_forwards=["8080"],
-    resource_deps=["temporal"],
-    labels=['tooling'],
-)
-

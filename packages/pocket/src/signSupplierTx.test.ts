@@ -9,6 +9,7 @@ const mockSimulate = jest.fn()
 const mockGetSequence = jest.fn()
 const mockGetChainId = jest.fn()
 const mockBroadcastTx = jest.fn()
+const mockStatus = jest.fn()
 
 // Mock @cosmjs/stargate
 jest.mock('@cosmjs/stargate', () => {
@@ -38,6 +39,7 @@ jest.mock('@cosmjs/stargate', () => {
 // Mock @cosmjs/tendermint-rpc
 jest.mock('@cosmjs/tendermint-rpc', () => ({
   connectComet: jest.fn().mockResolvedValue({
+    status: mockStatus,
     disconnect: mockDisconnect,
   }),
 }))
@@ -89,6 +91,7 @@ describe('PocketBlockchain.signSupplierTx', () => {
     mockSimulate.mockResolvedValue(200000)
     mockGetSequence.mockResolvedValue({ accountNumber: 1, sequence: 5 })
     mockBroadcastTx.mockResolvedValue({ transactionHash: 'ABCD1234'.repeat(8), code: 0, rawLog: '' })
+    mockStatus.mockResolvedValue({ syncInfo: { latestBlockTime: new Date() } })
   })
 
   it('returns a non-empty base64 signedPayload', async () => {
@@ -122,7 +125,19 @@ describe('PocketBlockchain.signSupplierTx', () => {
     expect(txBody.unordered).toBe(true)
   })
 
-  it('timeoutTimestamp is approximately now + 9 minutes', async () => {
+  it('timeoutTimestamp is latest block time + 9 minutes', async () => {
+    const latestBlockTime = new Date('2026-06-23T22:23:40.404Z')
+    mockStatus.mockResolvedValue({ syncInfo: { latestBlockTime } })
+
+    const signer = await getTestSignerAddress()
+    const bc = await createInstance()
+    const result = await bc.signSupplierTx({ ...STAKE_PARAMS_BASE, signer })
+
+    expect(result.timeoutTimestamp.getTime()).toBe(latestBlockTime.getTime() + 9 * 60 * 1000)
+  })
+
+  it('timeoutTimestamp falls back to approximately now + 9 minutes without latest block time', async () => {
+    mockStatus.mockRejectedValue(new Error('status unavailable'))
     const signer = await getTestSignerAddress()
     const bc = await createInstance()
     const before = Date.now()
@@ -160,6 +175,7 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     mockSimulate.mockResolvedValue(200000)
     mockGetSequence.mockResolvedValue({ accountNumber: 1, sequence: 5 })
     mockBroadcastTx.mockResolvedValue({ transactionHash: 'ABCD1234'.repeat(8), code: 0, rawLog: '' })
+    mockStatus.mockResolvedValue({ syncInfo: { latestBlockTime: new Date() } })
   })
 
   async function getSignedPayload(): Promise<string> {
@@ -209,7 +225,7 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     expect(result.success).toBe(true)
   })
 
-  it('dedup detection: code=19 codespace=sdk is treated as success', async () => {
+  it('dedup detection: generic code=19 codespace=sdk without dedup message is not treated as success', async () => {
     const signedPayload = await getSignedPayload()
     jest.clearAllMocks()
     mockBroadcastTx.mockRejectedValue(
@@ -219,7 +235,8 @@ describe('PocketBlockchain.broadcastSupplierTx', () => {
     const bc = await createInstance()
     const result = await bc.broadcastSupplierTx(signedPayload)
 
-    expect(result.success).toBe(true)
+    expect(result.success).toBe(false)
+    expect(result.rejected).toBe(false)
   })
 
   it('hard reject: returns success=false for non-dedup errors', async () => {

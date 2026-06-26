@@ -15,4 +15,5 @@ export interface StatusResponse {
   healthy: boolean;
   addressGroups: Array<AddressGroupWithDetails>
   rewardAddresses: Array<string> | null
+  returnSupplierFundsToOwner: boolean
 }

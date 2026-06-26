@@ -23,6 +23,7 @@ interface NotificationProps {
   actions?: Array<
     (notification: NotificationProps, removeNotification: () => void) => React.ReactNode
   >;
+  onDismiss?: () => void | Promise<void>;
 }
 
 interface NotificationContextProps {
@@ -46,6 +47,7 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
   }, [notifications])
 
   const removeNotification = (index: number) => {
+    const removed = notifications[index]
     const newNotifications = [...notifications]
     newNotifications.splice(index, 1)
     setNotifications(newNotifications)
@@ -63,6 +65,19 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
     }
 
     setIndex(newIndex)
+
+    // onDismiss owns its own error handling; guard here so a rejected side-effect
+    // never becomes an unhandled promise rejection.
+    void Promise.resolve(removed?.onDismiss?.()).catch(() => {})
+  }
+
+  const dismissAll = () => {
+    const all = notifications
+    setNotifications([])
+    setIndex(-1)
+    all.forEach((n) => {
+      void Promise.resolve(n.onDismiss?.()).catch(() => {})
+    })
   }
 
   let notificationsRender: React.ReactNode = null
@@ -174,6 +189,16 @@ export default function NotificationsProvider({children}: React.PropsWithChildre
               >
                 Dismiss
               </Button>
+              {notifications.length > 1 && (
+                <Button
+                  variant={'secondary'}
+                  onClick={() => {
+                    dismissAll()
+                  }}
+                >
+                  Dismiss all
+                </Button>
+              )}
               {paginationAction}
             </div>
           </div>

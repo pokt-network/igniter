@@ -1,0 +1,111 @@
+# Notification sinks for localnet e2e observability
+#
+# webhook-sink  — mendhak/http-https-echo, port 8080
+#   Logs full request body to stdout. Point Discord webhook URLs here.
+#   UI: http://localhost:8080
+#
+# mailpit       — axllent/mailpit, SMTP 1025, web UI 8025
+#   Catches all outbound SMTP; browse sent mail at http://localhost:8025
+
+objects = []
+
+# ─── webhook-sink ────────────────────────────────────────────────────────────
+
+objects.append({
+  'apiVersion': 'apps/v1',
+  'kind': 'Deployment',
+  'metadata': {'name': 'webhook-sink'},
+  'spec': {
+    'replicas': 1,
+    'selector': {'matchLabels': {'app': 'webhook-sink'}},
+    'template': {
+      'metadata': {'labels': {'app': 'webhook-sink'}},
+      'spec': {
+        'containers': [{
+          'name': 'echo',
+          'image': 'mendhak/http-https-echo:latest',
+          'ports': [{'containerPort': 8080}],
+          'env': [
+            {'name': 'HTTP_PORT', 'value': '8080'},
+          ],
+          'readinessProbe': {
+            'httpGet': {'path': '/', 'port': 8080},
+            'initialDelaySeconds': 3,
+            'periodSeconds': 10,
+          },
+        }],
+      },
+    },
+  },
+})
+
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Service',
+  'metadata': {'name': 'webhook-sink'},
+  'spec': {
+    'selector': {'app': 'webhook-sink'},
+    'ports': [{'port': 8080, 'targetPort': 8080}],
+  },
+})
+
+# ─── mailpit ─────────────────────────────────────────────────────────────────
+
+objects.append({
+  'apiVersion': 'apps/v1',
+  'kind': 'Deployment',
+  'metadata': {'name': 'mailpit'},
+  'spec': {
+    'replicas': 1,
+    'selector': {'matchLabels': {'app': 'mailpit'}},
+    'template': {
+      'metadata': {'labels': {'app': 'mailpit'}},
+      'spec': {
+        'containers': [{
+          'name': 'mailpit',
+          'image': 'axllent/mailpit:latest',
+          'ports': [
+            {'containerPort': 1025, 'name': 'smtp'},
+            {'containerPort': 8025, 'name': 'web'},
+          ],
+          'readinessProbe': {
+            'httpGet': {'path': '/', 'port': 8025},
+            'initialDelaySeconds': 3,
+            'periodSeconds': 10,
+          },
+        }],
+      },
+    },
+  },
+})
+
+objects.append({
+  'apiVersion': 'v1',
+  'kind': 'Service',
+  'metadata': {'name': 'mailpit'},
+  'spec': {
+    'selector': {'app': 'mailpit'},
+    'ports': [
+      {'name': 'smtp', 'port': 1025, 'targetPort': 1025},
+      {'name': 'web', 'port': 8025, 'targetPort': 8025},
+    ],
+  },
+})
+
+# ─── Apply ───────────────────────────────────────────────────────────────────
+
+k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)
+
+k8s_resource(
+  'webhook-sink',
+  port_forwards=['8080:8080'],
+  labels=['tooling'],
+  links=[link('http://localhost:8080', 'webhook-sink (Discord echo)')],
+)
+
+k8s_resource(
+  'mailpit',
+  port_forwards=['1025:1025', '8025:8025'],
+  labels=['tooling'],
+  links=[link('http://localhost:8025', 'Mailpit Web UI')],
+)

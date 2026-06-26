@@ -27,6 +27,11 @@
       "import": "./dist/src/pocket.js",
       "require": "./dist/src/pocket.js",
       "types": "./dist/src/pocket.d.ts"
+    },
+    "./transactions/extractSuppliers": {
+      "import": "./dist/src/transactions/extractSuppliers.js",
+      "require": "./dist/src/transactions/extractSuppliers.js",
+      "types": "./dist/src/transactions/extractSuppliers.d.ts"
     }
   },
   "scripts": {

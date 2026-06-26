@@ -11,8 +11,10 @@ import {
   getSortedRowModel,
   ColumnFiltersState,
   SortingState,
+  RowSelectionState,
   flexRender,
 } from "@tanstack/react-table";
+import { Checkbox } from '@igniter/ui/components/checkbox'
 
 import {
   Table,
@@ -29,6 +31,27 @@ import { Skeleton } from '../skeleton'
 import { Button } from '../button'
 import ExportButton from '../ExportButton'
 import RowsPerPage from './RowsPerPage'
+
+export function selectionColumn<TData>(): ColumnDef<TData, unknown> {
+  return {
+    id: '__select__',
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+        onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(v) => row.toggleSelected(!!v)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+  }
+}
 
 export interface FilterItem<TData> {
   label: React.ReactNode;
@@ -47,6 +70,15 @@ export interface SortOption<TData> {
   column: keyof TData;
   direction: "asc" | "desc";
   isDefault?: boolean;
+}
+
+export interface ManualPaginationProps {
+  /** Total number of rows across all pages */
+  total: number
+  pageIndex: number
+  pageSize: number
+  onPageChange: (pageIndex: number) => void
+  onPageSizeChange: (pageSize: number) => void
 }
 
 export interface DataTableProps<TData extends object, TValue> {
@@ -75,6 +107,16 @@ export interface DataTableProps<TData extends object, TValue> {
   itemActions?: (row: TData) => React.ReactNode
   /** Disable entire table interaction */
   isDisabled?: boolean
+  /** When provided, switches to server-side pagination. The caller owns page state and fetching. */
+  manualPagination?: ManualPaginationProps
+  /** Optional per-row className callback for highlighting specific rows */
+  getRowClassName?: (row: TData) => string
+  /** Enable row selection with checkboxes. Pair with selectionColumn() prepended to your columns array. */
+  enableRowSelection?: boolean
+  /** Derive a stable string key from a row; passed to tanstack getRowId. */
+  getRowId?: (row: TData) => string
+  /** Called whenever the selection changes; receives the selected row originals. */
+  onSelectionChange?: (selectedRows: TData[]) => void
 }
 
 export default function DataTable<TData extends object, TValue>({
@@ -96,7 +138,13 @@ export default function DataTable<TData extends object, TValue>({
   actions,
   itemActions,
   isDisabled,
+  manualPagination,
+  getRowClassName,
+  enableRowSelection,
+  getRowId,
+  onSelectionChange,
 }: DataTableProps<TData, TValue>) {
+  const isServerPaginated = !!manualPagination
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
 
   const [sorting, setSorting] = React.useState<SortingState>(
@@ -116,6 +164,17 @@ export default function DataTable<TData extends object, TValue>({
   const [globalFilter, setGlobalFilter] = React.useState('')
   const [searchInput, setSearchInput] = React.useState('')
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
+
+  // Filter/sort controls are derived from client-loaded data, so the NUMBER of dropdowns
+  // differs between SSR (data empty → fewer groups) and the client (data populated → more).
+  // That count difference shifts position-based hydration and radix's useId() counter,
+  // producing hydration mismatches in the toolbar. Render these controls only after mount
+  // so SSR and the first client render are identical; they appear once data is in anyway.
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const globalFilterFn = React.useMemo(() => {
     if (!searchableColumns?.length) return undefined
@@ -152,11 +211,15 @@ export default function DataTable<TData extends object, TValue>({
     getSortedRowModel: getSortedRowModel(),
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn,
-    autoResetPageIndex: true,
+    autoResetPageIndex: !isServerPaginated,
+    ...(isServerPaginated && {
+      manualPagination: true,
+      pageCount: Math.ceil(manualPagination!.total / manualPagination!.pageSize),
+    }),
     initialState: {
       pagination: {
-        pageSize: 25,
-        pageIndex: 0,
+        pageSize: isServerPaginated ? manualPagination!.pageSize : 25,
+        pageIndex: isServerPaginated ? manualPagination!.pageIndex : 0,
       },
       columnVisibility,
     },
@@ -164,8 +227,25 @@ export default function DataTable<TData extends object, TValue>({
       columnFilters,
       sorting,
       globalFilter,
+      ...(isServerPaginated && {
+        pagination: {
+          pageIndex: manualPagination!.pageIndex,
+          pageSize: manualPagination!.pageSize,
+        },
+      }),
+      ...(enableRowSelection ? { rowSelection } : {}),
     },
+    ...(enableRowSelection ? {
+      enableRowSelection: true,
+      onRowSelectionChange: setRowSelection,
+      getRowId,
+    } : {}),
   });
+
+  React.useEffect(() => {
+    if (!enableRowSelection || !onSelectionChange) return
+    onSelectionChange(table.getSelectedRowModel().rows.map((r) => r.original))
+  }, [rowSelection, enableRowSelection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tableState = table.getState();
 
@@ -216,7 +296,10 @@ export default function DataTable<TData extends object, TValue>({
           <TableRow
             key={row.id}
             data-state={row.getIsSelected() && "selected"}
-            className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+            className={clsx(
+              isDisabled ? 'opacity-50 cursor-not-allowed' : '',
+              getRowClassName?.(row.original) ?? '',
+            )}
           >
             {row.getVisibleCells().map((cell) => (
               <TableCell key={cell.id}>
@@ -296,7 +379,7 @@ export default function DataTable<TData extends object, TValue>({
               fileNameKey={csvFilename}
             />
           )}
-          {filters.map((filterGroup, groupIndex) => (
+          {mounted && filters.map((filterGroup, groupIndex) => (
             <FilterDropdown
               key={groupIndex}
               filterGroup={filterGroup}
@@ -307,7 +390,7 @@ export default function DataTable<TData extends object, TValue>({
             />
           ))}
           {
-            sorts.length > 0 && (
+            mounted && sorts.length > 0 && (
               <SortDropdown
                 sorts={sorts}
                 table={table}
@@ -364,15 +447,15 @@ export default function DataTable<TData extends object, TValue>({
       <div className="flex items-center justify-end space-x-2">
         <div className="flex items-center gap-2">
           <RowsPerPage
-            currentPageSize={tableState.pagination.pageSize}
-            totalRows={table.getPrePaginationRowModel().rows.length}
-            onPageSizeChange={(pageSize) => table.setPageSize(pageSize)}
+            currentPageSize={isServerPaginated ? manualPagination!.pageSize : tableState.pagination.pageSize}
+            totalRows={isServerPaginated ? manualPagination!.total : table.getPrePaginationRowModel().rows.length}
+            onPageSizeChange={isServerPaginated ? manualPagination!.onPageSizeChange : (pageSize) => table.setPageSize(pageSize)}
             disabled={isLoading || isError}
           />
           <Pagination
-            totalPages={totalPages}
-            currentPage={currentPage}
-            onPageChange={(pageIndex) => table.setPageIndex(pageIndex)}
+            totalPages={isServerPaginated ? Math.ceil(manualPagination!.total / manualPagination!.pageSize) : totalPages}
+            currentPage={isServerPaginated ? manualPagination!.pageIndex : currentPage}
+            onPageChange={isServerPaginated ? manualPagination!.onPageChange : (pageIndex) => table.setPageIndex(pageIndex)}
             disabled={isLoading || isError}
           />
         </div>

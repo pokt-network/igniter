@@ -1,6 +1,7 @@
 'use server'
 
 import type { NodeWithDetails } from '@igniter/db/middleman/schema'
+import { NodeStatus } from '@igniter/db/middleman/enums'
 import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
@@ -117,7 +118,8 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
 
   const results = await Promise.allSettled(
     providerEntries.map(async ([, group]) => {
-      const supplierAddresses: Array<string> = group.nodes.map((n) => n.address)
+      const stakedNodes = group.nodes.filter((n) => n.status === NodeStatus.Staked)
+      const supplierAddresses: Array<string> = stakedNodes.map((n) => n.address)
       const batches = batchArray(supplierAddresses)
 
       const batchResults = await Promise.all(
@@ -150,16 +152,17 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
     }),
   )
 
-  const providers: ProviderBreakdownData[] = providerEntries.map(
+  const allProviders: ProviderBreakdownData[] = providerEntries.map(
     ([identity, group], index) => {
       const result = results[index]
       const data = result?.status === 'fulfilled' ? result.value : null
+      const stakedNodes = group.nodes.filter((n) => n.status === NodeStatus.Staked)
 
       return {
         identity,
         name: group.name,
-        suppliers: group.nodes.length,
-        stakedPokt: group.nodes.reduce(
+        suppliers: stakedNodes.length,
+        stakedPokt: stakedNodes.reduce(
           (sum, n) => sum + amountToPokt(n.stakeAmount),
           0,
         ),
@@ -168,6 +171,9 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
       }
     },
   )
+
+  // Remove provider entries that have no staked suppliers (provider visibility)
+  const providers: ProviderBreakdownData[] = allProviders.filter((p) => p.suppliers > 0)
 
   providers.sort((a, b) => b.suppliers - a.suppliers)
   return providers

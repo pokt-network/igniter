@@ -1,11 +1,18 @@
 import React from 'react'
 import { ColumnDef } from "@igniter/ui/components/table";
-import { KeyState } from '@igniter/db/provider/enums'
+import { KeyState, KeyStateNameMap } from '@igniter/db/provider/enums'
 import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import Address from '@igniter/ui/components/Address'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
-import { getShortAddress } from '@igniter/ui/lib/utils'
-import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants";
+import { getShortAddress, amountToPokt, toCurrencyFormat } from '@igniter/ui/lib/utils'
+import { formatRelativeTime } from '@/lib/utils/time'
+import { Badge } from '@igniter/ui/components/badge'
+import {
+  KeyStateLabels,
+  deriveKeyLifecycleStatus,
+  keyLifecycleStatusBadgeVariant,
+  RETIRED_LIFECYCLE_LABEL,
+} from "@/app/admin/(internal)/keys/constants";
 import {useAddItemToDetail} from "@igniter/ui/components/QuickDetails/Provider";
 import {Button} from "@igniter/ui/components/button";
 import {RightArrowIcon} from "@igniter/ui/assets";
@@ -28,7 +35,10 @@ export interface Key {
   createdAt: Date
 }
 
-export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRelations>> = [
+export function getColumns(
+  pendingUnstakeAddresses?: Set<string>,
+): Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRelations>> {
+  return [
   {
     accessorKey: "address",
     header: "Address",
@@ -41,22 +51,116 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
     },
   },
   {
-    accessorKey: "addressGroup",
-    header: "Address Group",
+    // id stays "state" so the existing "state" FilterGroup and sorts keep
+    // targeting this column. The accessor now returns the DERIVED lifecycle
+    // status ('Retired' when retiredAt is set, else the KeyState label) so the
+    // badge and the client-side filter share one source of truth.
+    id: "state",
+    accessorFn: (row) => deriveKeyLifecycleStatus(row),
+    header: "State",
+    filterFn: 'equals',
+    meta: {
+      headerAlign: 'center'
+    },
     cell: ({ row }) => {
-      const addressGroup = row.getValue("addressGroup") as Key['addressGroup'];
-      return (
-        <div className="flex items-center gap-2">
-          <span className="text-slightly-muted-foreground flex justify-center items-center gap-2">
-            {addressGroup?.name || '-'}
+      const state = row.original.state as KeyState;
+      const lifecycleStatus = deriveKeyLifecycleStatus(row.original);
+      const isRetired = lifecycleStatus === RETIRED_LIFECYCLE_LABEL;
+      // (a) Retired wins outright: retiredAt set => "Retired" regardless of state.
+      // (b) Otherwise, fast in-progress feedback: a pending unstake tx exists but
+      //     the key.state hasn't flipped to Unstaking yet (that only happens on
+      //     tx verification). Once the real flip lands, the normal KeyState path
+      //     takes over. (c) Otherwise, the normal KeyState badge.
+      if (
+        !isRetired &&
+        pendingUnstakeAddresses?.has(row.original.address) &&
+        state === KeyState.Staked
+      ) {
+        return (
+          <span className="flex justify-center gap-2">
+            <Badge variant="warning">Unstaking…</Badge>
           </span>
-        </div>
+        );
+      }
+      const label = isRetired
+        ? RETIRED_LIFECYCLE_LABEL
+        : KeyStateNameMap[state] || state;
+      const variant = keyLifecycleStatusBadgeVariant(lifecycleStatus, state);
+      return (
+        <span className="flex justify-center gap-2">
+          <Badge variant={variant}>{label}</Badge>
+        </span>
       );
     },
-    filterFn: (row, columnId, value) => {
-      const addressGroup = row.getValue("addressGroup") as Key['addressGroup'];
-      if (!addressGroup) return false;
-      return typeof value === 'string' ? addressGroup.name.toLowerCase().includes(value.toLowerCase()) : addressGroup.id === value;
+  },
+  {
+    accessorKey: "stakeAmountUpokt",
+    header: "Stake (POKT)",
+    meta: {
+      headerAlign: 'center'
+    },
+    cell: ({ row }) => {
+      const upokt = Number(row.original.stakeAmountUpokt ?? 0);
+      if (!upokt) {
+        return <span className="flex justify-center text-text-tertiary">—</span>;
+      }
+      return (
+        <span className="flex justify-center font-mono">
+          {toCurrencyFormat(amountToPokt(upokt), 2, 2)}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "balanceUpokt",
+    header: "Op. Funds (POKT)",
+    meta: {
+      headerAlign: 'center'
+    },
+    cell: ({ row }) => {
+      const upokt = Number(row.original.balanceUpokt ?? 0);
+      if (!upokt) {
+        return <span className="flex justify-center text-text-tertiary">—</span>;
+      }
+      return (
+        <span className="flex justify-center font-mono">
+          {toCurrencyFormat(amountToPokt(upokt), 2, 2)}
+        </span>
+      );
+    },
+  },
+  {
+    id: "services",
+    accessorFn: (row) => row.services?.length ?? 0,
+    header: "Services",
+    meta: {
+      headerAlign: 'center'
+    },
+    cell: ({ row }) => {
+      const count = row.original.services?.length ?? 0;
+      return (
+        <span className="flex justify-center">
+          {count > 0 ? count : <span className="text-text-tertiary">—</span>}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "updatedAt",
+    header: "Last Updated",
+    meta: {
+      headerAlign: 'center'
+    },
+    cell: ({ row }) => {
+      const updatedAt = row.original.updatedAt;
+      return (
+        <span
+          className="font-mono text-slightly-muted-foreground flex justify-center"
+          title={updatedAt ? new Date(updatedAt).toLocaleString() : undefined}
+        >
+          {formatRelativeTime(updatedAt)}
+        </span>
+      );
     },
   },
   {
@@ -75,21 +179,6 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
       const ownerAddress = row.getValue("ownerAddress") as string;
       if (value === '__none__') return !ownerAddress;
       return ownerAddress === value;
-    },
-  },
-  {
-    accessorKey: "state",
-    header: "State",
-    meta: {
-      headerAlign: 'center'
-    },
-    cell: ({ row }) => {
-      const status = row.getValue("state") as KeyState;
-      return (
-        <span className="flex justify-center gap-2">
-          {KeyStateLabels[status] || status}
-        </span>
-      );
     },
   },
   {
@@ -115,18 +204,19 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
     },
   },
   {
-    accessorKey: "createdAt",
-    header: "Created At",
-    meta: {
-      headerAlign: 'center'
-    },
+    // Kept only to power the Address Group filter — hidden from the table via
+    // columnVisibility (identity/org lives in filters + the detail panel, not the
+    // metrics-focused list). Tanstack still needs the column present to filter on it.
+    accessorKey: "addressGroup",
+    header: "Address Group",
     cell: ({ row }) => {
-      const createdAt = new Date(row.getValue("createdAt"));
-      return (
-        <span className="font-mono text-slightly-muted-foreground flex justify-center gap-2">
-          {createdAt.toLocaleString()}
-        </span>
-      );
+      const addressGroup = row.getValue("addressGroup") as Key['addressGroup'];
+      return <span>{addressGroup?.name || '-'}</span>;
+    },
+    filterFn: (row, columnId, value) => {
+      const addressGroup = row.getValue("addressGroup") as Key['addressGroup'];
+      if (!addressGroup) return false;
+      return typeof value === 'string' ? addressGroup.name.toLowerCase().includes(value.toLowerCase()) : addressGroup.id === value;
     },
   },
   {
@@ -154,10 +244,23 @@ export const columns: Array<ColumnDef<KeyWithRelations> & CsvColumnDef<KeyWithRe
       );
     },
   },
-]
+  ]
+}
+
+export const columns = getColumns()
 
 export function getFilters(addressesGroup: AddressGroup[], keys: KeyWithRelations[]): Array<FilterGroup<KeyWithRelations>> {
   const distinctOwners = [...new Set(keys.map(k => k.ownerAddress).filter(Boolean))] as string[]
+  // Distinct DERIVED lifecycle statuses present in the data, ordered by the
+  // canonical KeyState order with "Retired" appended last (so the filter lists
+  // only statuses that actually occur, including "Retired" when retired keys exist).
+  const presentStatuses = new Set(keys.map((k) => deriveKeyLifecycleStatus(k)))
+  const distinctLifecycleStatuses = [
+    ...Object.values(KeyState)
+      .map((state) => KeyStateLabels[state])
+      .filter((label) => presentStatuses.has(label)),
+    ...(presentStatuses.has(RETIRED_LIFECYCLE_LABEL) ? [RETIRED_LIFECYCLE_LABEL] : []),
+  ]
   const delegatorMap = new Map<string, string>()
   for (const key of keys) {
     if (key.delegator) {
@@ -170,11 +273,18 @@ export function getFilters(addressesGroup: AddressGroup[], keys: KeyWithRelation
       group: "state",
       items: [
         [{label: "All Keys", value: "", column: "state", isDefault: true}],
-        (Object.values(KeyState).map((state) => ({
-          label: KeyStateLabels[state],
-          value: state,
+        // Options are the DERIVED lifecycle statuses present in the data: the
+        // KeyState labels of non-retired keys, plus "Retired" if any key has
+        // retiredAt set. The value equals the derived accessor output (the
+        // label string) so filterFn 'equals' on the "state" column matches.
+        // Filtering by "Retired" -> keys with retiredAt; filtering by e.g.
+        // "Staked" -> Staked keys, excluding retired ones (their status is
+        // "Retired", not their raw state).
+        distinctLifecycleStatuses.map((status) => ({
+          label: status,
+          value: status,
           column: "state"
-        })))
+        }))
       ]
     },
     {
@@ -241,10 +351,20 @@ export function getFilters(addressesGroup: AddressGroup[], keys: KeyWithRelation
 export const sorts: Array<Array<SortOption<KeyWithRelations>>> = [
   [
     {
-      label: "Most Recent",
-      column: "createdAt",
+      label: "Recently Updated",
+      column: "updatedAt",
       direction: "desc",
       isDefault: true,
+    },
+    {
+      label: "Highest Stake",
+      column: "stakeAmountUpokt",
+      direction: "desc",
+    },
+    {
+      label: "Lowest Op. Funds",
+      column: "balanceUpokt",
+      direction: "asc",
     },
   ],
 ]

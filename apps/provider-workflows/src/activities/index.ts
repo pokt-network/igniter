@@ -1,16 +1,21 @@
-import type {PocketBlockchain, StakeSupplierParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
+import { randomUUID } from 'crypto'
+import type {PocketBlockchain, StakeSupplierParams, UnstakeSupplierParams, SendFundsParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
+import { DEFAULT_NOTIFICATION_FLAGS } from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
 import {TX_EXPIRATION_BLOCKS} from '@igniter/tx-verify'
 import {ApplicationFailure, log} from '@temporalio/activity'
 import DAL from '@/lib/dal/DAL'
 import {KeysMinMax} from '@/lib/dal/keys'
-import {KeyState, RemediationHistoryEntryReason, TransactionType, TransactionStatus, TransactionTrigger} from '@igniter/db/provider/enums'
+import {KeyState, RemediationHistoryEntryReason, TransactionType, TransactionStatus, TransactionTrigger, NotificationChannelType} from '@igniter/db/provider/enums'
 import {BuildSupplierServiceConfigHandler, CompareSupplierServiceConfigHandler} from '@igniter/domain/provider/operations';
 import {addOrUpdateRemediationHistory} from "@/lib/utils";
 import {redactStakeSupplierParams} from "@/lib/redactors";
 import {getExpectedServicesFromKey} from '@igniter/domain/provider/utils'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
+import { DiscordChannel, TelegramChannel, EmailChannel, createSmtpTransport } from '@igniter/notifications'
+import type { NotificationEvent } from '@/lib/types/notifications'
+import { buildRichMessage } from '@/lib/richMessageBuilder'
 
 const errInfo = (e: unknown) => e instanceof Error ? { message: e.message, stack: e.stack } : e
 
@@ -36,6 +41,14 @@ export type UpsertSupplierStatusResult = {
     state?: KeyState;
     remediationReasons?: RemediationHistoryEntryReason[];
   };
+  /**
+   * True only on the sweep where this key becomes "fully staked" — bonded AND with at
+   * least one service configured — when it was not fully staked the previous sweep.
+   * Services land a sweep after the bare bond, so this fires once, at completion, and
+   * drives the single "Suppliers Staked" notification (no premature 0-service alert, no
+   * re-alert on later service edits).
+   */
+  becameFullyStaked?: boolean;
   supplier?: Supplier;
 }
 
@@ -51,6 +64,25 @@ export type GovernanceSyncResult = {
 
 /** Number of consecutive unavailable checks between critical alerts for a chronically-unverifiable tx. */
 const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE_ALERT_THRESHOLD ?? 50)
+
+// Explicit fee for the drain MsgSend (gasPrice 0.001 upokt; a MsgSend simulates ~70k gas,
+// signSendTx applies a 1.3x buffer -> ~91k gas -> ~91 upokt. Round up generously.
+// The exact value is validated on localnet (Phase 6); start at 1000 upokt = 0.001 POKT.
+// This MUST match the feeUpoktOverride passed to signSendTx so the amount and fee are consistent.
+const RETURN_FUNDS_FEE_UPOKT = 1000
+
+// D10: residual balance above this threshold after a drain triggers a warning (observability only).
+const DRAIN_DUST_TOLERANCE_UPOKT = RETURN_FUNDS_FEE_UPOKT
+
+export type ReturnFundsChoice =
+  | { mode: 'none' }
+  | { mode: 'owner' }
+  | { mode: 'custom'; address: string }
+
+export type TxIntentParams =
+  | { kind: 'stake'; params: StakeSupplierParams }
+  | { kind: 'unstake'; params: UnstakeSupplierParams; returnFunds: ReturnFundsChoice }
+  | { kind: 'return_funds'; params: SendFundsParams }
 
 /** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
 // TX_EXPIRATION_BLOCKS imported from @igniter/tx-verify above
@@ -86,7 +118,69 @@ export function supplierEffectFromKey(
     }
   }
 
+  if (tx.type === TransactionType.ReturnFunds) {
+    // A bank send (MsgSend drain) has no supplier-state path: verify is hash-only,
+    // exactly like the ServiceMismatch/AddressGroupMigration stake txs.
+    return null
+  }
+
   return null
+}
+
+/**
+ * Pure decision for where a return-funds (drain) MsgSend should send to.
+ * No DAL access — the key/choice/settings are passed in so this is trivially
+ * unit-testable. Shared by the provider-UI path (explicit per-op `choice`) and
+ * the middleman/automatic path (no choice → obey the provider settings flag).
+ *
+ * Returns the destination address, or null when no drain should happen
+ * (mode 'none', flag off, custom with empty address, or no resolvable owner).
+ */
+export function resolveDrainDestination(
+  key: { stakeOwner?: string | null; ownerAddress?: string | null },
+  choice: ReturnFundsChoice | undefined,
+  settings: { returnSupplierFundsToOwner?: boolean | null } | null,
+): string | null {
+  if (choice) {
+    if (choice.mode === 'none') return null
+    if (choice.mode === 'owner') return key.stakeOwner || key.ownerAddress || null
+    return choice.address || null
+  }
+  // No explicit choice (middleman/automatic path): obey the provider setting.
+  if (!settings?.returnSupplierFundsToOwner) return null
+  return key.stakeOwner || key.ownerAddress || null
+}
+
+/**
+ * Creates a return-funds (MsgSend drain) INTENT row for `keyAddress` → `toAddress`.
+ * Module-level (takes `dal` explicitly) so it can be invoked WITHOUT relying on `this`
+ * from both the `createReturnFundsIntent` activity method and `maybeCreateReturnFundsIntent`.
+ *
+ * The send amount is computed at sign time from the live spendable balance;
+ * `params.amount` is stored empty as a placeholder.
+ * Returns the new tx id, or null if a pending row already exists for this key
+ * (createIntent → onConflictDoNothing on the partial UNIQUE(key_id) WHERE pending index).
+ */
+async function doCreateReturnFundsIntent(dal: DAL, keyAddress: string, toAddress: string): Promise<number | null> {
+  const key = await dal.keys.loadKey(keyAddress)
+  if (!key) throw ApplicationFailure.nonRetryable(`createReturnFundsIntent: key not found for ${keyAddress}`, 'not_found')
+  const params: SendFundsParams = {
+    signerPrivateKey: key.privateKey,
+    fromAddress: key.address,
+    toAddress,
+    amount: [], // amount computed at sign time from live spendable balance
+  }
+  const intent: TxIntentParams = { kind: 'return_funds', params }
+  return dal.transactions.createIntent({
+    keyId: key.id,
+    keyAddress: key.address,
+    type: TransactionType.ReturnFunds,
+    reason: RemediationHistoryEntryReason.ReturnSupplierFunds,
+    trigger: TransactionTrigger.Automatic,
+    executionHeight: null,
+    params: JSON.stringify(intent),
+    reasons: JSON.stringify([]),
+  })
 }
 
 
@@ -177,23 +271,116 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       reason: p.reasons[0] ?? null,
       trigger: TransactionTrigger.Automatic,
       executionHeight: null,
-      params: JSON.stringify(p.params),
+      params: JSON.stringify({ kind: 'stake', params: p.params } satisfies TxIntentParams),
       reasons: JSON.stringify(p.reasons),
     })
   },
 
   /**
+   * Creates an unstake intent for the given key.
+   * Returns the new tx id, or null if:
+   *   - a pending row already exists for this key (UNIQUE WHERE pending index)
+   *   - the key is already retired (retiredAt set) — never re-unstake
+   */
+  async createUnstakeIntent(p: { keyAddress: string; returnFunds: ReturnFundsChoice; trigger?: TransactionTrigger }): Promise<number | null> {
+    const key = await dal.keys.loadKey(p.keyAddress)
+    if (!key) throw ApplicationFailure.nonRetryable(`createUnstakeIntent: key not found for ${p.keyAddress}`, 'not_found')
+    if (key.retiredAt) return null // already retired — never re-unstake
+    const params: UnstakeSupplierParams = {
+      signerPrivateKey: key.privateKey,
+      signer: key.address,
+      operatorAddress: key.address,
+    }
+    const intent: TxIntentParams = { kind: 'unstake', params, returnFunds: p.returnFunds }
+    return dal.transactions.createIntent({
+      keyId: key.id,
+      keyAddress: key.address,
+      type: TransactionType.Unstake,
+      reason: RemediationHistoryEntryReason.ManualUnstake,
+      trigger: p.trigger ?? TransactionTrigger.Manual,
+      executionHeight: null,
+      params: JSON.stringify(intent),
+      reasons: JSON.stringify([]),
+    })
+  },
+
+  /**
+   * Creates a return-funds (MsgSend drain) intent for the given key.
+   * The send amount is computed at sign time from the live spendable balance;
+   * `params.amount` is stored empty as a placeholder.
+   * Returns the new tx id, or null if a pending row already exists for this key.
+   */
+  async createReturnFundsIntent(p: { keyAddress: string; toAddress: string }): Promise<number | null> {
+    return doCreateReturnFundsIntent(dal, p.keyAddress, p.toAddress)
+  },
+
+  /**
    * Child activity: sign (unordered) the row's frozen params; persist bytes + hash + timeout
    * BEFORE broadcast so re-broadcast is idempotent.
+   *
+   * Dispatches to the correct pocket signer based on the tagged TxIntentParams union.
+   *
+   * MIGRATION TOLERANCE: In-flight stake intents created before the tagged-union deploy
+   * stored raw StakeSupplierParams (no `kind` field). If the parsed object has no `kind`,
+   * it is treated as a legacy stake intent: `{ kind: 'stake', params: parsed }`.
+   * This prevents breaking any pending stake rows across the deploy boundary.
    */
   async signSupplierTx(transactionId: number): Promise<void> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn?.params) throw new Error(`signSupplierTx: tx ${transactionId} missing params`)
-    const params: StakeSupplierParams = JSON.parse(txn.params)
+
+    // Parse tagged union; tolerate legacy shape (no `kind` = pre-migration stake intent).
+    const raw = JSON.parse(txn.params)
+    const intent: TxIntentParams = ('kind' in raw && raw.kind)
+      ? raw as TxIntentParams
+      : { kind: 'stake', params: raw as StakeSupplierParams }
+
     const head = await pocketRpcClient.getHeight()
-    let signed: Awaited<ReturnType<typeof pocketRpcClient.signSupplierTx>>
+    let signed: { signedPayload: string; transactionHash: string; timeoutTimestamp: Date }
     try {
-      signed = await pocketRpcClient.signSupplierTx(params)
+      if (intent.kind === 'stake') {
+        signed = await pocketRpcClient.signSupplierTx(intent.params)
+      } else if (intent.kind === 'unstake') {
+        // Provider-initiated unstake: combine unstake + optional drain into ONE operator-signed
+        // tx (2 messages), mirroring the middleman stake+funds pattern. The drain amount is
+        // computed now from the live spendable balance so the operator account lands at 0.
+        const key = await dal.keys.loadKey(txn.keyAddress)
+        const dest = key ? resolveDrainDestination(key, intent.returnFunds, null) : null
+        let drainTo: string | undefined
+        let drainAmount: string | undefined
+        if (dest) {
+          const spendable = await pocketRpcClient.getSpendableBalance(intent.params.operatorAddress)
+          const amt = spendable - RETURN_FUNDS_FEE_UPOKT
+          if (amt > 0) {
+            drainTo = dest
+            drainAmount = String(amt)
+          }
+          // else: nothing meaningful to drain — unstake only.
+        }
+        signed = await pocketRpcClient.signUnstakeAndDrainTx({
+          signerPrivateKey: intent.params.signerPrivateKey,
+          operatorAddress: intent.params.operatorAddress,
+          drainTo,
+          drainAmount,
+          feeUpoktOverride: drainTo ? RETURN_FUNDS_FEE_UPOKT : undefined,
+        })
+      } else {
+        // return_funds: compute exact drain amount NOW from live spendable balance.
+        const spendable = await pocketRpcClient.getSpendableBalance(intent.params.fromAddress)
+        const feeUpokt = RETURN_FUNDS_FEE_UPOKT
+        const sendAmount = spendable - feeUpokt
+        if (sendAmount <= 0) {
+          // Nothing meaningful to return — abandon this intent as a no-op success-equivalent.
+          await dal.transactions.abandonIntent(transactionId, {
+            message: `return-funds skipped: spendable ${spendable} <= fee ${feeUpokt}`,
+          })
+          return
+        }
+        signed = await pocketRpcClient.signSendTx(
+          { ...intent.params, amount: [{ denom: 'upokt', amount: String(sendAmount) }] },
+          feeUpokt,
+        )
+      }
     } catch (err: any) {
       const msg: string = err?.message ?? String(err)
       if (msg.includes("does not exist on chain")) {
@@ -511,12 +698,67 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     await dal.keys.updateKey(params.address, update, params.height)
     log.info('Update Supplier done!', {params})
 
+    // Drain trigger (D6): unbonding entered (Unstaking OR Unstaked) and not yet retired.
+    // Fires for middleman-initiated unstakes (the provider has no INTENT for those, so no
+    // applyVerificationDecision drain ran). Provider-UI unstakes already trigger the drain
+    // from applyVerificationDecision; the pending-unique index + retiredAt guard inside
+    // maybeCreateReturnFundsIntent make this duplicate path a structural no-op.
+    if (
+      (update.state === KeyState.Unstaking || update.state === KeyState.Unstaked) &&
+      !key.retiredAt
+    ) {
+      await maybeCreateReturnFundsIntent(key.address) // no explicit choice -> obey settings flag
+      // Retire-on-unbonding (set-once, isNull guard): retire the key the moment it enters
+      // unbonding — NOT only at the terminal Unstaked state. This closes the no-double-drain
+      // gap on this automatic path: the pending-unique index only blocks a CONCURRENT pending
+      // drain, so without retiring here, every SupplierStatus sweep across the multi-minute
+      // Unstaking window re-fired maybeCreateReturnFundsIntent; once the first drain SUCCEEDED
+      // (no longer pending) the next sweep created a second drain that then failed with
+      // "spendable 0 <= fee". Setting retiredAt now makes the next sweep's !key.retiredAt skip.
+      await dal.keys.setRetiredAt(key.address)
+    }
+
+    // Retire-on-terminal: safety net for a key that reaches Unstaked while already retired
+    // by another path (e.g. the provider-UI unstake-tx success effect in flipKeyForTx).
+    // setRetiredAt is set-once (isNull(retiredAt) guard), so this is idempotent.
+    if (update.state === KeyState.Unstaked) {
+      await dal.keys.setRetiredAt(key.address)
+    }
+
     const currentState = update.state ?? prevState
     const currentRemediationReasons = (update.remediationHistory ?? key.remediationHistory ?? []).map((rh) => rh.reason)
+
+    // Stake completion: a supplier is only "fully staked" once it is bonded AND has at
+    // least one service configured. Services are written a sweep after the bare bond, so
+    // we flag completion on exactly the sweep where both conditions first hold (i.e. they
+    // did not hold last sweep). This is what the "Suppliers Staked" notification keys off.
+    const prevServiceCount = key.services?.length ?? 0
+    const currentServiceCount = (update.services ?? key.services)?.length ?? 0
+    // "Was already a configured supplier" includes the degraded states a staked supplier
+    // can sit in (AttentionNeeded / RemediationFailed) — otherwise a drift→recovery back to
+    // Staked would falsely re-fire "Suppliers Staked". Only a genuinely-not-yet-staked
+    // supplier reaching Staked-with-services counts as a completion.
+    const STAKED_FAMILY = [KeyState.Staked, KeyState.AttentionNeeded, KeyState.RemediationFailed]
+    // States a key passes through while WE stake it, so reaching Staked-with-services is a
+    // genuine completion — plus the bare-bond case (already Staked with 0 services, services
+    // now landing). Excludes Imported: an Imported→Staked jump is the provider DISCOVERING a
+    // key already staked on-chain (e.g. importing pre-staked keys), not a fresh completion,
+    // so it must not fire "Suppliers Staked".
+    const STAKING_FLOW_STATES = [
+      KeyState.Available, KeyState.Delivered, KeyState.Staking,
+      KeyState.MissingStake, KeyState.Unstaked, KeyState.Unstaking,
+    ]
+    const wasFullyStaked = STAKED_FAMILY.includes(prevState) && prevServiceCount > 0
+    const isFullyStaked = currentState === KeyState.Staked && currentServiceCount > 0
+    const fromStakeCompletionPath =
+      STAKING_FLOW_STATES.includes(prevState) ||
+      (prevState === KeyState.Staked && prevServiceCount === 0)
+    const becameFullyStaked = isFullyStaked && !wasFullyStaked && fromStakeCompletionPath
 
     const result: UpsertSupplierStatusResult = {
       state: currentState,
       remediationReasons: currentRemediationReasons,
+      becameFullyStaked,
     }
 
     const prevDiff: UpsertSupplierStatusResult['prev'] = {}
@@ -562,6 +804,15 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       throw ApplicationFailure.nonRetryable('Key not found', 'not_found')
     }
 
+    // D7: never re-stake a retired (unstaked) key
+    if (key.retiredAt) {
+      log.info('remediateSupplier: Key is retired (retiredAt set); skipping remediation', {params})
+      return {
+        success: true,
+        message: 'Key is retired — re-staking is not allowed.',
+      }
+    }
+
     if (!key.addressGroup) {
       log.warn('remediateSupplier: Address Group not found', {params})
       throw ApplicationFailure.nonRetryable('Key address group not found', 'not_found')
@@ -571,6 +822,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.info('remediateSupplier: Supplier not found on-chain, skipping remediation', {params})
       return {
         success: true,
+        remediated: false,
         message: 'Supplier not found on-chain — nothing to remediate.'
       }
     }
@@ -579,6 +831,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       log.info('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
       return {
         success: true,
+        remediated: false,
         message: 'No remediation history found.'
       }
     }
@@ -633,6 +886,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       })
       return {
         success: true,
+        remediated: false,
         message: 'No actionable remediation for this supplier.',
       }
     }
@@ -669,7 +923,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           )
         }
 
-        return { success: true, message: 'Supplier already configured; remediation cleared.' }
+        // No on-chain action was taken — this only clears a stale OwnerInitialStake flag.
+        // remediated:false so a no-op sweep does not surface a "1 succeeded" notification
+        // (notify only when a real remediation action occurred). appliedReasons is kept so
+        // remediateSupplier's return union stays stable for the range aggregator's type; it is
+        // never read for a remediated:false result (the aggregator gates on remediated === true).
+        return { success: true, remediated: false, appliedReasons: [RemediationHistoryEntryReason.OwnerInitialStake], message: 'Supplier already configured; nothing remediated (cleared stale OwnerInitialStake flag).' }
       }
     }
 
@@ -871,33 +1130,242 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
-    await dal.transactions.claimTerminalTransition(transactionId, status, {
+    const claimed = await dal.transactions.claimTerminalTransition(transactionId, status, {
       code: decision.code,
       message: decision.tx === 'success' ? 'verified'
         : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
         : 'verification negative (validity bound covered, no effect)',
     })
+
+    // Provider-UI drain path: an Unstake verified success kicks off the drain using the
+    // per-op returnFunds choice frozen in the unstake intent.
+    //
+    // Created AFTER the terminal CAS (not before) for two reasons:
+    //   1. The pending-unique index UNIQUE(key_id) WHERE pending would BLOCK the drain
+    //      intent while the unstake row is still pending; only once the unstake reaches
+    //      its terminal status is the per-key pending slot free for the drain row.
+    //   2. `claimed` is truthy only for the single call that actually performed the
+    //      transition (CAS), so the drain is created exactly once — an overlapping sweep
+    //      or re-sweep gets undefined and never re-enters here.
+    // NOTE: provider-initiated unstakes carry the drain INSIDE the unstake tx (signUnstakeAndDrainTx),
+    // so there is NO separate ReturnFunds intent to create here. The middleman path's drain is
+    // triggered separately in upsertSupplierStatus when it observes the on-chain unbonding.
+
+    // D10: after a ReturnFunds tx succeeds, warn if a residual balance remains above dust tolerance.
+    // Observability only — never blocks or retries.
+    if (claimed && decision.tx === 'success' && txn.type === TransactionType.ReturnFunds) {
+      try {
+        const residual = await pocketRpcClient.getSpendableBalance(txn.keyAddress)
+        if (residual > DRAIN_DUST_TOLERANCE_UPOKT) {
+          log.warn('return-funds: residual balance remains after drain', {
+            keyAddress: txn.keyAddress,
+            residual,
+          })
+        }
+      } catch {
+        // Balance read failed — ignore; this is observability only.
+      }
+    }
+  },
+
+  async sendNotifications(event: NotificationEvent): Promise<void> {
+    try {
+      const allChannels = await dal.notificationChannels.loadEnabledChannels()
+
+      const channels = allChannels.filter((c) => {
+        const flags = { ...DEFAULT_NOTIFICATION_FLAGS, ...(c.notificationFlags ?? {}) }
+        return flags[event.type] ?? false
+      })
+
+      if (channels.length === 0) {
+        log.debug('sendNotifications: No enabled channels subscribed to this event type, skipping', { type: event.type })
+        return
+      }
+
+      const smtpConfig = channels.some((c) => c.type === NotificationChannelType.Email)
+        ? await dal.notificationChannels.loadSmtpConfig()
+        : null
+
+      // Pre-generate UUID so the message link can be built before saving to DB
+      const uuid = randomUUID()
+
+      const providerAppUrl = process.env.PROVIDER_APP_URL?.replace(/\/$/, '')
+      let providerName: string | null = null
+      try {
+        providerName = (await dal.settings.loadSettings())?.name ?? null
+      } catch (e) {
+        log.warn('sendNotifications: Failed to load settings for provider name, continuing without it', { e })
+      }
+      const richMessage = buildRichMessage(event, uuid, providerAppUrl, providerName)
+
+      // Send to each channel individually and record per-channel delivery status
+      const channelResults: Array<{ id: number; name: string; type: string; status: 'sent' | 'error'; error?: string }> = []
+
+      // All email channels share one SMTP server and differ only in recipients,
+      // so build a single pooled transport once and reuse it across the loop —
+      // one TCP+TLS+AUTH handshake for the whole run instead of one per channel.
+      // Closed in the finally below.
+      const emailSmtp = smtpConfig
+        ? {
+            host: smtpConfig.host,
+            port: smtpConfig.port,
+            secure: smtpConfig.secure,
+            username: smtpConfig.username,
+            password: smtpConfig.password,
+            fromAddress: smtpConfig.fromAddress,
+            fromName: smtpConfig.fromName ?? undefined,
+          }
+        : null
+      const emailTransporter = emailSmtp ? createSmtpTransport(emailSmtp, { pool: true }) : null
+
+      try {
+        for (const channel of channels) {
+          try {
+            if (channel.type === NotificationChannelType.Discord) {
+              const config = channel.config as { webhookUrl: string }
+              await new DiscordChannel({ webhookUrl: config.webhookUrl }).send(richMessage)
+            } else if (channel.type === NotificationChannelType.Telegram) {
+              const config = channel.config as { botToken: string; chatId: string }
+              await new TelegramChannel({ botToken: config.botToken, chatId: config.chatId }).send(richMessage)
+            } else if (channel.type === NotificationChannelType.Email) {
+              if (!emailSmtp || !emailTransporter) {
+                throw new Error('SMTP configuration not found')
+              }
+              const config = channel.config as { to: string[]; cc?: string[]; bcc?: string[] }
+              await new EmailChannel(
+                {
+                  to: config.to,
+                  cc: config.cc,
+                  bcc: config.bcc,
+                  smtp: emailSmtp,
+                },
+                emailTransporter,
+              ).send(richMessage)
+            }
+            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'sent' })
+          } catch (err) {
+            const error = err instanceof Error ? err.message : String(err)
+            log.warn('sendNotifications: Channel delivery failed', { channelId: channel.id, channelType: channel.type, error })
+            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'error', error })
+          }
+        }
+      } finally {
+        emailTransporter?.close()
+      }
+
+      // Save event with per-channel delivery status
+      try {
+        await dal.notificationChannels.insertNotificationEvent({
+          uuid,
+          type: event.type,
+          metadata: event.metadata,
+          channels: channelResults,
+        })
+      } catch (dbErr) {
+        log.error('sendNotifications: Failed to save notification event to DB', { dbErr, type: event.type })
+      }
+
+      const errorCount = channelResults.filter((r) => r.status === 'error').length
+      log.info('sendNotifications: Done', { type: event.type, uuid, total: channelResults.length, errors: errorCount })
+    } catch (err) {
+      log.error('sendNotifications: Unexpected error — notifications skipped', { err, type: event.type })
+    }
   },
   }
 
   /**
-   * Provider terminal effect: flips the key state for a verified stake tx.
+   * Provider terminal effect: flips the key state per the verified tx TYPE.
    * Keyed off goal-state effects (not raw tx outcome) so a tx that failed on-chain
-   * while a sibling achieved the goal still flips to Staked (not RemediationFailed).
-   * State-CAS: keys that moved to Unstaking/Unstaked/AttentionNeeded since broadcast
-   * must NOT be overwritten — those transitions take priority.
+   * while a sibling achieved the goal still reaches its goal state.
+   *
+   *  - Stake:       success → Staked, failure → RemediationFailed. State-CAS: keys that
+   *                 moved to Unstaking/Unstaked/AttentionNeeded since broadcast must NOT
+   *                 be dragged back — those transitions take priority.
+   *  - Unstake:     success → Unstaking + retire (set-once); the terminal Unstaked state
+   *                 is reconciled from chain by upsertSupplierStatus. failure → AttentionNeeded
+   *                 (do NOT retire — operator may re-try).
+   *  - ReturnFunds: NEVER mutate key state (it's a bank send; key lifecycle is independent).
    */
   async function flipKeyForTx(
     txn: Transaction,
     effects: 'apply-success' | 'apply-failure',
   ): Promise<void> {
-    const blockedStates = [KeyState.Unstaking, KeyState.Unstaked, KeyState.AttentionNeeded]
-    const flipped = effects === 'apply-success'
-      ? await dal.keys.flipState(txn.keyAddress, KeyState.Staked, { notFromStates: blockedStates, removeEntryReason: txn.reason ?? undefined })
-      : await dal.keys.flipState(txn.keyAddress, KeyState.RemediationFailed, { notFromStates: blockedStates })
-    if (!flipped) {
-      log.info('flipKeyForTx: key state moved on since broadcast; flip skipped', { keyAddress: txn.keyAddress, effects })
+    if (txn.type === TransactionType.Stake) {
+      const blockedStates = [KeyState.Unstaking, KeyState.Unstaked, KeyState.AttentionNeeded]
+      const flipped = effects === 'apply-success'
+        ? await dal.keys.flipState(txn.keyAddress, KeyState.Staked, { notFromStates: blockedStates, removeEntryReason: txn.reason ?? undefined })
+        : await dal.keys.flipState(txn.keyAddress, KeyState.RemediationFailed, { notFromStates: blockedStates })
+      if (!flipped) {
+        log.info('flipKeyForTx: key state moved on since broadcast; flip skipped', { keyAddress: txn.keyAddress, effects })
+      }
+      return
     }
+
+    if (txn.type === TransactionType.Unstake) {
+      if (effects === 'apply-success') {
+        // Unstake landed on-chain (unbonding entered). Mark Unstaking and RETIRE (set-once).
+        // Final Unstaked state is reconciled by upsertSupplierStatus from chain.
+        const flipped = await dal.keys.flipState(txn.keyAddress, KeyState.Unstaking, {
+          notFromStates: [KeyState.Unstaked],
+        })
+        if (!flipped) {
+          log.info('flipKeyForTx: key already past Unstaking since broadcast; flip skipped', { keyAddress: txn.keyAddress })
+        }
+        await dal.keys.setRetiredAt(txn.keyAddress)
+      } else {
+        // Unstake failed on-chain: surface for attention, do not retire.
+        const flipped = await dal.keys.flipState(txn.keyAddress, KeyState.AttentionNeeded, {
+          notFromStates: [KeyState.Unstaking, KeyState.Unstaked],
+        })
+        if (!flipped) {
+          log.info('flipKeyForTx: key already unbonding since broadcast; AttentionNeeded flip skipped', { keyAddress: txn.keyAddress })
+        }
+      }
+      return
+    }
+
+    // ReturnFunds: a bank send. NEVER mutate key state on success or failure.
+    // (supplierEffectFromKey returns null for it, so the verifier resolves it hash-only;
+    //  whatever the effect, the key's lifecycle state is independent of a drain send.)
+  }
+
+  /**
+   * Single decision point for the drain (return-funds) intent, shared by:
+   *  - the provider-UI path (applyVerificationDecision, explicit per-op `choice`), and
+   *  - the middleman/automatic path (upsertSupplierStatus, no choice → settings flag).
+   *
+   * No-double-drain / idempotency is structural and holds across BOTH callers:
+   *  - pending-unique index: doCreateReturnFundsIntent → createIntent uses onConflictDoNothing
+   *    on the partial UNIQUE(key_id) WHERE pending index, so a key that already has a pending
+   *    tx (including a pending drain) can never get a SECOND pending drain — this is the hard
+   *    no-double-drain guarantee and applies to every caller.
+   *  - retire guard (automatic path ONLY): a key with `retiredAt` set never re-drains from the
+   *    repeated chain-detection sweeps. The guard is intentionally NOT applied to the explicit
+   *    `choice` path: that path is the unstake-success transition, which (a) just set retiredAt
+   *    itself via flipKeyForTx and (b) is CAS-gated to fire exactly once — so applying the
+   *    retire guard there would wrongly suppress the single intended provider-UI drain.
+   *
+   * resolveDrainDestination is the pure decision; this wrapper only does the DAL I/O.
+   */
+  async function maybeCreateReturnFundsIntent(
+    keyAddress: string,
+    choice?: ReturnFundsChoice,
+  ): Promise<void> {
+    const key = await dal.keys.loadKey(keyAddress)
+    if (!key) return
+
+    let settings: { returnSupplierFundsToOwner?: boolean | null } | null = null
+    if (!choice) {
+      // No explicit choice (middleman/automatic path): obey the retire guard so the
+      // repeated chain-detection sweeps never re-drain, then obey the settings flag.
+      if (key.retiredAt) return
+      settings = await dal.settings.loadSettings()
+    }
+
+    const toAddress = resolveDrainDestination(key, choice, settings)
+    if (!toAddress) return
+
+    await doCreateReturnFundsIntent(dal, keyAddress, toAddress)
   }
 
   /**

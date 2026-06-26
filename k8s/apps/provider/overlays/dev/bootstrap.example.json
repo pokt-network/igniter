@@ -7,7 +7,8 @@
     "chainId": "pocket-lego-testnet",
     "rewardAddresses": [],
     "initialOperationalFunds": 5,
-    "minimumOperationalFunds": 2
+    "minimumOperationalFunds": 2,
+    "returnSupplierFundsToOwner": false
   },
   "regions": [
     {
@@ -50,6 +51,31 @@
           "revShare": []
         }
       ]
+    }
+  ],
+  "channels": [
+    {
+      "name": "discord-alerts",
+      "type": "discord",
+      "config": {
+        "webhookUrl": "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+      }
+    },
+    {
+      "name": "email-ops",
+      "type": "email",
+      "config": {
+        "to": ["ops@example.com"],
+        "cc": []
+      }
+    },
+    {
+      "name": "telegram-alerts",
+      "type": "telegram",
+      "config": {
+        "botToken": "000000000:YOUR_BOT_TOKEN",
+        "chatId": "-1001234567890"
+      }
     }
   ]
 }

@@ -19,6 +19,7 @@
     "@hookform/resolvers": "4.1.3",
     "@igniter/commons": "workspace:*",
     "@igniter/db": "workspace:*",
+    "@igniter/notifications": "workspace:*",
     "@igniter/domain": "workspace:*",
     "@igniter/graphql": "workspace:*",
     "@igniter/logger": "workspace:*",

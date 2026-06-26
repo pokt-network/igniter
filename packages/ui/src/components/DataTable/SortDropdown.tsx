@@ -39,16 +39,23 @@ export default function SortDropdown<TData>({
   currentDirection,
   disabled
 }: SortDropdownProps<TData>) {
+  // Deterministic ids (derived from the sort config) keep SSR and client markup
+  // identical. The DataTable renders a data-dependent number of dropdowns before this
+  // one (FilterDropdowns are empty on SSR, populated on the client), which shifts radix's
+  // positional useId() counter and caused a hydration id mismatch here. A stable id makes
+  // the rendered id independent of that counter.
+  const sortId = String(sorts.flat()[0]?.column ?? 'default')
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger disabled={disabled}>
+      <DropdownMenuTrigger id={`sort-trigger-${sortId}`} disabled={disabled}>
         <div className="flex items-center gap-2 py-2 px-4">
           <span className="text-sm">
             {selectedSort?.label || defaultSort?.label}
           </span>
         </div>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top">
+      <DropdownMenuContent id={`sort-content-${sortId}`} side="top">
         {sorts.map((sortGroup, groupIndex) => (
           <React.Fragment key={groupIndex}>
             {sortGroup.map((sortBy) => (

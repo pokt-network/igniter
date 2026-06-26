@@ -11,19 +11,21 @@ import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt, getShortAddress } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
 import { CaretSmallIcon } from '@igniter/ui/assets'
-import {useAddItemToDetail, useRemoveLastItemFromDetail} from '@igniter/ui/components/QuickDetails/Provider'
+import {useAddItemToDetail} from '@igniter/ui/components/QuickDetails/Provider'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { NodeService, Provider } from '@igniter/db/middleman/schema'
 import {TransactionDetailBody} from "@/app/detail/TransactionDetail"
-import { useRouter } from 'next/navigation'
+import { UnstakeProcess } from '@/app/app/unstake/components/UnstakeProcess'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetUnstakeDuration } from '@/actions/Unstake'
 import { GetSupplierChanges, AcknowledgeAllByNode } from '@/actions/SupplierChanges'
 import { formatDuration } from '@/lib/utils/time'
 import { GetNode } from '@/actions/Nodes'
 import { Skeleton } from '@igniter/ui/components/skeleton'
+import { usePendingGuards } from '@/lib/pending/usePendingGuards'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 
 export interface NodeDetailBody {
   [key: string]: unknown;
@@ -256,10 +258,16 @@ export default function NodeDetail({
    services,
 }: NodeDetailBody) {
   const addItem = useAddItemToDetail()
-  const removeLastItem = useRemoveLastItemFromDetail()
-  const router = useRouter()
+  const [unstakeOpen, setUnstakeOpen] = useState(false);
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
   const [isShowingServices, setIsShowingServices] = useState(false);
+  const { isOperatorPending, isOwnerBusy } = usePendingGuards();
+  const isUnstakeBlocked = isOperatorPending(address) || isOwnerBusy(ownerAddress);
+  // A pending op on a Staked supplier is an in-flight unstake (a staked supplier can't be
+  // re-staked), so reflect it in the detail hero immediately — before the node status flips
+  // to Unstaking on tx verification — matching the suppliers-list "Unstaking…" badge.
+  const displayStatus =
+    isOperatorPending(address) && status === NodeStatus.Staked ? NodeStatus.Unstaking : status
 
   const {
     data: unstakeDurationData,
@@ -393,15 +401,16 @@ export default function NodeDetail({
         className={
           clsx(
             'relative flex h-[64px] mt-[-5px]',
-            (status === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-slate',
-            status === NodeStatus.Unstaking && 'gradient-border-purple',
-            ((status === NodeStatus.Staked && !operationalFundsAmount) || status === NodeStatus.Unstaked) && 'gradient-border-orange',
+            (displayStatus === NodeStatus.Staked && operationalFundsAmount) && 'gradient-border-green',
+            (displayStatus === NodeStatus.Staked && !operationalFundsAmount) && 'gradient-border-red',
+            displayStatus === NodeStatus.Unstaking && 'gradient-border-orange',
+            displayStatus === NodeStatus.Unstaked && 'gradient-border-slate',
           )
         }
       >
         <div className={`absolute inset-0 flex flex-row items-center bg-[var(--background)] rounded-[8px] p-[18px_25px] justify-between`}>
           <span className="text-[20px] text-white">
-            {status.slice(0, 1).toUpperCase() + status.slice(1)}
+            {displayStatus.slice(0, 1).toUpperCase() + displayStatus.slice(1)}
           </span>
           <div className="flex flex-row items-center gap-2">
             <p className="font-mono !text-[20px] text-white">
@@ -504,19 +513,34 @@ export default function NodeDetail({
           </p>
           <hr className={'border-border-primary'} />
           <div className={'flex flex-row items-center gap-2 p-2'}>
-            <ActionButton
-              onClick={() => {
-                removeLastItem()
-                router.push('/app/unstake')
-              }}
-            >
-              Unstake
-            </ActionButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1">
+                  <ActionButton
+                    onClick={() => setUnstakeOpen(true)}
+                    disabled={isUnstakeBlocked}
+                    className={isUnstakeBlocked ? 'pointer-events-none opacity-50' : undefined}
+                  >
+                    Unstake
+                  </ActionButton>
+                </span>
+              </TooltipTrigger>
+              {isUnstakeBlocked && (
+                <TooltipContent>
+                  Operation in progress for this owner; wait for it to confirm.
+                </TooltipContent>
+              )}
+            </Tooltip>
             <QuickInfoPopOverIcon
               title={'Unstake'}
-              description={'Navigate to the unstake page to unstake this node.'}
+              description={'Unstake this supplier. If the provider returns funds, the remaining balance goes to the owner.'}
             />
           </div>
+          <UnstakeProcess
+            open={unstakeOpen}
+            onOpenChange={setUnstakeOpen}
+            preselectedAddresses={[address]}
+          />
         </div>
       )}
     </div>

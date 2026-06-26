@@ -218,7 +218,7 @@ export default function ClientStakePage() {
               selectedOffer={selectedOffer!}
               selectedAddressGroupId={selectedAddressGroupId!}
               onClose={() => {
-                router.push('/app');
+                router.push('/app/suppliers');
               }}
             />
           )}

@@ -3,12 +3,14 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CsvColumnDef } from '@igniter/ui/lib/csv'
 import { ProviderFee, TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
-import {ActivitySuccessIcon, ActivityWarningIcon, RightArrowIcon, WarningIcon} from '@igniter/ui/assets'
+import {ActivitySuccessIcon, ActivityWarningIcon, RightArrowIcon} from '@igniter/ui/assets'
 import { Button } from '@igniter/ui/components/button'
 import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
 import Amount from '@igniter/ui/components/Amount'
+import TransactionHash from '@igniter/ui/components/TransactionHash'
+import { TransactionStatusBadge } from '@/lib/transactions/statusBadge'
 import {Operation} from "@/app/detail/TransactionDetail";
 
 export type Transaction = {
@@ -19,7 +21,7 @@ export type Transaction = {
     executionHeight: string;
     createdAt: Date;
     totalValue: number;
-    hash: string,
+    hash: string | null,
     estimatedFee: number,
     consumedFee?: number,
     provider: string,
@@ -61,15 +63,18 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
         header: "Status",
         cell: ({ row }) => {
             const status = row.getValue("status") as TransactionStatus;
-
-            return (
-                <div className="flex items-baseline gap-2">
-                    {status === TransactionStatus.Failure && <WarningIcon />}
-                    <span>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
-                </div>
-            );
+            return <TransactionStatusBadge status={status} />;
         },
         csvFormatterFn: ({status}) => status.charAt(0).toUpperCase() + status.slice(1),
+    },
+    {
+        accessorKey: "hash",
+        header: "Tx Hash",
+        cell: ({ row }) => {
+            const hash = row.original.hash;
+            return hash ? <TransactionHash hash={hash} /> : <span className="text-muted-foreground">-</span>;
+        },
+        csvFormatterFn: (item) => item.hash || '-',
     },
     {
         id: "height",
@@ -163,6 +168,7 @@ export const filters: FilterGroup<Transaction>[] = [
                 { label: "Success", value: TransactionStatus.Success, column: "status" },
                 { label: "Failure", value: TransactionStatus.Failure, column: "status" },
                 { label: "Pending", value: TransactionStatus.Pending, column: "status" },
+                { label: "Not Executed", value: TransactionStatus.NotExecuted, column: "status" },
             ],
         ],
     },

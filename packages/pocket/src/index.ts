@@ -34,8 +34,9 @@ import {
 } from '@pocket/types'
 import { Coin } from '@pocket/proto/generated/cosmos/base/v1beta1/coin'
 import { Supplier } from '@pocket/proto/generated/pocket/shared/supplier'
-import {StakeSupplierParams} from "@pocket/types";
-import {MsgStakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
+import {StakeSupplierParams, UnstakeSupplierParams, SendFundsParams} from "@pocket/types";
+import {MsgStakeSupplier, MsgUnstakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
+import {MsgSend} from "@pocket/proto/generated/cosmos/bank/v1beta1/tx";
 import {isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
 import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
@@ -119,11 +120,8 @@ const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
 function isUnorderedDedupRejection(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const err = e as Error & { code?: number; codespace?: string; rawLog?: string }
-  // code 19 = cometbft ErrTxInCache (same bytes in mempool)
-  // code 18 = cosmos-sdk ErrInvalidRequest from verifyUnorderedNonce ("failed to add unordered nonce")
-  if (err.codespace === 'sdk' && (err.code === 19 || err.code === 18)) return true
   const msg = String(err?.message ?? err?.rawLog ?? '').toLowerCase()
-  if (msg.includes('failed to add unordered nonce')) return true
+  if (err.codespace === 'sdk' && msg.includes('failed to add unordered nonce')) return true
   if (msg.includes('tx already in mempool') || msg.includes('already exists in cache')) return true
   return false
 }
@@ -672,44 +670,68 @@ export class PocketBlockchain {
   }
 
   /**
-   * Signs a supplier stake tx with unordered=true (no sequence needed).
-   * Returns signed bytes + hash WITHOUT broadcasting.
-   * The caller must persist these before calling broadcastSupplierTx.
+   * Generic unordered tx signer. Builds a TxBody with unordered=true and
+   * timeoutTimestamp = now + UNORDERED_TIMEOUT_MS, estimates gas, signs with
+   * sequence=0, and returns the signed bytes + hash + timeout without broadcasting.
+   *
+   * All public sign methods (signSupplierTx, signUnstakeTx, signSendTx) delegate here.
+   *
+   * @param feeUpoktOverride - When set, skips gas simulation and builds an explicit fee of
+   *   `{ amount: [{ denom: 'upokt', amount: String(feeUpoktOverride) }], gas: String(gasLimit) }`.
+   *   Used by drain (return_funds) flows where the activity must subtract the EXACT same fee
+   *   it tells the signer to use, preventing amount/fee drift.
    */
-  async signSupplierTx(params: StakeSupplierParams): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
-    const { signerPrivateKey, signer, ...value } = params
-
+  private async signUnorderedTx(
+    signerPrivateKey: string,
+    signer: string,
+    registryEntries: ReadonlyArray<[string, GeneratedType]>,
+    msgs: ReadonlyArray<{ typeUrl: string; value: unknown }>,
+    feeUpoktOverride?: number,
+    gasLimitOverride?: number,
+  ): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
     if (!isValidPrivateKey(signerPrivateKey)) throw new Error('Invalid secp256k1 private key')
-    if (!signer) throw new Error('`signer` (bech32) is required')
 
     const pkBytes = Uint8Array.from(Buffer.from(signerPrivateKey, 'hex'))
     const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
-    const typeUrl = '/pocket.supplier.MsgStakeSupplier'
 
-    const registry = new Registry([
-      [typeUrl, MsgStakeSupplier as unknown as GeneratedType],
-    ])
-
+    const registry = new Registry(registryEntries as Array<[string, GeneratedType]>)
     const signingClient = await this.getSigningClient(wallet, registry)
 
-    const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
+    const latestBlockTime = await this.getLatestBlockTime()
+    const timeoutTimestamp = new Date((latestBlockTime?.getTime() ?? this.nowMs()) + UNORDERED_TIMEOUT_MS)
 
-    const timeoutTimestamp = new Date(this.nowMs() + UNORDERED_TIMEOUT_MS)
-
-    // Estimate gas; fallback 350_000 matches old stakeSupplier behavior
-    let gasEstimation: number
-    try {
-      gasEstimation = await signingClient.simulate(signer, [msg], '')
-    } catch (simErr: any) {
-      this.logger.warn({ signer, error: simErr?.message ?? simErr }, 'signSupplierTx: simulate failed, using fallback gas')
-      gasEstimation = 350_000
+    // StdFee shape: amount (readonly Coin[]), gas (string), granter?, payer?
+    let feeAmount: readonly { denom: string; amount: string }[]
+    let feeGas: string
+    let feeGranter: string | undefined
+    let feePayer: string | undefined
+    if (feeUpoktOverride !== undefined) {
+      // Explicit fee path: used when the caller must pre-compute and subtract the exact
+      // fee (e.g. drain flows). Default gas ceiling 200_000 (single MsgSend); callers with
+      // more messages (e.g. unstake+send) pass a higher gasLimitOverride.
+      const gasLimit = gasLimitOverride ?? 200_000
+      feeAmount = [{ denom: this.denom, amount: String(feeUpoktOverride) }]
+      feeGas = String(gasLimit)
+    } else {
+      // Estimate gas; fallback 350_000 matches stakeSupplier behavior
+      let gasEstimation: number
+      try {
+        gasEstimation = await signingClient.simulate(signer, msgs as any, '')
+      } catch (simErr: any) {
+        this.logger.warn({ signer, error: simErr?.message ?? simErr }, 'signUnorderedTx: simulate failed, using fallback gas')
+        gasEstimation = 350_000
+      }
+      const stdFee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
+      feeAmount = stdFee.amount
+      feeGas = stdFee.gas
+      feeGranter = stdFee.granter
+      feePayer = stdFee.payer
     }
-    const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
 
     // Build TxBody with LOCAL proto (has unordered + timeoutTimestamp fields)
-    const msgAny = registry.encodeAsAny(msg)
+    const encodedMsgs = msgs.map((m) => registry.encodeAsAny(m as any))
     const bodyBytes = TxBody.encode(TxBody.fromPartial({
-      messages: [msgAny as any],
+      messages: encodedMsgs as any,
       memo: '',
       unordered: true,
       timeoutTimestamp,
@@ -720,15 +742,15 @@ export class PocketBlockchain {
     const chainId = await signingClient.getChainId()
 
     const [account] = await wallet.getAccounts()
-    if (!account) throw new Error('signSupplierTx: wallet has no accounts')
+    if (!account) throw new Error('signUnorderedTx: wallet has no accounts')
 
     const pubkey = encodePubkey(encodeSecp256k1Pubkey(account.pubkey))
     const authInfoBytes = makeAuthInfoBytes(
       [{ pubkey, sequence: 0 }],
-      fee.amount,
-      Number(fee.gas),
-      fee.granter,
-      fee.payer,
+      feeAmount,
+      Number(feeGas),
+      feeGranter,
+      feePayer,
     )
     const signDoc = makeSignDoc(bodyBytes, authInfoBytes, chainId, accountNumber)
     const { signature, signed } = await wallet.signDirect(signer, signDoc)
@@ -742,9 +764,142 @@ export class PocketBlockchain {
     const transactionHash = toHex(sha256(txBytes)).toUpperCase()
     const signedPayload = Buffer.from(txBytes).toString('base64')
 
-    this.logger.info({ signer, transactionHash, timeoutTimestamp }, 'signSupplierTx: signed unordered tx')
-
     return { signedPayload, transactionHash, timeoutTimestamp }
+  }
+
+  /**
+   * Signs a supplier stake tx with unordered=true (no sequence needed).
+   * Returns signed bytes + hash WITHOUT broadcasting.
+   * The caller must persist these before calling broadcastSupplierTx.
+   */
+  async signSupplierTx(params: StakeSupplierParams): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, signer, ...value } = params
+
+    if (!signer) throw new Error('`signer` (bech32) is required')
+
+    const typeUrl = '/pocket.supplier.MsgStakeSupplier'
+    const result = await this.signUnorderedTx(
+      signerPrivateKey,
+      signer,
+      [[typeUrl, MsgStakeSupplier as unknown as GeneratedType]],
+      [{ typeUrl, value: { signer, ...value } as MsgStakeSupplier }],
+    )
+
+    this.logger.info({ signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signSupplierTx: signed unordered tx')
+
+    return result
+  }
+
+  /**
+   * Signs an unstake tx with unordered=true (no sequence needed).
+   * Returns signed bytes + hash WITHOUT broadcasting.
+   * The caller must persist these before broadcasting.
+   */
+  async signUnstakeTx(params: UnstakeSupplierParams): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, signer, ...value } = params
+
+    if (!signer) throw new Error('`signer` (bech32) is required')
+
+    const typeUrl = '/pocket.supplier.MsgUnstakeSupplier'
+    const result = await this.signUnorderedTx(
+      signerPrivateKey,
+      signer,
+      [[typeUrl, MsgUnstakeSupplier as unknown as GeneratedType]],
+      [{ typeUrl, value: { signer, ...value } as MsgUnstakeSupplier }],
+    )
+
+    this.logger.info({ signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signUnstakeTx: signed unordered tx')
+
+    return result
+  }
+
+  /**
+   * Signs a MsgSend (fund transfer) tx with unordered=true (no sequence needed).
+   * Returns signed bytes + hash WITHOUT broadcasting.
+   * The caller must persist these before broadcasting.
+   *
+   * @param feeUpoktOverride - When set, attaches an explicit fee of this many upokt instead
+   *   of simulating gas. Pass the SAME value used to compute the send amount so fees are
+   *   exactly consistent (no drift between what is subtracted and what the chain deducts).
+   */
+  async signSendTx(params: SendFundsParams, feeUpoktOverride?: number): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, fromAddress, ...value } = params
+
+    if (!fromAddress) throw new Error('`fromAddress` (bech32) is required')
+
+    const typeUrl = '/cosmos.bank.v1beta1.MsgSend'
+    const result = await this.signUnorderedTx(
+      signerPrivateKey,
+      fromAddress,
+      [[typeUrl, MsgSend as unknown as GeneratedType]],
+      [{ typeUrl, value: { fromAddress, ...value } as MsgSend }],
+      feeUpoktOverride,
+    )
+
+    this.logger.info({ fromAddress, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signSendTx: signed unordered tx')
+
+    return result
+  }
+
+  /**
+   * Signs ONE unordered tx containing a MsgUnstakeSupplier and (optionally) a MsgSend that
+   * drains the operator's remaining balance. Both messages are signed by the operator key.
+   * Used by the provider-initiated unstake (atomic unstake + return-funds), mirroring the
+   * middleman's stake+funds single-tx pattern. The send amount must be pre-computed by the
+   * caller as `spendable - feeUpoktOverride` so the operator account lands at exactly 0.
+   */
+  async signUnstakeAndDrainTx(p: {
+    signerPrivateKey: string;
+    operatorAddress: string;
+    drainTo?: string;
+    drainAmount?: string;
+    feeUpoktOverride?: number;
+  }): Promise<{ signedPayload: string; transactionHash: string; timeoutTimestamp: Date }> {
+    const { signerPrivateKey, operatorAddress, drainTo, drainAmount, feeUpoktOverride } = p
+    if (!operatorAddress) throw new Error('`operatorAddress` (bech32) is required')
+
+    const unstakeTypeUrl = '/pocket.supplier.MsgUnstakeSupplier'
+    const sendTypeUrl = '/cosmos.bank.v1beta1.MsgSend'
+
+    const registryEntries: Array<[string, GeneratedType]> = [
+      [unstakeTypeUrl, MsgUnstakeSupplier as unknown as GeneratedType],
+    ]
+    const msgs: Array<{ typeUrl: string; value: unknown }> = [
+      { typeUrl: unstakeTypeUrl, value: { signer: operatorAddress, operatorAddress } as MsgUnstakeSupplier },
+    ]
+    if (drainTo && drainAmount) {
+      registryEntries.push([sendTypeUrl, MsgSend as unknown as GeneratedType])
+      msgs.push({
+        typeUrl: sendTypeUrl,
+        value: { fromAddress: operatorAddress, toAddress: drainTo, amount: [{ denom: this.denom, amount: drainAmount }] } as MsgSend,
+      })
+    }
+
+    // Combined unstake+send needs more gas than a single message; 500_000 keeps the effective
+    // gas price (fee/gas = feeUpoktOverride/500000) safely above the 0.001 upokt minimum.
+    const result = await this.signUnorderedTx(
+      signerPrivateKey,
+      operatorAddress,
+      registryEntries,
+      msgs,
+      feeUpoktOverride,
+      drainTo ? 500_000 : undefined,
+    )
+
+    this.logger.info({ operatorAddress, drained: Boolean(drainTo), transactionHash: result.transactionHash }, 'signUnstakeAndDrainTx: signed unordered tx')
+
+    return result
+  }
+
+  /**
+   * Returns the spendable upokt balance for `address`.
+   * Unlike `getBalance` (total), this excludes vesting/locked coins.
+   */
+  async getSpendableBalance(address: string, height?: number): Promise<number> {
+    const client = await this.getCometClient()
+    const queryClient = getQueryClient(client, height)
+    const coin = await queryClient.bank.spendableBalanceByDenom(address, this.denom)
+    return parseInt(coin.amount, 10)
   }
 
   /**

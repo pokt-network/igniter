@@ -19,6 +19,7 @@
     "@igniter/pocket": "workspace:*",
     "@igniter/tx-verify": "workspace:*",
     "@igniter/domain": "workspace:*",
+    "@igniter/notifications": "workspace:*",
     "@pokt-foundation/pocketjs-provider": "2.2.1",
     "@pokt-foundation/pocketjs-signer": "2.2.1",
     "@pokt-foundation/pocketjs-transaction-builder": "2.2.1",

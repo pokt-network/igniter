@@ -1,3 +1,4 @@
 include('./postgres/Tiltfile')
 include('./temporal/Tiltfile')
 include('./governance/Tiltfile')
+include('./notification-sinks/Tiltfile')

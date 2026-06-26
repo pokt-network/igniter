@@ -21,6 +21,7 @@ import {CreateSignedMemo, CreateStakeTransaction} from "@/actions/Stake";
 import {StageStatus} from "@/app/app/stake/types";
 import {stageFailed, stageSucceeded} from "@/app/app/stake/utils";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import {useQueryClient} from "@tanstack/react-query";
 
 export interface StakingProcessStatus {
   requestSuppliersStatus: StageStatus;
@@ -56,6 +57,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
   const [currentStep, setCurrentStep] = useState<StakingProcessStep>(StakingProcessStep.requestSuppliers);
   const settings = useApplicationSettings();
   const {signTransaction} = useWalletConnection();
+  const queryClient = useQueryClient();
   const [transaction, setTransaction] = useState<DbTransaction | null>(null);
   const [transactionMessages, setTransactionMessages] = useState<TransactionMessage[]>([]);
   const [signedTransaction, setSignedTransaction] = useState<SignedTransaction | null>(null);
@@ -158,6 +160,9 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
           ...prev,
           schedulingTransactionStatus: 'success',
         }));
+
+        queryClient.invalidateQueries({ queryKey: ['pendingState'] });
+        queryClient.invalidateQueries({ queryKey: ['nodes'] });
 
         setCurrentStep(StakingProcessStep.Completed);
       } catch (err) {

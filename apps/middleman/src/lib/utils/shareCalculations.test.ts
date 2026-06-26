@@ -1,5 +1,7 @@
 import {
   calculateShares,
+  getPerServiceClientShares,
+  hasNonUniformClientShare,
   calculateAddressGroupPerformance,
   calculateProviderPerformance,
   calculateEffectiveYield,
@@ -37,7 +39,7 @@ describe('calculateShares', () => {
     expect(result.clientShare).toBe(92);
   });
 
-  it('uses median for client share across multiple services', () => {
+  it('computes client share as the reconciling remainder across services', () => {
     const ag = {
       addressGroupServices: [
         { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'a', share: 10 }] },
@@ -47,8 +49,33 @@ describe('calculateShares', () => {
     };
 
     const result = calculateShares(ag, 0);
-    // Per-service client shares: 90, 70, 50 → median = 70
+    // Provider avg = (10+30+50)/3 = 30 → client = 100 - 30 = 70
+    expect(result.providerShare).toBe(30);
     expect(result.clientShare).toBe(70);
+  });
+
+  it('client share is the remainder of the other rows, not a median (rows sum to 100)', () => {
+    // Issue #305 example: provider 20/20/80, supplier 5 each, fee 0.
+    // Per-service client = 75/75/15 → median would be 75, but the
+    // reconciling remainder (mean-based) is 55, and the rows must sum to 100.
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: true, supplierShare: 5, revShare: [{ address: 'a', share: 20 }] },
+        { addSupplierShare: true, supplierShare: 5, revShare: [{ address: 'b', share: 20 }] },
+        { addSupplierShare: true, supplierShare: 5, revShare: [{ address: 'c', share: 80 }] },
+      ],
+    };
+
+    const result = calculateShares(ag, 0);
+    expect(result.providerShare).toBeCloseTo(40, 5); // avg(20,20,80)
+    expect(result.supplierShare).toBe(5);
+    expect(result.clientShare).toBeCloseTo(55, 5); // not the median (75)
+    const total =
+      result.providerShare +
+      result.supplierShare +
+      result.delegatorShare +
+      result.clientShare;
+    expect(total).toBeCloseTo(100, 5);
   });
 
   it('averages provider share across services', () => {
@@ -85,6 +112,94 @@ describe('calculateShares', () => {
 
     const result = calculateShares(ag, 0);
     expect(result.clientShare).toBe(0);
+  });
+});
+
+// ── getPerServiceClientShares ───────────────────────────────────────
+describe('getPerServiceClientShares', () => {
+  it('returns the clamped remainder per service', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: true, supplierShare: 5, revShare: [{ address: 'a', share: 20 }] },
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'b', share: 80 }] },
+      ],
+    };
+
+    // S1: 100 - 20 - 5 - 0 = 75 ; S2: 100 - 80 - 0 - 0 = 20
+    expect(getPerServiceClientShares(ag, 0)).toEqual([75, 20]);
+  });
+
+  it('clamps negative remainders to 0', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: true, supplierShare: 60, revShare: [{ address: 'a', share: 50 }] },
+      ],
+    };
+
+    expect(getPerServiceClientShares(ag, 0)).toEqual([0]);
+  });
+
+  it('ignores supplierShare when addSupplierShare is false', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: false, supplierShare: 30, revShare: [{ address: 'a', share: 20 }] },
+      ],
+    };
+
+    // supplierShare ignored → 100 - 20 - 0 - 0 = 80
+    expect(getPerServiceClientShares(ag, 0)).toEqual([80]);
+  });
+});
+
+// ── hasNonUniformClientShare ────────────────────────────────────────
+describe('hasNonUniformClientShare', () => {
+  it('returns false for a single service', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'a', share: 20 }] },
+      ],
+    };
+
+    expect(hasNonUniformClientShare(ag, 0)).toBe(false);
+  });
+
+  it('returns false when no services exist', () => {
+    expect(hasNonUniformClientShare({ addressGroupServices: [] }, 0)).toBe(false);
+  });
+
+  it('returns false when every service yields the same client share', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'a', share: 20 }] },
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'b', share: 20 }] },
+      ],
+    };
+
+    expect(hasNonUniformClientShare(ag, 0)).toBe(false);
+  });
+
+  it('returns false when provider/supplier split shifts but client stays equal', () => {
+    // Agreed trigger: only the client-share remainder matters. Here client is
+    // 75 on both services even though provider/supplier differ (20/5 vs 23/2).
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: true, supplierShare: 5, revShare: [{ address: 'a', share: 20 }] },
+        { addSupplierShare: true, supplierShare: 2, revShare: [{ address: 'b', share: 23 }] },
+      ],
+    };
+
+    expect(hasNonUniformClientShare(ag, 0)).toBe(false);
+  });
+
+  it('returns true when services yield different client shares', () => {
+    const ag = {
+      addressGroupServices: [
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'a', share: 20 }] },
+        { addSupplierShare: false, supplierShare: 0, revShare: [{ address: 'b', share: 80 }] },
+      ],
+    };
+
+    expect(hasNonUniformClientShare(ag, 0)).toBe(true);
   });
 });
 

@@ -26,7 +26,14 @@ type SupplierRemediationByRange = {
  *   - height: The input height for supplier status update.
  * @return {Promise<void>} A promise that resolves once the supplier remediation process has completed or rejects in case all operations in the range fail.
  */
-export async function SupplierRemediationByRange(input: SupplierRemediationByRange): Promise<void> {
+export type RemediationRangeSucceeded = { address: string; reasons: RemediationHistoryEntryReason[] }
+
+export type RemediationRangeResult = {
+  succeeded: RemediationRangeSucceeded[]
+  failed: string[]
+}
+
+export async function SupplierRemediationByRange(input: SupplierRemediationByRange): Promise<RemediationRangeResult> {
   log.info('SupplierRemediationByRange: execution started', { minId: input.minId, maxId: input.maxId })
   const { loadKeysInRange, remediateSupplier } =
     proxyActivities<ReturnType<typeof providerActivities>>({
@@ -40,9 +47,11 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
 
   const rows: LoadKeysInRangeResult = await loadKeysInRange(input);
 
+  const emptyResult: RemediationRangeResult = { succeeded: [], failed: [] }
+
   if(rows.length === 0) {
     log.warn('SupplierRemediationByRange: No rows found for range', { minId: input.minId, maxId: input.maxId })
-    return
+    return emptyResult
   }
 
   log.debug('SupplierRemediationByRange: Loaded keys from range. Scheduling remediation activity for each key.', { minId: input.minId, maxId: input.maxId, totalKeysLoaded: rows.length })
@@ -77,5 +86,18 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
     )
   }
 
+  const result: RemediationRangeResult = { succeeded: [], failed: [] }
+  for (let i = 0; i < r.length; i++) {
+    const settled = r[i]!
+    const address = rows[i]!.address
+    if (settled.status === 'fulfilled' && settled.value?.success && 'remediated' in settled.value && settled.value.remediated) {
+      result.succeeded.push({ address, reasons: 'appliedReasons' in settled.value ? settled.value.appliedReasons ?? [] : [] })
+    } else if (settled.status === 'rejected') {
+      result.failed.push(address)
+    }
+    // fulfilled + success + !remediated → nothing was done, skip silently
+  }
+
   log.info('SupplierRemediationByRange: Execution Ended', { height: input.height, minId: input.minId, maxId: input.maxId, failedReasons })
+  return result
 }

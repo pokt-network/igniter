@@ -11,9 +11,11 @@ interface AddressProps {
   address: string;
   onClick?: (address: string) => void;
   showAvatar?: boolean;
+  /** Render the full address instead of the shortened form. Default false. */
+  full?: boolean;
 }
 
-export default function Address({address, onClick, showAvatar}: AddressProps) {
+export default function Address({address, onClick, showAvatar, full = false}: AddressProps) {
   const [isCopied, setIsCopied] = React.useState(false);
 
   const handleCopy = () => {
@@ -36,7 +38,7 @@ export default function Address({address, onClick, showAvatar}: AddressProps) {
         }
         onClick={onClick ? () => onClick(address) : undefined}
       >
-        {getShortAddress(address, 5)}
+        {full ? address : getShortAddress(address, 5)}
       </Button>
       <Button variant={'icon'} className={'h-5'} onClick={handleCopy}>
         {isCopied ? (

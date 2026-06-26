@@ -13,7 +13,7 @@
 # Activated via LOCALNET_ENABLED=true in .env
 
 POCKETD_IMAGE = 'ghcr.io/pokt-network/pocketd'
-POCKETD_TAG = '0.1.30'
+POCKETD_TAG = '0.1.34'
 CHAIN_ID = 'pocket'
 
 PROVIDER_OWNER = os.getenv('PROVIDER_OWNER_IDENTITY', '')

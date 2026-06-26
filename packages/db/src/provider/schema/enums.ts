@@ -161,6 +161,10 @@ export enum RemediationHistoryEntryReason {
   SupplierStakeTooLow = '1004',
   SupplierFundsTooLow = '1005',
   AddressGroupMigration = '1006',
+  // Transaction reasons (not remediation-history reasons): used as the `reason` on
+  // provider-initiated unstake / return-funds transactions for display in the tx table.
+  ManualUnstake = '2001',
+  ReturnSupplierFunds = '2002',
 }
 
 /**
@@ -279,6 +283,7 @@ export enum TransactionResult {
 export enum TransactionType {
   Stake = 'stake',
   Unstake = 'unstake',
+  ReturnFunds = 'return_funds',
 }
 
 export const transactionTypeEnum = pgEnum('tx_type', enumToPgEnum(TransactionType))
@@ -319,3 +324,29 @@ export const importRequestStatusEnum = pgEnum(
   'import_request_status',
   enumToPgEnum(ImportRequestStatus),
 )
+
+export enum NotificationChannelType {
+  Discord = 'discord',
+  Telegram = 'telegram',
+  Email = 'email',
+}
+
+export const notificationChannelTypeEnum = pgEnum(
+  'notification_channel_type',
+  enumToPgEnum(NotificationChannelType),
+)
+
+export const NOTIFICATION_EVENT_TYPES = [
+  'keys_staked',
+  'keys_unstaked',
+  'supplier_funds_low',
+  'supplier_stake_low',
+  'remediation_summary',
+  'delegators_synced',
+] as const
+
+export const notificationEventTypeEnum = pgEnum(
+  'notification_event_type',
+  NOTIFICATION_EVENT_TYPES,
+)
+

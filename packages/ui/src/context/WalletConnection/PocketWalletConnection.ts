@@ -169,10 +169,18 @@ export class PocketWalletConnection extends WalletConnection {
       throw new Error(`Signer ${signer} is not connected to the wallet`);
     }
 
+    const addr = signer || this.connectedIdentity || "";
+
+    // Compute gas ourselves via the shared estimator and hand Soothe an EXPLICIT
+    // gas limit. The installed Soothe build does not apply gasAdjustment to its own
+    // `gas:'auto'` estimate, which underfunded batch stakes (code 11 out of gas).
+    const pubkey = await this.getPublicKey(addr);
+    const { gasLimit } = await this.estimateGas(messages, addr, pubkey, memo);
+
     const transaction = {
-      address: signer || this.connectedIdentity || "",
-      gas: 'auto',
-      gasAdjustment: 2,
+      address: addr,
+      gas: gasLimit,        // explicit number — bypasses Soothe's internal 'auto' estimation
+      gasAdjustment: 1,     // we already applied the 2x margin in estimateGas; do not double it
       messages,
     };
 

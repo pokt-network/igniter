@@ -7,7 +7,7 @@ import {
 import {
   providerActivities,
 } from '@/activities'
-import { SupplierStatusByRange } from '@/workflows/SupplierStatusRange'
+import { SupplierStatusByRange, StatusRangeResult } from '@/workflows/SupplierStatusRange'
 import {makeRangesBySize} from "@/lib/utils";
 
 // we built to commonjs and p-limit for esm support
@@ -15,6 +15,7 @@ import {makeRangesBySize} from "@/lib/utils";
 import pLimit from 'p-limit'
 import {KeyState} from "@igniter/db/provider/enums";
 import {ApplicationFailure} from "@temporalio/workflow";
+import { buildStatusNotificationEvents } from '@/workflows/supplierStatusUtils'
 
 /**
  * Represents the total number of shards used by the workflow.
@@ -44,11 +45,19 @@ const shardCount = 200
  *                         orchestrating workflows.
  */
 export async function SupplierStatus(): Promise<{ height: number, minId: number, maxId: number }> {
-  const { getLatestBlock, getKeysMinAndMax } =
+  const { getLatestBlock, getKeysMinAndMax, sendNotifications } =
     proxyActivities<ReturnType<typeof providerActivities>>({
       startToCloseTimeout: '120s',
       retry: {
         maximumAttempts: 3,
+      },
+    })
+
+  const { sendNotifications: sendNotificationsBestEffort } =
+    proxyActivities<ReturnType<typeof providerActivities>>({
+      startToCloseTimeout: '30s',
+      retry: {
+        maximumAttempts: 1,
       },
     })
 
@@ -101,8 +110,7 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
         concurrency: 10,
       };
       log.debug('SupplierStatus: Triggering child SupplierStatusByRange workflow', { ...childLoggerContext })
-      // Await this child's completion to enforce the concurrency cap
-      await wf.startChild<typeof SupplierStatusByRange>('SupplierStatusByRange', {
+      const handle = await wf.startChild<typeof SupplierStatusByRange>('SupplierStatusByRange', {
         args: [{
           states,
           height,
@@ -111,9 +119,10 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
           pageSize: 200,
           concurrency: 10,
         }],
-        parentClosePolicy: 'ABANDON', // they will keep running if the father timeout
+        parentClosePolicy: 'ABANDON',
         workflowId: `SSR-${height}-${minId}-${maxId}`,
       })
+      return handle.result()
     })
   })
 
@@ -124,7 +133,6 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
 
   log.debug('SupplierStatus: Child workflows scheduled. Waiting for promises to settle.', { ...loggerContext, childPromisesCount: childPromises.length })
 
-  // Drain all children with bounded concurrency
   const r = await Promise.allSettled(childPromises)
 
   const allFailed = r.every(r => {
@@ -145,6 +153,21 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
       true,
       [failedReasons],
     )
+  }
+
+  // Aggregate results from all child workflows for notifications
+  const aggregated: StatusRangeResult = { staked: [], unstaked: [], fundsLow: [], stakeLow: [] }
+  for (const settled of r) {
+    if (settled.status !== 'fulfilled') continue
+    const res = settled.value
+    aggregated.staked.push(...res.staked)
+    aggregated.unstaked.push(...res.unstaked)
+    aggregated.fundsLow.push(...res.fundsLow)
+    aggregated.stakeLow.push(...res.stakeLow)
+  }
+
+  for (const event of buildStatusNotificationEvents(aggregated, height)) {
+    await sendNotificationsBestEffort(event)
   }
 
   log.info('SupplierStatus: Execution Ended', { height, minId, maxId, failedReasons })

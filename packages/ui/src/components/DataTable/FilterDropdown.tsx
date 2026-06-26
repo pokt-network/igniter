@@ -54,12 +54,16 @@ export default function FilterDropdown<TData>({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger disabled={disabled}>
+      {/* Deterministic ids (derived from the column) keep SSR and client markup identical.
+          The number of FilterDropdowns is data-dependent (empty on SSR, populated on the
+          client), so relying on radix's positional useId() counter caused hydration id
+          mismatches. A stable id removes these dropdowns from that counter. */}
+      <DropdownMenuTrigger id={`filter-trigger-${columnId}`} disabled={disabled}>
         <div className="flex items-center gap-2 py-2 px-4">
           <span className="text-sm flex items-center gap-2">{activeFilterLabel}</span>
         </div>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top">
+      <DropdownMenuContent id={`filter-content-${columnId}`} side="top">
         {filterGroup.items.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
             {group.map((filter) => (
