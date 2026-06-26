@@ -2,10 +2,7 @@ import type { ProviderInfo, Provider} from "./index";
 import type { SignedMemo, SignedTransaction, TransactionMessage } from "../../lib/models";
 import {
   decodePubkey,
-  EncodeObject,
-  GeneratedType,
   OfflineSigner,
-  Registry,
   makeAuthInfoBytes,
   makeSignDoc
 } from '@cosmjs/proto-signing'
@@ -13,22 +10,8 @@ import {MsgStakeSupplier, MsgUnstakeSupplier} from "@igniter/pocket/proto/pocket
 import { AuthInfo, TxBody, TxRaw } from '@igniter/pocket/proto/cosmos/tx/v1beta1/tx'
 import {PubKey} from "@igniter/pocket/proto/cosmos/crypto/secp256k1/keys";
 import {MsgSend} from "@igniter/pocket/proto/cosmos/bank/v1beta1/tx";
-import {Coin} from "@igniter/pocket/proto/cosmos/base/v1beta1/coin";
 import { WalletConnection, WalletSettings } from './WalletConnection'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
-
-export type AccountSequenceRawBody = {
-  account: {
-    "@type": string
-    address: string
-    pub_key: {
-      "@type": string
-      key: string
-    }
-    account_number: string
-    sequence: string
-  }
-}
 
 export class KeplrWalletConnection extends WalletConnection {
   name = KeplrWalletConnection.name;
@@ -37,15 +20,9 @@ export class KeplrWalletConnection extends WalletConnection {
   connectedIdentities?: string[];
   private _keplr?: any;
   private _offlineSigner?: OfflineSigner;
-  private _registry?: Registry;
 
   constructor(provider: Provider, settings: WalletSettings) {
     super(provider, settings);
-    this._registry = new Registry([
-      ["/cosmos.bank.v1beta1.MsgSend", MsgSend as unknown as GeneratedType],
-      ["/pocket.supplier.MsgStakeSupplier", MsgStakeSupplier as unknown as GeneratedType],
-      ["/pocket.supplier.MsgUnstakeSupplier", MsgUnstakeSupplier as unknown as GeneratedType],
-    ]);
   }
 
   private get keplr() {
@@ -153,45 +130,6 @@ export class KeplrWalletConnection extends WalletConnection {
     return sig.signature;
   };
 
-  buildEncodeObjectFromMessage = (message: TransactionMessage): EncodeObject => {
-    const { typeUrl, body } = message;
-    switch (typeUrl) {
-      case "/cosmos.bank.v1beta1.MsgSend":
-        return {
-          typeUrl: "/cosmos.bank.v1beta1.MsgSend",
-          value: {
-            ...MsgSend.fromJSON(body),
-            amount: [
-              Coin.fromJSON({
-                amount: body.amount,
-                denom: 'upokt',
-              })
-            ],
-          }
-        };
-      case "/pocket.supplier.MsgStakeSupplier":
-        return {
-          typeUrl: "/pocket.supplier.MsgStakeSupplier",
-          value: {
-            ...MsgStakeSupplier.fromJSON(body),
-            services: [],
-            // TODO: Update both the supplier and middleman to align to the correct attribute name for this message.
-            stake: Coin.fromJSON({
-              denom: "upokt",
-              amount: body.stakeAmount,
-            }),
-          }
-        };
-      case "/pocket.supplier.MsgUnstakeSupplier":
-        return {
-          typeUrl: "/pocket.supplier.MsgUnstakeSupplier",
-          value: MsgUnstakeSupplier.fromJSON(body)
-        };
-      default:
-        throw new Error(`Unsupported message type: ${typeUrl}`);
-    }
-  }
-
   /**
    * messages: you’ll pass pre-built Cosmos messages (typeUrl + value) elsewhere in your app.
    * fee: we default to "auto" behavior by estimating via signAndBroadcast's gasPrice if set on client; you can also craft StdFee.
@@ -224,39 +162,19 @@ export class KeplrWalletConnection extends WalletConnection {
     // the external wallet and cannot control this field — those txs rely on the
     // sequence rule in checkTxValidityEvidence (see: parseSignerAndSequence activity).
     const currentHeight = await this._getBlockHeight();
-    const bodyBytes = this._registry!.encodeTxBody({ messages: msgs, memo, timeoutHeight: BigInt(currentHeight + TX_EXPIRATION_BLOCKS) });
+    const bodyBytes = this._txRegistry.encodeTxBody({ messages: msgs, memo, timeoutHeight: BigInt(currentHeight + TX_EXPIRATION_BLOCKS) });
 
     const anyPubkey = {
       typeUrl: "/cosmos.crypto.secp256k1.PubKey",
       value: PubKey.encode({ key: account.pubkey }).finish(),
     };
 
-    const authInfoBytesForSim = makeAuthInfoBytes(
-      [{ pubkey: anyPubkey, sequence }],
-      [],
-      0,
-      undefined,
-      address,
-    )
-
-    const txRawForSim = TxRaw.fromPartial({
-      bodyBytes,
-      authInfoBytes: authInfoBytesForSim,
-      signatures: [new Uint8Array()],
-    });
-
-    const gasUsed = await this._simulateGas(txRawForSim);
-
-    const gasAdjustment = 2;
-    const gasPriceNum = 0.001;
-    const feeDenom = "upokt";
-
-    const gas = Math.ceil(gasUsed * gasAdjustment);
-    const feeAmount = Math.ceil(gas * gasPriceNum);
+    const pubkeyB64 = Buffer.from(account.pubkey).toString('base64');
+    const { gasLimit: gas, feeAmount } = await this.estimateGas(messages, address, pubkeyB64, memoObj);
 
     const authInfoBytes = makeAuthInfoBytes(
       [{ pubkey: anyPubkey, sequence }],
-      [{ denom: feeDenom, amount: String(feeAmount) }],
+      [{ denom: WalletConnection.FEE_DENOM, amount: String(feeAmount) }],
       gas,
       undefined,
       address,
@@ -285,37 +203,6 @@ export class KeplrWalletConnection extends WalletConnection {
     };
   };
 
-  private async _simulateGas(txRaw: TxRaw): Promise<number> {
-    if (!this._apiUrl) {
-      throw new Error('API URL not configured. Please set this._apiUrl to a Cosmos REST endpoint.');
-    }
-
-    const txBytes = TxRaw.encode(txRaw).finish();
-    const txBase64 = Buffer.from(txBytes).toString('base64');
-
-    const res = await fetch(`${this._apiUrl}/cosmos/tx/v1beta1/simulate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tx_bytes: txBase64 }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Gas simulation failed (${res.status}): ${text || 'no body'}`);
-    }
-
-    const data: any = await res.json();
-    const gasInfo = data?.gas_info;
-    const gasUsedStr = gasInfo?.gas_used ?? gasInfo?.gas_wanted;
-
-    const gas = Number(gasUsedStr);
-    if (!Number.isFinite(gas) || gas <= 0) {
-      throw new Error(`Invalid simulation response: ${JSON.stringify(data)}`);
-    }
-
-    return gas;
-  };
-
   /**
    * Fetches the current chain head height via the Cosmos REST API.
    * Used to embed timeoutHeight at signing time so the verifier can anchor failure verdicts.
@@ -331,29 +218,6 @@ export class KeplrWalletConnection extends WalletConnection {
     }
     const data = await res.json();
     return Number(data.block.header.height);
-  };
-
-  private async _getSequence(address: string): Promise<{
-    accountNumber: number,
-    sequence: number,
-  }> {
-    if (!this._apiUrl) {
-      throw new Error('API URL not configured. Please set this._apiUrl to a Cosmos REST endpoint.');
-    }
-
-    const res = await fetch(`${this._apiUrl}/cosmos/auth/v1beta1/accounts/${address}`);
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Fetch account sequence failed (${res.status}): ${text || 'no body'}`);
-    }
-
-    const data: AccountSequenceRawBody = await res.json();
-
-    return {
-      accountNumber: Number(data.account.account_number),
-      sequence: Number(data.account.sequence)
-    }
   };
 
   private _getRawTxJson(txRaw: TxRaw): string {

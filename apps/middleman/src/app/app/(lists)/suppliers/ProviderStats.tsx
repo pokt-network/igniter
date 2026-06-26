@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { GetUserNodes } from '@/actions/Nodes'
+import { NodeStatus } from '@igniter/db/middleman/enums'
 import { amountToPokt, toCompactFormat, toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@igniter/ui/components/tooltip'
 import { Popover, PopoverContent, PopoverTrigger } from '@igniter/ui/components/popover'
@@ -27,6 +28,9 @@ function computeProviderStats(
   >()
 
   for (const node of nodes) {
+    // Only staked nodes count as active suppliers (unstaking/unstaked excluded).
+    if (node.status !== NodeStatus.Staked) continue
+
     const id = node.providerId ?? '__imported__'
     const name = node.provider?.name ?? 'Imported Node'
 

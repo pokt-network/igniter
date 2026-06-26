@@ -1,4 +1,6 @@
 import * as schema from '@igniter/db/provider/schema'
+import type { NotificationChannelConfig, NotificationFlags } from '@igniter/db/provider/schema'
+import { DEFAULT_NOTIFICATION_FLAGS, NotificationChannelType } from '@igniter/db/provider/schema'
 import { UserRole } from '@igniter/db/provider/enums'
 import { eq } from 'drizzle-orm'
 import * as fs from 'fs'
@@ -16,11 +18,20 @@ const {
   addressGroupTable,
   addressGroupServicesTable,
   delegatorsTable,
+  notificationChannelsTable,
 } = schema
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+interface BootstrapChannelEntry {
+  name: string
+  type: 'discord' | 'telegram' | 'email'
+  config: NotificationChannelConfig
+  notificationFlags?: NotificationFlags
+  enabled?: boolean
+}
 
 interface BootstrapConfig {
   settings: {
@@ -34,6 +45,7 @@ interface BootstrapConfig {
     rewardAddresses?: string[]
     initialOperationalFunds?: number
     minimumOperationalFunds?: number
+    returnSupplierFundsToOwner?: boolean
   }
   regions: Array<{ displayName: string; urlValue: string }>
   relayMiners: Array<{
@@ -66,6 +78,7 @@ interface BootstrapConfig {
       revShare?: Array<{ address: string; share: number }>
     }>
   }>
+  channels?: BootstrapChannelEntry[]
 }
 
 interface CdnDelegator {
@@ -205,6 +218,7 @@ async function main() {
       indexerApiUrl: config.settings.indexerApiUrl,
       updatedAtHeight,
       rewardAddresses: config.settings.rewardAddresses ?? [],
+      returnSupplierFundsToOwner: config.settings.returnSupplierFundsToOwner ?? false,
       createdBy: ownerIdentity,
       updatedBy: ownerIdentity,
     })
@@ -346,7 +360,35 @@ async function main() {
       console.log('[bootstrap-seed] DELEGATORS_CDN_URL not set, skipping delegators.')
     }
 
-    // 9. Set isBootstrapped = true
+    // 9. Create notification channels (if any)
+    if (config.channels && config.channels.length > 0) {
+      console.log('[bootstrap-seed] Creating notification channels...')
+      const existingChannels = await db
+        .select()
+        .from(notificationChannelsTable)
+        .limit(1)
+
+      if (existingChannels.length > 0) {
+        console.log('[bootstrap-seed] Notification channels already exist, skipping.')
+      } else {
+        for (const ch of config.channels) {
+          await db.insert(notificationChannelsTable).values({
+            name: ch.name,
+            type: ch.type as NotificationChannelType,
+            config: ch.config,
+            notificationFlags: ch.notificationFlags ?? DEFAULT_NOTIFICATION_FLAGS,
+            enabled: ch.enabled ?? true,
+            createdBy: ownerIdentity,
+            updatedBy: ownerIdentity,
+          })
+          console.log(`[bootstrap-seed]   Channel "${ch.name}" (${ch.type}) created`)
+        }
+      }
+    } else {
+      console.log('[bootstrap-seed] No channels in config, skipping.')
+    }
+
+    // 10. Set isBootstrapped = true
     console.log('[bootstrap-seed] Setting isBootstrapped = true...')
     await db
       .update(applicationSettingsTable)

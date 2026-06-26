@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       healthy: true,
       addressGroups: addressGroups.map(stripAuditFields),
       rewardAddresses: applicationSettings.rewardAddresses,
+      returnSupplierFundsToOwner: applicationSettings.returnSupplierFundsToOwner ?? false,
     };
 
     return NextResponse.json(response);

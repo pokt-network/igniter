@@ -5,7 +5,10 @@ export type DetectedSupplierChange = {
   serviceId: string
   description: string
   previousValue: { revSharePercentage: number } | null
-  newValue: { revSharePercentage: number } | null
+  // `initialStake` marks a service_added that is the supplier's first active service
+  // (active services went 0 -> >=1) — i.e. the initial stake completing, not a later
+  // config tweak. The UI uses it to say "stake completed" instead of "config changed".
+  newValue: { revSharePercentage?: number; initialStake?: boolean } | null
 }
 
 function getOwnerRevShare(service: NodeService, ownerAddress: string): number | undefined {
@@ -50,18 +53,33 @@ export function detectSupplierChanges(
     }
   }
 
-  // Services added
+  // Services added. The initial empty→populated (and pending→active) transition is
+  // intentionally emitted: it completes the initial-stake lifecycle (the supplier's
+  // services becoming active), which the owner should see. Genuine later operator
+  // additions are caught the same way.
+  //
+  // When there were NO active services before this batch, the additions ARE that
+  // initial-stake activation (0 -> >=1) — flagged via `initialStake` so the UI reads
+  // "stake completed" rather than a generic configuration change.
+  const isInitialStake = current.length === 0
   for (const [serviceId, service] of nextByServiceId) {
     if (!currentByServiceId.has(serviceId)) {
       const ownerPct = getOwnerRevShare(service, ownerAddress)
+      const newValue: { revSharePercentage?: number; initialStake?: boolean } = {}
+      if (ownerPct !== undefined) newValue.revSharePercentage = ownerPct
+      if (isInitialStake) newValue.initialStake = true
       changes.push({
         changeType: 'service_added',
         serviceId,
-        description: ownerPct !== undefined
-          ? `Service ${serviceId} added (your rev share is ${ownerPct}%)`
-          : `Service ${serviceId} added`,
+        description: isInitialStake
+          ? (ownerPct !== undefined
+              ? `Service ${serviceId} activated — stake completed (your rev share is ${ownerPct}%)`
+              : `Service ${serviceId} activated — stake completed`)
+          : (ownerPct !== undefined
+              ? `Service ${serviceId} added (your rev share is ${ownerPct}%)`
+              : `Service ${serviceId} added`),
         previousValue: null,
-        newValue: ownerPct !== undefined ? { revSharePercentage: ownerPct } : null,
+        newValue: Object.keys(newValue).length ? newValue : null,
       })
     }
   }

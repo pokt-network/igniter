@@ -1,21 +1,49 @@
 'use client'
+import React from 'react'
 import DataTable from '@igniter/ui/components/DataTable/index'
+import LoadNewButton from '@igniter/ui/components/DataTable/LoadNewButton'
 import { columns, filters, sorts } from './columns'
 import { useDetailContext } from '@igniter/ui/components/QuickDetails/Provider'
 import { MessageType } from '@igniter/commons/constants'
-import { useQuery } from '@tanstack/react-query'
-import {GetUserTransactions} from '@/actions/Transactions'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {GetUserTransactions, CountUserTransactions} from '@/actions/Transactions'
 import { useEffect } from 'react'
 import {ItemBase} from "@igniter/ui/components/QuickDetails/types";
 import {Operation} from "@/app/detail/TransactionDetail";
 
 export default function TransactionsTable() {
+    const queryClient = useQueryClient()
+    const [acknowledgedCount, setAcknowledgedCount] = React.useState<number | null>(null)
+
     const { data, isLoading, isError, refetch } = useQuery({
         queryKey: ["user-transactions"],
         queryFn: GetUserTransactions,
+        refetchOnWindowFocus: false,
         refetchInterval: 15000,
     });
     const {items, updateItem} = useDetailContext()
+
+    const { data: totalCount } = useQuery({
+        queryKey: ['user-transactions-count'],
+        queryFn: CountUserTransactions,
+        refetchInterval: 15000,
+    })
+
+    useEffect(() => {
+        if (totalCount !== undefined && acknowledgedCount === null) {
+            setAcknowledgedCount(totalCount)
+        }
+    }, [totalCount, acknowledgedCount])
+
+    const newCount = acknowledgedCount !== null && totalCount !== undefined
+        ? Math.max(0, totalCount - acknowledgedCount)
+        : 0
+
+    const handleLoadNew = async () => {
+        await refetch()
+        await queryClient.invalidateQueries({ queryKey: ['user-transactions-count'] })
+        setAcknowledgedCount(totalCount ?? 0)
+    }
 
     useEffect(() => {
         const updateTxDetail = (item: ItemBase, index: number) => {
@@ -81,7 +109,7 @@ export default function TransactionsTable() {
                             return acc
                         }, 0),
                         operations,
-                        hash: tx.hash || '',
+                        hash: tx.hash,
                         estimatedFee: tx.estimatedFee,
                         consumedFee: tx.consumedFee,
                         provider: tx.provider?.name || 'Height Pending',
@@ -96,6 +124,10 @@ export default function TransactionsTable() {
             isError={isError}
             refetch={refetch}
             csvFilename={'transactions'}
+            searchableColumns={['hash']}
+            searchPlaceholder="Search by tx hash..."
+            countLabel="txs"
+            headerLeft={<LoadNewButton count={newCount} onClick={handleLoadNew} />}
         />
     )
 }

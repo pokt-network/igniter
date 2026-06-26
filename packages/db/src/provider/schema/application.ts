@@ -43,6 +43,7 @@ export const applicationSettingsTable = pgTable('application_settings', {
   minimumStake: integer().notNull(),
   initialOperationalFunds: integer().default(5),
   minimumOperationalFunds: integer().default(2),
+  returnSupplierFundsToOwner: boolean().notNull().default(true),
   isBootstrapped: boolean().notNull(),
   pocketApiUrl: varchar().notNull(),
   pocketRpcUrl: varchar(),

@@ -6,10 +6,15 @@ import ImportForm from './import/ImportForm'
 import ExportForm from './export/ExportForm'
 import GenerateForm from './generate/GenerateForm'
 import MigrateForm from './migrate/MigrateForm'
+import UnstakeForm from './unstake/UnstakeForm'
 
-export default function KeyActions() {
+interface KeyActionsProps {
+  returnFundsDefault?: boolean
+}
+
+export default function KeyActions({ returnFundsDefault = false }: KeyActionsProps) {
   const [activeModal, setActiveModal] = useState<
-    'import' | 'export' | 'generate' | 'migrate' | null
+    'import' | 'export' | 'generate' | 'migrate' | 'unstake' | null
   >(null)
 
   return (
@@ -33,6 +38,12 @@ export default function KeyActions() {
       >
         Migrate
       </Button>
+      <Button
+        variant="outline"
+        onClick={() => setActiveModal('unstake')}
+      >
+        Unstake
+      </Button>
 
       {activeModal === 'import' && (
         <ImportForm onClose={() => setActiveModal(null)} />
@@ -45,6 +56,9 @@ export default function KeyActions() {
       )}
       {activeModal === 'migrate' && (
         <MigrateForm onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === 'unstake' && (
+        <UnstakeForm onClose={() => setActiveModal(null)} returnFundsDefault={returnFundsDefault} />
       )}
     </>
   )

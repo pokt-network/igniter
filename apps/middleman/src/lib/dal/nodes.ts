@@ -5,6 +5,7 @@ import {
   nodesTable,
   NodeWithDetails,
 } from '@igniter/db/middleman/schema'
+import { NodeStatus } from '@igniter/db/middleman/enums'
 
 export async function getNodesByUser(userIdentity: string) {
   return getDb().query.nodesTable.findMany({
@@ -36,17 +37,17 @@ export async function getOwnerAddressesByUser(userIdentity: string) {
   const nodes = await getDb()
     .selectDistinct({ ownerAddress: nodesTable.ownerAddress })
     .from(nodesTable)
-    .where(eq(nodesTable.createdBy, userIdentity));
+    .where(and(eq(nodesTable.createdBy, userIdentity), eq(nodesTable.status, NodeStatus.Staked)));
 
   return nodes.map((row) => row.ownerAddress);
 }
 
-// TODO: filter for staked nodes only when we handle this state
 export async function getStakedNodesAddress() {
   return await getDb().query.nodesTable.findMany({
     columns: {
       address: true,
-    }
+    },
+    where: eq(nodesTable.status, NodeStatus.Staked),
   }).then((nodes) => nodes.map((node) => node.address));
 }
 
@@ -62,6 +63,7 @@ export async function getNodeAddressesByOwnerAndProvider(
         eq(nodesTable.ownerAddress, ownerAddress),
         eq(nodesTable.providerId, providerIdentity),
         eq(nodesTable.createdBy, userIdentity),
+        eq(nodesTable.status, NodeStatus.Staked),
       ),
     })
     .then((nodes) => nodes.map((n) => n.address))
@@ -83,7 +85,7 @@ export async function getProviderCountByUser(userIdentity: string): Promise<numb
   const result = await getDb()
     .select({ count: countDistinct(nodesTable.providerId) })
     .from(nodesTable)
-    .where(eq(nodesTable.createdBy, userIdentity))
+    .where(and(eq(nodesTable.createdBy, userIdentity), eq(nodesTable.status, NodeStatus.Staked)))
 
   return result[0]?.count ?? 0
 }

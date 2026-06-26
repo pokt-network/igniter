@@ -3,17 +3,22 @@
 import Amount from '@igniter/ui/components/Amount'
 import React from 'react'
 import { clsx } from 'clsx'
+import { useQuery, skipToken } from '@tanstack/react-query'
 import { DrawerDescription, DrawerHeader, DrawerTitle } from '@igniter/ui/components/drawer'
 import Summary, { SummaryRow } from '@igniter/ui/components/Summary'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import Address from '@igniter/ui/components/Address'
+import { Badge } from '@igniter/ui/components/badge'
 import {KeyWithRelations} from "@igniter/db/provider/schema"
 import {KeyState, KeyStateNameMap} from "@igniter/db/provider/enums"
 import { QuickInfoPopOverIcon } from '@igniter/ui/components/QuickInfoPopOverIcon'
+import { useAddItemToDetail } from "@igniter/ui/components/QuickDetails/Provider"
+import { ListTransactionsByKey } from "@/actions/Transactions"
 import {RemediationHistoryList} from "@/app/admin/details/KeyDetail/RemediationHistoryList";
-import {KeyStateLabels} from "@/app/admin/(internal)/keys/constants";
+import {KeyStateLabels, deriveKeyLifecycleStatus, RETIRED_LIFECYCLE_LABEL} from "@/app/admin/(internal)/keys/constants";
 import PrivateKeyReveal from "@/app/admin/details/KeyDetail/PrivateKeyReveal"
 import { MigrateKeyButton } from "@/app/admin/details/KeyDetail/MigrateKeyButton";
+import { UnstakeKeyButton } from "@/app/admin/details/KeyDetail/UnstakeKeyButton";
 
 export interface KeyDetail {
   type: 'key'
@@ -25,7 +30,6 @@ const stateColor: Record<string, string> = {
   [KeyState.Delivered]: 'bg-pnf-gold/15 text-pnf-gold border-pnf-gold/30',
   [KeyState.Staking]: 'bg-pnf-gold/15 text-pnf-gold border-pnf-gold/30',
   [KeyState.Staked]: 'bg-success/15 text-success border-success/30',
-  [KeyState.StakingFailed]: 'bg-error/15 text-error border-error/30',
   [KeyState.StakeFailed]: 'bg-error/15 text-error border-error/30',
   [KeyState.AttentionNeeded]: 'bg-pnf-gold/15 text-pnf-gold border-pnf-gold/30',
   [KeyState.RemediationFailed]: 'bg-error/15 text-error border-error/30',
@@ -47,7 +51,46 @@ const stateDescription: Partial<Record<KeyState, string>> = {
   [KeyState.Unstaked]: 'This key has been unstaked from the network.',
 }
 
-export default function KeyDetail(key: KeyWithRelations) {
+const TX_TYPE_LABELS: Record<string, string> = {
+  stake: 'Stake',
+  unstake: 'Unstake',
+  return_funds: 'Return Funds',
+}
+
+function txStatusVariant(status: string): 'success' | 'destructive' | 'warning' {
+  if (status === 'success') return 'success'
+  if (status === 'failure') return 'destructive'
+  return 'warning'
+}
+
+export default function KeyDetail(snapshot: KeyWithRelations) {
+  // The drawer opens with a point-in-time snapshot. Subscribe (read-only, no fetch via
+  // skipToken) to the live keys cache so the panel reflects unstake/retire transitions
+  // while it stays open instead of sticking on the pre-unstake state until reopened.
+  // Falls back to the snapshot before the cache is populated (e.g. deep-link).
+  const { data: keysData } = useQuery<{ keys: KeyWithRelations[] }>({
+    queryKey: ['keys'],
+    queryFn: skipToken,
+  })
+  // Instant in-flight signal, mirrors the keys-list badge override.
+  const { data: pendingUnstakeAddresses } = useQuery<Set<string>>({
+    queryKey: ['keys-pending-unstake'],
+    queryFn: skipToken,
+  })
+  const key = keysData?.keys?.find((k) => k.address === snapshot.address) ?? snapshot
+
+  // Transactions for this key — each row opens the existing TransactionDetail drawer
+  // (stacked on top of this panel). Server actions serialize Date natively; no bigint on
+  // provider transactions, so rows pass straight through as the drawer's body.
+  const addItem = useAddItemToDetail()
+  const { data: keyTransactions } = useQuery({
+    queryKey: ['key-transactions', snapshot.address],
+    queryFn: async () => {
+      const r = await ListTransactionsByKey(snapshot.address)
+      return r.success ? r.data : []
+    },
+  })
+
   const {
     id,
     address,
@@ -67,10 +110,32 @@ export default function KeyDetail(key: KeyWithRelations) {
     createdAt,
     exportedAt,
     exportCount,
+    retiredAt,
   } = key;
 
+  // Lifecycle status mirrors the keys list: Retired (retiredAt) wins outright, then a
+  // fast "Unstaking…" while an unstake tx is in flight but state hasn't flipped yet.
+  const isRetired = retiredAt != null
+  const isPendingUnstake =
+    !isRetired && state === KeyState.Staked && (pendingUnstakeAddresses?.has(address) ?? false)
+  const lifecycleLabel = isPendingUnstake
+    ? 'Unstaking…'
+    : deriveKeyLifecycleStatus({ state, retiredAt })
+  const statusBadgeClass = isPendingUnstake
+    ? 'bg-pnf-gold/15 text-pnf-gold border-pnf-gold/30'
+    : isRetired
+      ? 'bg-bg-elevated text-text-secondary border-border-primary'
+      : (stateColor[state] || 'bg-bg-elevated text-text-secondary')
+
   const isStakedKey = [KeyState.Staked, KeyState.RemediationFailed, KeyState.AttentionNeeded, KeyState.Unstaked].includes(state);
-  const description = stateDescription[state]
+  // Never offer unstake on a key that is already retired or has an unstake in flight.
+  const isUnstakeable = !isRetired && !isPendingUnstake &&
+    [KeyState.Staked, KeyState.RemediationFailed, KeyState.AttentionNeeded].includes(state);
+  const description = isPendingUnstake
+    ? 'This key is being unstaked from the network.'
+    : isRetired
+      ? 'This key has been retired and will not be reused.'
+      : stateDescription[state]
 
   const generalKeyDetails: Array<SummaryRow> = [
     {
@@ -80,8 +145,8 @@ export default function KeyDetail(key: KeyWithRelations) {
     {
       label: 'State',
       value: (
-        <span className={clsx('inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border', stateColor[state] || 'bg-bg-elevated text-text-secondary')}>
-          {KeyStateLabels[state] || state}
+        <span className={clsx('inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border', statusBadgeClass)}>
+          {lifecycleLabel}
         </span>
       ),
     },
@@ -116,6 +181,10 @@ export default function KeyDetail(key: KeyWithRelations) {
     createdAt && {
       label: 'Created',
       value: <span className="font-mono text-text-secondary">{new Date(createdAt).toLocaleString()}</span>,
+    },
+    isRetired && {
+      label: 'Retired At',
+      value: <span className="font-mono text-text-secondary">{new Date(retiredAt!).toLocaleString()}</span>,
     },
     {
       label: 'Last Updated Height',
@@ -167,7 +236,8 @@ export default function KeyDetail(key: KeyWithRelations) {
           className={
             clsx(
               'relative flex h-[64px] mt-[-5px]',
-              (state === KeyState.Staked) && 'gradient-border-green',
+              (state === KeyState.Staked && !isPendingUnstake) && 'gradient-border-green',
+              isPendingUnstake && 'gradient-border-orange',
               ([KeyState.Unstaked].includes(state)) && 'gradient-border-slate',
               ([KeyState.AttentionNeeded, KeyState.RemediationFailed].includes(state)) && 'gradient-border-orange',
             )
@@ -175,7 +245,7 @@ export default function KeyDetail(key: KeyWithRelations) {
         >
           <div className={`absolute inset-0 flex flex-row items-center bg-bg-root rounded-[8px] p-[18px_25px] justify-between`}>
             <span className="text-[20px] text-text-secondary">
-              {KeyStateNameMap[KeyState.Staked]}
+              {isPendingUnstake ? 'Unstaking…' : (KeyStateNameMap[state] || state)}
             </span>
             <div className="flex flex-row items-center gap-2">
               <p className="font-mono !text-[20px]">
@@ -201,6 +271,15 @@ export default function KeyDetail(key: KeyWithRelations) {
           keyId={id}
           currentGroupId={addressGroup.id}
           currentGroupName={addressGroup.name}
+        />
+      )}
+
+      {isUnstakeable && (
+        <UnstakeKeyButton
+          keyId={id}
+          address={address}
+          stakeAmountUpokt={stakeAmountUpokt}
+          balanceUpokt={balanceUpokt}
         />
       )}
 
@@ -251,6 +330,32 @@ export default function KeyDetail(key: KeyWithRelations) {
           keyState={state}
           keyId={id}
         />
+      )}
+
+      {(keyTransactions?.length ?? 0) > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">Transactions</span>
+          <div className="flex flex-col bg-bg-elevated rounded-[8px] divide-y divide-border-primary">
+            {keyTransactions!.map((tx) => (
+              <button
+                key={tx.id}
+                type="button"
+                onClick={() => addItem({ type: 'transaction', body: tx })}
+                className="flex flex-row items-center justify-between p-[8px_12px] text-sm hover:bg-bg-hover text-left transition-colors"
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span>{TX_TYPE_LABELS[tx.type] || tx.type}</span>
+                  {tx.createdAt && (
+                    <span className="text-xs text-text-tertiary font-mono">
+                      {new Date(tx.createdAt).toLocaleString()}
+                    </span>
+                  )}
+                </span>
+                <Badge variant={txStatusVariant(tx.status)}>{tx.status}</Badge>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       <PrivateKeyReveal keyId={id} />

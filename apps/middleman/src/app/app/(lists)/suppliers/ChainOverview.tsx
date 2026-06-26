@@ -3,6 +3,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { GetUserNodes } from '@/actions/Nodes'
+import { NodeStatus } from '@igniter/db/middleman/enums'
 import { amountToPokt, toCurrencyFormat } from '@igniter/ui/lib/utils'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
@@ -26,6 +27,9 @@ function computeChainOverview(
   const map = new Map<string, ChainProviderRow>()
 
   for (const node of nodes) {
+    // Only staked nodes count as active suppliers (unstaking/unstaked excluded).
+    if (node.status !== NodeStatus.Staked) continue
+
     const providerName = node.provider?.name ?? 'Imported Node'
 
     if (!node.services) continue

@@ -97,6 +97,7 @@ export async function getUnacknowledgedChangesByUser(userIdentity: string) {
       changeType: supplierChangesTable.changeType,
       serviceId: supplierChangesTable.serviceId,
       description: supplierChangesTable.description,
+      newValue: supplierChangesTable.newValue,
       batchId: supplierChangesTable.batchId,
       createdAt: supplierChangesTable.createdAt,
       nodeAddress: nodesTable.address,

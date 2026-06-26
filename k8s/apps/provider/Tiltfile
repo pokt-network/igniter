@@ -98,6 +98,7 @@ k8s_resource(
     objects=[
       'provider-config:configmap',
       'provider-secrets:secret',
+      'provider-bootstrap-config:configmap',
       'postgres-provider-connection:secret'
     ],
     extra_pod_selectors=[{"app": "provider", "component": "web"}],

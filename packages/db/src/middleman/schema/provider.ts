@@ -83,6 +83,7 @@ export const providersTable = pgTable('providers', {
   addressGroups: jsonb('address_groups').$type<AddressGroupsJson>().default([]),
   supplierStats: jsonb('supplier_stats').$type<{ suppliers_count: number; total_staked_tokens: number }>(),
   rewardAddresses: varchar().array(),
+  returnSupplierFundsToOwner: boolean().notNull().default(true),
   createdAt: timestamp().defaultNow(),
   updatedAt: timestamp().defaultNow().$onUpdateFn(() => new Date()),
   createdBy: varchar().references(() => usersTable.identity).notNull(),
