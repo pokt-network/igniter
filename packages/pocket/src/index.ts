@@ -119,11 +119,8 @@ const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
 function isUnorderedDedupRejection(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const err = e as Error & { code?: number; codespace?: string; rawLog?: string }
-  // code 19 = cometbft ErrTxInCache (same bytes in mempool)
-  // code 18 = cosmos-sdk ErrInvalidRequest from verifyUnorderedNonce ("failed to add unordered nonce")
-  if (err.codespace === 'sdk' && (err.code === 19 || err.code === 18)) return true
   const msg = String(err?.message ?? err?.rawLog ?? '').toLowerCase()
-  if (msg.includes('failed to add unordered nonce')) return true
+  if (err.codespace === 'sdk' && msg.includes('failed to add unordered nonce')) return true
   if (msg.includes('tx already in mempool') || msg.includes('already exists in cache')) return true
   return false
 }
@@ -694,7 +691,8 @@ export class PocketBlockchain {
 
     const msg = { typeUrl, value: { signer, ...value } as MsgStakeSupplier }
 
-    const timeoutTimestamp = new Date(this.nowMs() + UNORDERED_TIMEOUT_MS)
+    const latestBlockTime = await this.getLatestBlockTime()
+    const timeoutTimestamp = new Date((latestBlockTime?.getTime() ?? this.nowMs()) + UNORDERED_TIMEOUT_MS)
 
     // Estimate gas; fallback 350_000 matches old stakeSupplier behavior
     let gasEstimation: number
