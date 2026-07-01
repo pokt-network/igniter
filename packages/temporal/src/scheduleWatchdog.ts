@@ -1,4 +1,5 @@
 import type { Logger } from '@igniter/logger'
+import type { ScheduleDescription } from '@temporalio/client'
 import { parseDuration } from '@/duration'
 
 export type Verdict = 'healthy' | 'stale' | 'unknown' | 'paused'
@@ -108,4 +109,56 @@ export function parseWatchdogConfig(logger: Logger): WatchdogConfig {
     backoffCapMs: 300_000,
     describeDeadlineMs: 5_000,
   }
+}
+
+/** clamp(missedFirings * intervalMs, MIN_GRACE, maxGraceMs ?? GRACE_CAP) (D2). */
+export function graceFor(entry: WatchdogEntry): number {
+  const raw = entry.missedFirings * entry.intervalMs
+  const cap = entry.maxGraceMs ?? entry.graceCapMs
+  return Math.min(Math.max(raw, entry.minGraceMs), cap)
+}
+
+/**
+ * True iff the schedule has fired more times than we have injected via trigger()
+ * since the persisted baseline — i.e. a genuine autonomous fire happened (D3/F6).
+ */
+export function hasAutonomousFire(desc: ScheduleDescription, state: HealState): boolean {
+  return desc.info.numActionsTaken - state.lastActionCount > state.injectedTriggers
+}
+
+/**
+ * Pure liveness verdict. No reaping, no progress guard, no unpause.
+ * Uses ONLY verified SDK fields: state.paused, info.runningActions,
+ * info.recentActions[].takenAt, info.createdAt, info.numActionsTaken.
+ */
+export function evaluateLiveness(
+  desc: ScheduleDescription,
+  entry: WatchdogEntry,
+  now: Date,
+  state: HealState,
+): Verdict {
+  if (desc.state.paused) return 'paused' // always respect; never revive/unpause
+  if (desc.info.runningActions.length > 0) return 'healthy' // a run is in flight -> scheduler alive
+
+  const createdAt = desc.info.createdAt
+  if (!createdAt) return 'unknown' // missing timestamp -> skip, never coerce
+  if (createdAt.getTime() > now.getTime()) return 'unknown' // skew guard (D5)
+
+  const recent = desc.info.recentActions ?? []
+  const latestTakenAt = recent.length
+    ? new Date(Math.max(...recent.map((a) => a.takenAt.getTime())))
+    : undefined
+  if (latestTakenAt && latestTakenAt.getTime() > now.getTime()) return 'unknown' // skew guard (D5)
+
+  // reference = last AUTONOMOUS fire (excludes our compensating triggers, D3).
+  // If the only growth since baseline is our own trigger()s, treat as never-autonomously-fired.
+  let reference: Date
+  if (!latestTakenAt) reference = createdAt
+  else if (hasAutonomousFire(desc, state)) reference = latestTakenAt
+  else reference = createdAt
+
+  if (reference.getTime() > now.getTime()) return 'unknown'
+  if (now.getTime() - createdAt.getTime() <= entry.minAgeMs) return 'healthy' // infancy grace
+  if (now.getTime() - reference.getTime() > graceFor(entry)) return 'stale'
+  return 'healthy'
 }
