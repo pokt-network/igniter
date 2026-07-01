@@ -1,5 +1,13 @@
 import type { Logger } from '@igniter/logger'
-import type { ScheduleDescription } from '@temporalio/client'
+import {
+  ScheduleAlreadyRunning,
+  ScheduleOverlapPolicy,
+  type Client,
+  type ScheduleDescription,
+  type ScheduleOptions,
+  type ScheduleUpdateOptions,
+} from '@temporalio/client'
+import type { Duration } from '@temporalio/common'
 import { parseDuration } from '@/duration'
 
 export type Verdict = 'healthy' | 'stale' | 'unknown' | 'paused'
@@ -161,4 +169,66 @@ export function evaluateLiveness(
   if (now.getTime() - createdAt.getTime() <= entry.minAgeMs) return 'healthy' // infancy grace
   if (now.getTime() - reference.getTime() > graceFor(entry)) return 'stale'
   return 'healthy'
+}
+
+export function isNotFound(e: unknown): boolean {
+  if (typeof e === 'object' && e !== null && 'code' in e && (e as { code?: number }).code === 5) return true
+  const msg = e instanceof Error ? e.message : String(e)
+  return /not.?found/i.test(msg)
+}
+
+/** Re-arm options for an in-place update() (no absent window). Cannot set memo (SDK). */
+export function reArmOptions(prev: ScheduleUpdateOptions, entry: WatchdogEntry): ScheduleUpdateOptions {
+  return {
+    ...prev,
+    action: { ...prev.action, args: entry.args },
+    spec: { intervals: [{ every: entry.interval as Duration }] },
+    policies: { overlap: ScheduleOverlapPolicy.SKIP },
+  }
+}
+
+function createOptions(entry: WatchdogEntry): ScheduleOptions {
+  return {
+    scheduleId: entry.scheduleId,
+    action: {
+      type: 'startWorkflow',
+      workflowType: entry.workflowType,
+      taskQueue: entry.taskQueue,
+      args: entry.args,
+    },
+    spec: { intervals: [{ every: entry.interval as Duration }] },
+    policies: { overlap: ScheduleOverlapPolicy.SKIP },
+  }
+}
+
+/**
+ * Single create-OR-update primitive shared by bootstrap and the watchdog (D4).
+ * describe() ok -> update on drift; describe() NOT_FOUND -> create (swallow
+ * ScheduleAlreadyRunning); any other error -> rethrow.
+ */
+export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger): Promise<void> {
+  const handle = client.schedule.getHandle(entry.scheduleId)
+  try {
+    const desc = await handle.describe()
+    const currentArgs = (desc.action as { args?: unknown[] }).args ?? []
+    const currentEvery = desc.spec.intervals?.[0]?.every
+    const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(entry.args)
+    const intervalChanged = currentEvery !== entry.intervalMs
+    if (argsChanged || intervalChanged) {
+      logger.warn({ scheduleId: entry.scheduleId, argsChanged, intervalChanged }, 'Schedule config drift; updating')
+      await handle.update((prev) => reArmOptions(prev, entry))
+    }
+  } catch (e) {
+    if (!isNotFound(e)) throw e
+    try {
+      logger.warn({ scheduleId: entry.scheduleId }, 'Schedule not found; creating')
+      await client.schedule.create(createOptions(entry))
+    } catch (createErr) {
+      if (createErr instanceof ScheduleAlreadyRunning) {
+        logger.info({ scheduleId: entry.scheduleId }, 'Schedule already running; skipping create')
+        return
+      }
+      throw createErr
+    }
+  }
 }

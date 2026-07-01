@@ -19,7 +19,8 @@
     "@igniter/logger": "workspace:*",
     "@igniter/commons": "workspace:*",
     "@temporalio/worker": "^1.11.7",
-    "@temporalio/client": "^1.11.7"
+    "@temporalio/client": "^1.11.7",
+    "@temporalio/common": "^1.11.7"
   },
   "devDependencies": {
     "@igniter/eslint-config": "workspace:*",
