@@ -4,6 +4,7 @@ import {
   ScheduleOverlapPolicy,
   type Client,
   type ScheduleDescription,
+  type ScheduleHandle,
   type ScheduleOptions,
   type ScheduleUpdateOptions,
 } from '@temporalio/client'
@@ -231,4 +232,70 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
       throw createErr
     }
   }
+}
+
+const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 13, 14]) // DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED, ABORTED, INTERNAL, UNAVAILABLE
+
+/** Transient (retryable) errors do NOT consume a heal attempt (B4). */
+export function isTransient(e: unknown): boolean {
+  const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: number }).code : undefined
+  if (code !== undefined) return TRANSIENT_GRPC_CODES.has(code)
+  const msg = e instanceof Error ? e.message : String(e)
+  return /deadline|unavailable|timeout/i.test(msg)
+}
+
+/** Race a promise against a deadline; the loser rejects. Used to bound describe(). */
+export function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`RPC deadline exceeded after ${ms}ms`)), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Non-destructive heal ladder (D3). update() (no attempt on transient, B4) until
+ * RECREATE_AFTER, then ensureSchedule + WRITE-AHEAD trigger. Breaker at MAX.
+ */
+export async function healSchedule(
+  handle: ScheduleHandle,
+  client: Client,
+  entry: WatchdogEntry,
+  state: HealState,
+  store: WatchdogStateStore,
+  config: WatchdogConfig,
+  logger: Logger,
+  now: Date,
+): Promise<{ nextBackoffMs: number }> {
+  const n = state.attempts
+  let attemptsAfter = n
+
+  if (n < config.recreateAfter) {
+    try {
+      await handle.update((prev) => reArmOptions(prev, entry))
+      logger.info({ scheduleId: entry.scheduleId, attempt: n }, 'Heal: re-armed via update()')
+    } catch (e) {
+      if (isTransient(e)) {
+        logger.warn({ err: e, scheduleId: entry.scheduleId }, 'Heal update() transient; no attempt consumed (B4)')
+      } else {
+        const row = await store.bumpAttempt(entry.scheduleId)
+        attemptsAfter = row.attempts
+        logger.warn({ err: e, scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal update() definitive failure; attempt consumed')
+      }
+    }
+  } else {
+    await ensureSchedule(client, entry, logger) // create only if NOT_FOUND (D4)
+    await store.bumpInjectedTrigger(entry.scheduleId, now) // WRITE-AHEAD before the effect (D3)
+    await handle.trigger() // one compensating run
+    const row = await store.bumpAttempt(entry.scheduleId)
+    attemptsAfter = row.attempts
+    logger.warn({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: reconciled + injected one compensating trigger')
+  }
+
+  if (attemptsAfter >= config.maxHealAttempts) {
+    await store.setUnhealthy(entry.scheduleId, true)
+    logger.error({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal breaker tripped: schedule marked unhealthy (page-worthy)')
+  }
+
+  return { nextBackoffMs: Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs) }
 }
