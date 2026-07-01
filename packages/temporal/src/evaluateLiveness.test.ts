@@ -96,6 +96,11 @@ describe('evaluateLiveness', () => {
     expect(evaluateLiveness(desc, entry, NOW, state())).toBe('unknown')
   })
 
+  it('createdAt in the future (clock skew) -> unknown (D5)', () => {
+    const desc = makeDesc({ recentTakenAt: [], createdAt: new Date(NOW.getTime() + 60_000), numActionsTaken: 0 })
+    expect(evaluateLiveness(desc, entry, NOW, state())).toBe('unknown')
+  })
+
   it('missing createdAt -> unknown (never coerced)', () => {
     const desc = makeDesc({ recentTakenAt: [], createdAt: undefined, numActionsTaken: 0 })
     expect(evaluateLiveness(desc, entry, NOW, state())).toBe('unknown')
