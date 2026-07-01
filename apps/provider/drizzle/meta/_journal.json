@@ -162,6 +162,13 @@
       "when": 1781976055247,
       "tag": "0022_sparkling_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782947927783,
+      "tag": "0023_spotty_whistler",
+      "breakpoints": true
     }
   ]
 }
