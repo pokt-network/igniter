@@ -87,12 +87,19 @@ async function bootstrapNamespace(client: Client, config: TemporalConfig, logger
   }
 }
 
-export function buildWatchdogEntries(config: WatchdogConfig): WatchdogEntry[] {
+export function buildWatchdogEntries(config: WatchdogConfig, logger?: Logger): WatchdogEntry[] {
   const { taskQueue } = getConfig()
   return Object.values(ScheduledWorkflowType).map((wt) => {
     const wf = ScheduledWorkflowConfig[wt]
     const interval = process.env[wf.envVar] || wf.interval
-    const intervalMs = parseDuration(interval) ?? parseDuration(wf.interval)!
+    const parsed = parseDuration(interval)
+    if (parsed == null) {
+      logger?.warn(
+        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: interval, fallback: wf.interval },
+        'Invalid schedule interval override; falling back to default',
+      )
+    }
+    const intervalMs = parsed ?? parseDuration(wf.interval)!
     return {
       scheduleId: `${wt}-scheduled`,
       workflowType: wt, // middleman: the enum value IS the workflow type
@@ -110,7 +117,7 @@ export function buildWatchdogEntries(config: WatchdogConfig): WatchdogEntry[] {
 
 async function bootstrapScheduledWorkflows(client: Client, _config: TemporalConfig, logger: Logger) {
   const wdConfig = parseWatchdogConfig(logger)
-  for (const entry of buildWatchdogEntries(wdConfig)) {
+  for (const entry of buildWatchdogEntries(wdConfig, logger)) {
     await ensureSchedule(client, entry, logger)
   }
 }
