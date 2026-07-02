@@ -66,4 +66,14 @@ describe('previewPayloads', () => {
     expect(preview!.decodeError).not.toBeNull();
     expect(preview!.text).toContain('raw-bytes-here');
   });
+
+  it('rejects control characters and falls back to base64', () => {
+    const payload = {
+      metadata: { encoding: Buffer.from('unknown/enc') },
+      data: Buffer.from([0x01, 0x02, 0x03, 0x41]),
+    };
+    const preview = previewPayloads([payload]);
+    expect(preview!.decodeError).not.toBeNull();
+    expect(preview!.text).toMatch(/^base64:/);
+  });
 });

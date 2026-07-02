@@ -34,8 +34,9 @@ function rawPayloadText(payload: IPayload): string {
   if (!data || data.length === 0) return '<empty payload>';
   const buf = Buffer.from(data);
   const utf8 = buf.toString('utf8');
-  // Printable-ish heuristic: no replacement chars and mostly visible chars.
-  if (!utf8.includes('�')) return utf8;
+  // Printable-ish heuristic: no replacement chars and no control characters (except \t, \n, \r).
+  const hasControlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(utf8);
+  if (!utf8.includes('�') && !hasControlChars) return utf8;
   return `base64:${buf.toString('base64')}`;
 }
 
