@@ -1,6 +1,6 @@
 import { temporal } from '@temporalio/proto';
 import { optionalTsToDate } from '@temporalio/common/lib/time';
-import type { WorkflowExecutionDescription } from '@temporalio/client';
+import type { WorkflowExecutionDescription, Client } from '@temporalio/client';
 
 import { PayloadPreview, previewPayloads, safeJsonStringify } from '@/payloadPreview';
 import type { WorkflowStatus } from '@/workflowView';
@@ -465,4 +465,36 @@ function previewSearchAttributes(attrs: Record<string, unknown[]>): PayloadPrevi
   // Values are already decoded by the SDK; serialize directly.
   const text = safeJsonStringify(attrs);
   return { text, truncated: false, decodeError: null };
+}
+
+export async function getWorkflowDetail(
+  client: Client,
+  workflowId: string,
+  runId?: string,
+  nowMs: number = Date.now(),
+): Promise<WorkflowDetailView> {
+  const handle = client.workflow.getHandle(workflowId, runId);
+  const desc = await handle.describe();
+  let history: IHistory | null = null;
+  let historyError: string | null = null;
+  try {
+    history = await handle.fetchHistory();
+  } catch (err) {
+    historyError = err instanceof Error ? err.message : String(err);
+  }
+  return mapWorkflowDetail(desc, history, historyError, nowMs);
+}
+
+export async function getWorkflowHistoryJson(
+  client: Client,
+  workflowId: string,
+  runId?: string,
+): Promise<string> {
+  const handle = client.workflow.getHandle(workflowId, runId);
+  const history = await handle.fetchHistory();
+  const plain =
+    typeof (history as { toJSON?: () => unknown }).toJSON === 'function'
+      ? (history as { toJSON: () => unknown }).toJSON()
+      : history;
+  return safeJsonStringify(plain);
 }

@@ -12,6 +12,11 @@
       "import": "./dist/src/workflowView.js",
       "require": "./dist/src/workflowView.js",
       "types": "./dist/src/workflowView.d.ts"
+    },
+    "./workflow-detail": {
+      "import": "./dist/src/workflowDetail.js",
+      "require": "./dist/src/workflowDetail.js",
+      "types": "./dist/src/workflowDetail.d.ts"
     }
   },
   "scripts": {

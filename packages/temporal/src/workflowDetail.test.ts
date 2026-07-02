@@ -1,4 +1,4 @@
-import { mapWorkflowDetail } from '@/workflowDetail';
+import { mapWorkflowDetail, getWorkflowDetail, getWorkflowHistoryJson } from '@/workflowDetail';
 import {
   activityCompletedEvent, activityFailedEvent, activityScheduledEvent,
   activityStartedEvent, activityTimedOutEvent, pendingActivityInfo,
@@ -302,5 +302,56 @@ describe('mapWorkflowDetail — children', () => {
     ]);
     expect(view.children.map((c) => c.status)).toEqual(['INITIATED', 'FAILED']);
     expect(view.children[0]!.runId).toBeNull();
+  });
+});
+
+function fakeClient(handleImpl: Record<string, unknown>) {
+  return {
+    workflow: { getHandle: jest.fn(() => handleImpl) },
+  } as never;
+}
+
+describe('getWorkflowDetail / getWorkflowHistoryJson', () => {
+  it('fetches describe + history and maps', async () => {
+    const handle = {
+      describe: jest.fn(async () => makeDescription({ statusName: 'COMPLETED' })),
+      fetchHistory: jest.fn(async () => ({
+        events: [startedEvent({ eventId: 1, timeMs: NOW - 5000, input: [{ a: 1 }] })],
+      })),
+    };
+    const view = await getWorkflowDetail(fakeClient(handle), 'wf-1', 'run-1', NOW);
+    expect(JSON.parse(view.input!.text)).toEqual({ a: 1 });
+    expect(view.historyError).toBeNull();
+  });
+
+  it('history failure degrades to historyError, describe data kept', async () => {
+    const handle = {
+      describe: jest.fn(async () => makeDescription({ statusName: 'RUNNING', closeTime: null })),
+      fetchHistory: jest.fn(async () => { throw new Error('DEADLINE_EXCEEDED'); }),
+    };
+    const view = await getWorkflowDetail(fakeClient(handle), 'wf-1', undefined, NOW);
+    expect(view.historyError).toBe('DEADLINE_EXCEEDED');
+    expect(view.status).toBe('RUNNING');
+  });
+
+  it('describe failure propagates', async () => {
+    const handle = {
+      describe: jest.fn(async () => { throw new Error('NOT_FOUND'); }),
+      fetchHistory: jest.fn(),
+    };
+    await expect(getWorkflowDetail(fakeClient(handle), 'wf-x')).rejects.toThrow('NOT_FOUND');
+  });
+
+  it('history JSON download serializes Long-bearing events safely', async () => {
+    // NOTE: do NOT put bigints inside fixture payloads — defaultPayloadConverter.toPayload
+    // rejects bigint at fixture-build time (that is the whole Igniter caveat). The Long
+    // eventIds themselves are the serialization hazard this test covers.
+    const handle = {
+      fetchHistory: jest.fn(async () => ({
+        events: [startedEvent({ eventId: 1, timeMs: NOW - 5000, input: [{ a: 1 }] })],
+      })),
+    };
+    const json = await getWorkflowHistoryJson(fakeClient(handle), 'wf-1');
+    expect(() => JSON.parse(json)).not.toThrow();
   });
 });
