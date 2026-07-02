@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@igniter/ui/components/tabs'
 
 import { GetScheduleHealth } from '@/actions/Workflows'
-import ScheduleHealthPanel from './ScheduleHealthPanel'
+import { SchedulesTab } from './SchedulesTab'
 import WorkflowsTable from './table'
 
 export function WorkflowsTabs() {
@@ -59,7 +59,7 @@ export function WorkflowsTabs() {
         <WorkflowsTable />
       </TabsContent>
       <TabsContent value="schedules">
-        <ScheduleHealthPanel />
+        <SchedulesTab health={health} />
       </TabsContent>
     </Tabs>
   )
