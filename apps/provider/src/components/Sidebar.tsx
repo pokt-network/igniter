@@ -73,6 +73,12 @@ const mainRoutes = [
     icon: DelegatorsDark,
   },
   {
+    id: "workflows",
+    title: "Workflows",
+    url: "/admin/workflows",
+    icon: ActivityDark,
+  },
+  {
     title: "Notifications",
     url: "/admin/notifications",
     icon: NotificationsDark,
