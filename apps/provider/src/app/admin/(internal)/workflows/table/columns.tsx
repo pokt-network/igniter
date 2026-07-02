@@ -69,7 +69,7 @@ export function detailHref(workflowId: string, runId?: string | null): string {
   return runId ? `${base}?runId=${encodeURIComponent(runId)}` : base
 }
 
-function CopyButton({ value }: { value: string }) {
+export function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
 
   const onCopy = async () => {
