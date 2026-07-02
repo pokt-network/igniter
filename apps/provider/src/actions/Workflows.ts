@@ -12,6 +12,11 @@ import {
   type ScheduleHealthRow,
   type WatchdogHealState,
 } from '@igniter/temporal/workflow-view'
+import {
+  getWorkflowDetail,
+  getWorkflowHistoryJson,
+  type WorkflowDetailView,
+} from '@igniter/temporal/workflow-detail'
 
 export async function ListWorkflows(
   filter: WorkflowListFilter,
@@ -44,5 +49,25 @@ export async function TerminateWorkflow(
     const client = getTemporalClient()
     const handle = client.workflow.getHandle(workflowId, runId)
     await handle.terminate('Terminated by operator from admin UI')
+  })
+}
+
+export async function GetWorkflowDetail(
+  workflowId: string,
+  runId?: string,
+): Promise<ActionResult<WorkflowDetailView>> {
+  return withRequireOwner(async () => {
+    const client = getTemporalClient()
+    return getWorkflowDetail(client, workflowId, runId)
+  })
+}
+
+export async function GetWorkflowHistoryJson(
+  workflowId: string,
+  runId?: string,
+): Promise<ActionResult<string>> {
+  return withRequireOwner(async () => {
+    const client = getTemporalClient()
+    return getWorkflowHistoryJson(client, workflowId, runId)
   })
 }
