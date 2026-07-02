@@ -50,7 +50,7 @@ export interface WatchdogHealState {
   observedUnhealthy: boolean
 }
 
-export type ScheduleHealthState = 'firing' | 'paused' | 'stale' | 'unhealthy'
+export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy'
 
 export interface ScheduleHealthRow {
   scheduleId: string
@@ -173,7 +173,7 @@ export function mapScheduleToHealth(
   if (paused) state = 'paused'
   else if (heal?.unhealthy || heal?.observedUnhealthy) state = 'unhealthy'
   else if (heal && heal.attempts > 0) state = 'stale'
-  else state = 'firing'
+  else state = 'healthy'
 
   return {
     scheduleId: summary.scheduleId,

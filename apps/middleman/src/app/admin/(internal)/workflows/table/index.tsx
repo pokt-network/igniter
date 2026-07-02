@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import DataTable from '@igniter/ui/components/DataTable/index'
 import { Button } from '@igniter/ui/components/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@igniter/ui/components/select'
 import {
   Dialog,
   DialogContent,
@@ -86,20 +87,24 @@ export default function WorkflowsTable() {
             </Button>
           ))}
         </div>
-        <select
+        <Select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value as WorkflowStatus | 'ALL')
+          onValueChange={(value) => {
+            setStatus(value as WorkflowStatus | 'ALL')
             resetPage()
           }}
-          className="h-9 rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground"
         >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-9 min-w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <input
           type="text"
           placeholder="Filter by workflow type…"

@@ -161,9 +161,9 @@ describe('mapScheduleToHealth', () => {
     ...over,
   })
 
-  it('firing when not paused and no heal escalation', () => {
+  it('healthy when not paused and no heal escalation', () => {
     const row = mapScheduleToHealth(makeSummary(), heal())
-    expect(row.state).toBe('firing')
+    expect(row.state).toBe('healthy')
     expect(row.lastFire).toBe('2026-07-01T00:05:00.000Z')
     expect(row.nextFire).toBe('2026-07-01T00:10:00.000Z')
   })
@@ -181,9 +181,9 @@ describe('mapScheduleToHealth', () => {
     expect(mapScheduleToHealth(makeSummary(), heal({ attempts: 2 })).state).toBe('stale')
   })
 
-  it('degrades to firing with zeroed health when no watchdog row', () => {
+  it('degrades to healthy with zeroed health when no watchdog row', () => {
     const row = mapScheduleToHealth(makeSummary(), null)
-    expect(row.state).toBe('firing')
+    expect(row.state).toBe('healthy')
     expect(row.attempts).toBe(0)
     expect(row.unhealthy).toBe(false)
   })

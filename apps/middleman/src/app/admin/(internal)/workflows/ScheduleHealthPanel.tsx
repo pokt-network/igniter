@@ -14,7 +14,7 @@ import { GetScheduleHealth } from '@/actions/Workflows'
 import { formatDateTime } from './table/columns'
 
 const STATE_STYLE: Record<ScheduleHealthState, string> = {
-  firing: 'bg-green-500/15 text-green-400',
+  healthy: 'bg-green-500/15 text-green-400',
   paused: 'bg-neutral-500/15 text-neutral-300',
   stale: 'bg-amber-500/15 text-amber-400',
   unhealthy: 'bg-red-500/15 text-red-400',
