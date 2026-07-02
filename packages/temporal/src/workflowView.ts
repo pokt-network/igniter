@@ -5,6 +5,12 @@ import type {
   ScheduleSummary,
 } from '@temporalio/client'
 
+// Type-only import from workflowDetail is erased at runtime (no require-cycle);
+// the value import below is what actually loads the module.
+import { TEMPORAL_SCHEDULED_BY_ID } from '@/workflowDetail'
+
+export { TEMPORAL_SCHEDULED_BY_ID }
+
 export type WorkflowStatus = WorkflowExecutionStatusName
 
 export interface WorkflowView {
@@ -18,12 +24,15 @@ export interface WorkflowView {
   closeTime: string | null
   /** For running: now - start. For terminal: close - start. */
   elapsedMs: number
+  /** TemporalScheduledById[0] from search attributes, or null if not schedule-started. */
+  scheduledById: string | null
 }
 
 export interface WorkflowListFilter {
   status?: WorkflowStatus | 'ALL'
   type?: string
   scope?: 'running' | 'recent' | 'all'
+  scheduledBy?: string
 }
 
 export interface WorkflowPageRequest {
@@ -52,6 +61,14 @@ export interface WatchdogHealState {
 
 export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy'
 
+export type ScheduleFireView = {
+  scheduledAt: string
+  takenAt: string
+  lagMs: number
+  workflowId: string
+  firstExecutionRunId: string | null
+}
+
 export interface ScheduleHealthRow {
   scheduleId: string
   state: ScheduleHealthState
@@ -62,6 +79,8 @@ export interface ScheduleHealthRow {
   unhealthy: boolean
   observedUnhealthy: boolean
   note: string | null
+  /** Most recent actions started, sorted oldest to newest (as the SDK returns them). */
+  recentFires: ScheduleFireView[]
 }
 
 export function mapWorkflowInfoToView(
@@ -70,6 +89,7 @@ export function mapWorkflowInfoToView(
 ): WorkflowView {
   const startMs = info.startTime.getTime()
   const closeMs = info.closeTime ? info.closeTime.getTime() : null
+  const scheduledByRaw = info.searchAttributes[TEMPORAL_SCHEDULED_BY_ID]?.[0]
   return {
     workflowId: info.workflowId,
     runId: info.runId,
@@ -78,6 +98,7 @@ export function mapWorkflowInfoToView(
     startTime: info.startTime.toISOString(),
     closeTime: info.closeTime ? info.closeTime.toISOString() : null,
     elapsedMs: (closeMs ?? nowMs) - startMs,
+    scheduledById: typeof scheduledByRaw === 'string' ? scheduledByRaw : null,
   }
 }
 
@@ -85,6 +106,7 @@ export function matchesWorkflowFilter(view: WorkflowView, filter: WorkflowListFi
   if (filter.status && filter.status !== 'ALL' && view.status !== filter.status) return false
   if (filter.scope === 'running' && view.status !== 'RUNNING') return false
   if (filter.type && view.type !== filter.type) return false
+  if (filter.scheduledBy && !view.workflowId.startsWith(`${filter.scheduledBy}-workflow-`)) return false
   return true
 }
 
@@ -110,6 +132,9 @@ export function buildWorkflowListQuery(filter: WorkflowListFilter): string | und
   }
   if (filter.type) {
     clauses.push(`WorkflowType = "${filter.type}"`)
+  }
+  if (filter.scheduledBy) {
+    clauses.push(`TemporalScheduledById = '${filter.scheduledBy.replace(/'/g, "''")}'`)
   }
   return clauses.length ? clauses.join(' AND ') : undefined
 }
@@ -175,6 +200,20 @@ export function mapScheduleToHealth(
   else if (heal && heal.attempts > 0) state = 'stale'
   else state = 'healthy'
 
+  // Schedule listing is eventual-consistent (SDK doc comment on ScheduleSummary), so
+  // guard against a stale/partial recentActions entry rather than trusting the types.
+  const recentFires: ScheduleFireView[] = recent.flatMap((a) => {
+    const workflowId = a.action?.workflow?.workflowId
+    if (!workflowId || !a.scheduledAt || !a.takenAt) return []
+    return [{
+      scheduledAt: a.scheduledAt.toISOString(),
+      takenAt: a.takenAt.toISOString(),
+      lagMs: a.takenAt.getTime() - a.scheduledAt.getTime(),
+      workflowId,
+      firstExecutionRunId: a.action.workflow.firstExecutionRunId ?? null,
+    }]
+  })
+
   return {
     scheduleId: summary.scheduleId,
     state,
@@ -185,5 +224,6 @@ export function mapScheduleToHealth(
     unhealthy: heal?.unhealthy ?? false,
     observedUnhealthy: heal?.observedUnhealthy ?? false,
     note: summary.state.note ?? null,
+    recentFires,
   }
 }

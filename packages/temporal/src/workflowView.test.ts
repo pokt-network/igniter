@@ -54,6 +54,7 @@ describe('mapWorkflowInfoToView', () => {
       startTime: '2026-07-01T00:00:00.000Z',
       closeTime: null,
       elapsedMs: 10_000,
+      scheduledById: null,
     })
   })
 
@@ -186,5 +187,83 @@ describe('mapScheduleToHealth', () => {
     expect(row.state).toBe('healthy')
     expect(row.attempts).toBe(0)
     expect(row.unhealthy).toBe(false)
+  })
+
+  it('maps recentActions to fire views with lag, most recent last', () => {
+    const row = mapScheduleToHealth(
+      makeSummary({
+        info: {
+          recentActions: [
+            {
+              scheduledAt: new Date('2026-07-02T10:00:00Z'),
+              takenAt: new Date('2026-07-02T10:00:04Z'),
+              action: {
+                type: 'startWorkflow',
+                workflow: {
+                  workflowId: 'S-scheduled-workflow-2026-07-02T10:00:00Z',
+                  firstExecutionRunId: 'run-9',
+                },
+              },
+            },
+          ],
+          nextActionTimes: [],
+        },
+      }),
+      null,
+    )
+    expect(row.recentFires).toEqual([
+      {
+        scheduledAt: '2026-07-02T10:00:00.000Z',
+        takenAt: '2026-07-02T10:00:04.000Z',
+        lagMs: 4000,
+        workflowId: 'S-scheduled-workflow-2026-07-02T10:00:00Z',
+        firstExecutionRunId: 'run-9',
+      },
+    ])
+  })
+
+  it('defaults recentFires to an empty array without recentActions', () => {
+    const row = mapScheduleToHealth(
+      makeSummary({ info: { recentActions: [], nextActionTimes: [] } }),
+      null,
+    )
+    expect(row.recentFires).toEqual([])
+  })
+})
+
+describe('scheduledById on WorkflowView', () => {
+  it('extracts TemporalScheduledById[0] from list-item searchAttributes', () => {
+    const info = makeInfo({
+      searchAttributes: { TemporalScheduledById: ['S-scheduled'] },
+    })
+    expect(mapWorkflowInfoToView(info).scheduledById).toBe('S-scheduled')
+  })
+
+  it('defaults to null without the attribute', () => {
+    expect(mapWorkflowInfoToView(makeInfo()).scheduledById).toBeNull()
+  })
+})
+
+describe('scheduledBy filter', () => {
+  it('adds TemporalScheduledById clause to the server query', () => {
+    expect(buildWorkflowListQuery({ scheduledBy: 'GovernanceSync-scheduled' })).toBe(
+      `TemporalScheduledById = 'GovernanceSync-scheduled'`,
+    )
+  })
+
+  it('combines with status/type clauses via AND', () => {
+    const q = buildWorkflowListQuery({ status: 'RUNNING', scheduledBy: 'S-scheduled' })
+    expect(q).toContain('ExecutionStatus = "Running"')
+    expect(q).toContain(`TemporalScheduledById = 'S-scheduled'`)
+    expect(q).toContain(' AND ')
+  })
+
+  it('client-side fallback matches by workflowId prefix', () => {
+    const view = mapWorkflowInfoToView(
+      makeInfo({ workflowId: 'S-scheduled-workflow-2026-07-02T10:00:00Z' }),
+      Date.now(),
+    )
+    expect(matchesWorkflowFilter(view, { scheduledBy: 'S-scheduled' })).toBe(true)
+    expect(matchesWorkflowFilter(view, { scheduledBy: 'Other-scheduled' })).toBe(false)
   })
 })
