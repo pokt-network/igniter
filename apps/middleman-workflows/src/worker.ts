@@ -8,7 +8,14 @@ import {
 import { PocketBlockchain } from '@igniter/pocket'
 import { getDb } from '@igniter/db/middleman/connection'
 import schema from '@igniter/db/middleman/schema'
-import { getWorker } from '@igniter/temporal'
+import {
+  getWorker,
+  parseWatchdogConfig,
+  createDedicatedClient,
+  installProcessSafetyHandlers,
+  ScheduleWatchdog,
+} from '@igniter/temporal'
+import { buildWatchdogEntries } from '@/bootstrap'
 import DAL from '@/lib/dal/DAL'
 import { ProviderService } from '@/lib/provider'
 
@@ -116,7 +123,32 @@ export async function setupTemporalWorker() {
 
   await bootstrap(logger)
 
-  registerGracefulShutdown(disconnect, logger, shutdownGraceTime)
+  installProcessSafetyHandlers(logger)
+
+  const wdConfig = parseWatchdogConfig(logger)
+  let watchdog: ScheduleWatchdog | undefined
+  if (wdConfig.enabled) {
+    const dedicated = await createDedicatedClient(logger)
+    watchdog = new ScheduleWatchdog({
+      client: dedicated,
+      entries: buildWatchdogEntries(wdConfig),
+      store: dal.watchdog,
+      config: wdConfig,
+      logger: logger.child({ context: 'ScheduleWatchdog' }),
+    })
+    watchdog.start()
+  } else {
+    logger.warn('Schedule watchdog disabled (SCHEDULE_WATCHDOG_ENABLED=false)')
+  }
+
+  registerGracefulShutdown(
+    async () => {
+      if (watchdog) await watchdog.stop()
+      await disconnect()
+    },
+    logger,
+    shutdownGraceTime,
+  )
 
   await worker.run()
 }

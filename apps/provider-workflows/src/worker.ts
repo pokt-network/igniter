@@ -3,7 +3,13 @@ import {
   getLogger,
   Logger,
 } from '@igniter/logger'
-import { getWorker } from '@igniter/temporal'
+import {
+  getWorker,
+  parseWatchdogConfig,
+  createDedicatedClient,
+  installProcessSafetyHandlers,
+  ScheduleWatchdog,
+} from '@igniter/temporal'
 import { getDb } from '@igniter/db/provider/connection'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/provider/schema'
@@ -11,6 +17,7 @@ import { keysTable } from '@igniter/db/provider/schema'
 import { KeyState } from '@igniter/db/provider/enums'
 import { and, eq, isNotNull, or } from 'drizzle-orm'
 import bootstrap from '@/bootstrap'
+import { buildWatchdogEntries } from '@/bootstrap'
 import { PocketBlockchain } from '@igniter/pocket'
 import DAL from '@/lib/dal/DAL'
 
@@ -145,7 +152,32 @@ export async function setupTemporalWorker() {
 
   await bootstrap(logger)
 
-  registerGracefulShutdown(disconnect, logger, shutdownGraceTime)
+  installProcessSafetyHandlers(logger)
+
+  const wdConfig = parseWatchdogConfig(logger)
+  let watchdog: ScheduleWatchdog | undefined
+  if (wdConfig.enabled) {
+    const dedicated = await createDedicatedClient(logger)
+    watchdog = new ScheduleWatchdog({
+      client: dedicated,
+      entries: buildWatchdogEntries(wdConfig),
+      store: dal.watchdog,
+      config: wdConfig,
+      logger: logger.child({ context: 'ScheduleWatchdog' }),
+    })
+    watchdog.start()
+  } else {
+    logger.warn('Schedule watchdog disabled (SCHEDULE_WATCHDOG_ENABLED=false)')
+  }
+
+  registerGracefulShutdown(
+    async () => {
+      if (watchdog) await watchdog.stop()
+      await disconnect()
+    },
+    logger,
+    shutdownGraceTime,
+  )
 
   await worker.run()
 }
