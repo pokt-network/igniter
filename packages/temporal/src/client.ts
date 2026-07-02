@@ -84,3 +84,25 @@ export const getClient = async (logger: Logger): Promise<TemporalClient> => {
     },
   }
 }
+
+/**
+ * Dedicated, NON-global Temporal client for the watchdog (D6). The process
+ * singleton is closed by bootstrap()'s disconnect(), so the watchdog must own
+ * its own connection, created once and closed only at shutdown.
+ */
+export const createDedicatedClient = async (logger: Logger): Promise<TemporalClient> => {
+  checkEnvVariables(['TEMPORAL_URL', 'TEMPORAL_NAMESPACE'])
+  const address = process.env.TEMPORAL_URL!
+  const namespace = process.env.TEMPORAL_NAMESPACE!
+  const tls = getTLSConfig(logger)
+  const connection = await Connection.connect({ address, tls })
+  const client = new Client({ connection, namespace })
+  logger.info({ address, namespace }, 'Dedicated Temporal client initialized (watchdog)')
+  return {
+    client,
+    disconnect: async () => {
+      logger.info('Closing dedicated (watchdog) Temporal connection')
+      await connection.close()
+    },
+  }
+}

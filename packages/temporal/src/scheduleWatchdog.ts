@@ -10,6 +10,7 @@ import {
 } from '@temporalio/client'
 import type { Duration } from '@temporalio/common'
 import { parseDuration } from '@/duration'
+import type { TemporalClient } from '@/types'
 
 export type Verdict = 'healthy' | 'stale' | 'unknown' | 'paused'
 
@@ -298,4 +299,142 @@ export async function healSchedule(
   }
 
   return { nextBackoffMs: Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs) }
+}
+
+/** Log-only process safety handlers (D7): never exit on stray rejections. */
+export function installProcessSafetyHandlers(logger: Logger): void {
+  process.on('unhandledRejection', (reason) =>
+    logger.error({ reason }, 'Unhandled promise rejection (watchdog safety handler; not exiting)'),
+  )
+  process.on('uncaughtException', (err) =>
+    logger.error({ err }, 'Uncaught exception (watchdog safety handler; not exiting)'),
+  )
+}
+
+export interface ScheduleWatchdogDeps {
+  client: TemporalClient
+  entries: WatchdogEntry[]
+  store: WatchdogStateStore
+  config: WatchdogConfig
+  logger: Logger
+}
+
+/**
+ * In-worker self-heal orchestrator (D6/D7). Owns a dedicated client, a
+ * self-rescheduling setTimeout loop re-armed only after each tick settles, and
+ * an in-memory per-schedule backoff gate.
+ */
+export class ScheduleWatchdog {
+  private running = false
+  private timer: NodeJS.Timeout | null = null
+  private inFlight: Promise<void> = Promise.resolve()
+  private readonly nextEligibleAt = new Map<string, number>()
+  private lastHeartbeatAt = 0
+
+  constructor(private readonly deps: ScheduleWatchdogDeps) {}
+
+  start(): void {
+    if (this.running) return
+    this.running = true
+    this.deps.logger.info(
+      { mode: this.deps.config.mode, entries: this.deps.entries.length },
+      'Schedule watchdog started',
+    )
+    this.scheduleNext(0)
+  }
+
+  async stop(): Promise<void> {
+    this.running = false
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    await this.inFlight // let the current tick settle
+    await this.deps.client.disconnect()
+    this.deps.logger.info('Schedule watchdog stopped')
+  }
+
+  getHeartbeat(): number {
+    return this.lastHeartbeatAt
+  }
+
+  private scheduleNext(delayMs: number): void {
+    this.timer = setTimeout(() => {
+      if (!this.running) return
+      this.inFlight = this.tick()
+        .catch((err) => this.deps.logger.error({ err }, 'Watchdog tick failed'))
+        .then(() => {
+          if (this.running) this.scheduleNext(this.deps.config.tickMs)
+        })
+    }, delayMs)
+  }
+
+  async tick(): Promise<void> {
+    const now = new Date()
+    for (const entry of this.deps.entries) {
+      try {
+        await this.tickOne(entry, now)
+      } catch (err) {
+        this.deps.logger.error({ err, scheduleId: entry.scheduleId }, 'Watchdog per-schedule error (continuing)')
+      }
+    }
+    this.lastHeartbeatAt = Date.now()
+  }
+
+  private async tickOne(entry: WatchdogEntry, now: Date): Promise<void> {
+    const { client } = this.deps.client
+    const { store, config, logger } = this.deps
+    const state = (await store.getState(entry.scheduleId)) ?? defaultHealState(entry.scheduleId)
+    const handle = client.schedule.getHandle(entry.scheduleId)
+
+    let desc
+    try {
+      desc = await withDeadline(handle.describe(), config.describeDeadlineMs)
+    } catch (e) {
+      if (isNotFound(e)) {
+        if (config.mode === 'enforce') {
+          logger.warn({ scheduleId: entry.scheduleId }, 'Schedule NOT_FOUND; recreating')
+          await ensureSchedule(client, entry, logger)
+          await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
+        } else {
+          await store.setObservedUnhealthy(entry.scheduleId, true)
+        }
+        return
+      }
+      logger.warn({ err: e, scheduleId: entry.scheduleId }, 'describe() transient; skipping (never stale)')
+      return
+    }
+
+    const verdict = evaluateLiveness(desc, entry, now, state)
+    switch (verdict) {
+      case 'paused':
+        logger.debug({ scheduleId: entry.scheduleId }, 'Schedule paused; respecting (no revive)')
+        return
+      case 'unknown':
+        logger.warn({ scheduleId: entry.scheduleId }, 'Liveness unknown (skew/missing ts); skipping')
+        return
+      case 'healthy':
+        if ((state.attempts > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
+          logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
+          await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)
+          this.nextEligibleAt.delete(entry.scheduleId)
+        }
+        return
+      case 'stale': {
+        const eligibleAt = this.nextEligibleAt.get(entry.scheduleId) ?? 0
+        if (now.getTime() < eligibleAt) {
+          logger.debug({ scheduleId: entry.scheduleId }, 'Stale but within backoff; skipping')
+          return
+        }
+        if (config.mode === 'observe') {
+          logger.warn({ scheduleId: entry.scheduleId }, 'OBSERVE: stale; persisting observed_unhealthy, mutating nothing')
+          await store.setObservedUnhealthy(entry.scheduleId, true)
+          return
+        }
+        const { nextBackoffMs } = await healSchedule(handle, client, entry, state, store, config, logger, now)
+        this.nextEligibleAt.set(entry.scheduleId, now.getTime() + nextBackoffMs)
+        return
+      }
+    }
+  }
 }

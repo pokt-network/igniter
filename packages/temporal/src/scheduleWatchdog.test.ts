@@ -1,0 +1,117 @@
+import { ScheduleWatchdog, defaultHealState } from '@/scheduleWatchdog'
+import type { HealState, WatchdogConfig, WatchdogEntry, WatchdogStateStore } from '@/scheduleWatchdog'
+import type { TemporalClient } from '@/types'
+
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), child: () => logger } as never
+const NOW_MS = Date.now()
+
+const entry: WatchdogEntry = {
+  scheduleId: 'GovernanceSync-scheduled',
+  workflowType: 'GovernanceSync',
+  taskQueue: 'default',
+  args: [],
+  interval: '30s',
+  intervalMs: 30_000,
+  missedFirings: 5,
+  minAgeMs: 180_000,
+  minGraceMs: 90_000,
+  graceCapMs: 600_000,
+}
+
+const config: WatchdogConfig = {
+  enabled: true, mode: 'enforce', tickMs: 30_000, minAgeMs: 180_000, missedFirings: 5,
+  maxHealAttempts: 5, recreateAfter: 2, minGraceMs: 90_000, graceCapMs: 600_000,
+  backoffBaseMs: 30_000, backoffCapMs: 300_000, describeDeadlineMs: 5_000,
+}
+
+function makeStore(state?: HealState): WatchdogStateStore {
+  return {
+    getState: jest.fn(async () => state),
+    bumpAttempt: jest.fn(async (id) => ({ ...defaultHealState(id), attempts: 1 })),
+    bumpInjectedTrigger: jest.fn(async (id) => ({ ...defaultHealState(id), injectedTriggers: 1 })),
+    setUnhealthy: jest.fn(),
+    setObservedUnhealthy: jest.fn(),
+    resetOnRecreate: jest.fn(),
+    resetLadder: jest.fn(),
+  }
+}
+
+function descWith(over: Record<string, unknown>) {
+  return {
+    state: { paused: false },
+    info: { runningActions: [], recentActions: [], createdAt: new Date(NOW_MS - 3_600_000), numActionsTaken: 0, ...over },
+  }
+}
+
+function makeClient(handle: Record<string, unknown>, create = jest.fn()): TemporalClient {
+  return {
+    client: { schedule: { getHandle: () => handle, create } },
+    disconnect: jest.fn().mockResolvedValue(undefined),
+  } as never
+}
+
+describe('ScheduleWatchdog.tick', () => {
+  it('paused schedule: skips, no mutation', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue({ state: { paused: true }, info: descWith({}).info }), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(handle.update).not.toHaveBeenCalled()
+  })
+
+  it('stale + enforce: heals via update() (attempt 0)', async () => {
+    const update = jest.fn().mockResolvedValue(undefined)
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 3_600_000), scheduledAt: new Date(NOW_MS - 3_600_000) }], numActionsTaken: 100 })), update, trigger: jest.fn() }
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store: makeStore(), config, logger })
+    await wd.tick()
+    expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it('stale + observe: persists observed_unhealthy, mutates nothing (S5)', async () => {
+    const update = jest.fn()
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 3_600_000), scheduledAt: new Date(NOW_MS - 3_600_000) }], numActionsTaken: 100 })), update, trigger: jest.fn() }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config: { ...config, mode: 'observe' }, logger })
+    await wd.tick()
+    expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('healthy + prior attempts + autonomous fire: resets the ladder (F6)', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 5_000), scheduledAt: new Date(NOW_MS - 5_000) }], numActionsTaken: 52 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), attempts: 3, lastActionCount: 50, injectedTriggers: 1 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 52)
+  })
+
+  it('describe() NOT_FOUND + enforce: ensureSchedule creates + resetOnRecreate (S6)', async () => {
+    const create = jest.fn().mockResolvedValue(undefined)
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
+  })
+
+  it('describe() transient: skips, never treated as stale, never aborts pass', async () => {
+    const store = makeStore()
+    const handleBad = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('unavailable'), { code: 14 })), update: jest.fn(), trigger: jest.fn() }
+    const wd = new ScheduleWatchdog({ client: makeClient(handleBad), entries: [entry], store, config, logger })
+    await expect(wd.tick()).resolves.toBeUndefined()
+    expect(store.setObservedUnhealthy).not.toHaveBeenCalled()
+    expect(store.bumpAttempt).not.toHaveBeenCalled()
+  })
+})
+
+describe('ScheduleWatchdog.stop', () => {
+  it('clears the timer and disconnects the dedicated client', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({})), update: jest.fn(), trigger: jest.fn() }
+    const client = makeClient(handle)
+    const wd = new ScheduleWatchdog({ client, entries: [entry], store: makeStore(), config, logger })
+    wd.start()
+    await wd.stop()
+    expect(client.disconnect).toHaveBeenCalledTimes(1)
+  })
+})
