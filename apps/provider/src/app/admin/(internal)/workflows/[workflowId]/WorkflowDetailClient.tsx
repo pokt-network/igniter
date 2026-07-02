@@ -89,7 +89,7 @@ export function WorkflowDetailClient({
   }
 
   // ---- error / loading states (spec §4 a-c + NotFound) ----
-  if (query.isError) {
+  if (query.isError && !query.data) {
     const message = query.error instanceof Error ? query.error.message : String(query.error)
     const notFound = /not found|NOT_FOUND/i.test(message)
     return (
@@ -110,7 +110,7 @@ export function WorkflowDetailClient({
   }
   if (!detail) return <DetailSkeleton onBack={goBack} />
 
-  const refreshFailing = query.isRefetchError || (query.errorUpdatedAt > query.dataUpdatedAt)
+  const refreshFailing = query.isError && !!query.data
 
   return (
     <div className="space-y-6">
@@ -391,8 +391,9 @@ function ActivityStatusBadge({ state }: { state: ActivityDetailView['state'] }) 
       case 'COMPLETED':
         return 'success' as const
       case 'FAILED':
-      case 'TIMED_OUT':
         return 'destructive' as const
+      case 'TIMED_OUT':
+        return 'warning' as const
       case 'PENDING':
       case 'SCHEDULED':
       case 'STARTED':
@@ -435,6 +436,7 @@ function ActivitiesTable({
             <TableRow>
               <TableCell>
                 <button type="button" aria-label="Toggle detail"
+                        aria-expanded={!!expanded[act.scheduledEventId]}
                         className="text-text-secondary hover:text-text-primary"
                         onClick={() => onToggle(act.scheduledEventId)}>
                   {expanded[act.scheduledEventId] ? '▾' : '▸'}
