@@ -308,9 +308,14 @@ function mapActivities(
   // Merge live pending info (attempt, retry picture) by activityId.
   const pendingList = (raw.pendingActivities ?? []) as PendingActivityRaw[];
   for (const pending of pendingList) {
-    const row = [...byScheduledId.values()].find(
-      (r) => r.activityId === (pending.activityId ?? ''),
+    // Find all open rows with matching activityId, then pick the latest by scheduledEventId.
+    // Temporal allows reusing activityIds across closed and open activities in the same run.
+    const matchingRows = [...byScheduledId.values()].filter(
+      (r) => r.activityId === (pending.activityId ?? '') && !r.closedAt,
     );
+    const row = matchingRows.length > 0
+      ? matchingRows.reduce((max, r) => r.scheduledEventId > max.scheduledEventId ? r : max)
+      : undefined;
     if (!row) continue;
     row.state = 'PENDING';
     row.pendingState = PENDING_STATE_NAME[pending.state ?? 0] ?? null;

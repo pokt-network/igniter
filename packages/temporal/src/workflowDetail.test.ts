@@ -238,4 +238,32 @@ describe('mapWorkflowDetail — activities', () => {
     );
     expect(view.activities[0]!.maxAttempts).toBeNull();
   });
+
+  it('activityId reuse: prefers latest open row when same activityId spans closed+pending', () => {
+    const view = base(
+      [
+        activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'A' }),
+        activityStartedEvent({ eventId: 6, timeMs: NOW - 49_000, scheduledEventId: 5, attempt: 1 }),
+        activityCompletedEvent({ eventId: 7, timeMs: NOW - 48_000, scheduledEventId: 5 }),
+        activityScheduledEvent({ eventId: 9, timeMs: NOW - 30_000, activityId: 'a1', activityType: 'A' }),
+        activityStartedEvent({ eventId: 10, timeMs: NOW - 29_000, scheduledEventId: 9, attempt: 1 }),
+      ],
+      {
+        pendingActivities: [
+          pendingActivityInfo({
+            activityId: 'a1', activityType: 'A', state: 2, attempt: 4,
+          }),
+        ],
+      },
+    );
+    expect(view.activities).toHaveLength(2);
+    const closed = view.activities[0]!;
+    const pending = view.activities[1]!;
+    expect(closed.scheduledEventId).toBe(5);
+    expect(closed.state).toBe('COMPLETED');
+    expect(closed.attempts).toBe(1);
+    expect(pending.scheduledEventId).toBe(9);
+    expect(pending.state).toBe('PENDING');
+    expect(pending.attempts).toBe(4);
+  });
 });
