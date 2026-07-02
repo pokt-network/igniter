@@ -20,7 +20,8 @@ export function WorkflowsTabs() {
     queryKey: ['schedule-health'],
     queryFn: async () => {
       const result = await GetScheduleHealth()
-      return result.data ?? []
+      if (!result.success || !result.data) throw new Error(result.error ?? 'Failed to load schedule health')
+      return result.data
     },
     refetchInterval: 30_000,
     initialData: [],

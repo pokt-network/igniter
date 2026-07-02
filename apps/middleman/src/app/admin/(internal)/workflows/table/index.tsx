@@ -30,6 +30,8 @@ const STATUS_OPTIONS: Array<{ label: string; value: WorkflowStatus | 'ALL' }> = 
   { label: 'Failed', value: 'FAILED' },
   { label: 'Terminated', value: 'TERMINATED' },
   { label: 'Timed Out', value: 'TIMED_OUT' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+  { label: 'Continued as New', value: 'CONTINUED_AS_NEW' },
 ]
 
 const ANY_TYPE = 'ALL'
