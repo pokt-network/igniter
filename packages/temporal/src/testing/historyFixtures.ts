@@ -204,6 +204,56 @@ export function pendingActivityInfo(o: {
   };
 }
 
+export function childInitiatedEvent(o: {
+  eventId: number; timeMs: number; workflowId: string; workflowType: string;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    startChildWorkflowExecutionInitiatedEventAttributes: {
+      workflowId: o.workflowId,
+      workflowType: { name: o.workflowType },
+    },
+  };
+}
+
+export function childStartedEvent(o: {
+  eventId: number; timeMs: number; initiatedEventId: number; runId: string;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    childWorkflowExecutionStartedEventAttributes: {
+      initiatedEventId: longOf(o.initiatedEventId),
+      workflowExecution: { workflowId: undefined, runId: o.runId },
+    },
+  };
+}
+
+export function childCompletedEvent(o: {
+  eventId: number; timeMs: number; initiatedEventId: number;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    childWorkflowExecutionCompletedEventAttributes: {
+      initiatedEventId: longOf(o.initiatedEventId),
+    },
+  };
+}
+
+export function childFailedEvent(o: {
+  eventId: number; timeMs: number; initiatedEventId: number;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    childWorkflowExecutionFailedEventAttributes: {
+      initiatedEventId: longOf(o.initiatedEventId),
+    },
+  };
+}
+
 export function makeDescription(
   o: Partial<{
     workflowId: string; runId: string; type: string; statusName: string;

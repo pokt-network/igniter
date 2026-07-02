@@ -333,8 +333,75 @@ function mapActivities(
   return [...byScheduledId.values()].sort((a, b) => a.scheduledEventId - b.scheduledEventId);
 }
 
-function mapChildren(_events: IHistoryEvent[]): ChildWorkflowDetailView[] {
-  return [];
+function mapChildren(events: IHistoryEvent[]): ChildWorkflowDetailView[] {
+  const byInitiatedId = new Map<number, ChildWorkflowDetailView>();
+  const timeOf = (e: IHistoryEvent) => protoTimeToIso(e.eventTime);
+
+  for (const event of events) {
+    const initiated = event.startChildWorkflowExecutionInitiatedEventAttributes;
+    if (initiated) {
+      const id = longToNumber(event.eventId);
+      if (id === null) continue;
+      byInitiatedId.set(id, {
+        workflowId: initiated.workflowId ?? '<unknown>',
+        runId: null,
+        type: initiated.workflowType?.name ?? '<unknown>',
+        status: 'INITIATED',
+        initiatedAt: timeOf(event) ?? new Date(0).toISOString(),
+        closedAt: null,
+        durationMs: null,
+      });
+      continue;
+    }
+
+    const lookup = (id: LongLike) => {
+      const n = longToNumber(id);
+      return n === null ? undefined : byInitiatedId.get(n);
+    };
+    const close = (id: LongLike, status: ChildWorkflowDetailView['status']) => {
+      const row = lookup(id);
+      if (!row) return;
+      row.status = status;
+      row.closedAt = timeOf(event);
+      if (row.closedAt) {
+        row.durationMs =
+          new Date(row.closedAt).getTime() - new Date(row.initiatedAt).getTime();
+      }
+    };
+
+    const started = event.childWorkflowExecutionStartedEventAttributes;
+    if (started) {
+      const row = lookup(started.initiatedEventId);
+      if (row) {
+        row.status = 'STARTED';
+        row.runId = started.workflowExecution?.runId ?? null;
+      }
+      continue;
+    }
+    if (event.childWorkflowExecutionCompletedEventAttributes) {
+      close(event.childWorkflowExecutionCompletedEventAttributes.initiatedEventId, 'COMPLETED');
+      continue;
+    }
+    if (event.childWorkflowExecutionFailedEventAttributes) {
+      close(event.childWorkflowExecutionFailedEventAttributes.initiatedEventId, 'FAILED');
+      continue;
+    }
+    if (event.childWorkflowExecutionTerminatedEventAttributes) {
+      close(event.childWorkflowExecutionTerminatedEventAttributes.initiatedEventId, 'TERMINATED');
+      continue;
+    }
+    if (event.childWorkflowExecutionTimedOutEventAttributes) {
+      close(event.childWorkflowExecutionTimedOutEventAttributes.initiatedEventId, 'TIMED_OUT');
+      continue;
+    }
+    if (event.childWorkflowExecutionCanceledEventAttributes) {
+      close(event.childWorkflowExecutionCanceledEventAttributes.initiatedEventId, 'CANCELED');
+    }
+  }
+
+  return [...byInitiatedId.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, v]) => v);
 }
 
 export function mapWorkflowDetail(

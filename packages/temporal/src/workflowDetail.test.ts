@@ -2,7 +2,8 @@ import { mapWorkflowDetail } from '@/workflowDetail';
 import {
   activityCompletedEvent, activityFailedEvent, activityScheduledEvent,
   activityStartedEvent, activityTimedOutEvent, pendingActivityInfo,
-  canceledEvent, completedEvent, continuedAsNewEvent, failedEvent,
+  canceledEvent, childCompletedEvent, childFailedEvent, childInitiatedEvent,
+  childStartedEvent, completedEvent, continuedAsNewEvent, failedEvent,
   makeDescription, startedEvent, terminatedEvent, timedOutEvent, ts,
   workflowTaskFailedEvent,
 } from '@/testing/historyFixtures';
@@ -265,5 +266,41 @@ describe('mapWorkflowDetail — activities', () => {
     expect(pending.scheduledEventId).toBe(9);
     expect(pending.state).toBe('PENDING');
     expect(pending.attempts).toBe(4);
+  });
+});
+
+describe('mapWorkflowDetail — children', () => {
+  const run = (events: unknown[]) =>
+    mapWorkflowDetail(
+      makeDescription({ statusName: 'RUNNING', closeTime: null }),
+      { events: events as never },
+      null,
+      NOW,
+    );
+
+  it('correlates initiated→started→completed via Long initiatedEventId', () => {
+    const view = run([
+      childInitiatedEvent({ eventId: 5, timeMs: NOW - 30_000, workflowId: 'ExecuteTransaction-tx9', workflowType: 'ExecuteTransaction' }),
+      childStartedEvent({ eventId: 6, timeMs: NOW - 29_000, initiatedEventId: 5, runId: 'child-run-1' }),
+      childCompletedEvent({ eventId: 9, timeMs: NOW - 20_000, initiatedEventId: 5 }),
+    ]);
+    expect(view.children).toHaveLength(1);
+    const child = view.children[0]!;
+    expect(child.workflowId).toBe('ExecuteTransaction-tx9');
+    expect(child.type).toBe('ExecuteTransaction');
+    expect(child.runId).toBe('child-run-1');
+    expect(child.status).toBe('COMPLETED');
+    expect(child.durationMs).toBe(10_000);
+  });
+
+  it('tracks INITIATED-only (ABANDON child not yet started) and FAILED', () => {
+    const view = run([
+      childInitiatedEvent({ eventId: 5, timeMs: NOW - 30_000, workflowId: 'c1', workflowType: 'T' }),
+      childInitiatedEvent({ eventId: 8, timeMs: NOW - 25_000, workflowId: 'c2', workflowType: 'T' }),
+      childStartedEvent({ eventId: 9, timeMs: NOW - 24_000, initiatedEventId: 8, runId: 'r2' }),
+      childFailedEvent({ eventId: 12, timeMs: NOW - 20_000, initiatedEventId: 8 }),
+    ]);
+    expect(view.children.map((c) => c.status)).toEqual(['INITIATED', 'FAILED']);
+    expect(view.children[0]!.runId).toBeNull();
   });
 });
