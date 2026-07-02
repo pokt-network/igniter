@@ -7,6 +7,11 @@
       "import": "./dist/src/index.js",
       "require": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
+    },
+    "./workflow-view": {
+      "import": "./dist/src/workflowView.js",
+      "require": "./dist/src/workflowView.js",
+      "types": "./dist/src/workflowView.d.ts"
     }
   },
   "scripts": {
