@@ -72,6 +72,9 @@ importers:
       '@igniter/pocket':
         specifier: workspace:*
         version: link:../../packages/pocket
+      '@igniter/temporal':
+        specifier: workspace:*
+        version: link:../../packages/temporal
       '@igniter/ui':
         specifier: workspace:*
         version: link:../../packages/ui
