@@ -194,10 +194,140 @@ function mapWorkflowTaskProblem(
   };
 }
 
-// Filled in by later tasks.
-function mapActivities(_events: IHistoryEvent[], _raw: Record<string, unknown>): ActivityDetailView[] {
-  return [];
+const PENDING_STATE_NAME: Record<number, ActivityDetailView['pendingState']> = {
+  1: 'SCHEDULED',
+  2: 'STARTED',
+  3: 'CANCEL_REQUESTED',
+};
+
+type PendingActivityRaw = {
+  activityId?: string | null;
+  activityType?: { name?: string | null } | null;
+  state?: number | null;
+  attempt?: number | null;
+  maximumAttempts?: number | null;
+  scheduledTime?: unknown;
+  expirationTime?: unknown;
+  lastHeartbeatTime?: unknown;
+  lastWorkerIdentity?: string | null;
+  lastFailure?: IFailure | null;
+};
+
+function mapActivities(
+  events: IHistoryEvent[],
+  raw: Record<string, unknown>,
+): ActivityDetailView[] {
+  const byScheduledId = new Map<number, ActivityDetailView>();
+  const timeOf = (e: IHistoryEvent) => protoTimeToIso(e.eventTime);
+
+  for (const event of events) {
+    const scheduled = event.activityTaskScheduledEventAttributes;
+    if (scheduled) {
+      const id = longToNumber(event.eventId);
+      if (id === null) continue;
+      byScheduledId.set(id, {
+        scheduledEventId: id,
+        activityId: scheduled.activityId ?? String(id),
+        activityType: scheduled.activityType?.name ?? '<unknown>',
+        state: 'SCHEDULED',
+        pendingState: null,
+        attempts: 1,
+        maxAttempts: null,
+        input: previewPayloads(scheduled.input?.payloads),
+        result: null,
+        failure: null,
+        scheduledAt: timeOf(event) ?? new Date(0).toISOString(),
+        startedAt: null,
+        closedAt: null,
+        durationMs: null,
+        lastHeartbeatAt: null,
+        nextRetryAt: null,
+        retryExpiresAt: null,
+        lastWorkerIdentity: null,
+      });
+      continue;
+    }
+
+    const lookup = (id: LongLike) => {
+      const n = longToNumber(id);
+      return n === null ? undefined : byScheduledId.get(n);
+    };
+
+    const started = event.activityTaskStartedEventAttributes;
+    if (started) {
+      const row = lookup(started.scheduledEventId);
+      if (row) {
+        row.state = 'STARTED';
+        row.startedAt = timeOf(event);
+        row.attempts = started.attempt ?? row.attempts;
+      }
+      continue;
+    }
+
+    const close = (
+      id: LongLike,
+      state: ActivityDetailView['state'],
+      patch: Partial<ActivityDetailView>,
+    ) => {
+      const row = lookup(id);
+      if (!row) return;
+      row.state = state;
+      row.closedAt = timeOf(event);
+      Object.assign(row, patch);
+      if (row.closedAt && row.scheduledAt) {
+        row.durationMs =
+          new Date(row.closedAt).getTime() - new Date(row.scheduledAt).getTime();
+      }
+    };
+
+    const completed = event.activityTaskCompletedEventAttributes;
+    if (completed) {
+      close(completed.scheduledEventId, 'COMPLETED', {
+        result: previewPayloads(completed.result?.payloads),
+      });
+      continue;
+    }
+    const failed = event.activityTaskFailedEventAttributes;
+    if (failed) {
+      close(failed.scheduledEventId, 'FAILED', { failure: failureParts(failed.failure) });
+      continue;
+    }
+    const timedOut = event.activityTaskTimedOutEventAttributes;
+    if (timedOut) {
+      close(timedOut.scheduledEventId, 'TIMED_OUT', {
+        failure: failureParts(timedOut.failure) ?? { message: 'Timed out', type: null, stackTrace: null },
+      });
+      continue;
+    }
+    const canceled = event.activityTaskCanceledEventAttributes;
+    if (canceled) {
+      close(canceled.scheduledEventId, 'CANCELED', {});
+    }
+  }
+
+  // Merge live pending info (attempt, retry picture) by activityId.
+  const pendingList = (raw.pendingActivities ?? []) as PendingActivityRaw[];
+  for (const pending of pendingList) {
+    const row = [...byScheduledId.values()].find(
+      (r) => r.activityId === (pending.activityId ?? ''),
+    );
+    if (!row) continue;
+    row.state = 'PENDING';
+    row.pendingState = PENDING_STATE_NAME[pending.state ?? 0] ?? null;
+    row.attempts = pending.attempt ?? row.attempts;
+    row.maxAttempts =
+      pending.maximumAttempts && pending.maximumAttempts > 0 ? pending.maximumAttempts : null;
+    row.nextRetryAt = pending.scheduledTime ? protoTimeToIso(pending.scheduledTime) : null;
+    row.retryExpiresAt = pending.expirationTime ? protoTimeToIso(pending.expirationTime) : null;
+    row.lastHeartbeatAt = pending.lastHeartbeatTime ? protoTimeToIso(pending.lastHeartbeatTime) : null;
+    row.lastWorkerIdentity = pending.lastWorkerIdentity ?? null;
+    const pendingFailure = failureParts(pending.lastFailure);
+    if (pendingFailure) row.failure = pendingFailure;
+  }
+
+  return [...byScheduledId.values()].sort((a, b) => a.scheduledEventId - b.scheduledEventId);
 }
+
 function mapChildren(_events: IHistoryEvent[]): ChildWorkflowDetailView[] {
   return [];
 }

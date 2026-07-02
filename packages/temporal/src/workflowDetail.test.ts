@@ -1,5 +1,7 @@
 import { mapWorkflowDetail } from '@/workflowDetail';
 import {
+  activityCompletedEvent, activityFailedEvent, activityScheduledEvent,
+  activityStartedEvent, activityTimedOutEvent, pendingActivityInfo,
   canceledEvent, completedEvent, continuedAsNewEvent, failedEvent,
   makeDescription, startedEvent, terminatedEvent, timedOutEvent, ts,
   workflowTaskFailedEvent,
@@ -148,5 +150,92 @@ describe('mapWorkflowDetail — workflow level', () => {
     expect(view.activities).toEqual([]);
     expect(view.children).toEqual([]);
     expect(view.input).toBeNull();
+  });
+});
+
+describe('mapWorkflowDetail — activities', () => {
+  const base = (events: unknown[], raw: Record<string, unknown> = {}) =>
+    mapWorkflowDetail(
+      makeDescription({ statusName: 'RUNNING', closeTime: null, raw }),
+      { events: events as never },
+      null,
+      NOW,
+    );
+
+  it('correlates scheduled→started→completed via Long scheduledEventId', () => {
+    const view = base([
+      startedEvent({ eventId: 1, timeMs: NOW - 60_000 }),
+      activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'SendTx', input: [{ tx: 1 }] }),
+      activityStartedEvent({ eventId: 6, timeMs: NOW - 49_000, scheduledEventId: 5, attempt: 1 }),
+      activityCompletedEvent({ eventId: 7, timeMs: NOW - 48_000, scheduledEventId: 5, result: { hash: '0xabc' } }),
+    ]);
+    expect(view.activities).toHaveLength(1);
+    const act = view.activities[0]!;
+    expect(act.scheduledEventId).toBe(5);
+    expect(act.activityType).toBe('SendTx');
+    expect(act.state).toBe('COMPLETED');
+    expect(JSON.parse(act.input!.text)).toEqual({ tx: 1 });
+    expect(JSON.parse(act.result!.text)).toEqual({ hash: '0xabc' });
+    expect(act.durationMs).toBe(2000);
+  });
+
+  it('maps failure with stack on FAILED activities', () => {
+    const view = base([
+      activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'SendTx' }),
+      activityStartedEvent({ eventId: 6, timeMs: NOW - 49_000, scheduledEventId: 5, attempt: 3 }),
+      activityFailedEvent({ eventId: 7, timeMs: NOW - 48_000, scheduledEventId: 5, message: 'rpc down', type: 'RpcError', stackTrace: 'at act()' }),
+    ]);
+    const act = view.activities[0]!;
+    expect(act.state).toBe('FAILED');
+    expect(act.attempts).toBe(3);
+    expect(act.failure).toEqual({ message: 'rpc down', type: 'RpcError', stackTrace: 'at act()' });
+  });
+
+  it('marks TIMED_OUT and open activities', () => {
+    const view = base([
+      activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'A' }),
+      activityTimedOutEvent({ eventId: 6, timeMs: NOW - 40_000, scheduledEventId: 5 }),
+      activityScheduledEvent({ eventId: 8, timeMs: NOW - 30_000, activityId: 'a2', activityType: 'B' }),
+      activityScheduledEvent({ eventId: 10, timeMs: NOW - 20_000, activityId: 'a3', activityType: 'C' }),
+      activityStartedEvent({ eventId: 11, timeMs: NOW - 19_000, scheduledEventId: 10 }),
+    ]);
+    expect(view.activities.map((a) => a.state)).toEqual(['TIMED_OUT', 'SCHEDULED', 'STARTED']);
+  });
+
+  it('merges pendingActivities by activityId into PENDING rows with retry picture', () => {
+    const view = base(
+      [
+        activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'SendTx' }),
+        activityStartedEvent({ eventId: 6, timeMs: NOW - 49_000, scheduledEventId: 5 }),
+      ],
+      {
+        pendingActivities: [
+          pendingActivityInfo({
+            activityId: 'a1', activityType: 'SendTx', state: 1, attempt: 7,
+            maximumAttempts: 10, scheduledTimeMs: NOW + 42_000,
+            expirationTimeMs: NOW + 300_000, lastHeartbeatMs: NOW - 5_000,
+            lastWorkerIdentity: 'worker-1@pod', lastFailureMessage: 'ECONNREFUSED',
+          }),
+        ],
+      },
+    );
+    const act = view.activities[0]!;
+    expect(act.state).toBe('PENDING');
+    expect(act.pendingState).toBe('SCHEDULED');
+    expect(act.attempts).toBe(7);
+    expect(act.maxAttempts).toBe(10);
+    expect(act.nextRetryAt).toBe(new Date(NOW + 42_000).toISOString());
+    expect(act.retryExpiresAt).toBe(new Date(NOW + 300_000).toISOString());
+    expect(act.lastHeartbeatAt).toBe(new Date(NOW - 5_000).toISOString());
+    expect(act.lastWorkerIdentity).toBe('worker-1@pod');
+    expect(act.failure!.message).toBe('ECONNREFUSED');
+  });
+
+  it('maxAttempts 0 (unlimited) maps to null', () => {
+    const view = base(
+      [activityScheduledEvent({ eventId: 5, timeMs: NOW - 50_000, activityId: 'a1', activityType: 'A' })],
+      { pendingActivities: [pendingActivityInfo({ activityId: 'a1', activityType: 'A', maximumAttempts: 0 })] },
+    );
+    expect(view.activities[0]!.maxAttempts).toBeNull();
   });
 });

@@ -115,6 +115,95 @@ export function workflowTaskFailedEvent(o: {
   };
 }
 
+export function activityScheduledEvent(o: {
+  eventId: number; timeMs: number; activityId: string; activityType: string; input?: unknown[];
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    activityTaskScheduledEventAttributes: {
+      activityId: o.activityId,
+      activityType: { name: o.activityType },
+      input: payloadsOf(o.input),
+    },
+  };
+}
+
+export function activityStartedEvent(o: {
+  eventId: number; timeMs: number; scheduledEventId: number; attempt?: number;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    activityTaskStartedEventAttributes: {
+      scheduledEventId: longOf(o.scheduledEventId),
+      attempt: o.attempt ?? 1,
+    },
+  };
+}
+
+export function activityCompletedEvent(o: {
+  eventId: number; timeMs: number; scheduledEventId: number; result?: unknown;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    activityTaskCompletedEventAttributes: {
+      scheduledEventId: longOf(o.scheduledEventId),
+      result: o.result === undefined ? undefined : payloadsOf([o.result]),
+    },
+  };
+}
+
+export function activityFailedEvent(o: {
+  eventId: number; timeMs: number; scheduledEventId: number; message: string; type?: string; stackTrace?: string;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    activityTaskFailedEventAttributes: {
+      scheduledEventId: longOf(o.scheduledEventId),
+      failure: {
+        message: o.message,
+        stackTrace: o.stackTrace,
+        applicationFailureInfo: o.type ? { type: o.type } : undefined,
+      },
+    },
+  };
+}
+
+export function activityTimedOutEvent(o: {
+  eventId: number; timeMs: number; scheduledEventId: number; message?: string;
+}): IHistoryEvent {
+  return {
+    eventId: longOf(o.eventId),
+    eventTime: ts(o.timeMs),
+    activityTaskTimedOutEventAttributes: {
+      scheduledEventId: longOf(o.scheduledEventId),
+      failure: o.message ? { message: o.message } : undefined,
+    },
+  };
+}
+
+export function pendingActivityInfo(o: {
+  activityId: string; activityType: string; state?: number; attempt?: number;
+  maximumAttempts?: number; scheduledTimeMs?: number; expirationTimeMs?: number;
+  lastHeartbeatMs?: number; lastWorkerIdentity?: string; lastFailureMessage?: string;
+}): Record<string, unknown> {
+  return {
+    activityId: o.activityId,
+    activityType: { name: o.activityType },
+    state: o.state ?? 1,
+    attempt: o.attempt ?? 1,
+    maximumAttempts: o.maximumAttempts ?? 0,
+    scheduledTime: o.scheduledTimeMs ? ts(o.scheduledTimeMs) : undefined,
+    expirationTime: o.expirationTimeMs ? ts(o.expirationTimeMs) : undefined,
+    lastHeartbeatTime: o.lastHeartbeatMs ? ts(o.lastHeartbeatMs) : undefined,
+    lastWorkerIdentity: o.lastWorkerIdentity,
+    lastFailure: o.lastFailureMessage ? { message: o.lastFailureMessage } : undefined,
+  };
+}
+
 export function makeDescription(
   o: Partial<{
     workflowId: string; runId: string; type: string; statusName: string;
