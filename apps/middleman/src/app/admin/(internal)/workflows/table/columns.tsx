@@ -1,20 +1,11 @@
 'use client'
 
+import { useState } from 'react'
+import Link from 'next/link'
 import { ColumnDef } from '@igniter/ui/components/table'
 import type { CsvColumnDef } from '@igniter/ui/lib/csv'
+import { Badge } from '@igniter/ui/components/badge'
 import type { WorkflowView, WorkflowStatus } from '@igniter/temporal/workflow-view'
-
-const STATUS_STYLE: Record<string, string> = {
-  RUNNING: 'bg-blue-500/15 text-blue-400',
-  COMPLETED: 'bg-green-500/15 text-green-400',
-  FAILED: 'bg-red-500/15 text-red-400',
-  TERMINATED: 'bg-red-500/15 text-red-400',
-  TIMED_OUT: 'bg-amber-500/15 text-amber-400',
-  CANCELLED: 'bg-neutral-500/15 text-neutral-300',
-  CONTINUED_AS_NEW: 'bg-neutral-500/15 text-neutral-300',
-  UNKNOWN: 'bg-neutral-500/15 text-neutral-300',
-  UNSPECIFIED: 'bg-neutral-500/15 text-neutral-300',
-}
 
 function formatStatus(status: WorkflowStatus): string {
   return status
@@ -22,6 +13,24 @@ function formatStatus(status: WorkflowStatus): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+export function statusBadgeVariant(
+  status: WorkflowStatus,
+): 'info' | 'success' | 'destructive' | 'warning' | 'secondary' {
+  switch (status) {
+    case 'RUNNING':
+      return 'info'
+    case 'COMPLETED':
+      return 'success'
+    case 'FAILED':
+    case 'TERMINATED':
+      return 'destructive'
+    case 'TIMED_OUT':
+      return 'warning'
+    default:
+      return 'secondary'
+  }
 }
 
 export function formatDateTime(iso: string): string {
@@ -40,12 +49,65 @@ export function formatElapsed(ms: number): string {
   return `${d}d ${h % 24}h`
 }
 
+export function formatRelative(iso: string | null, nowMs: number = Date.now()): string {
+  if (!iso) return '-'
+  const diff = new Date(iso).getTime() - nowMs
+  const abs = Math.abs(diff)
+  const unit =
+    abs < 60_000
+      ? `${Math.round(abs / 1000)}s`
+      : abs < 3_600_000
+        ? `${Math.round(abs / 60_000)}m`
+        : abs < 86_400_000
+          ? `${Math.round(abs / 3_600_000)}h`
+          : `${Math.round(abs / 86_400_000)}d`
+  return diff <= 0 ? `${unit} ago` : `in ${unit}`
+}
+
+export function detailHref(workflowId: string, runId?: string | null): string {
+  const base = `/admin/workflows/${encodeURIComponent(workflowId)}`
+  return runId ? `${base}?runId=${encodeURIComponent(runId)}` : base
+}
+
+export function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable (non-secure context); ignore
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      className="text-text-tertiary hover:text-text-primary"
+      title="Copy"
+    >
+      {copied ? '✓' : '⧉'}
+    </button>
+  )
+}
+
 export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>> = [
   {
     accessorKey: 'workflowId',
     header: 'Workflow ID',
     cell: ({ row }) => (
-      <span className="font-mono text-xs break-all">{row.getValue('workflowId')}</span>
+      <span className="flex items-center gap-1.5">
+        <Link
+          href={detailHref(row.original.workflowId, row.original.runId)}
+          className="font-mono text-xs break-all text-text-primary underline-offset-2 hover:underline"
+        >
+          {row.original.workflowId}
+        </Link>
+        <CopyButton value={row.original.workflowId} />
+      </span>
     ),
   },
   {
@@ -57,13 +119,7 @@ export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>
     header: 'Status',
     cell: ({ row }) => {
       const status = row.getValue('status') as WorkflowStatus
-      return (
-        <span
-          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status] ?? STATUS_STYLE.UNKNOWN}`}
-        >
-          {formatStatus(status)}
-        </span>
-      )
+      return <Badge variant={statusBadgeVariant(status)}>{formatStatus(status)}</Badge>
     },
   },
   {
@@ -83,5 +139,15 @@ export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>
         {formatElapsed(row.getValue('elapsedMs'))}
       </span>
     ),
+  },
+  {
+    accessorKey: 'scheduledById',
+    header: 'Origin',
+    cell: ({ row }) =>
+      row.original.scheduledById ? (
+        <Badge variant="secondary" title={row.original.scheduledById}>
+          scheduled
+        </Badge>
+      ) : null,
   },
 ]
