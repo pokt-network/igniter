@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { GetAppName } from '@/actions/ApplicationSettings'
 import PageHeader from '@igniter/ui/components/PageHeader'
 import PageContent from '@igniter/ui/components/PageContent'
-import WorkflowsTable from './table'
-import ScheduleHealthPanel from './ScheduleHealthPanel'
+import { WorkflowsTabs } from './WorkflowsTabs'
+
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(): Promise<Metadata> {
   const appName = await GetAppName()
@@ -20,8 +22,9 @@ export default function WorkflowsPage() {
         subtitle="Inspect running and recent Temporal workflows and schedule health."
       />
       <PageContent>
-        <ScheduleHealthPanel />
-        <WorkflowsTable />
+        <Suspense>
+          <WorkflowsTabs />
+        </Suspense>
       </PageContent>
     </>
   )
