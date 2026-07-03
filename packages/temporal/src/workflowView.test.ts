@@ -153,7 +153,7 @@ describe('mapScheduleToHealth', () => {
 
   const heal = (over: Partial<WatchdogHealState> = {}): WatchdogHealState => ({
     scheduleId: 'GovernanceSync-scheduled',
-    attempts: 0,
+    unstucks: 0,
     injectedTriggers: 0,
     lastHealTriggerAt: null,
     lastActionCount: 0,
@@ -181,13 +181,13 @@ describe('mapScheduleToHealth', () => {
   })
 
   it('stale when attempts>0 but not yet unhealthy', () => {
-    expect(mapScheduleToHealth(makeSummary(), heal({ attempts: 2 })).state).toBe('stale')
+    expect(mapScheduleToHealth(makeSummary(), heal({ unstucks: 2 })).state).toBe('stale')
   })
 
   it('degrades to healthy with zeroed health when no watchdog row', () => {
     const row = mapScheduleToHealth(makeSummary(), null)
     expect(row.state).toBe('healthy')
-    expect(row.attempts).toBe(0)
+    expect(row.unstucks).toBe(0)
     expect(row.unhealthy).toBe(false)
     expect(row.recreations).toBe(0)
     expect(row.lastRecreatedAt).toBeNull()

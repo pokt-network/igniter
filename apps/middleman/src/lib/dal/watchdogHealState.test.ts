@@ -14,7 +14,7 @@ describe('listWatchdogHealState (middleman)', () => {
     execute.mockResolvedValue([
       {
         scheduleId: 'GovernanceSync-scheduled',
-        attempts: 2,
+        unstucks: 2,
         injected_triggers: 1,
         last_heal_trigger_at: '2026-07-01T00:00:00.000Z',
         last_action_count: 4,
@@ -27,7 +27,7 @@ describe('listWatchdogHealState (middleman)', () => {
     const rows = await listWatchdogHealState()
     expect(rows[0]).toEqual({
       scheduleId: 'GovernanceSync-scheduled',
-      attempts: 2,
+      unstucks: 2,
       injectedTriggers: 1,
       lastHealTriggerAt: '2026-07-01T00:00:00.000Z',
       lastActionCount: 4,
@@ -39,7 +39,7 @@ describe('listWatchdogHealState (middleman)', () => {
   })
 
   it('defaults recreations to 0 and lastRecreatedAt to null when absent', async () => {
-    execute.mockResolvedValue([{ scheduleId: 's', attempts: 0, unhealthy: false }])
+    execute.mockResolvedValue([{ scheduleId: 's', unstucks: 0, unhealthy: false }])
     const rows = await listWatchdogHealState()
     expect(rows[0].recreations).toBe(0)
     expect(rows[0].lastRecreatedAt).toBeNull()

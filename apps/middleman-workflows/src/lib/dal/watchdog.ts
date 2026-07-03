@@ -23,13 +23,13 @@ export default class Watchdog implements WatchdogStateStore {
     return row as HealState | undefined
   }
 
-  async bumpAttempt(scheduleId: string): Promise<HealState> {
+  async bumpUnstuck(scheduleId: string): Promise<HealState> {
     const [row] = await this.dbClient.db
       .insert(watchdogHealStateTable)
-      .values({ scheduleId, attempts: 1 })
+      .values({ scheduleId, unstucks: 1 })
       .onConflictDoUpdate({
         target: watchdogHealStateTable.scheduleId,
-        set: { attempts: sql`${watchdogHealStateTable.attempts} + 1` },
+        set: { unstucks: sql`${watchdogHealStateTable.unstucks} + 1` },
       })
       .returning()
     return row as HealState
@@ -80,10 +80,10 @@ export default class Watchdog implements WatchdogStateStore {
   async resetLadder(scheduleId: string, lastActionCount: number): Promise<void> {
     await this.dbClient.db
       .insert(watchdogHealStateTable)
-      .values({ scheduleId, attempts: 0, unhealthy: false, injectedTriggers: 0, lastActionCount })
+      .values({ scheduleId, unstucks: 0, unhealthy: false, injectedTriggers: 0, lastActionCount })
       .onConflictDoUpdate({
         target: watchdogHealStateTable.scheduleId,
-        set: { attempts: 0, unhealthy: false, injectedTriggers: 0, lastActionCount },
+        set: { unstucks: 0, unhealthy: false, injectedTriggers: 0, lastActionCount },
       })
   }
 

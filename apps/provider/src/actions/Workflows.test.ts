@@ -47,7 +47,7 @@ const fakeClient = {
 jest.mock('@/lib/temporal', () => ({ getTemporalClient: () => fakeClient }))
 jest.mock('@/lib/dal/watchdogHealState', () => ({
   listWatchdogHealState: jest.fn().mockResolvedValue([
-    { scheduleId: 'GovernanceSync-scheduled', attempts: 4, injectedTriggers: 0, lastHealTriggerAt: null, lastActionCount: 0, unhealthy: true, observedUnhealthy: false },
+    { scheduleId: 'GovernanceSync-scheduled', unstucks: 4, injectedTriggers: 0, lastHealTriggerAt: null, lastActionCount: 0, unhealthy: true, observedUnhealthy: false },
   ]),
 }))
 
@@ -75,7 +75,7 @@ describe('provider Workflows actions', () => {
     if (!res.success) throw new Error('expected success')
     expect(res.data[0].scheduleId).toBe('GovernanceSync-scheduled')
     expect(res.data[0].state).toBe('unhealthy')
-    expect(res.data[0].attempts).toBe(4)
+    expect(res.data[0].unstucks).toBe(4)
   })
 
   it('TerminateWorkflow calls handle.terminate with a reason', async () => {

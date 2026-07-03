@@ -64,7 +64,7 @@ Only workflows in the **Running** status show a **Terminate** action.
 
 ## Schedules Tab
 
-Shows the health of every Temporal Schedule registered for this Provider instance — the recurring triggers behind supplier status checks, remediation, and governance sync. Health state and heal-attempt counts come from the [schedule watchdog](../schedule-watchdog.md), which detects schedules that have stopped firing and attempts to recover them automatically.
+Shows the health of every Temporal Schedule registered for this Provider instance — the recurring triggers behind supplier status checks, remediation, and governance sync. Health state and unstuck counts come from the [schedule watchdog](../schedule-watchdog.md), which detects schedules that have stopped firing and attempts to recover them automatically.
 
 This tab is read-only: it surfaces what the watchdog has already observed and acted on, it does not trigger any actions itself.
 
@@ -76,7 +76,7 @@ This tab is read-only: it surfaces what the watchdog has already observed and ac
 | **State** | See [Schedule States](#schedule-states) below. |
 | **Last fire** | Relative time since the schedule last triggered a workflow, hover for the exact timestamp. |
 | **Next fire** | Relative time until the schedule's next scheduled trigger. |
-| **Heal attempts** | Number of times the watchdog has attempted to recover this schedule. Highlighted when greater than zero. |
+| **Unstuck** | Number of times the watchdog has attempted to recover this schedule. Highlighted when greater than zero. |
 | **Recreated** | Number of times the watchdog recreated this schedule after finding it `NOT_FOUND`. Highlighted when greater than zero, hover for the last recreation timestamp. |
 | **Note** | Any operator or system note attached to the schedule, truncated with a tooltip for the full text. |
 | *(View runs)* | Jumps to the Workflows tab, filtered to workflows started by this schedule. |
@@ -85,9 +85,9 @@ This tab is read-only: it surfaces what the watchdog has already observed and ac
 
 | State | Meaning |
 |-------|---------|
-| **healthy** | Firing normally. No heal attempts recorded. |
+| **healthy** | Firing normally. No unstuck actions recorded. |
 | **paused** | The schedule is paused in Temporal — it will not fire until resumed. |
-| **stale** | The watchdog has recorded heal attempts for this schedule. It's actively trying to recover it. |
+| **stale** | The watchdog has recorded unstuck actions for this schedule. It's actively trying to recover it. |
 | **unhealthy** | The watchdog has flagged this schedule as unhealthy — it needs operator attention. |
 
 ### Recent Fires
@@ -191,7 +191,7 @@ Common debug flows using this page:
 
 - **A workflow seems stuck.** Open its detail page. If the [stuck-workflow banner](#stuck-workflow-banner) is showing, the workflow task is repeatedly failing — the message and stack trace usually point at the underlying cause (a bad activity input, a code bug, a non-retryable error in a loop). Compare the attempt count against how long the workflow has been running.
 - **A run failed and you need forensics.** Open the failed workflow's detail page. The [failure banner](#failure-banner) gives the immediate cause. Expand the **Activities** table to find which activity failed and inspect its **Input** and **Failure** blocks. If you need the complete picture, use **Download history (JSON)** to get the raw event log.
-- **A schedule doesn't seem to be firing.** Open the **Schedules** tab and check the schedule's **State** and **Last fire** / **Next fire** columns. If it's `stale` or `unhealthy`, the watchdog has already picked it up — check **Heal attempts** to see how much recovery activity has happened. Expand **Recent fires** and look for amber **Lag** values, which point at delayed dispatch rather than a fully stopped schedule. Use **View runs** to jump straight to the resulting workflows and check their outcomes.
+- **A schedule doesn't seem to be firing.** Open the **Schedules** tab and check the schedule's **State** and **Last fire** / **Next fire** columns. If it's `stale` or `unhealthy`, the watchdog has already picked it up — check **Unstuck** to see how much recovery activity has happened. Expand **Recent fires** and look for amber **Lag** values, which point at delayed dispatch rather than a fully stopped schedule. Use **View runs** to jump straight to the resulting workflows and check their outcomes.
 
 ---
 

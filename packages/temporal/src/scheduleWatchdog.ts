@@ -32,7 +32,7 @@ export interface WatchdogEntry {
 /** Persisted heal state (mirrors the `watchdog_heal_state` row shape). */
 export interface HealState {
   scheduleId: string
-  attempts: number
+  unstucks: number
   injectedTriggers: number
   lastHealTriggerAt: Date | null
   lastActionCount: number
@@ -63,7 +63,7 @@ export interface WatchdogConfig {
  */
 export interface WatchdogStateStore {
   getState(scheduleId: string): Promise<HealState | undefined>
-  bumpAttempt(scheduleId: string): Promise<HealState>
+  bumpUnstuck(scheduleId: string): Promise<HealState>
   bumpInjectedTrigger(scheduleId: string, at: Date): Promise<HealState>
   setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void>
   setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void>
@@ -75,7 +75,7 @@ export interface WatchdogStateStore {
 export function defaultHealState(scheduleId: string): HealState {
   return {
     scheduleId,
-    attempts: 0,
+    unstucks: 0,
     injectedTriggers: 0,
     lastHealTriggerAt: null,
     lastActionCount: 0,
@@ -273,7 +273,7 @@ export async function healSchedule(
   logger: Logger,
   now: Date,
 ): Promise<{ nextBackoffMs: number }> {
-  const n = state.attempts
+  const n = state.unstucks
   let attemptsAfter = n
 
   if (n < config.recreateAfter) {
@@ -284,8 +284,8 @@ export async function healSchedule(
       if (isTransient(e)) {
         logger.warn({ err: e, scheduleId: entry.scheduleId }, 'Heal update() transient; no attempt consumed (B4)')
       } else {
-        const row = await store.bumpAttempt(entry.scheduleId)
-        attemptsAfter = row.attempts
+        const row = await store.bumpUnstuck(entry.scheduleId)
+        attemptsAfter = row.unstucks
         logger.warn({ err: e, scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal update() definitive failure; attempt consumed')
       }
     }
@@ -293,8 +293,8 @@ export async function healSchedule(
     await ensureSchedule(client, entry, logger) // create only if NOT_FOUND (D4)
     await store.bumpInjectedTrigger(entry.scheduleId, now) // WRITE-AHEAD before the effect (D3)
     await handle.trigger() // one compensating run
-    const row = await store.bumpAttempt(entry.scheduleId)
-    attemptsAfter = row.attempts
+    const row = await store.bumpUnstuck(entry.scheduleId)
+    attemptsAfter = row.unstucks
     logger.warn({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: reconciled + injected one compensating trigger')
   }
 
@@ -420,7 +420,7 @@ export class ScheduleWatchdog {
         logger.warn({ scheduleId: entry.scheduleId }, 'Liveness unknown (skew/missing ts); skipping')
         return
       case 'healthy':
-        if ((state.attempts > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
+        if ((state.unstucks > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
           logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
           await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)
           this.nextEligibleAt.delete(entry.scheduleId)

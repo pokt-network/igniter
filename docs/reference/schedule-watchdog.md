@@ -16,7 +16,7 @@ The watchdog runs a self-rescheduling tick loop (`SCHEDULE_WATCHDOG_TICK`, defau
 
 1. Calls `handle.describe()` against Temporal, bounded by a 5s deadline so a hung RPC can never stall the loop.
 2. If the call fails with a transient error (deadline exceeded, unavailable, timeout — or gRPC codes `DEADLINE_EXCEEDED`/`RESOURCE_EXHAUSTED`/`ABORTED`/`INTERNAL`/`UNAVAILABLE`), the tick is skipped for that schedule. A flaky RPC never counts as staleness.
-3. If the schedule is `NOT_FOUND`: in **enforce** mode it's recreated immediately and the heal state is rebased (`resetOnRecreate`) — a new schedule's `numActionsTaken` starts at 0, so the watchdog's own bookkeeping has to start over too. The recreate action itself is counted in `recreations` and timestamped in `last_recreated_at`, written *before* the schedule is actually recreated (write-ahead, same invariant as the rest of the table) — otherwise this action was only visible as a pod log line, with the admin UI showing an unremarkable `healthy`/`attempts=0` schedule. `resetOnRecreate` does not touch these two columns, so the recreation count survives the ladder reset that follows. In **observe** mode nothing is created; the row is just marked `observedUnhealthy`.
+3. If the schedule is `NOT_FOUND`: in **enforce** mode it's recreated immediately and the heal state is rebased (`resetOnRecreate`) — a new schedule's `numActionsTaken` starts at 0, so the watchdog's own bookkeeping has to start over too. The recreate action itself is counted in `recreations` and timestamped in `last_recreated_at`, written *before* the schedule is actually recreated (write-ahead, same invariant as the rest of the table) — otherwise this action was only visible as a pod log line, with the admin UI showing an unremarkable `healthy`/`unstucks=0` schedule. `resetOnRecreate` does not touch these two columns, so the recreation count survives the ladder reset that follows. In **observe** mode nothing is created; the row is just marked `observedUnhealthy`.
 4. Otherwise it computes a liveness **verdict** from only verified Temporal SDK fields (`state.paused`, `info.runningActions`, `info.recentActions[].takenAt`, `info.createdAt`, `info.numActionsTaken`) — never inferred or coerced:
    - **`paused`** — always respected. The watchdog never unpauses a schedule an operator paused on purpose.
    - **`healthy`** — a run is currently in flight, or the schedule is within its **min-age guard** (`SCHEDULE_WATCHDOG_MIN_AGE`, default 3m) since creation, or its last firing is still within the staleness grace window.
@@ -39,14 +39,14 @@ With the defaults (`SCHEDULE_WATCHDOG_MISSED_FIRINGS=5`, a 90s floor, a 600s cei
 
 When a schedule is confirmed `stale` and the watchdog is in **enforce** mode, it escalates through two non-destructive steps, gated by an in-memory per-schedule backoff so repeated ticks don't hammer the same schedule:
 
-1. **Re-arm via `update()`** (attempts below `SCHEDULE_WATCHDOG_RECREATE_AFTER`, default 2) — the schedule is updated in place with its intended spec and args. This has no "absent" window the way delete-then-recreate would. A **transient** failure here does not consume an attempt (it's retried next eligible tick); a **definitive** failure does, via `bumpAttempt()`.
+1. **Re-arm via `update()`** (attempts below `SCHEDULE_WATCHDOG_RECREATE_AFTER`, default 2) — the schedule is updated in place with its intended spec and args. This has no "absent" window the way delete-then-recreate would. A **transient** failure here does not consume an attempt (it's retried next eligible tick); a **definitive** failure does, via `bumpUnstuck()`.
 2. **Reconcile + inject a compensating trigger** (once attempts reach `RECREATE_AFTER`) — `ensureSchedule()` recreates the schedule only if it's genuinely missing (drift is already handled by step 1), then the watchdog fires one manual `trigger()` to make up for the missed run. Critically, `bumpInjectedTrigger()` is written to the database **before** `trigger()` is called (write-ahead) — so the injected-trigger counter can never under-count relative to what was actually sent, even if the process crashes mid-action. This matters because `hasAutonomousFire` depends on that counter being an honest upper bound.
 
-Each definitive action increments `attempts`. If `attempts` reaches `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS` (default 5), the breaker trips: the schedule is marked `unhealthy` and an error is logged (page-worthy — the watchdog has exhausted its own remediation and a human needs to look).
+Each definitive action increments `unstucks`. If `unstucks` reaches `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS` (default 5), the breaker trips: the schedule is marked `unhealthy` and an error is logged (page-worthy — the watchdog has exhausted its own remediation and a human needs to look).
 
-The ladder isn't manually reset from the UI. It clears itself the next time a tick observes an **autonomous** fire (`hasAutonomousFire` true) while the verdict is `healthy` — proof the scheduler is alive again — which zeroes `attempts`, `unhealthy`, and `injectedTriggers`, and rebases the action-count baseline.
+The ladder isn't manually reset from the UI. It clears itself the next time a tick observes an **autonomous** fire (`hasAutonomousFire` true) while the verdict is `healthy` — proof the scheduler is alive again — which zeroes `unstucks`, `unhealthy`, and `injectedTriggers`, and rebases the action-count baseline.
 
-Backoff between heal attempts on the same schedule is exponential: `min(backoffBaseMs × 2^attempts, backoffCapMs)` (30s base, capped at 5 minutes) — a fixed internal constant, not env-configurable.
+Backoff between heal attempts on the same schedule is exponential: `min(backoffBaseMs × 2^unstucks, backoffCapMs)` (30s base, capped at 5 minutes) — a fixed internal constant, not env-configurable.
 
 ---
 
@@ -68,20 +68,20 @@ Each app persists watchdog state in its own `watchdog_heal_state` table (Provide
 | Column | Meaning |
 |--------|---------|
 | `schedule_id` | Primary key — matches the Temporal schedule ID. |
-| `attempts` | Definitive heal actions taken since the ladder last reset. Drives the breaker. |
+| `unstucks` | Definitive heal actions taken since the ladder last reset. Drives the breaker. |
 | `injected_triggers` | Compensating `trigger()` calls the watchdog has issued since the last baseline. Written *before* the trigger fires (write-ahead) — never an undercount. |
 | `last_heal_trigger_at` | Timestamp of the most recent injected trigger. |
 | `last_action_count` | Baseline snapshot of Temporal's `numActionsTaken`, used to detect autonomous fires. |
-| `unhealthy` | Breaker tripped — `attempts` reached `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS`. |
+| `unhealthy` | Breaker tripped — `unstucks` reached `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS`. |
 | `observed_unhealthy` | Set in `observe` mode (or on `NOT_FOUND` in `observe` mode) instead of acting. |
 | `recreations` | Count of `NOT_FOUND` → recreate actions taken by the enforce-mode watchdog. Written *before* the recreate call (write-ahead). Not touched by `resetOnRecreate`. |
 | `last_recreated_at` | Timestamp of the most recent recreate action. |
 
-The write-ahead ordering — persisting a counter before performing the effect it counts — is the core safety property: `attempts`, `injected_triggers`, and `recreations` can only ever be equal to or greater than what actually happened, never less, even across a crash mid-action.
+The write-ahead ordering — persisting a counter before performing the effect it counts — is the core safety property: `unstucks`, `injected_triggers`, and `recreations` can only ever be equal to or greater than what actually happened, never less, even across a crash mid-action.
 
 A recreation does not by itself affect the derived health state — a freshly recreated schedule with no other heal history reads as `healthy`, since `recreations` isn't part of `mapScheduleToHealth()`'s precedence. It's purely an action counter surfaced for observability.
 
-The admin **Workflows UI** surfaces this state directly. `mapScheduleToHealth()` (in `workflowView.ts`) combines a Temporal `ScheduleSummary` with its `watchdog_heal_state` row into a `ScheduleHealthRow`, using this precedence: `paused` wins outright; otherwise `unhealthy` if either the breaker tripped or the state was observed-unhealthy; otherwise `stale` if `attempts > 0`; otherwise `healthy`. The Schedules tab renders this as a health badge per schedule, a **Heal attempts** column, a **Recreated** column (count + last-recreated tooltip), and an expandable panel of recent fires with lag and run status. See [Provider Workflows](../provider/workflows.md) and [Middleman Workflows](../middleman/workflows.md) for the full UI walkthrough.
+The admin **Workflows UI** surfaces this state directly. `mapScheduleToHealth()` (in `workflowView.ts`) combines a Temporal `ScheduleSummary` with its `watchdog_heal_state` row into a `ScheduleHealthRow`, using this precedence: `paused` wins outright; otherwise `unhealthy` if either the breaker tripped or the state was observed-unhealthy; otherwise `stale` if `unstucks > 0`; otherwise `healthy`. The Schedules tab renders this as a health badge per schedule, an **Unstuck** column, a **Recreated** column (count + last-recreated tooltip), and an expandable panel of recent fires with lag and run status. See [Provider Workflows](../provider/workflows.md) and [Middleman Workflows](../middleman/workflows.md) for the full UI walkthrough.
 
 ---
 
@@ -106,6 +106,6 @@ A few bounds used inside the heal loop are fixed constants rather than env-confi
 ## Operational Notes
 
 - **Schedule shows `stale` in `observe` mode** — nothing has been mutated; this is informational. Confirm the underlying Temporal server/worker are actually healthy, then either let it self-resolve on the next autonomous fire or flip that environment to `enforce`.
-- **Schedule shows `stale` (`attempts > 0`) in `enforce` mode** — the watchdog is actively healing; `attempts` should return to 0 once the schedule fires on its own again. If `attempts` keeps climbing tick over tick, check worker connectivity to the Temporal server and whether the target workflow itself is failing to start.
-- **Schedule shows `unhealthy`** — either the heal breaker tripped (`attempts` reached `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS`) or the schedule was `NOT_FOUND` while running in `observe` mode. This is page-worthy: investigate Temporal server/namespace health and worker logs. There's no manual "clear" button — the ladder resets automatically the next time an autonomous fire is observed, so fixing the root cause and letting (or manually triggering) one successful firing is what recovers it.
+- **Schedule shows `stale` (`unstucks > 0`) in `enforce` mode** — the watchdog is actively healing; `unstucks` should return to 0 once the schedule fires on its own again. If `unstucks` keeps climbing tick over tick, check worker connectivity to the Temporal server and whether the target workflow itself is failing to start.
+- **Schedule shows `unhealthy`** — either the heal breaker tripped (`unstucks` reached `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS`) or the schedule was `NOT_FOUND` while running in `observe` mode. This is page-worthy: investigate Temporal server/namespace health and worker logs. There's no manual "clear" button — the ladder resets automatically the next time an autonomous fire is observed, so fixing the root cause and letting (or manually triggering) one successful firing is what recovers it.
 - **`unknown` verdicts logged repeatedly** — usually a clock skew or a missing `createdAt`/`recentActions` timestamp from the SDK. Treat it as a signal to check clock sync between the worker and the Temporal server rather than a schedule problem.

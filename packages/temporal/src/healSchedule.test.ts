@@ -34,13 +34,13 @@ const config: WatchdogConfig = {
 
 function makeStore(over: Partial<HealState> = {}) {
   const order: string[] = []
-  let attempts = over.attempts ?? 0
+  let attempts = over.unstucks ?? 0
   const store: WatchdogStateStore = {
     getState: jest.fn(),
-    bumpAttempt: jest.fn(async (id) => {
+    bumpUnstuck: jest.fn(async (id) => {
       order.push('bumpAttempt')
       attempts += 1
-      return { ...defaultHealState(id), ...over, attempts }
+      return { ...defaultHealState(id), ...over, unstucks: attempts }
     }),
     bumpInjectedTrigger: jest.fn(async (id) => {
       order.push('bumpInjectedTrigger')
@@ -78,30 +78,30 @@ function workingHandleClient() {
 describe('healSchedule ladder', () => {
   it('attempts < recreateAfter: re-arms via update()', async () => {
     const update = jest.fn().mockResolvedValue(undefined)
-    const { store } = makeStore({ attempts: 0 })
+    const { store } = makeStore({ unstucks: 0 })
     await healSchedule({ update } as never, {} as never, entry, defaultHealState(entry.scheduleId), store, config, logger, NOW)
     expect(update).toHaveBeenCalledTimes(1)
-    expect(store.bumpAttempt).not.toHaveBeenCalled()
+    expect(store.bumpUnstuck).not.toHaveBeenCalled()
   })
 
   it('B4: update() transient failure does NOT consume an attempt', async () => {
     const update = jest.fn().mockRejectedValue(transient())
-    const { store } = makeStore({ attempts: 0 })
+    const { store } = makeStore({ unstucks: 0 })
     await healSchedule({ update } as never, {} as never, entry, defaultHealState(entry.scheduleId), store, config, logger, NOW)
-    expect(store.bumpAttempt).not.toHaveBeenCalled()
+    expect(store.bumpUnstuck).not.toHaveBeenCalled()
   })
 
   it('update() definitive failure DOES consume an attempt', async () => {
     const update = jest.fn().mockRejectedValue(definitive())
-    const { store } = makeStore({ attempts: 0 })
+    const { store } = makeStore({ unstucks: 0 })
     await healSchedule({ update } as never, {} as never, entry, defaultHealState(entry.scheduleId), store, config, logger, NOW)
-    expect(store.bumpAttempt).toHaveBeenCalledTimes(1)
+    expect(store.bumpUnstuck).toHaveBeenCalledTimes(1)
   })
 
   it('attempts >= recreateAfter: ensureSchedule, WRITE-AHEAD bump BEFORE trigger()', async () => {
     const { handle, client } = workingHandleClient()
-    const { store, order } = makeStore({ attempts: 2 })
-    const state: HealState = { ...defaultHealState(entry.scheduleId), attempts: 2 }
+    const { store, order } = makeStore({ unstucks: 2 })
+    const state: HealState = { ...defaultHealState(entry.scheduleId), unstucks: 2 }
     await healSchedule(handle as never, client as never, entry, state, store, config, logger, NOW)
     expect(store.bumpInjectedTrigger).toHaveBeenCalledWith(entry.scheduleId, NOW)
     expect(handle.trigger).toHaveBeenCalledTimes(1)
@@ -119,8 +119,8 @@ describe('healSchedule ladder', () => {
     // handle+client; the assertion only cares that bumpAttempt (unconditional
     // in the recreate branch) pushes attempts 4->5 == maxHealAttempts.
     const { handle, client } = workingHandleClient()
-    const { store } = makeStore({ attempts: 4 }) // bump -> 5 == max
-    const state: HealState = { ...defaultHealState(entry.scheduleId), attempts: 4 }
+    const { store } = makeStore({ unstucks: 4 }) // bump -> 5 == max
+    const state: HealState = { ...defaultHealState(entry.scheduleId), unstucks: 4 }
     await healSchedule(handle as never, client as never, entry, state, store, config, logger, NOW)
     expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
   })
@@ -130,12 +130,12 @@ describe('healSchedule ladder', () => {
     // Share one working handle+client across all three calls so both the
     // update path (r0/r1) and the recreate path (rBig) succeed.
     const { handle, client } = workingHandleClient()
-    const { store } = makeStore({ attempts: 0 })
-    const r0 = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), attempts: 0 }, store, config, logger, NOW)
+    const { store } = makeStore({ unstucks: 0 })
+    const r0 = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), unstucks: 0 }, store, config, logger, NOW)
     expect(r0.nextBackoffMs).toBe(30_000) // base * 2^0
-    const r1 = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), attempts: 1 }, store, config, logger, NOW)
+    const r1 = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), unstucks: 1 }, store, config, logger, NOW)
     expect(r1.nextBackoffMs).toBe(60_000) // base * 2^1
-    const rBig = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), attempts: 20 }, store, config, logger, NOW)
+    const rBig = await healSchedule(handle as never, client as never, entry, { ...defaultHealState(entry.scheduleId), unstucks: 20 }, store, config, logger, NOW)
     expect(rBig.nextBackoffMs).toBe(300_000) // capped
   })
 })

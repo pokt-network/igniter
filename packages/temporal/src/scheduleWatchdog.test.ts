@@ -27,7 +27,7 @@ const config: WatchdogConfig = {
 function makeStore(state?: HealState): WatchdogStateStore {
   return {
     getState: jest.fn(async () => state),
-    bumpAttempt: jest.fn(async (id) => ({ ...defaultHealState(id), attempts: 1 })),
+    bumpUnstuck: jest.fn(async (id) => ({ ...defaultHealState(id), unstucks: 1 })),
     bumpInjectedTrigger: jest.fn(async (id) => ({ ...defaultHealState(id), injectedTriggers: 1 })),
     setUnhealthy: jest.fn(),
     setObservedUnhealthy: jest.fn(),
@@ -80,7 +80,7 @@ describe('ScheduleWatchdog.tick', () => {
 
   it('healthy + prior attempts + autonomous fire: resets the ladder (F6)', async () => {
     const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 5_000), scheduledAt: new Date(NOW_MS - 5_000) }], numActionsTaken: 52 })), update: jest.fn(), trigger: jest.fn() }
-    const store = makeStore({ ...defaultHealState(entry.scheduleId), attempts: 3, lastActionCount: 50, injectedTriggers: 1 })
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unstucks: 3, lastActionCount: 50, injectedTriggers: 1 })
     const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
     await wd.tick()
     expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 52)
@@ -116,7 +116,7 @@ describe('ScheduleWatchdog.tick', () => {
     const wd = new ScheduleWatchdog({ client: makeClient(handleBad), entries: [entry], store, config, logger })
     await expect(wd.tick()).resolves.toBeUndefined()
     expect(store.setObservedUnhealthy).not.toHaveBeenCalled()
-    expect(store.bumpAttempt).not.toHaveBeenCalled()
+    expect(store.bumpUnstuck).not.toHaveBeenCalled()
   })
 })
 

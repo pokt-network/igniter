@@ -1148,8 +1148,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "attempts": {
-          "name": "attempts",
+        "unstucks": {
+          "name": "unstucks",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1188,6 +1188,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "recreations": {
+          "name": "recreations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_recreated_at": {
+          "name": "last_recreated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

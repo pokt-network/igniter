@@ -12,7 +12,7 @@ import {
  */
 export const watchdogHealStateTable = pgTable('watchdog_heal_state', {
   scheduleId: text('schedule_id').primaryKey(),
-  attempts: integer('attempts').notNull().default(0),
+  unstucks: integer('unstucks').notNull().default(0),
   injectedTriggers: integer('injected_triggers').notNull().default(0),
   lastHealTriggerAt: timestamp('last_heal_trigger_at'),
   lastActionCount: integer('last_action_count').notNull().default(0),

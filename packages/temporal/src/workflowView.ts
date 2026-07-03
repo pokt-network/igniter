@@ -51,7 +51,7 @@ export interface WorkflowPageResult {
 
 export interface WatchdogHealState {
   scheduleId: string
-  attempts: number
+  unstucks: number
   injectedTriggers: number
   lastHealTriggerAt: string | null
   lastActionCount: number
@@ -77,7 +77,7 @@ export interface ScheduleHealthRow {
   paused: boolean
   lastFire: string | null
   nextFire: string | null
-  attempts: number
+  unstucks: number
   unhealthy: boolean
   observedUnhealthy: boolean
   note: string | null
@@ -201,7 +201,7 @@ export function mapScheduleToHealth(
   let state: ScheduleHealthState
   if (paused) state = 'paused'
   else if (heal?.unhealthy || heal?.observedUnhealthy) state = 'unhealthy'
-  else if (heal && heal.attempts > 0) state = 'stale'
+  else if (heal && heal.unstucks > 0) state = 'stale'
   else state = 'healthy'
 
   // Schedule listing is eventual-consistent (SDK doc comment on ScheduleSummary), so
@@ -224,7 +224,7 @@ export function mapScheduleToHealth(
     paused,
     lastFire,
     nextFire,
-    attempts: heal?.attempts ?? 0,
+    unstucks: heal?.unstucks ?? 0,
     unhealthy: heal?.unhealthy ?? false,
     observedUnhealthy: heal?.observedUnhealthy ?? false,
     note: summary.state.note ?? null,

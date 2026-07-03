@@ -62,7 +62,7 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
             <TableHead>State</TableHead>
             <TableHead>Last fire</TableHead>
             <TableHead>Next fire</TableHead>
-            <TableHead className="text-center">Heal attempts</TableHead>
+            <TableHead className="text-center">Unstuck</TableHead>
             <TableHead className="text-center">Recreated</TableHead>
             <TableHead>Note</TableHead>
             <TableHead />
@@ -94,8 +94,8 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
                 <TableCell title={row.nextFire ? formatDateTime(row.nextFire) : undefined}>
                   {formatRelative(row.nextFire)}
                 </TableCell>
-                <TableCell className={`text-center font-mono ${row.attempts > 0 ? 'text-amber-400' : ''}`}>
-                  {row.attempts}
+                <TableCell className={`text-center font-mono ${row.unstucks > 0 ? 'text-amber-400' : ''}`}>
+                  {row.unstucks}
                 </TableCell>
                 <TableCell
                   className={`text-center font-mono ${row.recreations > 0 ? 'text-amber-400' : ''}`}
