@@ -3,15 +3,16 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import type { UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { Badge } from '@igniter/ui/components/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@igniter/ui/components/table';
-import type { ScheduleHealthRow, ScheduleHealthState } from '@igniter/temporal/workflow-view';
+import type { ScheduleFireView, ScheduleHealthRow, ScheduleHealthState } from '@igniter/temporal/workflow-view';
 
-import { detailHref, formatDateTime, formatRelative } from './table/columns';
+import { ListWorkflows } from '@/actions/Workflows';
+import { detailHref, formatDateTime, formatRelative, statusBadgeVariant } from './table/columns';
 
 const STATE_VARIANT: Record<ScheduleHealthState, 'success' | 'secondary' | 'warning' | 'destructive'> = {
   healthy: 'success',
@@ -109,28 +110,9 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
                 </TableCell>
               </TableRow>
               {expanded[row.scheduleId] && (
-                <TableRow>
-                  <TableCell colSpan={8} className="bg-bg-elevated/40">
-                    {row.recentFires.length === 0 ? (
-                      <span className="text-xs text-text-tertiary">No recent fires recorded.</span>
-                    ) : (
-                      <ul className="space-y-1 py-1">
-                        {row.recentFires.map((fire) => (
-                          <li key={`${fire.workflowId}:${fire.takenAt}`} className="flex items-center gap-3 text-xs">
-                            <span title={formatDateTime(fire.takenAt)}>{formatRelative(fire.takenAt)}</span>
-                            <span className={fire.lagMs > LAG_WARN_MS ? 'font-medium text-amber-400' : 'text-text-tertiary'}>
-                              lag {Math.round(fire.lagMs / 1000)}s
-                            </span>
-                            <Link
-                              className="font-mono underline-offset-2 hover:underline"
-                              href={detailHref(fire.workflowId, fire.firstExecutionRunId ?? '')}
-                            >
-                              {fire.workflowId}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="px-4 pb-4 pt-1">
+                    <RecentFires scheduleId={row.scheduleId} fires={row.recentFires} />
                   </TableCell>
                 </TableRow>
               )}
@@ -138,6 +120,66 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
           ))}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+const FIRE_GRID = 'grid grid-cols-[100px_80px_minmax(0,1fr)_140px] items-center gap-x-4';
+
+function RecentFires({ scheduleId, fires }: { scheduleId: string; fires: ScheduleFireView[] }) {
+  // Lazy status lookup: one visibility query per expanded schedule, matched by workflowId.
+  const runs = useQuery({
+    queryKey: ['schedule-runs', scheduleId],
+    queryFn: async () => {
+      const result = await ListWorkflows({ scheduledBy: scheduleId }, { pageIndex: 0, pageSize: 25 });
+      if (!result.success) throw new Error(result.error.message);
+      return result.data.items;
+    },
+    staleTime: 10_000,
+  });
+  const statusOf = (workflowId: string) =>
+    runs.data?.find((run) => run.workflowId === workflowId)?.status ?? null;
+
+  if (fires.length === 0) {
+    return <span className="text-xs text-text-tertiary">No recent fires recorded.</span>;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-primary">
+      <div className={`${FIRE_GRID} border-b border-border-primary bg-bg-elevated/60 px-3 py-1.5 text-xs uppercase tracking-wide text-text-tertiary`}>
+        <span>Fired</span>
+        <span>Lag</span>
+        <span>Workflow</span>
+        <span>Status</span>
+      </div>
+      {[...fires].reverse().map((fire) => {
+        const status = statusOf(fire.workflowId);
+        return (
+          <div
+            key={`${fire.workflowId}:${fire.takenAt}`}
+            className={`${FIRE_GRID} border-b border-border-primary/50 px-3 py-2 text-xs last:border-b-0 hover:bg-bg-elevated/30`}
+          >
+            <span title={formatDateTime(fire.takenAt)}>{formatRelative(fire.takenAt)}</span>
+            <span className={fire.lagMs > LAG_WARN_MS ? 'font-medium text-amber-400' : 'text-text-tertiary'}>
+              {Math.round(fire.lagMs / 1000)}s
+            </span>
+            <Link
+              className="truncate font-mono underline-offset-2 hover:underline"
+              title={fire.workflowId}
+              href={detailHref(fire.workflowId, fire.firstExecutionRunId ?? '')}
+            >
+              {fire.workflowId}
+            </Link>
+            {status ? (
+              <span>
+                <Badge variant={statusBadgeVariant(status)}>{status}</Badge>
+              </span>
+            ) : (
+              <span className="text-text-tertiary">{runs.isLoading ? '…' : '—'}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
