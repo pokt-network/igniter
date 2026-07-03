@@ -135,7 +135,7 @@ export default function WorkflowsTable() {
           ))}
         </div>
         <Select value={status} onValueChange={(value) => write({ status: value })}>
-          <SelectTrigger className="h-9 min-w-[160px]">
+          <SelectTrigger className="h-9 w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -159,7 +159,7 @@ export default function WorkflowsTable() {
             write({ type: value === ANY_TYPE ? '' : value })
           }}
         >
-          <SelectTrigger className="h-9 min-w-[200px]">
+          <SelectTrigger className="h-9 w-[220px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -102,7 +102,8 @@ export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>
       <span className="flex items-center gap-1.5">
         <Link
           href={detailHref(row.original.workflowId, row.original.runId)}
-          className="font-mono text-xs break-all text-text-primary underline-offset-2 hover:underline"
+          title={row.original.workflowId}
+          className="block max-w-[480px] truncate font-mono text-xs text-text-primary underline-offset-2 hover:underline"
         >
           {row.original.workflowId}
         </Link>
