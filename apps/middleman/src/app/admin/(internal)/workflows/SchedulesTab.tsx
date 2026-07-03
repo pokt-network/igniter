@@ -161,7 +161,7 @@ function RecentFires({ scheduleId, fires }: { scheduleId: string; fires: Schedul
           >
             <span title={formatDateTime(fire.takenAt)}>{formatRelative(fire.takenAt)}</span>
             <span className={fire.lagMs > LAG_WARN_MS ? 'font-medium text-amber-400' : 'text-text-tertiary'}>
-              {Math.round(fire.lagMs / 1000)}s
+              {fire.lagMs < 1000 ? `${fire.lagMs}ms` : `${Math.round(fire.lagMs / 1000)}s`}
             </span>
             <Link
               className="truncate font-mono underline-offset-2 hover:underline"

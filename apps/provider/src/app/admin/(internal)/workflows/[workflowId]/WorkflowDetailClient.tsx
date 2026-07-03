@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 
 import { Badge } from '@igniter/ui/components/badge'
@@ -32,7 +31,6 @@ export function WorkflowDetailClient({
   workflowId: string
   runId?: string
 }) {
-  const router = useRouter()
   const { addNotification } = useNotifications()
   const [confirmTerminate, setConfirmTerminate] = React.useState(false)
   const [isTerminating, setIsTerminating] = React.useState(false)
@@ -49,10 +47,6 @@ export function WorkflowDetailClient({
   })
 
   const detail = query.data
-  const goBack = () => {
-    if (window.history.length > 1) router.back()
-    else router.push('/admin/workflows?tab=workflows')
-  }
 
   const downloadHistory = async () => {
     const result = await GetWorkflowHistoryJson(workflowId, runId)
@@ -94,7 +88,7 @@ export function WorkflowDetailClient({
     const notFound = /not found|NOT_FOUND/i.test(message)
     return (
       <div className="space-y-4">
-        <BackLink onClick={goBack} />
+        <Crumbs current="Workflow" />
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
           <p className="text-sm font-medium text-red-400">
             {notFound ? 'Workflow not found (it may have aged out of visibility retention).' : 'Failed to load workflow.'}
@@ -108,7 +102,7 @@ export function WorkflowDetailClient({
       </div>
     )
   }
-  if (!detail) return <DetailSkeleton onBack={goBack} />
+  if (!detail) return <DetailSkeleton />
 
   const refreshFailing = query.isError && !!query.data
 
@@ -116,7 +110,7 @@ export function WorkflowDetailClient({
     <div className="space-y-6">
       {/* Page heading */}
       <div className="space-y-3">
-        <BackLink onClick={goBack} />
+        <Crumbs parent={detail.parent} current={detail.type} />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
@@ -178,7 +172,7 @@ export function WorkflowDetailClient({
         </dl>
         {detail.searchAttributes && (
           <div className="mt-4">
-            <PayloadBlock label="Search attributes" text={detail.searchAttributes.text} collapsedLines={4} />
+            <PayloadBlock label="Search attributes" text={detail.searchAttributes.text} />
           </div>
         )}
       </div>
@@ -329,16 +323,33 @@ export function WorkflowDetailClient({
   )
 }
 
-function BackLink({ onClick }: { onClick: () => void }) {
+function Crumbs({
+  parent,
+  current,
+}: {
+  parent?: { workflowId: string; runId: string } | null
+  current: string
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
-    >
-      <span aria-hidden="true">←</span>
-      Back to Workflows
-    </button>
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-text-secondary">
+      <Link href="/admin/workflows?tab=workflows" className="transition-colors hover:text-text-primary">
+        Workflows
+      </Link>
+      {parent && (
+        <>
+          <span className="text-text-tertiary">/</span>
+          <Link
+            href={detailHref(parent.workflowId, parent.runId)}
+            title={parent.workflowId}
+            className="max-w-60 truncate font-mono text-xs transition-colors hover:text-text-primary"
+          >
+            {parent.workflowId}
+          </Link>
+        </>
+      )}
+      <span className="text-text-tertiary">/</span>
+      <span className="text-text-primary">{current}</span>
+    </nav>
   )
 }
 
@@ -366,10 +377,10 @@ function MetaRow({
   )
 }
 
-function DetailSkeleton({ onBack }: { onBack: () => void }) {
+function DetailSkeleton() {
   return (
     <div className="space-y-6">
-      <BackLink onClick={onBack} />
+      <Crumbs current="…" />
       <div className="animate-pulse space-y-6">
         <div className="h-24 rounded-xl border border-border-primary bg-bg-elevated/40" />
         <div className="h-40 rounded-xl border border-border-primary bg-bg-elevated/40" />

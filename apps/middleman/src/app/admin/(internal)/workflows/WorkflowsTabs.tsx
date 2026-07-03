@@ -4,7 +4,7 @@ import * as React from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@igniter/ui/components/tabs'
+import { Tabs, TabsBadge, TabsContent, TabsList, TabsTrigger } from '@igniter/ui/components/tabs'
 
 import { GetScheduleHealth } from '@/actions/Workflows'
 import { SchedulesTab } from './SchedulesTab'
@@ -42,17 +42,7 @@ export function WorkflowsTabs() {
         <TabsTrigger value="workflows">Workflows</TabsTrigger>
         <TabsTrigger value="schedules">
           Schedules
-          {alerts.length > 0 && (
-            <span
-              className={
-                worst === 'unhealthy'
-                  ? 'rounded-full bg-red-500/20 px-1.5 text-xs font-semibold text-red-400'
-                  : 'rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-400'
-              }
-            >
-              {alerts.length}
-            </span>
-          )}
+          <TabsBadge count={alerts.length} variant={worst === 'unhealthy' ? 'destructive' : 'warning'} />
         </TabsTrigger>
       </TabsList>
       <TabsContent value="workflows">

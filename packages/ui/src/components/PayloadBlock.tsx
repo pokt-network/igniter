@@ -10,7 +10,6 @@ export type PayloadBlockProps = {
   truncated?: boolean;
   decodeError?: string | null;
   variant?: 'default' | 'error';
-  collapsedLines?: number;
   defaultExpanded?: boolean;
 };
 
@@ -72,25 +71,21 @@ export function PayloadBlock({
   truncated = false,
   decodeError = null,
   variant = 'default',
-  collapsedLines = 12,
   defaultExpanded = false,
 }: PayloadBlockProps) {
   const [copied, setCopied] = React.useState(false);
   const [expanded, setExpanded] = React.useState(defaultExpanded);
 
   const lines = React.useMemo(() => text.split('\n'), [text]);
-  const collapsible = lines.length > collapsedLines;
-  const visibleText =
-    collapsible && !expanded ? lines.slice(0, collapsedLines).join('\n') : text;
 
   const rendered = React.useMemo(() => {
     const shouldHighlight =
       variant === 'default' &&
       !decodeError &&
-      visibleText.length <= HIGHLIGHT_LIMIT &&
-      looksLikeJson(visibleText);
-    return shouldHighlight ? highlightJson(visibleText) : visibleText;
-  }, [visibleText, variant, decodeError]);
+      text.length <= HIGHLIGHT_LIMIT &&
+      looksLikeJson(text);
+    return shouldHighlight ? highlightJson(text) : text;
+  }, [text, variant, decodeError]);
 
   const onCopy = async () => {
     try {
@@ -111,15 +106,29 @@ export function PayloadBlock({
     >
       <div
         className={cn(
-          'flex items-center gap-2 border-b px-3 py-1.5',
+          'flex items-center gap-2 px-3 py-1.5',
+          expanded && 'border-b',
           variant === 'error'
             ? 'border-red-500/40 bg-red-500/10'
             : 'border-border-primary bg-bg-elevated',
         )}
       >
-        <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((e) => !e)}
+          className="flex min-w-0 items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-secondary hover:text-text-primary"
+        >
+          <span aria-hidden="true" className="text-[10px]">
+            {expanded ? '▾' : '▸'}
+          </span>
           {label}
-        </span>
+          {!expanded && (
+            <span className="normal-case tracking-normal text-text-tertiary">
+              ({lines.length} {lines.length === 1 ? 'line' : 'lines'})
+            </span>
+          )}
+        </button>
         {truncated && (
           <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
             truncated
@@ -141,22 +150,15 @@ export function PayloadBlock({
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre
-        className={cn(
-          'max-w-full overflow-x-auto whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs leading-relaxed',
-          variant === 'error' ? 'bg-red-500/5 text-red-300' : 'bg-(--input-bg) text-text-primary',
-        )}
-      >
-        {rendered}
-      </pre>
-      {collapsible && (
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className="block w-full border-t border-border-primary px-3 py-1 text-left text-xs text-text-secondary hover:text-text-primary"
+      {expanded && (
+        <pre
+          className={cn(
+            'max-w-full overflow-x-auto whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs leading-relaxed',
+            variant === 'error' ? 'bg-red-500/5 text-red-300' : 'bg-(--input-bg) text-text-primary',
+          )}
         >
-          {expanded ? 'Show less' : `Show all ${lines.length} lines`}
-        </button>
+          {rendered}
+        </pre>
       )}
     </div>
   );

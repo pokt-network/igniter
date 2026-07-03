@@ -186,6 +186,7 @@ export default function WorkflowsTable() {
             className="h-9 min-w-[220px] rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground placeholder:text-muted-foreground"
           />
         )}
+        <span className="ml-auto inline-flex h-9 items-center whitespace-nowrap rounded-lg border border-border-primary bg-bg-elevated px-4 text-sm font-medium text-text-secondary">{data?.total ?? 0} workflows</span>
       </div>
 
       {scheduledBy && (
@@ -229,7 +230,6 @@ export default function WorkflowsTable() {
           },
         ]}
         data={data?.items ?? []}
-        countLabel="workflows"
         manualPagination={{
           total: data?.total ?? 0,
           pageIndex,

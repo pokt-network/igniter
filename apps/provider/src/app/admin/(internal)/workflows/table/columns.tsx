@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { RightArrowIcon } from '@igniter/ui/assets'
 import { ColumnDef } from '@igniter/ui/components/table'
 import type { CsvColumnDef } from '@igniter/ui/lib/csv'
 import { Badge } from '@igniter/ui/components/badge'
@@ -39,6 +40,7 @@ export function formatDateTime(iso: string): string {
 
 export function formatElapsed(ms: number): string {
   if (ms < 0) return '-'
+  if (ms < 1000) return `${Math.round(ms)}ms`
   const s = Math.floor(ms / 1000)
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
@@ -150,5 +152,20 @@ export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>
           scheduled
         </Badge>
       ) : null,
+  },
+  {
+    id: 'open',
+    header: '',
+    cell: ({ row }) => (
+      <div className="flex items-center justify-end">
+        <Link
+          href={detailHref(row.original.workflowId, row.original.runId)}
+          aria-label="Open workflow detail"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+        >
+          <RightArrowIcon style={{ width: '18px', height: '18px' }} />
+        </Link>
+      </div>
+    ),
   },
 ]

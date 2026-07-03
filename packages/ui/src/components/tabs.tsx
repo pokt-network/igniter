@@ -51,4 +51,34 @@ const TabsContent = React.forwardRef<
 ));
 TabsContent.displayName = TabsPrimitive.Content.displayName;
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+type TabsBadgeProps = {
+  count: number;
+  max?: number;
+  variant?: 'destructive' | 'warning' | 'info' | 'secondary';
+  className?: string;
+};
+
+const TABS_BADGE_VARIANT: Record<NonNullable<TabsBadgeProps['variant']>, string> = {
+  destructive: 'bg-red-500/20 text-red-400',
+  warning: 'bg-amber-500/20 text-amber-400',
+  info: 'bg-blue-500/20 text-blue-400',
+  secondary: 'bg-bg-elevated text-text-secondary',
+};
+
+/** Notification count badge for TabsTrigger. Hidden when count <= 0; caps at `max` (default 99) as "99+". */
+function TabsBadge({ count, max = 99, variant = 'secondary', className }: TabsBadgeProps) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className={cn(
+        'rounded-full px-1.5 text-xs font-semibold tabular-nums',
+        TABS_BADGE_VARIANT[variant],
+        className,
+      )}
+    >
+      {count > max ? `${max}+` : count}
+    </span>
+  );
+}
+
+export { Tabs, TabsList, TabsTrigger, TabsContent, TabsBadge };
