@@ -186,24 +186,24 @@ export default function WorkflowsTable() {
             className="h-9 min-w-[220px] rounded-lg border bg-(--input-bg) px-3 text-sm text-foreground placeholder:text-muted-foreground"
           />
         )}
+        {scheduledBy && (
+          <span className="inline-flex h-9 max-w-96 items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 text-sm text-blue-300">
+            Schedule
+            <span className="truncate font-mono text-xs" title={scheduledBy}>
+              {scheduledBy}
+            </span>
+            <button
+              type="button"
+              onClick={() => write({ scheduledBy: '' })}
+              className="text-blue-300 hover:text-text-primary"
+              aria-label="Clear schedule filter"
+            >
+              ✕
+            </button>
+          </span>
+        )}
         <span className="ml-auto inline-flex h-9 items-center whitespace-nowrap rounded-lg border border-border-primary bg-bg-elevated px-4 text-sm font-medium text-text-secondary">{data?.total ?? 0} workflows</span>
       </div>
-
-      {scheduledBy && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            Runs of schedule <span className="font-mono">{scheduledBy}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => write({ scheduledBy: '' })}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Clear schedule filter"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       <DataTable
         isLoading={isLoading}
