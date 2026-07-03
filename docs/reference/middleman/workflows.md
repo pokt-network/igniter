@@ -74,7 +74,7 @@ All filters and pagination state are written to the URL (`scope`, `status`, `typ
 
 ### Filtering by Schedule
 
-Clicking **View runs** from the Schedules tab (see below) cross-filters this table to the runs started by that schedule ID, shown as a dismissible chip above the table ("Runs of schedule `<id>`").
+Clicking **View runs** from the Schedules tab (see below) cross-filters this table to the runs started by that schedule ID, shown as a dismissible blue pill in the filter row ("Schedule `<id>`" with a **✕** to clear it).
 
 ### Terminate
 

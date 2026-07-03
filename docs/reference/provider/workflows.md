@@ -23,11 +23,11 @@ Lists individual Temporal workflow executions, most recent first, with filters a
 
 ### Filters
 
-| Filter | Description |
-|--------|-------------|
-| **Scope** | **All** or **Running** — toggle buttons that scope the list to currently running workflows only. |
-| **Status** | Any status, or one of: Running, Completed, Failed, Terminated, Timed Out, Cancelled, Continued as New. |
-| **Type** | A dropdown seeded with the known Provider workflow types (`CreateUnstakeIntents`, `ExecutePendingTransactions`, `ExecuteTransaction`, `GovernanceSync`, `SupplierRemediation`, `SupplierRemediationByRange`, `SupplierStatus`, `SupplierStatusByRange`, `SupplierStatusForAddresses`, `VerifyPendingTransactions`). Selecting **Other…** reveals a free-text field for any other type name (useful for workflow types not in this list). |
+| Filter     | Description                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Scope**  | **All** or **Running** — toggle buttons that scope the list to currently running workflows only.                                                                                                                                                                                                                                                                                                                                         |
+| **Status** | Any status, or one of: Running, Completed, Failed, Terminated, Timed Out, Cancelled, Continued as New.                                                                                                                                                                                                                                                                                                                                   |
+| **Type**   | A dropdown seeded with the known Provider workflow types (`CreateUnstakeIntents`, `ExecutePendingTransactions`, `ExecuteTransaction`, `GovernanceSync`, `SupplierRemediation`, `SupplierRemediationByRange`, `SupplierStatus`, `SupplierStatusByRange`, `SupplierStatusForAddresses`, `VerifyPendingTransactions`). Selecting **Other…** reveals a free-text field for any other type name (useful for workflow types not in this list). |
 
 A counter to the right of the filter bar shows the total number of workflows matching the current filter.
 
@@ -35,19 +35,19 @@ Changing scope, status, or type resets pagination back to the first page.
 
 ### Table Columns
 
-| Column | Description |
-|--------|-------------|
-| **Workflow ID** | The Temporal workflow ID, truncated with a tooltip showing the full value, with a copy button. Click the ID to open the [detail page](#workflow-detail-page). |
-| **Type** | The workflow type name (e.g., `SupplierRemediation`). |
-| **Status** | A badge: Running (info), Completed (success), Failed / Terminated (destructive), Timed Out (warning), other terminal states (secondary). |
-| **Started** | Local date/time the workflow started. |
-| **Elapsed** | Time since start (running workflows) or total duration (terminal workflows). Sub-second durations are shown in milliseconds; larger durations roll up through seconds, minutes, hours, and days. |
-| **Origin** | A `scheduled` chip if the workflow was started by a Temporal Schedule, hovering shows the schedule ID. Blank for manually or code-triggered workflows. |
-| *(arrow)* | Opens the workflow detail page. |
+| Column          | Description                                                                                                                                                                                      |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Workflow ID** | The Temporal workflow ID, truncated with a tooltip showing the full value, with a copy button. Click the ID to open the [detail page](#workflow-detail-page).                                    |
+| **Type**        | The workflow type name (e.g., `SupplierRemediation`).                                                                                                                                            |
+| **Status**      | A badge: Running (info), Completed (success), Failed / Terminated (destructive), Timed Out (warning), other terminal states (secondary).                                                         |
+| **Started**     | Local date/time the workflow started.                                                                                                                                                            |
+| **Elapsed**     | Time since start (running workflows) or total duration (terminal workflows). Sub-second durations are shown in milliseconds; larger durations roll up through seconds, minutes, hours, and days. |
+| **Origin**      | A `scheduled` chip if the workflow was started by a Temporal Schedule, hovering shows the schedule ID. Blank for manually or code-triggered workflows.                                           |
+| *(arrow)*       | Opens the workflow detail page.                                                                                                                                                                  |
 
 ### Filtering by Schedule
 
-Arriving from the Schedules tab's **View runs** link adds a `scheduledBy` chip above the table showing which schedule's runs are being displayed. Click the **✕** on the chip to clear it and return to the unfiltered list.
+Arriving from the Schedules tab's **View runs** link adds a blue "Schedule `<id>`" pill to the filter row showing which schedule's runs are being displayed. Click the **✕** on the pill to clear it and return to the unfiltered list.
 
 ### Terminate a Workflow
 
