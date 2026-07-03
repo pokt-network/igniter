@@ -20,6 +20,8 @@ describe('listWatchdogHealState (middleman)', () => {
         last_action_count: 4,
         unhealthy: false,
         observed_unhealthy: true,
+        recreations: 1,
+        last_recreated_at: '2026-07-01T00:05:00.000Z',
       },
     ])
     const rows = await listWatchdogHealState()
@@ -31,7 +33,16 @@ describe('listWatchdogHealState (middleman)', () => {
       lastActionCount: 4,
       unhealthy: false,
       observedUnhealthy: true,
+      recreations: 1,
+      lastRecreatedAt: '2026-07-01T00:05:00.000Z',
     })
+  })
+
+  it('defaults recreations to 0 and lastRecreatedAt to null when absent', async () => {
+    execute.mockResolvedValue([{ scheduleId: 's', attempts: 0, unhealthy: false }])
+    const rows = await listWatchdogHealState()
+    expect(rows[0].recreations).toBe(0)
+    expect(rows[0].lastRecreatedAt).toBeNull()
   })
 
   it('degrades to [] when the table is absent', async () => {

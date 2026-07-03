@@ -33,6 +33,7 @@ function makeStore(state?: HealState): WatchdogStateStore {
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
+    recordRecreate: jest.fn(),
   }
 }
 
@@ -85,14 +86,28 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 52)
   })
 
-  it('describe() NOT_FOUND + enforce: ensureSchedule creates + resetOnRecreate (S6)', async () => {
-    const create = jest.fn().mockResolvedValue(undefined)
+  it('describe() NOT_FOUND + enforce: recordRecreate (write-ahead) -> ensureSchedule creates -> resetOnRecreate (S6)', async () => {
+    const calls: string[] = []
+    const create = jest.fn().mockImplementation(async () => { calls.push('create') })
     const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
     const store = makeStore()
+    ;(store.recordRecreate as jest.Mock).mockImplementation(async () => { calls.push('recordRecreate') })
+    ;(store.resetOnRecreate as jest.Mock).mockImplementation(async () => { calls.push('resetOnRecreate') })
     const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
     await wd.tick()
     expect(create).toHaveBeenCalledTimes(1)
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
     expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(calls).toEqual(['recordRecreate', 'create', 'resetOnRecreate'])
+  })
+
+  it('describe() NOT_FOUND + observe: does not recordRecreate', async () => {
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config: { ...config, mode: 'observe' }, logger })
+    await wd.tick()
+    expect(store.recordRecreate).not.toHaveBeenCalled()
+    expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
   })
 
   it('describe() transient: skips, never treated as stale, never aborts pass', async () => {

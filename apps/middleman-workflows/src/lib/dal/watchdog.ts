@@ -86,4 +86,17 @@ export default class Watchdog implements WatchdogStateStore {
         set: { attempts: 0, unhealthy: false, injectedTriggers: 0, lastActionCount },
       })
   }
+
+  async recordRecreate(scheduleId: string): Promise<void> {
+    await this.dbClient.db
+      .insert(watchdogHealStateTable)
+      .values({ scheduleId, recreations: 1, lastRecreatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: watchdogHealStateTable.scheduleId,
+        set: {
+          recreations: sql`${watchdogHealStateTable.recreations} + 1`,
+          lastRecreatedAt: new Date(),
+        },
+      })
+  }
 }

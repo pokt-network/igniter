@@ -16,7 +16,7 @@ The watchdog runs a self-rescheduling tick loop (`SCHEDULE_WATCHDOG_TICK`, defau
 
 1. Calls `handle.describe()` against Temporal, bounded by a 5s deadline so a hung RPC can never stall the loop.
 2. If the call fails with a transient error (deadline exceeded, unavailable, timeout — or gRPC codes `DEADLINE_EXCEEDED`/`RESOURCE_EXHAUSTED`/`ABORTED`/`INTERNAL`/`UNAVAILABLE`), the tick is skipped for that schedule. A flaky RPC never counts as staleness.
-3. If the schedule is `NOT_FOUND`: in **enforce** mode it's recreated immediately and the heal state is rebased (`resetOnRecreate`) — a new schedule's `numActionsTaken` starts at 0, so the watchdog's own bookkeeping has to start over too. In **observe** mode nothing is created; the row is just marked `observedUnhealthy`.
+3. If the schedule is `NOT_FOUND`: in **enforce** mode it's recreated immediately and the heal state is rebased (`resetOnRecreate`) — a new schedule's `numActionsTaken` starts at 0, so the watchdog's own bookkeeping has to start over too. The recreate action itself is counted in `recreations` and timestamped in `last_recreated_at`, written *before* the schedule is actually recreated (write-ahead, same invariant as the rest of the table) — otherwise this action was only visible as a pod log line, with the admin UI showing an unremarkable `healthy`/`attempts=0` schedule. `resetOnRecreate` does not touch these two columns, so the recreation count survives the ladder reset that follows. In **observe** mode nothing is created; the row is just marked `observedUnhealthy`.
 4. Otherwise it computes a liveness **verdict** from only verified Temporal SDK fields (`state.paused`, `info.runningActions`, `info.recentActions[].takenAt`, `info.createdAt`, `info.numActionsTaken`) — never inferred or coerced:
    - **`paused`** — always respected. The watchdog never unpauses a schedule an operator paused on purpose.
    - **`healthy`** — a run is currently in flight, or the schedule is within its **min-age guard** (`SCHEDULE_WATCHDOG_MIN_AGE`, default 3m) since creation, or its last firing is still within the staleness grace window.
@@ -74,10 +74,14 @@ Each app persists watchdog state in its own `watchdog_heal_state` table (Provide
 | `last_action_count` | Baseline snapshot of Temporal's `numActionsTaken`, used to detect autonomous fires. |
 | `unhealthy` | Breaker tripped — `attempts` reached `SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS`. |
 | `observed_unhealthy` | Set in `observe` mode (or on `NOT_FOUND` in `observe` mode) instead of acting. |
+| `recreations` | Count of `NOT_FOUND` → recreate actions taken by the enforce-mode watchdog. Written *before* the recreate call (write-ahead). Not touched by `resetOnRecreate`. |
+| `last_recreated_at` | Timestamp of the most recent recreate action. |
 
-The write-ahead ordering — persisting a counter before performing the effect it counts — is the core safety property: `attempts` and `injected_triggers` can only ever be equal to or greater than what actually happened, never less, even across a crash mid-action.
+The write-ahead ordering — persisting a counter before performing the effect it counts — is the core safety property: `attempts`, `injected_triggers`, and `recreations` can only ever be equal to or greater than what actually happened, never less, even across a crash mid-action.
 
-The admin **Workflows UI** surfaces this state directly. `mapScheduleToHealth()` (in `workflowView.ts`) combines a Temporal `ScheduleSummary` with its `watchdog_heal_state` row into a `ScheduleHealthRow`, using this precedence: `paused` wins outright; otherwise `unhealthy` if either the breaker tripped or the state was observed-unhealthy; otherwise `stale` if `attempts > 0`; otherwise `healthy`. The Schedules tab renders this as a health badge per schedule, a **Heal attempts** column, and an expandable panel of recent fires with lag and run status. See [Provider Workflows](../provider/workflows.md) and [Middleman Workflows](../middleman/workflows.md) for the full UI walkthrough.
+A recreation does not by itself affect the derived health state — a freshly recreated schedule with no other heal history reads as `healthy`, since `recreations` isn't part of `mapScheduleToHealth()`'s precedence. It's purely an action counter surfaced for observability.
+
+The admin **Workflows UI** surfaces this state directly. `mapScheduleToHealth()` (in `workflowView.ts`) combines a Temporal `ScheduleSummary` with its `watchdog_heal_state` row into a `ScheduleHealthRow`, using this precedence: `paused` wins outright; otherwise `unhealthy` if either the breaker tripped or the state was observed-unhealthy; otherwise `stale` if `attempts > 0`; otherwise `healthy`. The Schedules tab renders this as a health badge per schedule, a **Heal attempts** column, a **Recreated** column (count + last-recreated tooltip), and an expandable panel of recent fires with lag and run status. See [Provider Workflows](../provider/workflows.md) and [Middleman Workflows](../middleman/workflows.md) for the full UI walkthrough.
 
 ---
 

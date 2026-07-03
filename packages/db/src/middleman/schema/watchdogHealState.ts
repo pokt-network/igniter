@@ -18,6 +18,8 @@ export const watchdogHealStateTable = pgTable('watchdog_heal_state', {
   lastActionCount: integer('last_action_count').notNull().default(0),
   unhealthy: boolean('unhealthy').notNull().default(false),
   observedUnhealthy: boolean('observed_unhealthy').notNull().default(false),
+  recreations: integer('recreations').notNull().default(0),
+  lastRecreatedAt: timestamp('last_recreated_at'),
 })
 
 export type WatchdogHealState = typeof watchdogHealStateTable.$inferSelect

@@ -38,6 +38,8 @@ export interface HealState {
   lastActionCount: number
   unhealthy: boolean
   observedUnhealthy: boolean
+  recreations: number
+  lastRecreatedAt: Date | null
 }
 
 export interface WatchdogConfig {
@@ -67,6 +69,7 @@ export interface WatchdogStateStore {
   setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void>
   resetOnRecreate(scheduleId: string): Promise<void>
   resetLadder(scheduleId: string, lastActionCount: number): Promise<void>
+  recordRecreate(scheduleId: string): Promise<void>
 }
 
 export function defaultHealState(scheduleId: string): HealState {
@@ -78,6 +81,8 @@ export function defaultHealState(scheduleId: string): HealState {
     lastActionCount: 0,
     unhealthy: false,
     observedUnhealthy: false,
+    recreations: 0,
+    lastRecreatedAt: null,
   }
 }
 
@@ -394,6 +399,7 @@ export class ScheduleWatchdog {
       if (isNotFound(e)) {
         if (config.mode === 'enforce') {
           logger.warn({ scheduleId: entry.scheduleId }, 'Schedule NOT_FOUND; recreating')
+          await store.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
           await ensureSchedule(client, entry, logger)
           await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
         } else {

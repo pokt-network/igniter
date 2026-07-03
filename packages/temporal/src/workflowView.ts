@@ -57,6 +57,8 @@ export interface WatchdogHealState {
   lastActionCount: number
   unhealthy: boolean
   observedUnhealthy: boolean
+  recreations: number
+  lastRecreatedAt: string | null
 }
 
 export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy'
@@ -81,6 +83,8 @@ export interface ScheduleHealthRow {
   note: string | null
   /** Most recent actions started, sorted oldest to newest (as the SDK returns them). */
   recentFires: ScheduleFireView[]
+  recreations: number
+  lastRecreatedAt: string | null
 }
 
 export function mapWorkflowInfoToView(
@@ -225,5 +229,7 @@ export function mapScheduleToHealth(
     observedUnhealthy: heal?.observedUnhealthy ?? false,
     note: summary.state.note ?? null,
     recentFires,
+    recreations: heal?.recreations ?? 0,
+    lastRecreatedAt: heal?.lastRecreatedAt ?? null,
   }
 }

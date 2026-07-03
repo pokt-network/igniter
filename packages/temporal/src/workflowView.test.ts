@@ -159,6 +159,8 @@ describe('mapScheduleToHealth', () => {
     lastActionCount: 0,
     unhealthy: false,
     observedUnhealthy: false,
+    recreations: 0,
+    lastRecreatedAt: null,
     ...over,
   })
 
@@ -187,6 +189,14 @@ describe('mapScheduleToHealth', () => {
     expect(row.state).toBe('healthy')
     expect(row.attempts).toBe(0)
     expect(row.unhealthy).toBe(false)
+    expect(row.recreations).toBe(0)
+    expect(row.lastRecreatedAt).toBeNull()
+  })
+
+  it('passes recreations and lastRecreatedAt through from the heal row', () => {
+    const row = mapScheduleToHealth(makeSummary(), heal({ recreations: 3, lastRecreatedAt: '2026-07-02T10:00:00.000Z' }))
+    expect(row.recreations).toBe(3)
+    expect(row.lastRecreatedAt).toBe('2026-07-02T10:00:00.000Z')
   })
 
   it('maps recentActions to fire views with lag, most recent last', () => {

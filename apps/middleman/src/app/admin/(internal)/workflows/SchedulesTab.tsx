@@ -63,6 +63,7 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
             <TableHead>Last fire</TableHead>
             <TableHead>Next fire</TableHead>
             <TableHead className="text-center">Heal attempts</TableHead>
+            <TableHead className="text-center">Recreated</TableHead>
             <TableHead>Note</TableHead>
             <TableHead />
           </TableRow>
@@ -96,6 +97,12 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
                 <TableCell className={`text-center font-mono ${row.attempts > 0 ? 'text-amber-400' : ''}`}>
                   {row.attempts}
                 </TableCell>
+                <TableCell
+                  className={`text-center font-mono ${row.recreations > 0 ? 'text-amber-400' : ''}`}
+                  title={row.lastRecreatedAt ? formatDateTime(row.lastRecreatedAt) : undefined}
+                >
+                  {row.recreations}
+                </TableCell>
                 <TableCell className="max-w-56 truncate text-xs text-text-secondary" title={row.note ?? undefined}>
                   {row.note ?? '-'}
                 </TableCell>
@@ -111,7 +118,7 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
               </TableRow>
               {expanded[row.scheduleId] && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="px-4 pb-4 pt-1">
+                  <TableCell colSpan={9} className="px-4 pb-4 pt-1">
                     <RecentFires scheduleId={row.scheduleId} fires={row.recentFires} />
                   </TableCell>
                 </TableRow>

@@ -99,6 +99,7 @@ A read-only view of Temporal Schedule health, sourced from the schedule list plu
 | **Last fire** | Relative time of the most recent action (hover for the absolute timestamp). |
 | **Next fire** | Relative time of the next scheduled action. |
 | **Heal attempts** | Number of times the watchdog has attempted to heal this schedule. Highlighted amber when greater than 0. |
+| **Recreated** | Number of times the watchdog recreated this schedule after finding it `NOT_FOUND`. Highlighted amber when greater than 0, hover for the last recreation timestamp. |
 | **Note** | The schedule's Temporal-native note field, if set (truncated with a tooltip for the full text). |
 | *(view runs)* | Cross-filters the Workflows tab to this schedule's runs (see [Filtering by Schedule](#filtering-by-schedule)). |
 

@@ -77,6 +77,7 @@ This tab is read-only: it surfaces what the watchdog has already observed and ac
 | **Last fire** | Relative time since the schedule last triggered a workflow, hover for the exact timestamp. |
 | **Next fire** | Relative time until the schedule's next scheduled trigger. |
 | **Heal attempts** | Number of times the watchdog has attempted to recover this schedule. Highlighted when greater than zero. |
+| **Recreated** | Number of times the watchdog recreated this schedule after finding it `NOT_FOUND`. Highlighted when greater than zero, hover for the last recreation timestamp. |
 | **Note** | Any operator or system note attached to the schedule, truncated with a tooltip for the full text. |
 | *(View runs)* | Jumps to the Workflows tab, filtered to workflows started by this schedule. |
 

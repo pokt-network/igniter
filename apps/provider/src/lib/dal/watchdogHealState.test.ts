@@ -20,6 +20,8 @@ describe('listWatchdogHealState (provider)', () => {
         lastActionCount: 9,
         unhealthy: true,
         observed_unhealthy: false,
+        recreations: 2,
+        lastRecreatedAt: '2026-07-01T00:05:00.000Z',
       },
     ])
     const rows = await listWatchdogHealState()
@@ -32,6 +34,8 @@ describe('listWatchdogHealState (provider)', () => {
         lastActionCount: 9,
         unhealthy: true,
         observedUnhealthy: false,
+        recreations: 2,
+        lastRecreatedAt: '2026-07-01T00:05:00.000Z',
       },
     ])
   })
@@ -41,6 +45,13 @@ describe('listWatchdogHealState (provider)', () => {
     const rows = await listWatchdogHealState()
     expect(rows[0].scheduleId).toBe('s')
     expect(rows[0].attempts).toBe(0)
+  })
+
+  it('defaults recreations to 0 and lastRecreatedAt to null when absent', async () => {
+    execute.mockResolvedValue([{ scheduleId: 's', attempts: 0, unhealthy: false }])
+    const rows = await listWatchdogHealState()
+    expect(rows[0].recreations).toBe(0)
+    expect(rows[0].lastRecreatedAt).toBeNull()
   })
 
   it('degrades to [] when the table is absent (Part A not merged)', async () => {

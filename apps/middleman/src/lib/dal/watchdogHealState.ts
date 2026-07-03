@@ -18,6 +18,7 @@ export async function listWatchdogHealState(): Promise<WatchdogHealState[]> {
 
     return rows.map((r) => {
       const lastHeal = pick(r, 'lastHealTriggerAt', 'lasthealtriggerat', 'last_heal_trigger_at')
+      const lastRecreated = pick(r, 'lastRecreatedAt', 'lastrecreatedat', 'last_recreated_at')
       return {
         scheduleId: String(pick(r, 'scheduleId', 'scheduleid', 'schedule_id') ?? ''),
         attempts: Number(pick(r, 'attempts') ?? 0),
@@ -26,6 +27,8 @@ export async function listWatchdogHealState(): Promise<WatchdogHealState[]> {
         lastActionCount: Number(pick(r, 'lastActionCount', 'lastactioncount', 'last_action_count') ?? 0),
         unhealthy: Boolean(pick(r, 'unhealthy')),
         observedUnhealthy: Boolean(pick(r, 'observedUnhealthy', 'observed_unhealthy', 'observedunhealthy')),
+        recreations: Number(pick(r, 'recreations') ?? 0),
+        lastRecreatedAt: lastRecreated ? new Date(lastRecreated as string | number | Date).toISOString() : null,
       }
     })
   } catch {

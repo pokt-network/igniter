@@ -1,5 +1,5 @@
 import Watchdog from '@/lib/dal/watchdog'
-import { watchdogHealStateTable } from '@igniter/db/provider/schema'
+import { watchdogHealStateTable } from '@igniter/db/middleman/schema'
 
 type Calls = {
   insertTable?: unknown

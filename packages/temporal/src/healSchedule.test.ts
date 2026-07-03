@@ -50,6 +50,7 @@ function makeStore(over: Partial<HealState> = {}) {
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
+    recordRecreate: jest.fn(),
   }
   return { store, order }
 }

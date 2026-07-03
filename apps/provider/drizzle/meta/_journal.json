@@ -169,6 +169,13 @@
       "when": 1782947927783,
       "tag": "0023_spotty_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783101185544,
+      "tag": "0024_abandoned_elektra",
+      "breakpoints": true
     }
   ]
 }
