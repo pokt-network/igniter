@@ -99,6 +99,8 @@ Both apps use Temporal for long-running operations, each in its own namespace an
 
 Middleman workflows handle the full staking lifecycle — signing transactions, broadcasting to the blockchain, waiting for confirmation, and notifying Provider of the result.
 
+Both workers also run a **schedule watchdog** (`@repo/temporal`) alongside their normal Temporal worker: a self-heal loop that periodically checks whether every schedule it owns is still firing on time, and revives ones that have gone silent (a stuck task queue, a wedged server) through a bounded, non-destructive heal ladder. It can run in `observe` (log-only) or `enforce` mode, and its state — attempts, health — is surfaced in each app's admin Workflows UI. See [Schedule Watchdog](./reference/schedule-watchdog.md) for details.
+
 ---
 
 ## Monorepo Packages

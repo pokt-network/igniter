@@ -137,3 +137,4 @@ Detailed feature documentation for each admin area.
 | [Address Groups](../../docs/reference/provider/address-groups.md) | Organize miners into groups with service and revenue share configuration |
 | [Key Management](../../docs/reference/provider/key-management.md) | Import, track, and export supplier keys through their lifecycle          |
 | [Delegators](../../docs/reference/provider/delegators.md)         | Enable delegators and manage revenue sharing, including CDN import       |
+| [Workflows](../../docs/reference/provider/workflows.md)           | Inspect running/recent Temporal workflows and schedule health            |
