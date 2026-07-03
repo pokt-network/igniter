@@ -114,19 +114,26 @@ export function WorkflowDetailClient({
 
   return (
     <div className="space-y-6">
-      <BackLink onClick={goBack} />
-
-      {/* Header */}
-      <div className="rounded-xl border border-border-primary p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-lg font-semibold">{detail.type}</h1>
-          <Badge variant={statusBadgeVariant(detail.status)}>{detail.status}</Badge>
-          {refreshFailing && (
-            <span className="text-xs text-amber-400">
-              last updated {formatRelative(new Date(query.dataUpdatedAt).toISOString())} — refresh failing
-            </span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
+      {/* Page heading */}
+      <div className="space-y-3">
+        <BackLink onClick={goBack} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-xl font-semibold">{detail.type}</h1>
+              <Badge variant={statusBadgeVariant(detail.status)}>{detail.status}</Badge>
+              {refreshFailing && (
+                <span className="text-xs text-amber-400">
+                  last updated {formatRelative(new Date(query.dataUpdatedAt).toISOString())} — refresh failing
+                </span>
+              )}
+            </div>
+            <p className="mt-1 flex items-center gap-1.5 break-all font-mono text-xs text-text-secondary">
+              {detail.workflowId}
+              <CopyButton value={detail.workflowId} />
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => query.refetch()}>Refresh</Button>
             <Button size="sm" variant="outline" onClick={downloadHistory}>Download history (JSON)</Button>
             {detail.status === 'RUNNING' && (
@@ -136,38 +143,41 @@ export function WorkflowDetailClient({
             )}
           </div>
         </div>
-        <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
-          <MetaRow label="Workflow ID" mono copy value={detail.workflowId} />
+      </div>
+
+      {/* Details card */}
+      <div className="rounded-xl border border-border-primary p-4">
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 md:grid-cols-3 xl:grid-cols-4">
           <MetaRow label="Run ID" mono copy value={detail.runId} />
           <MetaRow label="Task queue" value={detail.taskQueue} />
-          <MetaRow label="History length" value={String(detail.historyLength)} />
           <MetaRow label="Started" value={formatDateTime(detail.startTime)} />
           <MetaRow label="Closed" value={detail.closeTime ? formatDateTime(detail.closeTime) : '—'} />
           <MetaRow label="Elapsed" value={formatElapsed(detail.elapsedMs)} />
+          <MetaRow label="History length" value={String(detail.historyLength)} />
           {detail.scheduledById && (
             <MetaRow label="Scheduled by">
-              <Link className="font-mono text-xs underline-offset-2 hover:underline" href="/admin/workflows?tab=schedules">
+              <Link className="break-all font-mono text-xs underline-offset-2 hover:underline" href="/admin/workflows?tab=schedules">
                 {detail.scheduledById}
               </Link>
             </MetaRow>
           )}
           {detail.parent && (
             <MetaRow label="Parent">
-              <Link className="font-mono text-xs underline-offset-2 hover:underline" href={detailHref(detail.parent.workflowId, detail.parent.runId)}>
+              <Link className="break-all font-mono text-xs underline-offset-2 hover:underline" href={detailHref(detail.parent.workflowId, detail.parent.runId)}>
                 {detail.parent.workflowId}
               </Link>
             </MetaRow>
           )}
           {detail.nextRunId && (
             <MetaRow label="Next run">
-              <Link className="font-mono text-xs underline-offset-2 hover:underline" href={detailHref(detail.workflowId, detail.nextRunId)}>
+              <Link className="break-all font-mono text-xs underline-offset-2 hover:underline" href={detailHref(detail.workflowId, detail.nextRunId)}>
                 {detail.nextRunId}
               </Link>
             </MetaRow>
           )}
         </dl>
         {detail.searchAttributes && (
-          <div className="mt-3">
+          <div className="mt-4">
             <PayloadBlock label="Search attributes" text={detail.searchAttributes.text} collapsedLines={4} />
           </div>
         )}
@@ -226,7 +236,7 @@ export function WorkflowDetailClient({
       {!detail.historyError && (
         <>
           {/* Input / Output */}
-          <section className="space-y-3">
+          <section className="space-y-3 rounded-xl border border-border-primary p-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">Input / Output</h2>
             {detail.input
               ? <PayloadBlock label="Input" text={detail.input.text} truncated={detail.input.truncated} decodeError={detail.input.decodeError} defaultExpanded />
@@ -239,7 +249,7 @@ export function WorkflowDetailClient({
           </section>
 
           {/* Activities */}
-          <section className="space-y-3">
+          <section className="space-y-3 rounded-xl border border-border-primary p-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Activities ({detail.activities.length})
             </h2>
@@ -252,7 +262,7 @@ export function WorkflowDetailClient({
 
           {/* Children */}
           {detail.children.length > 0 && (
-            <section className="space-y-3">
+            <section className="space-y-3 rounded-xl border border-border-primary p-4">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
                 Child workflows ({detail.children.length})
               </h2>
@@ -324,9 +334,10 @@ function BackLink({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="text-sm text-text-secondary hover:text-text-primary"
+      className="inline-flex items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
     >
-      ← Workflows
+      <span aria-hidden="true">←</span>
+      Back to Workflows
     </button>
   )
 }
@@ -345,13 +356,13 @@ function MetaRow({
   children?: React.ReactNode
 }) {
   return (
-    <>
-      <dt className="text-text-secondary">{label}</dt>
-      <dd className={cn('flex items-center gap-1.5', mono && 'font-mono text-xs break-all')}>
+    <div className="min-w-0">
+      <dt className="text-xs uppercase tracking-wide text-text-tertiary">{label}</dt>
+      <dd className={cn('mt-0.5 flex items-center gap-1.5 text-sm', mono && 'font-mono text-xs break-all')}>
         {children ?? value}
         {copy && value && <CopyButton value={value} />}
       </dd>
-    </>
+    </div>
   )
 }
 

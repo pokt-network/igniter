@@ -1,5 +1,7 @@
 import { Suspense } from 'react'
 
+import PageContent from '@igniter/ui/components/PageContent'
+
 import { WorkflowDetailClient } from './WorkflowDetailClient'
 
 export const dynamic = 'force-dynamic'
@@ -24,8 +26,10 @@ export default async function WorkflowDetailPage({
   const { workflowId } = await params
   const { runId } = await searchParams
   return (
-    <Suspense>
-      <WorkflowDetailClient workflowId={safeDecode(workflowId)} runId={runId} />
-    </Suspense>
+    <PageContent>
+      <Suspense>
+        <WorkflowDetailClient workflowId={safeDecode(workflowId)} runId={runId} />
+      </Suspense>
+    </PageContent>
   )
 }

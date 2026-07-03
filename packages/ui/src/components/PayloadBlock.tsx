@@ -82,8 +82,8 @@ export function PayloadBlock({
       </div>
       <pre
         className={cn(
-          'max-w-full overflow-x-auto whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs',
-          variant === 'error' ? 'text-red-300' : 'text-text-primary',
+          'max-w-full overflow-x-auto whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs leading-relaxed',
+          variant === 'error' ? 'bg-red-500/5 text-red-300' : 'bg-(--input-bg) text-text-primary',
         )}
       >
         {visibleText}
