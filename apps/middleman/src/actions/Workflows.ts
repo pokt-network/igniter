@@ -38,11 +38,17 @@ export async function GetScheduleHealth(): Promise<ActionResult<ScheduleHealthRo
     const out: ScheduleHealthRow[] = []
     for await (const summary of client.schedule.list()) {
       const heal = healById.get(summary.scheduleId) ?? null
-      // describe() (not the list summary) carries runningActions/createdAt/
-      // numActionsTaken, which scheduleLiveness needs to judge staleness without
-      // false-flagging an in-flight SKIP-overlap run (M6).
-      const desc = await client.schedule.getHandle(summary.scheduleId).describe()
-      out.push(mapScheduleToHealth(desc, heal, scheduleLiveness(desc, heal)))
+      try {
+        // describe() (not the list summary) carries runningActions/createdAt/
+        // numActionsTaken, which scheduleLiveness needs to judge staleness without
+        // false-flagging an in-flight SKIP-overlap run (M6).
+        const desc = await client.schedule.getHandle(summary.scheduleId).describe()
+        out.push(mapScheduleToHealth(desc, heal, scheduleLiveness(desc, heal)))
+      } catch {
+        // One schedule failing (e.g. deleted between list() and describe()) must not
+        // fail the whole panel — degrade this row to the summary + counter liveness (N2).
+        out.push(mapScheduleToHealth(summary, heal))
+      }
     }
     return out
   })
