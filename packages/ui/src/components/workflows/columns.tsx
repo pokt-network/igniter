@@ -105,7 +105,7 @@ export const columns: Array<ColumnDef<WorkflowView> & CsvColumnDef<WorkflowView>
         <Link
           href={detailHref(row.original.workflowId, row.original.runId)}
           title={row.original.workflowId}
-          className="block max-w-[480px] truncate font-mono text-xs text-text-primary underline-offset-2 hover:underline"
+          className="block max-w-[200px] truncate font-mono text-xs text-text-primary underline-offset-2 hover:underline lg:max-w-[300px]"
         >
           {row.original.workflowId}
         </Link>
