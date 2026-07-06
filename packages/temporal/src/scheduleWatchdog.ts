@@ -8,7 +8,6 @@ import {
   type ScheduleOptions,
   type ScheduleUpdateOptions,
 } from '@temporalio/client'
-import type { Duration } from '@temporalio/common'
 import { parseDuration } from '@/duration'
 import type { TemporalClient } from '@/types'
 
@@ -65,6 +64,8 @@ export interface WatchdogStateStore {
   getState(scheduleId: string): Promise<HealState | undefined>
   bumpUnstuck(scheduleId: string): Promise<HealState>
   bumpInjectedTrigger(scheduleId: string, at: Date): Promise<HealState>
+  /** Undo one write-ahead bumpInjectedTrigger when the compensating trigger() failed (M7). */
+  compensateInjectedTrigger(scheduleId: string): Promise<void>
   setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void>
   setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void>
   resetOnRecreate(scheduleId: string): Promise<void>
@@ -189,7 +190,14 @@ export function reArmOptions(prev: ScheduleUpdateOptions, entry: WatchdogEntry):
   return {
     ...prev,
     action: { ...prev.action, args: entry.args },
-    spec: { intervals: [{ every: entry.interval as Duration }] },
+    // update() replaces the WHOLE spec, so spread prev.spec to preserve any
+    // operator-set jitter/calendars/timezone/skip; only re-assert the interval
+    // (and its offset). Use the validated intervalMs (a Duration in ms) — never
+    // the raw override string, which may disagree with intervalMs (M3/M10).
+    spec: {
+      ...prev.spec,
+      intervals: [{ every: entry.intervalMs, offset: prev.spec?.intervals?.[0]?.offset }],
+    },
     policies: { overlap: ScheduleOverlapPolicy.SKIP },
   }
 }
@@ -203,7 +211,7 @@ function createOptions(entry: WatchdogEntry): ScheduleOptions {
       taskQueue: entry.taskQueue,
       args: entry.args,
     },
-    spec: { intervals: [{ every: entry.interval as Duration }] },
+    spec: { intervals: [{ every: entry.intervalMs }] },
     policies: { overlap: ScheduleOverlapPolicy.SKIP },
   }
 }
@@ -215,18 +223,8 @@ function createOptions(entry: WatchdogEntry): ScheduleOptions {
  */
 export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger): Promise<void> {
   const handle = client.schedule.getHandle(entry.scheduleId)
-  try {
-    const desc = await handle.describe()
-    const currentArgs = (desc.action as { args?: unknown[] }).args ?? []
-    const currentEvery = desc.spec.intervals?.[0]?.every
-    const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(entry.args)
-    const intervalChanged = currentEvery !== entry.intervalMs
-    if (argsChanged || intervalChanged) {
-      logger.warn({ scheduleId: entry.scheduleId, argsChanged, intervalChanged }, 'Schedule config drift; updating')
-      await handle.update((prev) => reArmOptions(prev, entry))
-    }
-  } catch (e) {
-    if (!isNotFound(e)) throw e
+
+  const createFresh = async () => {
     try {
       logger.warn({ scheduleId: entry.scheduleId }, 'Schedule not found; creating')
       await client.schedule.create(createOptions(entry))
@@ -236,6 +234,47 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
         return
       }
       throw createErr
+    }
+  }
+
+  let desc
+  try {
+    desc = await handle.describe()
+  } catch (e) {
+    if (isNotFound(e)) {
+      await createFresh()
+      return
+    }
+    // A transient RPC blip must NOT abort bootstrap — leave reconciliation for
+    // the next bootstrap/tick instead of crash-looping the worker (M3/#229).
+    if (isTransient(e)) {
+      logger.warn({ err: e, scheduleId: entry.scheduleId }, 'describe() transient during ensureSchedule; skipping reconcile this round')
+      return
+    }
+    throw e
+  }
+
+  const currentArgs = (desc.action as { args?: unknown[] }).args ?? []
+  const currentEvery = desc.spec.intervals?.[0]?.every
+  const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(entry.args)
+  const intervalChanged = currentEvery !== entry.intervalMs
+  if (argsChanged || intervalChanged) {
+    logger.warn({ scheduleId: entry.scheduleId, argsChanged, intervalChanged }, 'Schedule config drift; updating')
+    try {
+      await handle.update((prev) => reArmOptions(prev, entry))
+    } catch (e) {
+      // Schedule deleted between describe() and update() (race) -> create it fresh.
+      if (isNotFound(e)) {
+        await createFresh()
+        return
+      }
+      // A transient failure to apply drift is not fatal — the schedule keeps
+      // running with its prior (valid) config until the next reconcile (#229).
+      if (isTransient(e)) {
+        logger.warn({ err: e, scheduleId: entry.scheduleId }, 'drift update() transient; leaving drift for next reconcile')
+        return
+      }
+      throw e
     }
   }
 }
@@ -279,7 +318,13 @@ export async function healSchedule(
   if (n < config.recreateAfter) {
     try {
       await handle.update((prev) => reArmOptions(prev, entry))
-      logger.info({ scheduleId: entry.scheduleId, attempt: n }, 'Heal: re-armed via update()')
+      // A successful update() does NOT prove the scheduler resumed firing. Count
+      // every non-transient heal attempt toward the ladder so that CONTINUED
+      // staleness escalates to recreate + the maxHealAttempts breaker; the ladder
+      // resets only when an autonomous fire is later observed (M1/#279).
+      const row = await store.bumpUnstuck(entry.scheduleId)
+      attemptsAfter = row.unstucks
+      logger.info({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: re-armed via update() (attempt consumed)')
     } catch (e) {
       if (isTransient(e)) {
         logger.warn({ err: e, scheduleId: entry.scheduleId }, 'Heal update() transient; no attempt consumed (B4)')
@@ -292,7 +337,15 @@ export async function healSchedule(
   } else {
     await ensureSchedule(client, entry, logger) // create only if NOT_FOUND (D4)
     await store.bumpInjectedTrigger(entry.scheduleId, now) // WRITE-AHEAD before the effect (D3)
-    await handle.trigger() // one compensating run
+    try {
+      await handle.trigger() // one compensating run
+    } catch (e) {
+      // The injected run never happened — undo the write-ahead, else the inflated
+      // injectedTriggers makes hasAutonomousFire demand an extra real fire before
+      // the ladder can reset, keeping a recovered schedule judged stale (M7/#294).
+      await store.compensateInjectedTrigger(entry.scheduleId)
+      throw e
+    }
     const row = await store.bumpUnstuck(entry.scheduleId)
     attemptsAfter = row.unstucks
     logger.warn({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: reconciled + injected one compensating trigger')
@@ -306,14 +359,23 @@ export async function healSchedule(
   return { nextBackoffMs: Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs) }
 }
 
-/** Log-only process safety handlers (D7): never exit on stray rejections. */
+/**
+ * Process safety handlers: log the fatal error with context, then exit non-zero
+ * so k8s restarts the pod cleanly. The watchdog already catches its own tick and
+ * per-schedule errors (scheduleNext/tickOne), so anything reaching HERE is a
+ * genuinely-uncaught fault — swallowing it would leave a zombie worker
+ * Running/Ready with stalled workflow tasks and no restart (M2). Install ONLY
+ * when the watchdog is enabled (worker gates the call).
+ */
 export function installProcessSafetyHandlers(logger: Logger): void {
-  process.on('unhandledRejection', (reason) =>
-    logger.error({ reason }, 'Unhandled promise rejection (watchdog safety handler; not exiting)'),
-  )
-  process.on('uncaughtException', (err) =>
-    logger.error({ err }, 'Uncaught exception (watchdog safety handler; not exiting)'),
-  )
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ reason }, 'Unhandled promise rejection; exiting for a clean restart')
+    process.exit(1)
+  })
+  process.on('uncaughtException', (err) => {
+    logger.error({ err }, 'Uncaught exception; exiting for a clean restart')
+    process.exit(1)
+  })
 }
 
 export interface ScheduleWatchdogDeps {
@@ -420,6 +482,13 @@ export class ScheduleWatchdog {
         logger.warn({ scheduleId: entry.scheduleId }, 'Liveness unknown (skew/missing ts); skipping')
         return
       case 'healthy':
+        // A healthy verdict means the schedule is live again (reference within
+        // grace). Clear the one-way observe-mode latch so it can't stay red
+        // forever after recovery — nothing else ever sets it false (M5/#425).
+        if (state.observedUnhealthy) {
+          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing observed_unhealthy latch')
+          await store.setObservedUnhealthy(entry.scheduleId, false)
+        }
         if ((state.unstucks > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
           logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
           await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)

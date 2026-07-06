@@ -68,8 +68,38 @@ describe('ensureSchedule', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
-  it('re-throws a non-NOT_FOUND describe() error', async () => {
-    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('boom'), { code: 13 })), update: jest.fn() }
+  it('re-throws a definitive non-NOT_FOUND describe() error', async () => {
+    // code 7 = PERMISSION_DENIED: a real misconfiguration that must crash-loop, not be swallowed.
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('boom'), { code: 7 })), update: jest.fn() }
     await expect(ensureSchedule(fakeClient(handle), entry, logger)).rejects.toThrow('boom')
+  })
+
+  it('tolerates a transient describe() error (no crash-loop, #229)', async () => {
+    // code 14 = UNAVAILABLE: a transient RPC blip must not abort bootstrap.
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('unavailable'), { code: 14 })), update: jest.fn() }
+    await expect(ensureSchedule(fakeClient(handle), entry, logger)).resolves.toBeUndefined()
+  })
+
+  it('tolerates a transient update() failure during drift (#229)', async () => {
+    const update = jest.fn().mockRejectedValue(Object.assign(new Error('unavailable'), { code: 14 }))
+    const handle = {
+      describe: jest.fn().mockResolvedValue({ action: { args: [] }, spec: { intervals: [{ every: 60_000 }] } }),
+      update,
+    }
+    await expect(ensureSchedule(fakeClient(handle), entry, logger)).resolves.toBeUndefined()
+    expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates fresh when the schedule is deleted between describe() and drift update() (race)', async () => {
+    const create = jest.fn().mockResolvedValue(undefined)
+    const update = jest.fn().mockRejectedValue(notFound())
+    const handle = {
+      describe: jest.fn().mockResolvedValue({ action: { args: [] }, spec: { intervals: [{ every: 60_000 }] } }),
+      update,
+    }
+    await ensureSchedule(fakeClient(handle, create), entry, logger)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0]).toMatchObject({ scheduleId: 'GovernanceSync-scheduled' })
   })
 })

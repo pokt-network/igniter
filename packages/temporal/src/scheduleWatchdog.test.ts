@@ -29,6 +29,7 @@ function makeStore(state?: HealState): WatchdogStateStore {
     getState: jest.fn(async () => state),
     bumpUnstuck: jest.fn(async (id) => ({ ...defaultHealState(id), unstucks: 1 })),
     bumpInjectedTrigger: jest.fn(async (id) => ({ ...defaultHealState(id), injectedTriggers: 1 })),
+    compensateInjectedTrigger: jest.fn(),
     setUnhealthy: jest.fn(),
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),

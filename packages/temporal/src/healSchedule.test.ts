@@ -46,6 +46,7 @@ function makeStore(over: Partial<HealState> = {}) {
       order.push('bumpInjectedTrigger')
       return { ...defaultHealState(id), ...over, injectedTriggers: (over.injectedTriggers ?? 0) + 1 }
     }),
+    compensateInjectedTrigger: jest.fn(async () => { order.push('compensateInjectedTrigger') }),
     setUnhealthy: jest.fn(async () => { order.push('setUnhealthy') }),
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),
@@ -76,12 +77,14 @@ function workingHandleClient() {
 }
 
 describe('healSchedule ladder', () => {
-  it('attempts < recreateAfter: re-arms via update()', async () => {
+  it('attempts < recreateAfter: re-arms via update() AND consumes an attempt (M1/#279)', async () => {
+    // A successful update() does not prove the scheduler resumed firing, so it must
+    // still advance the ladder — otherwise continued staleness never escalates.
     const update = jest.fn().mockResolvedValue(undefined)
     const { store } = makeStore({ unstucks: 0 })
     await healSchedule({ update } as never, {} as never, entry, defaultHealState(entry.scheduleId), store, config, logger, NOW)
     expect(update).toHaveBeenCalledTimes(1)
-    expect(store.bumpUnstuck).not.toHaveBeenCalled()
+    expect(store.bumpUnstuck).toHaveBeenCalledTimes(1)
   })
 
   it('B4: update() transient failure does NOT consume an attempt', async () => {

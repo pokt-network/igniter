@@ -152,15 +152,17 @@ export async function setupTemporalWorker() {
 
   await bootstrap(logger)
 
-  installProcessSafetyHandlers(logger)
-
   const wdConfig = parseWatchdogConfig(logger)
+  const watchdogEntries = wdConfig.enabled ? buildWatchdogEntries(wdConfig) : []
   let watchdog: ScheduleWatchdog | undefined
   if (wdConfig.enabled) {
+    // Fail-fast handlers belong WITH the watchdog: install only when it runs, so a
+    // disabled watchdog leaves Node's default crash-on-fatal behavior intact (M2).
+    installProcessSafetyHandlers(logger)
     const dedicated = await createDedicatedClient(logger)
     watchdog = new ScheduleWatchdog({
       client: dedicated,
-      entries: buildWatchdogEntries(wdConfig),
+      entries: watchdogEntries,
       store: dal.watchdog,
       config: wdConfig,
       logger: logger.child({ context: 'ScheduleWatchdog' }),
@@ -170,13 +172,20 @@ export async function setupTemporalWorker() {
     logger.warn('Schedule watchdog disabled (SCHEDULE_WATCHDOG_ENABLED=false)')
   }
 
+  // The outer grace timer must cover the worker's own activity drain
+  // (shutdownGraceTime) PLUS watchdog.stop() awaiting an in-flight tick (each
+  // describe bounded by describeDeadlineMs) PLUS disconnect — otherwise a tick
+  // stalled on describe() trips process.exit(1) and aborts the clean drain (#175).
+  const outerGraceMs =
+    shutdownGraceTime + (watchdog ? watchdogEntries.length * wdConfig.describeDeadlineMs + 2500 : 0)
+
   registerGracefulShutdown(
     async () => {
       if (watchdog) await watchdog.stop()
       await disconnect()
     },
     logger,
-    shutdownGraceTime,
+    outerGraceMs,
   )
 
   await worker.run()

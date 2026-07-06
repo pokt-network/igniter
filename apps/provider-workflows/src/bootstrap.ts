@@ -111,14 +111,18 @@ export function buildWatchdogEntries(config: WatchdogConfig, logger?: Logger): W
   const { taskQueue } = getConfig()
   return Object.values(ScheduledWorkflowType).map((wt) => {
     const wf = ScheduledWorkflowConfig[wt]
-    const interval = process.env[wf.envVar] || wf.interval
-    const parsed = parseDuration(interval)
+    const rawOverride = process.env[wf.envVar] || wf.interval
+    const parsed = parseDuration(rawOverride)
     if (parsed == null) {
       logger?.warn(
-        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: interval, fallback: wf.interval },
+        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: rawOverride, fallback: wf.interval },
         'Invalid schedule interval override; falling back to default',
       )
     }
+    // Never carry an invalid override forward: fall the STRING back to the default
+    // too, so `interval` and `intervalMs` can never disagree (M3/#114). The spec is
+    // armed from intervalMs, so an unparseable raw string never reaches the SDK.
+    const interval = parsed == null ? wf.interval : rawOverride
     const intervalMs = parsed ?? parseDuration(wf.interval)!
     return {
       scheduleId: `${wt}-scheduled`,
