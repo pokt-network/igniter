@@ -1,27 +1,27 @@
 jest.mock('server-only', () => ({}))
 
-const execute = jest.fn()
+const from = jest.fn()
 jest.mock('@/db', () => ({
-  getDb: () => ({ execute }),
+  getDb: () => ({ select: () => ({ from }) }),
 }))
 
 import { listWatchdogHealState } from './watchdogHealState'
 
 describe('listWatchdogHealState (middleman)', () => {
-  beforeEach(() => execute.mockReset())
+  beforeEach(() => from.mockReset())
 
-  it('maps rows across column casings', async () => {
-    execute.mockResolvedValue([
+  it('maps typed drizzle rows, serializing Date columns to ISO strings', async () => {
+    from.mockResolvedValue([
       {
         scheduleId: 'GovernanceSync-scheduled',
         unstucks: 2,
-        injected_triggers: 1,
-        last_heal_trigger_at: '2026-07-01T00:00:00.000Z',
-        last_action_count: 4,
+        injectedTriggers: 1,
+        lastHealTriggerAt: new Date('2026-07-01T00:00:00.000Z'),
+        lastActionCount: 4,
         unhealthy: false,
-        observed_unhealthy: true,
+        observedUnhealthy: true,
         recreations: 1,
-        last_recreated_at: '2026-07-01T00:05:00.000Z',
+        lastRecreatedAt: new Date('2026-07-01T00:05:00.000Z'),
       },
     ])
     const rows = await listWatchdogHealState()
@@ -38,15 +38,27 @@ describe('listWatchdogHealState (middleman)', () => {
     })
   })
 
-  it('defaults recreations to 0 and lastRecreatedAt to null when absent', async () => {
-    execute.mockResolvedValue([{ scheduleId: 's', unstucks: 0, unhealthy: false }])
+  it('maps null timestamp columns to null', async () => {
+    from.mockResolvedValue([
+      {
+        scheduleId: 's',
+        unstucks: 0,
+        injectedTriggers: 0,
+        lastHealTriggerAt: null,
+        lastActionCount: 0,
+        unhealthy: false,
+        observedUnhealthy: false,
+        recreations: 0,
+        lastRecreatedAt: null,
+      },
+    ])
     const rows = await listWatchdogHealState()
     expect(rows[0].recreations).toBe(0)
     expect(rows[0].lastRecreatedAt).toBeNull()
   })
 
-  it('degrades to [] when the table is absent', async () => {
-    execute.mockRejectedValue(new Error('relation "watchdog_heal_state" does not exist'))
-    await expect(listWatchdogHealState()).resolves.toEqual([])
+  it('propagates errors (a DB outage must not read as "all schedules healthy")', async () => {
+    from.mockRejectedValue(new Error('relation "watchdog_heal_state" does not exist'))
+    await expect(listWatchdogHealState()).rejects.toThrow('watchdog_heal_state')
   })
 })

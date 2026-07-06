@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { RightArrowIcon } from '@igniter/ui/assets'
-import { ColumnDef } from '@igniter/ui/components/table'
-import type { CsvColumnDef } from '@igniter/ui/lib/csv'
-import { Badge } from '@igniter/ui/components/badge'
+import { RightArrowIcon } from '../../assets'
+import { ColumnDef } from '../table'
+import type { CsvColumnDef } from '../../lib/csv'
+import { Badge } from '../badge'
 import type { WorkflowView, WorkflowStatus } from '@igniter/temporal/workflow-view'
 
 function formatStatus(status: WorkflowStatus): string {

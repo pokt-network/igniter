@@ -626,6 +626,9 @@ importers:
       '@igniter/pocket':
         specifier: workspace:*
         version: link:../pocket
+      '@igniter/temporal':
+        specifier: workspace:*
+        version: link:../temporal
       drizzle-orm:
         specifier: 0.44.1
         version: 0.44.1(@types/pg@8.11.11)(@vercel/postgres@0.10.0)(pg@8.14.0)
@@ -926,6 +929,9 @@ importers:
       '@igniter/graphql':
         specifier: workspace:*
         version: link:../graphql
+      '@igniter/temporal':
+        specifier: workspace:*
+        version: link:../temporal
       '@igniter/tx-verify':
         specifier: workspace:*
         version: link:../tx-verify

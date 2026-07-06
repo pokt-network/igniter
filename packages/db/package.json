@@ -37,6 +37,11 @@
       "import": "./dist/src/middleman/schema/index.js",
       "require": "./dist/src/middleman/schema/index.js",
       "types": "./dist/src/middleman/schema/index.d.ts"
+    },
+    "./watchdogStore": {
+      "import": "./dist/src/watchdogStore.js",
+      "require": "./dist/src/watchdogStore.js",
+      "types": "./dist/src/watchdogStore.d.ts"
     }
   },
   "scripts": {
@@ -49,6 +54,7 @@
     "@igniter/commons": "workspace:*",
     "@igniter/logger": "workspace:*",
     "@igniter/pocket": "workspace:*",
+    "@igniter/temporal": "workspace:*",
     "drizzle-orm": "0.44.1",
     "pg": "8.14.0"
   },

@@ -1,6 +1,7 @@
 import 'server-only'
 import { auth } from '@/auth'
 import { UserRole } from '@igniter/db/middleman/enums'
+import { type ActionResult, success, error } from '@igniter/ui/lib/actionResult'
 
 export async function getCurrentUser() {
   const session = await auth()
@@ -38,6 +39,36 @@ export async function requireAdmin() {
   const isAdmin = await isUserAdmin()
   if (!isAdmin) {
     throw new Error('Unauthorized')
+  }
+}
+
+/**
+ * Wrapper for server actions that require owner/admin and return the shared
+ * `ActionResult<T>` shape. Keeps middleman's existing `requireAdmin()` auth
+ * semantics; only the RESULT shape is standardized to match the provider app so
+ * the shared workflows admin UI can read a single uniform result.
+ */
+export async function withRequireOwner<T>(
+  action: () => Promise<T>,
+): Promise<ActionResult<T>> {
+  try {
+    await requireAdmin()
+    const result = await action()
+    return success(result)
+  } catch (err) {
+    console.error('[ActionError]', err)
+
+    if (err instanceof Error) {
+      if (err.message === 'Unauthorized' || err.message === 'Not logged in') {
+        return error('UNAUTHORIZED', err.message)
+      }
+      if (err.message.includes('validation') || err.message.includes('Invalid')) {
+        return error('VALIDATION_ERROR', err.message)
+      }
+      return error('INTERNAL_ERROR', err.message)
+    }
+
+    return error('INTERNAL_ERROR', 'An unexpected error occurred')
   }
 }
 

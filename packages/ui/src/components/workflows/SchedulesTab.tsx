@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
-import { Badge } from '@igniter/ui/components/badge';
+import { Badge } from '../badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@igniter/ui/components/table';
+} from '../table';
 import type { ScheduleFireView, ScheduleHealthRow, ScheduleHealthState } from '@igniter/temporal/workflow-view';
 
-import { ListWorkflows } from '@/actions/Workflows';
-import { detailHref, formatDateTime, formatRelative, statusBadgeVariant } from './table/columns';
+import { detailHref, formatDateTime, formatRelative, statusBadgeVariant } from './columns';
+import type { WorkflowsActions } from './types';
 
 const STATE_VARIANT: Record<ScheduleHealthState, 'success' | 'secondary' | 'warning' | 'destructive'> = {
   healthy: 'success',
@@ -23,7 +23,13 @@ const STATE_VARIANT: Record<ScheduleHealthState, 'success' | 'secondary' | 'warn
 
 const LAG_WARN_MS = 30_000;
 
-export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealthRow[]> }) {
+export function SchedulesTab({
+  health,
+  actions,
+}: {
+  health: UseQueryResult<ScheduleHealthRow[]>;
+  actions: WorkflowsActions;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -119,7 +125,7 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
               {expanded[row.scheduleId] && (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={9} className="px-4 pb-4 pt-1">
-                    <RecentFires scheduleId={row.scheduleId} fires={row.recentFires} />
+                    <RecentFires scheduleId={row.scheduleId} fires={row.recentFires} actions={actions} />
                   </TableCell>
                 </TableRow>
               )}
@@ -133,12 +139,20 @@ export function SchedulesTab({ health }: { health: UseQueryResult<ScheduleHealth
 
 const FIRE_GRID = 'grid grid-cols-[100px_80px_minmax(0,1fr)_140px] items-center gap-x-4';
 
-function RecentFires({ scheduleId, fires }: { scheduleId: string; fires: ScheduleFireView[] }) {
+function RecentFires({
+  scheduleId,
+  fires,
+  actions,
+}: {
+  scheduleId: string;
+  fires: ScheduleFireView[];
+  actions: WorkflowsActions;
+}) {
   // Lazy status lookup: one visibility query per expanded schedule, matched by workflowId.
   const runs = useQuery({
     queryKey: ['schedule-runs', scheduleId],
     queryFn: async () => {
-      const result = await ListWorkflows({ scheduledBy: scheduleId }, { pageIndex: 0, pageSize: 25 });
+      const result = await actions.ListWorkflows({ scheduledBy: scheduleId }, { pageIndex: 0, pageSize: 25 });
       if (!result.success) throw new Error(result.error.message);
       return result.data.items;
     },

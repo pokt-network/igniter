@@ -1,102 +1,60 @@
-import { eq, sql } from 'drizzle-orm'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/provider/schema'
 import { watchdogHealStateTable } from '@igniter/db/provider/schema'
+import { createWatchdogHealStateStore } from '@igniter/db/watchdogStore'
 import type { Logger } from '@igniter/logger'
 import type { HealState, WatchdogStateStore } from '@igniter/temporal'
 
+/**
+ * Thin per-app wrapper binding this app's `watchdogHealStateTable` to the shared
+ * self-heal state store (`@igniter/db/watchdogStore`). All SQL semantics live in
+ * the factory; this class only supplies the provider table + preserves the
+ * `new Watchdog(dbClient, logger)` construction contract its callers/tests rely on.
+ */
 export default class Watchdog implements WatchdogStateStore {
   logger: Logger
   dbClient: DBClient<typeof schema>
+  private store: WatchdogStateStore
 
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
     this.dbClient = dbClient
+    this.store = createWatchdogHealStateStore(dbClient.db, watchdogHealStateTable)
   }
 
-  async getState(scheduleId: string): Promise<HealState | undefined> {
-    const [row] = await this.dbClient.db
-      .select()
-      .from(watchdogHealStateTable)
-      .where(eq(watchdogHealStateTable.scheduleId, scheduleId))
-      .limit(1)
-    return row as HealState | undefined
+  getState(scheduleId: string): Promise<HealState | undefined> {
+    return this.store.getState(scheduleId)
   }
 
-  async bumpUnstuck(scheduleId: string): Promise<HealState> {
-    const [row] = await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, unstucks: 1 })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: { unstucks: sql`${watchdogHealStateTable.unstucks} + 1` },
-      })
-      .returning()
-    return row as HealState
+  bumpUnstuck(scheduleId: string): Promise<HealState> {
+    return this.store.bumpUnstuck(scheduleId)
   }
 
-  async bumpInjectedTrigger(scheduleId: string, at: Date): Promise<HealState> {
-    const [row] = await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, injectedTriggers: 1, lastHealTriggerAt: at })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: {
-          injectedTriggers: sql`${watchdogHealStateTable.injectedTriggers} + 1`,
-          lastHealTriggerAt: at,
-        },
-      })
-      .returning()
-    return row as HealState
+  bumpInjectedTrigger(scheduleId: string, at: Date): Promise<HealState> {
+    return this.store.bumpInjectedTrigger(scheduleId, at)
   }
 
-  async setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void> {
-    await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, unhealthy })
-      .onConflictDoUpdate({ target: watchdogHealStateTable.scheduleId, set: { unhealthy } })
+  compensateInjectedTrigger(scheduleId: string): Promise<void> {
+    return this.store.compensateInjectedTrigger(scheduleId)
   }
 
-  async setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void> {
-    await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, observedUnhealthy: observed })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: { observedUnhealthy: observed },
-      })
+  setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void> {
+    return this.store.setUnhealthy(scheduleId, unhealthy)
   }
 
-  async resetOnRecreate(scheduleId: string): Promise<void> {
-    await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, lastActionCount: 0, injectedTriggers: 0 })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: { lastActionCount: 0, injectedTriggers: 0 },
-      })
+  setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void> {
+    return this.store.setObservedUnhealthy(scheduleId, observed)
   }
 
-  async resetLadder(scheduleId: string, lastActionCount: number): Promise<void> {
-    await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, unstucks: 0, unhealthy: false, injectedTriggers: 0, lastActionCount })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: { unstucks: 0, unhealthy: false, injectedTriggers: 0, lastActionCount },
-      })
+  resetOnRecreate(scheduleId: string): Promise<void> {
+    return this.store.resetOnRecreate(scheduleId)
   }
 
-  async recordRecreate(scheduleId: string): Promise<void> {
-    await this.dbClient.db
-      .insert(watchdogHealStateTable)
-      .values({ scheduleId, recreations: 1, lastRecreatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: watchdogHealStateTable.scheduleId,
-        set: {
-          recreations: sql`${watchdogHealStateTable.recreations} + 1`,
-          lastRecreatedAt: new Date(),
-        },
-      })
+  resetLadder(scheduleId: string, lastActionCount: number): Promise<void> {
+    return this.store.resetLadder(scheduleId, lastActionCount)
+  }
+
+  recordRecreate(scheduleId: string): Promise<void> {
+    return this.store.recordRecreate(scheduleId)
   }
 }

@@ -1,104 +1,80 @@
 'use server'
 
-import { requireAdmin } from '@/lib/utils/actions'
+import { type ActionResult } from '@igniter/ui/lib/actionResult'
+import { withRequireOwner } from '@/lib/utils/actions'
+import { getTemporalClient } from '@/lib/temporal'
 import { listWatchdogHealState } from '@/lib/dal/watchdogHealState'
 import {
   listWorkflowViews,
   mapScheduleToHealth,
+  scheduleLiveness,
   type WorkflowListFilter,
   type WorkflowPageRequest,
   type WorkflowPageResult,
   type ScheduleHealthRow,
   type WatchdogHealState,
 } from '@igniter/temporal/workflow-view'
-import type { WorkflowDetailView } from '@igniter/temporal/workflow-detail'
+import {
+  getWorkflowDetail,
+  getWorkflowHistoryJson,
+  type WorkflowDetailView,
+} from '@igniter/temporal/workflow-detail'
 
 export async function ListWorkflows(
   filter: WorkflowListFilter,
   page: WorkflowPageRequest,
-): Promise<{ success: boolean; error?: string; data?: WorkflowPageResult }> {
-  try {
-    await requireAdmin()
-    const { getTemporalClient } = await import('@/lib/temporal')
+): Promise<ActionResult<WorkflowPageResult>> {
+  return withRequireOwner(async () => {
     const client = getTemporalClient()
-    const data = await listWorkflowViews(client, filter, page)
-    return { success: true, data }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' }
-  }
+    return listWorkflowViews(client, filter, page)
+  })
 }
 
-export async function GetScheduleHealth(): Promise<{
-  success: boolean
-  error?: string
-  data?: ScheduleHealthRow[]
-}> {
-  try {
-    await requireAdmin()
-    const { getTemporalClient } = await import('@/lib/temporal')
+export async function GetScheduleHealth(): Promise<ActionResult<ScheduleHealthRow[]>> {
+  return withRequireOwner(async () => {
     const client = getTemporalClient()
     const healRows = await listWatchdogHealState()
     const healById = new Map<string, WatchdogHealState>(healRows.map((r) => [r.scheduleId, r]))
     const out: ScheduleHealthRow[] = []
     for await (const summary of client.schedule.list()) {
-      out.push(mapScheduleToHealth(summary, healById.get(summary.scheduleId) ?? null))
+      const heal = healById.get(summary.scheduleId) ?? null
+      // describe() (not the list summary) carries runningActions/createdAt/
+      // numActionsTaken, which scheduleLiveness needs to judge staleness without
+      // false-flagging an in-flight SKIP-overlap run (M6).
+      const desc = await client.schedule.getHandle(summary.scheduleId).describe()
+      out.push(mapScheduleToHealth(desc, heal, scheduleLiveness(desc, heal)))
     }
-    return { success: true, data: out }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' }
-  }
+    return out
+  })
 }
 
 export async function TerminateWorkflow(
   workflowId: string,
   runId?: string,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requireAdmin()
-    const { getTemporalClient } = await import('@/lib/temporal')
+): Promise<ActionResult<void>> {
+  return withRequireOwner(async () => {
     const client = getTemporalClient()
     const handle = client.workflow.getHandle(workflowId, runId)
     await handle.terminate('Terminated by operator from admin UI')
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' }
-  }
+  })
 }
 
 export async function GetWorkflowDetail(
   workflowId: string,
   runId?: string,
-): Promise<{ success: boolean; error?: string; data?: WorkflowDetailView }> {
-  try {
-    await requireAdmin()
-    const { getTemporalClient } = await import('@/lib/temporal')
-    const { getWorkflowDetail } = await import('@igniter/temporal/workflow-detail')
+): Promise<ActionResult<WorkflowDetailView>> {
+  return withRequireOwner(async () => {
     const client = getTemporalClient()
-    const data = await getWorkflowDetail(client, workflowId, runId)
-    return { success: true, data }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to load workflow detail',
-    }
-  }
+    return getWorkflowDetail(client, workflowId, runId)
+  })
 }
 
 export async function GetWorkflowHistoryJson(
   workflowId: string,
   runId?: string,
-): Promise<{ success: boolean; error?: string; data?: string }> {
-  try {
-    await requireAdmin()
-    const { getTemporalClient } = await import('@/lib/temporal')
-    const { getWorkflowHistoryJson } = await import('@igniter/temporal/workflow-detail')
+): Promise<ActionResult<string>> {
+  return withRequireOwner(async () => {
     const client = getTemporalClient()
-    const data = await getWorkflowHistoryJson(client, workflowId, runId)
-    return { success: true, data }
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to export history',
-    }
-  }
+    return getWorkflowHistoryJson(client, workflowId, runId)
+  })
 }

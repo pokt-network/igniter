@@ -4,15 +4,13 @@ import * as React from 'react'
 import { useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import DataTable from '@igniter/ui/components/DataTable/index'
-import { Button } from '@igniter/ui/components/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@igniter/ui/components/select'
-import { ConfirmationDialog } from '@/components/ConfirmationDialog'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import DataTable from '../DataTable/index'
+import { Button } from '../button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select'
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '../dialog'
 import type { WorkflowView, WorkflowListFilter, WorkflowStatus } from '@igniter/temporal/workflow-view'
-import { ListWorkflows, TerminateWorkflow } from '@/actions/Workflows'
 import { columns } from './columns'
-import { PROVIDER_WORKFLOW_TYPES } from '../workflowTypes'
+import type { WorkflowsActions, WorkflowsTableFeedback } from './types'
 
 const SCOPES: Array<{ label: string; value: NonNullable<WorkflowListFilter['scope']> }> = [
   { label: 'All', value: 'all' },
@@ -64,11 +62,16 @@ function useUrlFilters() {
   return { ...read, write }
 }
 
-export default function WorkflowsTable() {
-  const { addNotification } = useNotifications()
+export interface WorkflowsTableProps {
+  actions: WorkflowsActions
+  workflowTypes: readonly string[]
+  feedback: WorkflowsTableFeedback
+}
+
+export default function WorkflowsTable({ actions, workflowTypes, feedback }: WorkflowsTableProps) {
   const { scope, status, type, scheduledBy, pageIndex, pageSize, write } = useUrlFilters()
 
-  const isKnownType = type === '' || (PROVIDER_WORKFLOW_TYPES as readonly string[]).includes(type)
+  const isKnownType = type === '' || (workflowTypes as readonly string[]).includes(type)
   const [customType, setCustomType] = useState(!isKnownType)
   const [customTypeText, setCustomTypeText] = useState(isKnownType ? '' : type)
   const customTypeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -81,6 +84,7 @@ export default function WorkflowsTable() {
 
   const [toTerminate, setToTerminate] = useState<WorkflowView | null>(null)
   const [isTerminating, setIsTerminating] = useState(false)
+  const [termError, setTermError] = useState<string | null>(null)
 
   const filter: WorkflowListFilter = {
     scope,
@@ -92,7 +96,7 @@ export default function WorkflowsTable() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['workflows', scope, status, type, scheduledBy, pageIndex, pageSize],
     queryFn: async () => {
-      const result = await ListWorkflows(filter, { pageIndex, pageSize })
+      const result = await actions.ListWorkflows(filter, { pageIndex, pageSize })
       if (!result.success) throw new Error(result.error.message)
       return result.data
     },
@@ -101,21 +105,20 @@ export default function WorkflowsTable() {
 
   const confirmTerminate = async () => {
     if (!toTerminate) return
+    if (feedback.mode === 'inline') setTermError(null)
     try {
       setIsTerminating(true)
-      const result = await TerminateWorkflow(toTerminate.workflowId, toTerminate.runId)
+      const result = await actions.TerminateWorkflow(toTerminate.workflowId, toTerminate.runId)
       if (!result.success) throw new Error(result.error.message)
       await refetch()
+      if (feedback.mode === 'inline') setToTerminate(null)
     } catch (err) {
-      addNotification({
-        id: 'terminate-workflow-error',
-        type: 'error',
-        showTypeIcon: true,
-        content: err instanceof Error ? err.message : 'Unable to terminate workflow.',
-      })
+      const message = err instanceof Error ? err.message : 'Unable to terminate workflow.'
+      if (feedback.mode === 'toast') feedback.onTerminateError(message)
+      else setTermError(message)
     } finally {
       setIsTerminating(false)
-      setToTerminate(null)
+      if (feedback.mode === 'toast') setToTerminate(null)
     }
   }
 
@@ -164,7 +167,7 @@ export default function WorkflowsTable() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY_TYPE}>Any type</SelectItem>
-            {PROVIDER_WORKFLOW_TYPES.map((t) => (
+            {workflowTypes.map((t) => (
               <SelectItem key={t} value={t}>
                 {t}
               </SelectItem>
@@ -202,7 +205,9 @@ export default function WorkflowsTable() {
             </button>
           </span>
         )}
-        <span className="ml-auto inline-flex h-9 items-center whitespace-nowrap rounded-lg border border-border-primary bg-bg-elevated px-4 text-sm font-medium text-text-secondary">{data?.total ?? 0} workflows</span>
+        {/* `total` is a synthesized pagination estimate (grows as you page), not a real
+            count — show the honest page-scoped count instead of claiming a total (#205). */}
+        <span className="ml-auto inline-flex h-9 items-center whitespace-nowrap rounded-lg border border-border-primary bg-bg-elevated px-4 text-sm font-medium text-text-secondary">Showing {data?.items?.length ?? 0}{data?.hasMore ? '+' : ''}</span>
       </div>
 
       <DataTable
@@ -221,7 +226,10 @@ export default function WorkflowsTable() {
                     size="sm"
                     variant="ghost"
                     className="text-red-400 hover:text-red-300"
-                    onClick={() => setToTerminate(row.original)}
+                    onClick={() => {
+                      if (feedback.mode === 'inline') setTermError(null)
+                      setToTerminate(row.original)
+                    }}
                   >
                     Terminate
                   </Button>
@@ -239,34 +247,34 @@ export default function WorkflowsTable() {
         }}
       />
 
-      {toTerminate && (
-        <ConfirmationDialog
-          title="Terminate Workflow"
-          open={!!toTerminate}
-          onClose={() => setToTerminate(null)}
-          footerActions={
-            <>
-              <Button variant="outline" onClick={() => setToTerminate(null)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={confirmTerminate} disabled={isTerminating}>
-                Terminate
-              </Button>
-            </>
-          }
-        >
-          <div className="flex flex-col gap-2">
-            <p>
-              Terminate workflow <span className="font-mono">{toTerminate.workflowId}</span> (
-              {toTerminate.type})? This cannot be undone.
-            </p>
-            <p className="text-sm text-amber-400">
-              This may affect an in-flight transaction. The transaction row self-recovers and is
-              re-dispatched, but proceed only if you understand the impact.
-            </p>
-          </div>
-        </ConfirmationDialog>
-      )}
+      <Dialog open={!!toTerminate} onOpenChange={(open) => !open && setToTerminate(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Terminate Workflow</DialogTitle>
+          {toTerminate && (
+            <div className="flex flex-col gap-2">
+              <p>
+                Terminate workflow <span className="font-mono">{toTerminate.workflowId}</span> (
+                {toTerminate.type})? This cannot be undone.
+              </p>
+              <p className="text-sm text-amber-400">
+                This may affect an in-flight transaction. The transaction row self-recovers and is
+                re-dispatched, but proceed only if you understand the impact.
+              </p>
+              {feedback.mode === 'inline' && termError && (
+                <p className="text-sm text-red-400">{termError}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setToTerminate(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmTerminate} disabled={isTerminating}>
+              Terminate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
