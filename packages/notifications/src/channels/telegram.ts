@@ -1,5 +1,6 @@
 import { getLogger } from '@igniter/logger'
 import type { NotificationChannel, NotificationMessage, TelegramConfig } from '../types'
+import { assertSafeUrl } from '../egressGuard'
 
 const logger = getLogger()
 
@@ -33,21 +34,30 @@ export class TelegramChannel implements NotificationChannel {
     )
 
     const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: this.chatId,
-        text,
-        parse_mode: 'HTML',
-      }),
-      signal: AbortSignal.timeout(10_000),
-    })
+    // Host is the fixed Telegram API; guard anyway for defense-in-depth/uniformity.
+    await assertSafeUrl(url)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: this.chatId,
+          text,
+          parse_mode: 'HTML',
+        }),
+        signal: AbortSignal.timeout(10_000),
+      })
+    } catch (err) {
+      logger.error({ err }, 'Telegram request failed')
+      throw new Error('Telegram message delivery failed')
+    }
 
     if (!response.ok) {
       const body = await response.text()
       logger.error({ status: response.status, body }, 'Telegram message failed')
-      throw new Error(`Telegram message failed with status ${response.status}`)
+      throw new Error('Telegram message delivery failed')
     }
   }
 }

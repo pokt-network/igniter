@@ -11,7 +11,7 @@ import {
 import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
-import { eq } from 'drizzle-orm/sql/expressions/conditions'
+import { and, eq } from 'drizzle-orm/sql/expressions/conditions'
 import { sql } from 'drizzle-orm'
 
 export default class ImportSupplierAttempts {
@@ -56,15 +56,23 @@ export default class ImportSupplierAttempts {
   async markCompleted(
     id: number,
     importedSupplierAddresses: string[],
-  ): Promise<void> {
-    await this.dbClient.db
+  ): Promise<ImportSupplierAttempt | undefined> {
+    // CAS: only a still-submitted attempt transitions to completed, and only the
+    // winner gets the row back. A Temporal retry re-runs the whole activity, but
+    // the attempt is already terminal by then → no row → no duplicate dispatch.
+    const [row] = await this.dbClient.db
       .update(importSupplierAttemptsTable)
       .set({
         status: ImportAttemptStatus.Completed,
         importedSupplierAddresses,
         completedAt: new Date(),
       })
-      .where(eq(importSupplierAttemptsTable.id, id))
+      .where(and(
+        eq(importSupplierAttemptsTable.id, id),
+        eq(importSupplierAttemptsTable.status, ImportAttemptStatus.Submitted),
+      ))
+      .returning()
+    return row
   }
 
   /**
@@ -73,15 +81,22 @@ export default class ImportSupplierAttempts {
    * @param id - The attempt ID
    * @param errorMessage - The error message
    */
-  async markFailed(id: number, errorMessage: string): Promise<void> {
-    await this.dbClient.db
+  async markFailed(id: number, errorMessage: string): Promise<ImportSupplierAttempt | undefined> {
+    // CAS (see markCompleted): only the submitted→failed winner gets the row back,
+    // so a retried activity can't re-dispatch the failure notification.
+    const [row] = await this.dbClient.db
       .update(importSupplierAttemptsTable)
       .set({
         status: ImportAttemptStatus.Failed,
         errorMessage,
         completedAt: new Date(),
       })
-      .where(eq(importSupplierAttemptsTable.id, id))
+      .where(and(
+        eq(importSupplierAttemptsTable.id, id),
+        eq(importSupplierAttemptsTable.status, ImportAttemptStatus.Submitted),
+      ))
+      .returning()
+    return row
   }
 
   /**

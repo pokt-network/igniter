@@ -1,6 +1,7 @@
 import { getLogger } from '@igniter/logger'
 import nodemailer, { type Transporter } from 'nodemailer'
 import type { EmailConfig, EmailSmtpConfig, NotificationChannel, NotificationMessage } from '../types'
+import { assertSafeHost } from '../egressGuard'
 
 const logger = getLogger()
 
@@ -42,6 +43,9 @@ export class EmailChannel implements NotificationChannel {
   async send(message: NotificationMessage): Promise<void> {
     const { to, cc, bcc, smtp } = this.config
 
+    // SSRF guard: refuse connecting to internal/private SMTP hosts.
+    await assertSafeHost(smtp.host)
+
     const transporter = this.transporter ?? createSmtpTransport(smtp)
     const ownsTransporter = !this.transporter
 
@@ -60,6 +64,10 @@ export class EmailChannel implements NotificationChannel {
       })
 
       logger.debug({ messageId: info.messageId, to }, 'Email notification sent')
+    } catch (err) {
+      // Don't reflect the raw connect error (which leaks host:port reachability).
+      logger.error({ err }, 'Email notification failed')
+      throw new Error('Email delivery failed')
     } finally {
       if (ownsTransporter) transporter.close()
     }

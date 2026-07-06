@@ -35,6 +35,11 @@ const mainRoutes = [
     url: "/app/suppliers",
     icon: NodesDark,
   },
+  {
+    title: "Notifications",
+    url: "/app/notifications",
+    icon: ActivityDark,
+  },
 ];
 
 const adminRoutes = [

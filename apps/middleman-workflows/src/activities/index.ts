@@ -31,6 +31,9 @@ import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplie
 import { NodesMinMax } from '@/lib/dal/nodes'
 import { verifyStakeGoalState } from './verifyStakeGoalStateHelper'
 import { parseSignerAndSequence } from './parseSignerAndSequence'
+import { dispatchUserNotification } from '@/lib/notifications/dispatch'
+import { txTypeToUserEventType } from './txEventType'
+import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 
 export type Height = number
 
@@ -282,6 +285,15 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         }
       }
 
+      // Captured during detection, fired only AFTER the node update persists
+      // (below): a pre-persist dispatch would re-fire on a Temporal retry of this
+      // activity (the node reloads still-stale and the same changes re-detect).
+      const pendingUserNotifications: Array<{
+        type: 'service_change' | 'revshare_change'
+        ownerIdentity: string
+        metadata: Record<string, unknown>
+      }> = []
+
       // Detect changes in services/rev-share and persist them
       if (node.services && node.services.length > 0 && update.services) {
         try {
@@ -316,6 +328,20 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
               changeCount: changes.length,
               batchId,
             })
+
+            // Capture per-category notifications for the node owner; fired after
+            // the node update persists (below) so a retry can't double-send. The
+            // service-change detail and the rev-share detail are kept separate so
+            // each notification only describes its own category.
+            const owner = node.createdBy
+            if (owner) {
+              pendingUserNotifications.push(
+                ...buildSupplierChangeNotifications(changes, owner, {
+                  address: params.address,
+                  height: params.height,
+                }),
+              )
+            }
           }
         } catch (e) {
           log.error('Error detecting/persisting supplier changes', { error: e })
@@ -331,6 +357,13 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         throw new ApplicationFailure('errored updating node record', 'update_error', false, null, e as Error)
       }
       log.info('Upsert Supplier done!', { params })
+
+      // Node update has persisted — now deliver the captured supplier-change
+      // notifications (best-effort; dispatchUserNotification never throws). On a
+      // retry the services already match, so detection finds nothing to re-send.
+      for (const notification of pendingUserNotifications) {
+        await dispatchUserNotification(dal, log, notification)
+      }
     } catch (e) {
       log.error('Error upserting supplier status', { error: e })
       throw new ApplicationFailure('errored upserting supplier status', 'update_error', false, null, e as Error)
@@ -1187,6 +1220,30 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       }
     }
   },
+  /**
+   * Emits a per-user failure notification for a transaction that died in the
+   * broadcaster (ExecuteTransaction) before it could reach the verifier's
+   * claimTerminalTransition hook — i.e. it expired before broadcast, or broadcast
+   * returned no hash. Those exits set Failure directly, so the verifier's
+   * (only other) user-notify site never fires and the owner would otherwise get
+   * nothing. Owner-keyed to transaction.createdBy; best-effort — swallows its own
+   * errors so a notification never fails the already-terminal transaction workflow.
+   */
+  async notifyUserOfFailedTransaction(transactionId: number, reason: string): Promise<void> {
+    try {
+      const transaction = await dal.transaction.getTransaction(transactionId)
+      if (!transaction || !transaction.createdBy) return
+      const eventType = txTypeToUserEventType(transaction.type)
+      if (!eventType) return
+      await dispatchUserNotification(dal, log, {
+        type: eventType,
+        ownerIdentity: transaction.createdBy,
+        metadata: { outcome: 'failure', reason },
+      })
+    } catch (error) {
+      log.error('notifyUserOfFailedTransaction: failed, skipping', { error, transactionId })
+    }
+  },
 
   /**
    * The verifier's queue: pending transactions that have been broadcast (have a hash).
@@ -1325,7 +1382,27 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     }
     if (decision.code !== undefined) fields.code = decision.code
     if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)
-    await dal.transaction.claimTerminalTransition(transactionId, status, fields)
+    const claimed = await dal.transaction.claimTerminalTransition(transactionId, status, fields)
+
+    // Only the CAS winner gets the row back, so the owner is notified exactly
+    // once. Map the tx type to a per-user event; skip types with no event.
+    if (claimed && claimed.createdBy) {
+      const eventType = txTypeToUserEventType(claimed.type)
+      if (eventType) {
+        await dispatchUserNotification(dal, log, {
+          type: eventType,
+          ownerIdentity: claimed.createdBy,
+          metadata: {
+            // Goal-state, not raw tx status: a tx can fail on-chain while a
+            // sibling achieves the goal (effects=apply-success → supplier staked),
+            // so notify based on whether the goal was met, not the tx outcome.
+            outcome: decision.effects === 'apply-success' ? 'success' : 'failure',
+            hash: claimed.hash ?? undefined,
+            height: verificationHeight,
+          },
+        })
+      }
+    }
   },
   }
 

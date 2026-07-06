@@ -3,112 +3,97 @@
 import React, { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { AcknowledgeChanges, GetUnacknowledgedChanges } from '@/actions/SupplierChanges'
+import {
+  ListUnviewedNotificationEvents,
+  MarkNotificationEventsViewed,
+  GetNotificationPreferences,
+} from '@/actions/NotificationChannels'
 import { useNotifications } from '@igniter/ui/context/Notifications/index'
 import { Button } from '@igniter/ui/components/button'
+import { EVENT_LABELS, SUPPLIER_TYPES, describeEvent } from '@/lib/notificationEvents'
 
+// Single source of truth for the in-app header feed: the per-wallet
+// notification_events store. Every event the user is subscribed to (supplier
+// changes, transaction outcomes, import results) surfaces here and — for users
+// with channels — is also delivered externally. (The detailed, acknowledge-based
+// supplier-change view still lives on the Suppliers page / node detail.)
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { addNotification } = useNotifications()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const notifiedBatchesRef = useRef<Set<string>>(new Set())
+  const notifiedRef = useRef<Set<number>>(new Set())
 
-  const { data: unacknowledgedChanges } = useQuery({
-    queryKey: ['unacknowledged-supplier-changes'],
-    queryFn: GetUnacknowledgedChanges,
+  const { data: prefs } = useQuery({
+    queryKey: ['notification-preferences'],
+    queryFn: async () => {
+      const res = await GetNotificationPreferences()
+      return res.success ? res.data : { inAppFeedEnabled: true }
+    },
+  })
+
+  const { data: events } = useQuery({
+    queryKey: ['unviewed-notification-events'],
+    queryFn: async () => {
+      const res = await ListUnviewedNotificationEvents()
+      return res.success ? res.data : []
+    },
     refetchInterval: 60000,
   })
 
   useEffect(() => {
-    if (!unacknowledgedChanges?.length) return
+    // Respect the per-user in-app feed toggle (default on). Wait until prefs are
+    // known — otherwise a user who disabled the feed gets a flash of toasts on
+    // load if the events query resolves before the prefs query.
+    if (prefs === undefined || prefs.inAppFeedEnabled === false || !events?.length) return
+    for (const ev of events) {
+      if (notifiedRef.current.has(ev.id)) continue
+      notifiedRef.current.add(ev.id)
 
-    // Group by batchId
-    const batches = new Map<string, typeof unacknowledgedChanges>()
-    for (const change of unacknowledgedChanges) {
-      const existing = batches.get(change.batchId) ?? []
-      existing.push(change)
-      batches.set(change.batchId, existing)
-    }
-
-    for (const [batchId, changes] of batches) {
-      if (notifiedBatchesRef.current.has(batchId)) continue
-      notifiedBatchesRef.current.add(batchId)
-
-      const providerName = changes[0]?.providerName ?? 'Your provider'
-      const changeIds = changes.map((c) => c.id)
-
-      // A node "completed staking" when its first active services landed (a service_added
-      // flagged initialStake = active services went 0 → ≥1). Anything else is a genuine
-      // config change (drift) — services/rev-share edited on an already-staked supplier.
-      const completedNodeIds = new Set(
-        changes
-          .filter(
-            (c) =>
-              c.changeType === 'service_added' &&
-              (c.newValue as { initialStake?: boolean } | null)?.initialStake,
-          )
-          .map((c) => c.nodeId),
-      )
-      const configNodeIds = new Set(
-        changes.map((c) => c.nodeId).filter((id) => !completedNodeIds.has(id)),
-      )
-      const completedCount = completedNodeIds.size
-      const configCount = configNodeIds.size
-      const onlyCompleted = completedCount > 0 && configCount === 0
+      const meta = (ev.metadata ?? {}) as Record<string, unknown>
+      const outcome = typeof meta.outcome === 'string' ? meta.outcome : undefined
+      const isSupplier = SUPPLIER_TYPES.has(ev.type)
+      const isFailure = outcome === 'failure' || outcome === 'failed'
 
       addNotification({
-        id: `supplier-changes-${batchId}`,
-        type: onlyCompleted ? 'success' : 'warning',
+        id: `notif-event-${ev.id}`,
+        type: isFailure ? 'error' : isSupplier ? 'warning' : 'success',
         showTypeIcon: true,
-        title: onlyCompleted
-          ? 'Stake Completed'
-          : completedCount > 0
-            ? 'Supplier Updates'
-            : 'Supplier Configuration Changed',
+        // The Notifications context renders `content` only (not `title`), so the
+        // label is folded into content as a heading above the description.
+        title: EVENT_LABELS[ev.type] ?? 'Notification',
         content: (
-          <span className="flex flex-col gap-0.5">
-            {completedCount > 0 && (
-              <p className="text-sm">
-                <strong>{providerName}</strong> completed staking for{' '}
-                <strong>{completedCount}</strong> of your supplier{completedCount > 1 ? 's' : ''}.
-              </p>
-            )}
-            {configCount > 0 && (
-              <p className="text-sm">
-                <strong>{providerName}</strong> updated configuration for{' '}
-                <strong>{configCount}</strong> of your supplier{configCount > 1 ? 's' : ''} — services or rev share may have changed.
-              </p>
-            )}
+          <span className="flex flex-col gap-0.5 text-sm">
+            <strong>{EVENT_LABELS[ev.type] ?? 'Notification'}</strong>
+            <span>{describeEvent(ev.type, meta)}</span>
           </span>
         ),
         onDismiss: async () => {
           try {
-            await AcknowledgeChanges(changeIds)
-            await queryClient.invalidateQueries({ queryKey: ['unacknowledged-supplier-changes'] })
-            await queryClient.invalidateQueries({ queryKey: ['recent-supplier-changes'] })
+            await MarkNotificationEventsViewed([ev.id])
+            await queryClient.invalidateQueries({ queryKey: ['unviewed-notification-events'] })
           } catch (err) {
-            // Persisting the acknowledgement failed (auth/DB/network). The change is still
-            // unacknowledged in the DB, so drop it from the seen-set to let the next 60s poll
-            // re-surface the banner instead of silently losing it for the rest of the session.
-            notifiedBatchesRef.current.delete(batchId)
-            console.error('Failed to acknowledge supplier changes on dismiss', err)
+            // Marking viewed failed — drop from the seen-set so the next poll re-surfaces it.
+            notifiedRef.current.delete(ev.id)
+            console.error('Failed to mark notification event viewed', err)
           }
         },
-        actions: [
-          (_notification, removeNotification) => (
-            <Button
-              onClick={() => {
-                router.push(`/app/suppliers?highlightBatch=${batchId}`)
-                removeNotification()
-              }}
-            >
-              View Details
-            </Button>
-          ),
-        ],
+        actions: isSupplier
+          ? [
+              (_notification, removeNotification) => (
+                <Button
+                  onClick={() => {
+                    router.push('/app/suppliers')
+                    removeNotification()
+                  }}
+                >
+                  View Details
+                </Button>
+              ),
+            ]
+          : undefined,
       })
     }
-  }, [unacknowledgedChanges])
+  }, [events, prefs])
 
   return <>{children}</>
 }

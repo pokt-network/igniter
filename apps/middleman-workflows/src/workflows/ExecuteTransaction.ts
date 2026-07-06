@@ -27,6 +27,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     getBlockHeight,
     getTxTimeoutHeight,
     notifyProviderOfFailedStakes,
+    notifyUserOfFailedTransaction,
   } = proxyActivities<ReturnType<typeof delegatorActivities>>({
     startToCloseTimeout: "30s",
     retry: {
@@ -56,6 +57,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     if (transaction.type === TransactionType.Stake) {
       await notifyProviderOfFailedStakes(transaction.id);
     }
+    await notifyUserOfFailedTransaction(transactionId, 'TX expired before broadcast');
     return { ...transaction, status: TransactionStatus.Failure };
   }
 
@@ -70,6 +72,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
       code: result.code,
       log: result.message || 'unknown error',
     });
+    await notifyUserOfFailedTransaction(transactionId, result.message || 'Broadcast returned no transaction hash');
     return { ...transaction, status: TransactionStatus.Failure, code: result.code };
   }
 
