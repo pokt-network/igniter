@@ -1,6 +1,7 @@
 import { getLogger } from '@igniter/logger'
 import type { DiscordConfig, NotificationChannel, NotificationMessage } from '../types'
 import { assertSafeUrl } from '../egressGuard'
+import { ChannelDeliveryError, categorizeHttpStatus } from '../channelError'
 
 const logger = getLogger()
 
@@ -31,15 +32,18 @@ export class DiscordChannel implements NotificationChannel {
     } catch (err) {
       // Don't reflect the transport error (host/port/connect detail) to callers.
       logger.error({ err }, 'Discord webhook request failed')
-      throw new Error('Discord webhook delivery failed')
+      throw new ChannelDeliveryError('discord', 'transient')
     }
 
     if (!response.ok) {
       const text = await response.text()
-      // Log status+body server-side; surface only a generic message so the
-      // response can't be used as a read oracle for probed endpoints.
+      // Log status+body server-side; surface only the status CLASS (not the
+      // body) so a caller can distinguish a bad/revoked webhook from a transient
+      // failure without the response becoming a read oracle for probed endpoints.
       logger.error({ status: response.status, body: text }, 'Discord webhook failed')
-      throw new Error('Discord webhook delivery failed')
+      throw new ChannelDeliveryError('discord', categorizeHttpStatus(response.status), {
+        statusCode: response.status,
+      })
     }
   }
 }

@@ -1,6 +1,6 @@
 import { getLogger } from '@igniter/logger'
 import type { NotificationChannel, NotificationMessage, TelegramConfig } from '../types'
-import { assertSafeUrl } from '../egressGuard'
+import { ChannelDeliveryError, categorizeHttpStatus } from '../channelError'
 
 const logger = getLogger()
 
@@ -33,9 +33,11 @@ export class TelegramChannel implements NotificationChannel {
       message.telegram?.html ?? `<b>${message.title}</b>\n\n${message.body}`,
     )
 
+    // Host is the compile-time-constant Telegram API (api.telegram.org), not a
+    // user-supplied destination — the only user input (botToken/chatId) lives in
+    // the path/body, never the host. So there is no SSRF surface to guard here,
+    // and running the egress guard would just add a DNS lookup per send.
     const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`
-    // Host is the fixed Telegram API; guard anyway for defense-in-depth/uniformity.
-    await assertSafeUrl(url)
 
     let response: Response
     try {
@@ -51,13 +53,16 @@ export class TelegramChannel implements NotificationChannel {
       })
     } catch (err) {
       logger.error({ err }, 'Telegram request failed')
-      throw new Error('Telegram message delivery failed')
+      throw new ChannelDeliveryError('telegram', 'transient')
     }
 
     if (!response.ok) {
       const body = await response.text()
+      // Status class only (not body): 401 = bad bot token, 400 = bad chat id, etc.
       logger.error({ status: response.status, body }, 'Telegram message failed')
-      throw new Error('Telegram message delivery failed')
+      throw new ChannelDeliveryError('telegram', categorizeHttpStatus(response.status), {
+        statusCode: response.status,
+      })
     }
   }
 }

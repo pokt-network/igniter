@@ -53,17 +53,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const outcome = typeof meta.outcome === 'string' ? meta.outcome : undefined
       const isSupplier = SUPPLIER_TYPES.has(ev.type)
       const isFailure = outcome === 'failure' || outcome === 'failed'
+      const isSuccess = outcome === 'success'
+      const batchId = typeof meta.batchId === 'string' ? meta.batchId : undefined
+      // A supplier event carrying outcome:'success' (a first stake) is a positive
+      // event, not config drift — show it green with a dedicated label.
+      const label = isSuccess && isSupplier ? 'Stake Completed' : EVENT_LABELS[ev.type] ?? 'Notification'
 
       addNotification({
         id: `notif-event-${ev.id}`,
-        type: isFailure ? 'error' : isSupplier ? 'warning' : 'success',
+        type: isFailure ? 'error' : isSuccess ? 'success' : isSupplier ? 'warning' : 'success',
         showTypeIcon: true,
         // The Notifications context renders `content` only (not `title`), so the
         // label is folded into content as a heading above the description.
-        title: EVENT_LABELS[ev.type] ?? 'Notification',
+        title: label,
         content: (
           <span className="flex flex-col gap-0.5 text-sm">
-            <strong>{EVENT_LABELS[ev.type] ?? 'Notification'}</strong>
+            <strong>{label}</strong>
             <span>{describeEvent(ev.type, meta)}</span>
           </span>
         ),
@@ -82,7 +87,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               (_notification, removeNotification) => (
                 <Button
                   onClick={() => {
-                    router.push('/app/suppliers')
+                    // Deep-link to the batch so RecentChanges highlights/expands
+                    // it; fall back to the plain list if no batch id is present.
+                    router.push(batchId ? `/app/suppliers?highlightBatch=${batchId}` : '/app/suppliers')
                     removeNotification()
                   }}
                 >

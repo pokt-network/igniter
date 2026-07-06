@@ -12,7 +12,10 @@ export type {
   EmailConfig,
   EmailSmtpConfig,
 } from './types'
-export { assertSafeUrl, assertSafeHost } from './egressGuard'
+export { assertSafeUrl, assertSafeHost, parseEgressAllowlist } from './egressGuard'
+export type { EgressAllowlist } from './egressGuard'
+export { ChannelDeliveryError, categorizeHttpStatus } from './channelError'
+export type { ChannelErrorCategory } from './channelError'
 export { composeRichMessage } from './richMessage'
 export type { RichMessageParts } from './richMessage'
 export { dispatchToChannels } from './dispatch'

@@ -68,4 +68,31 @@ describe('buildSupplierChangeNotifications', () => {
   it('fires nothing when there are no changes', () => {
     expect(buildSupplierChangeNotifications([], OWNER, meta)).toEqual([])
   })
+
+  it('marks a first stake (initialStake) as outcome:success', () => {
+    const initial = {
+      ...change(SupplierChangeType.ServiceAdded, 'initial stake activated'),
+      newValue: { initialStake: true },
+    } as DetectedSupplierChange
+    const out = buildSupplierChangeNotifications([initial], OWNER, meta)
+    expect(out[0]!.metadata.outcome).toBe('success')
+  })
+
+  it('does NOT mark an ordinary service change as success', () => {
+    const out = buildSupplierChangeNotifications(
+      [change(SupplierChangeType.ServiceAdded, 'added svc1')],
+      OWNER,
+      meta,
+    )
+    expect(out[0]!.metadata.outcome).toBeUndefined()
+  })
+
+  it('threads batchId into the notification metadata for the deep-link', () => {
+    const out = buildSupplierChangeNotifications(
+      [change(SupplierChangeType.ServiceAdded, 'added svc1')],
+      OWNER,
+      { ...meta, batchId: 'batch-abc' },
+    )
+    expect(out[0]!.metadata.batchId).toBe('batch-abc')
+  })
 })

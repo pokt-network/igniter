@@ -339,6 +339,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
                 ...buildSupplierChangeNotifications(changes, owner, {
                   address: params.address,
                   height: params.height,
+                  batchId,
                 }),
               )
             }

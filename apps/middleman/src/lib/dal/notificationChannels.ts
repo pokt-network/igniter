@@ -126,12 +126,13 @@ export async function listNotificationEvents(
   userIdentity: string,
   page = 0,
   pageSize = 25,
-): Promise<{ data: NotificationEvent[]; total: number }> {
+): Promise<{ data: NotificationEvent[]; total: number; unviewedTotal: number }> {
   const db = getDb()
-  // Scoped to the owning wallet on BOTH the rows query and the count, so the
+  // Scoped to the owning wallet on BOTH the rows query and the counts, so the
   // paginated total never leaks other wallets' events.
   const where = eq(notificationEventsTable.createdBy, userIdentity)
-  const [rows, [countRow]] = await Promise.all([
+  const unviewedWhere = and(where, isNull(notificationEventsTable.viewedAt))
+  const [rows, [countRow], [unviewedRow]] = await Promise.all([
     db
       .select()
       .from(notificationEventsTable)
@@ -140,8 +141,10 @@ export async function listNotificationEvents(
       .limit(pageSize)
       .offset(page * pageSize),
     db.select({ total: count() }).from(notificationEventsTable).where(where),
+    // Full unread count (all pages) so the badge/mark-all reflect the true total.
+    db.select({ total: count() }).from(notificationEventsTable).where(unviewedWhere),
   ])
-  return { data: rows, total: countRow?.total ?? 0 }
+  return { data: rows, total: countRow?.total ?? 0, unviewedTotal: unviewedRow?.total ?? 0 }
 }
 
 export async function getNotificationEvent(

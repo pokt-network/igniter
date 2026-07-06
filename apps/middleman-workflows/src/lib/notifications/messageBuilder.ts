@@ -1,6 +1,7 @@
 import type { NotificationMessage } from '@igniter/notifications'
 import { composeRichMessage } from '@igniter/notifications'
 import type { NotificationEventType } from '@igniter/db/middleman/schema'
+import { NOTIFICATION_EVENT_LABELS, NOTIFICATION_EVENT_FALLBACK_DETAIL } from '@igniter/db/middleman/schema'
 
 type Meta = Record<string, unknown>
 
@@ -41,21 +42,25 @@ function contentFor(type: NotificationEventType, metadata: Meta): Content {
   const txColor = failed ? RED : GREEN
 
   switch (type) {
-    case 'service_change':
+    case 'service_change': {
+      // A first stake (outcome:'success') is a positive event — render it green
+      // with a completion title instead of the neutral "config changed" blue.
+      const success = outcome === 'success'
       return {
-        title: 'Supplier service changed',
-        emailColor: BLUE.hex,
-        discordColor: BLUE.num,
-        emoji: BLUE.emoji,
-        lines: [str(metadata.detail) || 'A service was added or removed on one of your suppliers.', supplierLine].filter(Boolean),
+        title: success ? 'Stake completed' : NOTIFICATION_EVENT_LABELS.service_change,
+        emailColor: success ? GREEN.hex : BLUE.hex,
+        discordColor: success ? GREEN.num : BLUE.num,
+        emoji: success ? GREEN.emoji : BLUE.emoji,
+        lines: [str(metadata.detail) || NOTIFICATION_EVENT_FALLBACK_DETAIL.service_change || '', supplierLine].filter(Boolean),
       }
+    }
     case 'revshare_change':
       return {
-        title: 'Revenue share changed',
+        title: NOTIFICATION_EVENT_LABELS.revshare_change,
         emailColor: PURPLE.hex,
         discordColor: PURPLE.num,
         emoji: PURPLE.emoji,
-        lines: [str(metadata.detail) || 'The revenue share on one of your suppliers changed.', supplierLine].filter(Boolean),
+        lines: [str(metadata.detail) || NOTIFICATION_EVENT_FALLBACK_DETAIL.revshare_change || '', supplierLine].filter(Boolean),
       }
     case 'stake':
     case 'unstake':

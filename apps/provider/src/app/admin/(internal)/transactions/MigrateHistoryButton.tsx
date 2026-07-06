@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Button } from '@igniter/ui/components/button'
-import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { ConfirmationDialog } from '@igniter/ui/components/ConfirmationDialog'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CountMigratableHistory, MigrateRemediationHistory } from '@/actions/Transactions'
 

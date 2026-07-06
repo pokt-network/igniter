@@ -31,6 +31,31 @@ export const DEFAULT_NOTIFICATION_FLAGS: NotificationFlags = {
   import_result: true,
 }
 
+// ─── Shared event vocabulary ─────────────────────────────────────────────────
+// Single source of truth for how each event type reads, consumed by BOTH the
+// in-app header/History (middleman app) and the external email/Discord/Telegram
+// message builder (middleman-workflows) so the two can never drift.
+
+export const NOTIFICATION_EVENT_LABELS: Record<NotificationEventType, string> = {
+  service_change: 'Supplier service changed',
+  revshare_change: 'Revenue share changed',
+  stake: 'Stake update',
+  unstake: 'Unstake update',
+  upstake: 'Upstake update',
+  operational_funds: 'Operational funds',
+  import_result: 'Supplier import',
+}
+
+// Event types that describe a supplier configuration change (rendered distinctly
+// from transaction-outcome events).
+export const SUPPLIER_EVENT_TYPES: readonly NotificationEventType[] = ['service_change', 'revshare_change']
+
+// Fallback one-line summaries used when an event carries no `detail` in metadata.
+export const NOTIFICATION_EVENT_FALLBACK_DETAIL: Partial<Record<NotificationEventType, string>> = {
+  service_change: 'A service was added or removed on one of your suppliers.',
+  revshare_change: 'The revenue share on one of your suppliers changed.',
+}
+
 // Channel secrets (webhook URL, bot token, and — for middleman's per-user email
 // — the full SMTP credentials) are stored encrypted at rest with AES-256-CBC
 // keyed by NOTIFICATION_ENCRYPTION_KEY; the whole config JSON is encrypted, so the SMTP

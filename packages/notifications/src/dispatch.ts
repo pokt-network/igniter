@@ -8,6 +8,7 @@ import type {
   EmailConfig,
   NotificationMessage,
 } from './types'
+import { ChannelDeliveryError, type ChannelErrorCategory } from './channelError'
 
 export type DispatchChannelType = 'discord' | 'telegram' | 'email'
 
@@ -28,6 +29,10 @@ export type ChannelDeliveryResult = {
   type: DispatchChannelType
   status: 'sent' | 'error'
   error?: string
+  // Present when the failure was a categorized ChannelDeliveryError, so the
+  // caller can distinguish a permanent misconfig from a retriable blip.
+  category?: ChannelErrorCategory
+  retriable?: boolean
 }
 
 // Sends one already-built message to each channel, capturing per-channel
@@ -66,6 +71,9 @@ export async function dispatchToChannels(
         type: channel.type,
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
+        ...(err instanceof ChannelDeliveryError
+          ? { category: err.category, retriable: err.retriable }
+          : {}),
       })
     }
   }

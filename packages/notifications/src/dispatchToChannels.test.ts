@@ -101,16 +101,16 @@ describe('dispatchToChannels', () => {
     expect(body.text.slice(0, -1).split('\n').every((l: string) => l === longLine)).toBe(true)
   })
 
-  it('captures an HTTP failure as a generic per-channel error and continues to later channels', async () => {
+  it('captures an HTTP failure with its status CLASS and category, continuing to later channels', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: false, status: 404, text: async () => 'internal-body' })
       .mockResolvedValueOnce({ ok: true, text: async () => '' })
     const results = await dispatchToChannels([discordChannel, telegramChannel], message)
-    expect(results[0]).toMatchObject({ id: 1, status: 'error' })
-    // Generic — must NOT leak the upstream status or body (SSRF read-oracle fix).
+    // A 404 is categorized so a bad/revoked webhook is distinguishable from a blip.
+    expect(results[0]).toMatchObject({ id: 1, status: 'error', category: 'not_found', retriable: false })
     expect(results[0]!.error).toContain('delivery failed')
-    expect(results[0]!.error).not.toContain('404')
-    expect(results[0]!.error).not.toContain('internal-body')
+    expect(results[0]!.error).toContain('404') // status class is surfaced...
+    expect(results[0]!.error).not.toContain('internal-body') // ...but never the body (read-oracle fix)
     expect(results[1]).toMatchObject({ id: 2, status: 'sent' })
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })

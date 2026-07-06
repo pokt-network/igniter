@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import {DeleteRegion, ListRegions} from "@/actions/Regions";
 import {Button} from "@igniter/ui/components/button";
 import { Trash2Icon, PencilIcon } from "lucide-react";
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import type {Region} from "@igniter/db/provider/schema";
 import {AddOrUpdateRegionDialog} from "@/components/AddOrUpdateRegionDialog";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";

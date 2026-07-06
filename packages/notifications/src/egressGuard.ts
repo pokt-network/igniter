@@ -82,11 +82,105 @@ function ipBlocked(ip: string): boolean {
   return true // unrecognized format → fail closed
 }
 
-// Resolves a hostname and throws if ANY resolved address is a blocked target.
-// Errors are safe to surface to the caller (they describe the user's own input,
-// not any internal service response).
-export async function assertSafeHost(host: string): Promise<void> {
+// ── Operator escape hatch ───────────────────────────────────────────────────
+// The blocks above are correct for USER-supplied destinations, but legitimate
+// deployments point channels at internal targets the operator owns and trusts:
+// an in-cluster SMTP relay (10.x / 192.168.x), a localnet mailpit, a webhook
+// sink. Those are configured by the person running the server, not by an
+// arbitrary authenticated user, so we let the OPERATOR (via a deploy-time env
+// var, a higher trust tier than channel config) name exactly which private
+// destinations are allowed. Default is empty → the strict guard above stands.
+
+interface CidrEntry {
+  bytes: number[] // 4 (v4) or 16 (v6)
+  prefix: number
+}
+
+export interface EgressAllowlist {
+  hosts: Set<string> // exact host literals (lowercased), matched pre-resolution
+  cidrs: CidrEntry[] // IP / CIDR ranges, matched against resolved addresses
+}
+
+function ipv4ToBytes(ip: string): number[] {
+  return ip.split('.').map((o) => parseInt(o, 10))
+}
+
+/** True iff the first `prefix` bits of a and b are equal (same-length byte arrays). */
+function bitsMatch(a: number[], b: number[], prefix: number): boolean {
+  let bits = prefix
+  for (let i = 0; i < a.length && bits > 0; i++) {
+    const take = Math.min(8, bits)
+    const mask = take === 8 ? 0xff : (0xff << (8 - take)) & 0xff
+    if ((a[i]! & mask) !== (b[i]! & mask)) return false
+    bits -= take
+  }
+  return true
+}
+
+/**
+ * Parse `NOTIFICATION_EGRESS_ALLOWLIST` (comma/space separated). Each token is
+ * either a host literal (`localhost`, `mailpit`, `smtp.default.svc`), a bare IP
+ * (`10.0.5.25`), or a CIDR (`10.0.0.0/8`, `fd00::/8`). Unparseable tokens are
+ * skipped (fail-closed: an operator typo grants nothing rather than everything).
+ */
+export function parseEgressAllowlist(raw: string | undefined): EgressAllowlist {
+  const hosts = new Set<string>()
+  const cidrs: CidrEntry[] = []
+  for (const token of (raw ?? '').split(/[\s,]+/)) {
+    if (!token) continue
+    const slash = token.indexOf('/')
+    const addr = slash >= 0 ? token.slice(0, slash) : token
+    const prefixStr = slash >= 0 ? token.slice(slash + 1) : undefined
+    // A slash with nothing after it (`10.0.0.0/`, or a typo'd `10.0.0.0/ 8`
+    // that split on the space) is a malformed CIDR — skip it. Parsing it as
+    // prefix 0 would fail OPEN to allow-all-family, breaking the contract below.
+    if (prefixStr === '') continue
+
+    if (net.isIPv4(addr)) {
+      const prefix = prefixStr === undefined ? 32 : Number(prefixStr)
+      if (Number.isInteger(prefix) && prefix >= 0 && prefix <= 32) {
+        cidrs.push({ bytes: ipv4ToBytes(addr), prefix })
+      }
+      continue
+    }
+    if (net.isIPv6(addr)) {
+      const bytes = ipv6ToBytes(addr)
+      const prefix = prefixStr === undefined ? 128 : Number(prefixStr)
+      if (bytes && Number.isInteger(prefix) && prefix >= 0 && prefix <= 128) {
+        cidrs.push({ bytes, prefix })
+      }
+      continue
+    }
+    // Not an IP → treat as a host literal (only meaningful without a prefix).
+    if (slash < 0) hosts.add(addr.toLowerCase())
+  }
+  return { hosts, cidrs }
+}
+
+/** True iff a resolved address falls inside an allowlisted IP/CIDR (family-exact). */
+function ipAllowed(ip: string, allow: EgressAllowlist): boolean {
+  const bytes = net.isIPv4(ip) ? ipv4ToBytes(ip) : net.isIPv6(ip) ? ipv6ToBytes(ip) : null
+  if (!bytes) return false
+  return allow.cidrs.some((c) => c.bytes.length === bytes.length && bitsMatch(bytes, c.bytes, c.prefix))
+}
+
+// Read the operator allowlist from the environment once. Pure callers can pass
+// an explicit allowlist (e.g. tests); channels use this env-backed default.
+let cachedAllowlist: EgressAllowlist | undefined
+function defaultAllowlist(): EgressAllowlist {
+  if (!cachedAllowlist) cachedAllowlist = parseEgressAllowlist(process.env.NOTIFICATION_EGRESS_ALLOWLIST)
+  return cachedAllowlist
+}
+
+// Resolves a hostname and throws if ANY resolved address is a blocked target
+// that the operator has not explicitly allowlisted. Errors are safe to surface
+// to the caller (they describe the user's own input, not an internal response).
+export async function assertSafeHost(host: string, allow: EgressAllowlist = defaultAllowlist()): Promise<void> {
   const cleaned = host.replace(/^\[|\]$/g, '') // strip IPv6 URL brackets
+  // Operator-trusted host literal: skip resolution entirely (they named this
+  // exact host as safe, e.g. `mailpit` / `localhost`).
+  if (allow.hosts.has(cleaned.toLowerCase())) return
+
   let addresses: Array<{ address: string }>
   try {
     addresses = await lookup(cleaned, { all: true })
@@ -95,14 +189,14 @@ export async function assertSafeHost(host: string): Promise<void> {
   }
   if (addresses.length === 0) throw new Error('Destination host could not be resolved')
   for (const { address } of addresses) {
-    if (ipBlocked(address)) {
+    if (ipBlocked(address) && !ipAllowed(address, allow)) {
       throw new Error('Destination address is not allowed')
     }
   }
 }
 
 // Validates an outbound URL: http(s) only, and its host must pass assertSafeHost.
-export async function assertSafeUrl(rawUrl: string): Promise<void> {
+export async function assertSafeUrl(rawUrl: string, allow: EgressAllowlist = defaultAllowlist()): Promise<void> {
   let url: URL
   try {
     url = new URL(rawUrl)
@@ -112,5 +206,5 @@ export async function assertSafeUrl(rawUrl: string): Promise<void> {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Destination protocol is not allowed')
   }
-  await assertSafeHost(url.hostname)
+  await assertSafeHost(url.hostname, allow)
 }

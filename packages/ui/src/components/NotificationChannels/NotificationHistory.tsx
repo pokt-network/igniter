@@ -34,12 +34,17 @@ export interface NotificationHistoryEvent {
 }
 
 export interface NotificationHistoryProps {
-  /** App-specific, wallet/owner-scoped fetch returning a page + total count. */
+  /**
+   * App-specific, wallet/owner-scoped fetch returning a page + total count.
+   * `unviewedTotal` is the server-side count of ALL unread events (not just this
+   * page) so the badge and the mark-all control reflect the true unread total
+   * rather than however many unread rows happen to land on the current page.
+   */
   listEvents: (
     page: number,
     pageSize: number,
     search?: string,
-  ) => Promise<{ data: NotificationHistoryEvent[]; total: number }>
+  ) => Promise<{ data: NotificationHistoryEvent[]; total: number; unviewedTotal?: number }>
   /** Marks every unread event viewed (app-scoped). */
   markAllViewed: () => Promise<void>
   /** Human label for an event type (vocabularies differ per app). */
@@ -168,7 +173,10 @@ export function NotificationHistory({
     },
   ]
 
-  const unviewedCount = (data?.data ?? []).filter((e) => !e.viewedAt).length
+  // Prefer the server-side unread total so the badge/mark-all reflect ALL unread
+  // events, not just the current page; fall back to the page-local count for an
+  // app that hasn't wired unviewedTotal yet.
+  const unviewedCount = data?.unviewedTotal ?? (data?.data ?? []).filter((e) => !e.viewedAt).length
 
   return (
     <div className="flex flex-col gap-3">

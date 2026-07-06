@@ -4,7 +4,11 @@ import { DetectedSupplierChange } from '@igniter/domain/middleman/utils/supplier
 export type SupplierChangeNotification = {
   type: 'service_change' | 'revshare_change'
   ownerIdentity: string
-  metadata: { address: string; height: number; detail: string }
+  // `outcome: 'success'` marks a positive event (the supplier's first stake) so
+  // the UI renders it green instead of the neutral "config changed" warning.
+  // `batchId` links the notification back to the supplier_changes rows so the
+  // "View Details" deep-link can highlight/expand that batch.
+  metadata: { address: string; height: number; detail: string; outcome?: 'success'; batchId?: string }
 }
 
 // Buckets detected supplier changes into the per-owner notifications to fire:
@@ -14,7 +18,7 @@ export type SupplierChangeNotification = {
 export function buildSupplierChangeNotifications(
   changes: DetectedSupplierChange[],
   ownerIdentity: string,
-  meta: { address: string; height: number },
+  meta: { address: string; height: number; batchId?: string },
 ): SupplierChangeNotification[] {
   const describe = (cs: DetectedSupplierChange[]) =>
     cs.map((c) => c.description).filter(Boolean).join(' ')
@@ -28,12 +32,20 @@ export function buildSupplierChangeNotifications(
     (c) => c.changeType === SupplierChangeType.RevShareChanged,
   )
 
+  // A service-add flagged `initialStake` is the supplier's first activation — a
+  // success, not a config drift. The detector sets it on `newValue.initialStake`.
+  const isInitialStake = serviceChanges.some((c) => c.newValue?.initialStake === true)
+
   const notifications: SupplierChangeNotification[] = []
   if (serviceChanges.length > 0) {
     notifications.push({
       type: 'service_change',
       ownerIdentity,
-      metadata: { ...meta, detail: describe(serviceChanges) },
+      metadata: {
+        ...meta,
+        detail: describe(serviceChanges),
+        ...(isInitialStake ? { outcome: 'success' } : {}),
+      },
     })
   }
   if (revShareChanges.length > 0) {
