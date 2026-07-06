@@ -42,6 +42,21 @@ const fakeClient = {
         }
       },
     }),
+    // GetScheduleHealth describe()s each schedule for running-actions-aware liveness.
+    getHandle: () => ({
+      describe: async () => ({
+        scheduleId: 'GovernanceSync-scheduled',
+        state: { paused: false },
+        spec: { intervals: [] },
+        info: {
+          recentActions: [],
+          nextActionTimes: [],
+          runningActions: [],
+          numActionsTaken: 0,
+          createdAt: new Date('2026-07-01T00:00:00Z'),
+        },
+      }),
+    }),
   },
 }
 jest.mock('@/lib/temporal', () => ({ getTemporalClient: () => fakeClient }))
