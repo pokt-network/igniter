@@ -70,36 +70,36 @@ This tab is read-only: it surfaces what the watchdog has already observed and ac
 
 ### Schedule Health Table
 
-| Column | Description |
-|--------|-------------|
-| **Schedule** | The schedule's Temporal ID. |
-| **State** | See [Schedule States](#schedule-states) below. |
-| **Last fire** | Relative time since the schedule last triggered a workflow, hover for the exact timestamp. |
-| **Next fire** | Relative time until the schedule's next scheduled trigger. |
-| **Unstuck** | Number of times the watchdog has attempted to recover this schedule. Highlighted when greater than zero. |
+| Column        | Description                                                                                                                                                     |
+|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Schedule**  | The schedule's Temporal ID.                                                                                                                                     |
+| **State**     | See [Schedule States](#schedule-states) below.                                                                                                                  |
+| **Last fire** | Relative time since the schedule last triggered a workflow, hover for the exact timestamp.                                                                      |
+| **Next fire** | Relative time until the schedule's next scheduled trigger.                                                                                                      |
+| **Unstuck**   | Number of times the watchdog has attempted to recover this schedule. Highlighted when greater than zero.                                                        |
 | **Recreated** | Number of times the watchdog recreated this schedule after finding it `NOT_FOUND`. Highlighted when greater than zero, hover for the last recreation timestamp. |
-| **Note** | Any operator or system note attached to the schedule, truncated with a tooltip for the full text. |
-| *(View runs)* | Jumps to the Workflows tab, filtered to workflows started by this schedule. |
+| **Note**      | Any operator or system note attached to the schedule, truncated with a tooltip for the full text.                                                               |
+| *(View runs)* | Jumps to the Workflows tab, filtered to workflows started by this schedule.                                                                                     |
 
 ### Schedule States
 
-| State | Meaning |
-|-------|---------|
-| **healthy** | Firing normally. No unstuck actions recorded. |
-| **paused** | The schedule is paused in Temporal — it will not fire until resumed. |
-| **stale** | The watchdog has recorded unstuck actions for this schedule. It's actively trying to recover it. |
-| **unhealthy** | The watchdog has flagged this schedule as unhealthy — it needs operator attention. |
+| State         | Meaning                                                                                          |
+|---------------|--------------------------------------------------------------------------------------------------|
+| **healthy**   | Firing normally. No unstuck actions recorded.                                                    |
+| **paused**    | The schedule is paused in Temporal — it will not fire until resumed.                             |
+| **stale**     | The watchdog has recorded unstuck actions for this schedule. It's actively trying to recover it. |
+| **unhealthy** | The watchdog has flagged this schedule as unhealthy — it needs operator attention.               |
 
 ### Recent Fires
 
 Click the row's expand arrow to reveal the schedule's recent fires:
 
-| Column | Description |
-|--------|-------------|
-| **Fired** | Relative time the action was taken, hover for the exact timestamp. |
-| **Lag** | The delay between when the action was scheduled and when it was actually taken (`takenAt − scheduledAt`). Shown in milliseconds or seconds, highlighted amber when it exceeds 30 seconds. |
-| **Workflow** | Link to the resulting workflow's detail page. |
-| **Status** | The workflow's current status badge, looked up lazily when the row is expanded. Shows `…` while loading or `—` if not found. |
+| Column       | Description                                                                                                                                                                               |
+|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Fired**    | Relative time the action was taken, hover for the exact timestamp.                                                                                                                        |
+| **Lag**      | The delay between when the action was scheduled and when it was actually taken (`takenAt − scheduledAt`). Shown in milliseconds or seconds, highlighted amber when it exceeds 30 seconds. |
+| **Workflow** | Link to the resulting workflow's detail page.                                                                                                                                             |
+| **Status**   | The workflow's current status badge, looked up lazily when the row is expanded. Shows `…` while loading or `—` if not found.                                                              |
 
 <!-- SCREENSHOT: Capture the Schedules tab with one row expanded showing recent fires, including at least one amber lag value. -->
 <!-- ![Screenshot: Schedules tab with expanded recent fires](../screenshots/schedules-tab-expanded.png) -->
@@ -123,16 +123,16 @@ While the workflow is `RUNNING`, the page auto-refreshes every 10 seconds. If a 
 
 ### Details Grid
 
-| Field | Description |
-|-------|-------------|
-| **Run ID** | The specific execution's run ID, with a copy button. |
-| **Task queue** | The Temporal task queue this workflow runs on. |
-| **Started / Closed** | Start timestamp, and close timestamp for terminal workflows. |
-| **Elapsed** | Duration so far (running) or total duration (terminal). |
-| **History length** | Number of events in the workflow's history. |
-| **Scheduled by** | Present only if the workflow was started by a Temporal Schedule — links back to the Schedules tab. |
-| **Parent** | Present only for child workflows — links to the parent's detail page. |
-| **Next run** | Present only when the workflow continued as a new run — links to that run. |
+| Field                | Description                                                                                        |
+|----------------------|----------------------------------------------------------------------------------------------------|
+| **Run ID**           | The specific execution's run ID, with a copy button.                                               |
+| **Task queue**       | The Temporal task queue this workflow runs on.                                                     |
+| **Started / Closed** | Start timestamp, and close timestamp for terminal workflows.                                       |
+| **Elapsed**          | Duration so far (running) or total duration (terminal).                                            |
+| **History length**   | Number of events in the workflow's history.                                                        |
+| **Scheduled by**     | Present only if the workflow was started by a Temporal Schedule — links back to the Schedules tab. |
+| **Parent**           | Present only for child workflows — links to the parent's detail page.                              |
+| **Next run**         | Present only when the workflow continued as a new run — links to that run.                         |
 
 If the workflow has custom search attributes beyond the schedule-origin one, they appear in a collapsible **Search attributes** block below the grid.
 
@@ -154,14 +154,14 @@ Collapsible payload blocks for the workflow's input and, once available, its res
 
 One row per activity invocation in the workflow's history.
 
-| Column | Description |
-|--------|-------------|
-| **#** | Sequence number. |
-| **Activity** | Activity type name. |
-| **Status** | Badge: Completed (success), Failed (destructive), Timed Out (warning), Pending / Scheduled / Started (info), Canceled (secondary). |
-| **Attempts** | Attempt count out of the max configured retries (`∞` if unbounded). |
-| **Started** | Relative time the activity started. |
-| **Duration** | Elapsed time, for closed activities. |
+| Column       | Description                                                                                                                        |
+|--------------|------------------------------------------------------------------------------------------------------------------------------------|
+| **#**        | Sequence number.                                                                                                                   |
+| **Activity** | Activity type name.                                                                                                                |
+| **Status**   | Badge: Completed (success), Failed (destructive), Timed Out (warning), Pending / Scheduled / Started (info), Canceled (secondary). |
+| **Attempts** | Attempt count out of the max configured retries (`∞` if unbounded).                                                                |
+| **Started**  | Relative time the activity started.                                                                                                |
+| **Duration** | Elapsed time, for closed activities.                                                                                               |
 
 Expand a row to see:
 - For **Pending** activities, the retry picture: pending sub-state, next retry time, when retries expire, last heartbeat time, and the worker identity that last picked it up.
@@ -174,10 +174,10 @@ If the workflow spawned child workflows, a table lists each one with its ID (lin
 
 ### Error States
 
-| Situation | What you see |
-|-----------|--------------|
-| **Not found** | The workflow ID doesn't resolve — likely aged out of Temporal's visibility retention window. A retry button is shown. |
-| **Load failure** | A generic error with a retry button. |
+| Situation            | What you see                                                                                                                                                                                       |
+|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Not found**        | The workflow ID doesn't resolve — likely aged out of Temporal's visibility retention window. A retry button is shown.                                                                              |
+| **Load failure**     | A generic error with a retry button.                                                                                                                                                               |
 | **History degraded** | The workflow's summary (`describe()`) loaded but its event history did not. An amber notice explains that activities, input/output, and children are hidden, while header fields remain available. |
 
 <!-- SCREENSHOT: Capture the workflow detail page for a RUNNING workflow with the Activities table showing a PENDING activity expanded, and one with a Failure banner. -->
