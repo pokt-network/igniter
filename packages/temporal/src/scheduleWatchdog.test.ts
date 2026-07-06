@@ -30,6 +30,7 @@ function makeStore(state?: HealState): WatchdogStateStore {
     bumpUnstuck: jest.fn(async (id) => ({ ...defaultHealState(id), unstucks: 1 })),
     bumpInjectedTrigger: jest.fn(async (id) => ({ ...defaultHealState(id), injectedTriggers: 1 })),
     compensateInjectedTrigger: jest.fn(),
+    baselineActionCount: jest.fn(),
     setUnhealthy: jest.fn(),
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),
@@ -67,6 +68,22 @@ describe('ScheduleWatchdog.tick', () => {
     const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store: makeStore(), config, logger })
     await wd.tick()
     expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it('stale + enforce heal-start: baselines lastActionCount to numActionsTaken (F7b)', async () => {
+    const store = makeStore() // fresh state -> unstucks 0
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 3_600_000), scheduledAt: new Date(NOW_MS - 3_600_000) }], numActionsTaken: 100 })), update: jest.fn().mockResolvedValue(undefined), trigger: jest.fn() }
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.baselineActionCount).toHaveBeenCalledWith(entry.scheduleId, 100)
+  })
+
+  it('stale + enforce mid-episode (unstucks>0): does NOT re-baseline (F7b)', async () => {
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unstucks: 1 })
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 3_600_000), scheduledAt: new Date(NOW_MS - 3_600_000) }], numActionsTaken: 100 })), update: jest.fn().mockResolvedValue(undefined), trigger: jest.fn() }
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.baselineActionCount).not.toHaveBeenCalled()
   })
 
   it('stale + observe: persists observed_unhealthy, mutates nothing (S5)', async () => {

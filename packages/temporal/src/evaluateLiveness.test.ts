@@ -118,4 +118,19 @@ describe('evaluateLiveness', () => {
     const s = state({ lastActionCount: 50, injectedTriggers: 1 })
     expect(evaluateLiveness(desc, entry, NOW, s)).toBe('healthy')
   })
+
+  it('N1: tolerates a recentActions entry with an absent takenAt (no throw)', () => {
+    // Eventual-consistency partiality: one entry has takenAt, one does not.
+    const desc = {
+      state: { paused: false },
+      info: {
+        runningActions: [],
+        recentActions: [{ scheduledAt: ago(3_600_000) }, { scheduledAt: ago(3_600_000), takenAt: ago(3_600_000) }],
+        createdAt: ago(3_600_000),
+        numActionsTaken: 100,
+      },
+    } as unknown as ScheduleDescription
+    expect(() => evaluateLiveness(desc, entry, NOW, state())).not.toThrow()
+    expect(evaluateLiveness(desc, entry, NOW, state())).toBe('stale')
+  })
 })

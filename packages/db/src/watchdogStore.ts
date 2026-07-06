@@ -74,6 +74,13 @@ export function createWatchdogHealStateStore(
         .where(eq(table.scheduleId, scheduleId))
     },
 
+    async baselineActionCount(scheduleId: string, lastActionCount: number): Promise<void> {
+      await db
+        .insert(table)
+        .values({ scheduleId, lastActionCount })
+        .onConflictDoUpdate({ target: table.scheduleId, set: { lastActionCount } })
+    },
+
     async setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void> {
       await db
         .insert(table)
@@ -92,13 +99,21 @@ export function createWatchdogHealStateStore(
     },
 
     async resetOnRecreate(scheduleId: string): Promise<void> {
+      // A recreated schedule is brand-new (numActionsTaken resets to 0), so it must
+      // start with a clean ladder — including unstucks/unhealthy/observedUnhealthy —
+      // else it inherits old elevated counters and can trip the breaker prematurely
+      // (consistent with resetLadder).
+      const clean = {
+        lastActionCount: 0,
+        injectedTriggers: 0,
+        unstucks: 0,
+        unhealthy: false,
+        observedUnhealthy: false,
+      }
       await db
         .insert(table)
-        .values({ scheduleId, lastActionCount: 0, injectedTriggers: 0 })
-        .onConflictDoUpdate({
-          target: table.scheduleId,
-          set: { lastActionCount: 0, injectedTriggers: 0 },
-        })
+        .values({ scheduleId, ...clean })
+        .onConflictDoUpdate({ target: table.scheduleId, set: clean })
     },
 
     async resetLadder(scheduleId: string, lastActionCount: number): Promise<void> {

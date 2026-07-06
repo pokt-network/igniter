@@ -66,6 +66,8 @@ export interface WatchdogStateStore {
   bumpInjectedTrigger(scheduleId: string, at: Date): Promise<HealState>
   /** Undo one write-ahead bumpInjectedTrigger when the compensating trigger() failed (M7). */
   compensateInjectedTrigger(scheduleId: string): Promise<void>
+  /** Snapshot numActionsTaken as the autonomous-fire baseline at heal-start (F7b). */
+  baselineActionCount(scheduleId: string, lastActionCount: number): Promise<void>
   setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void>
   setObservedUnhealthy(scheduleId: string, observed: boolean): Promise<void>
   resetOnRecreate(scheduleId: string): Promise<void>
@@ -104,7 +106,9 @@ export function parseWatchdogConfig(logger: Logger): WatchdogConfig {
     const raw = process.env[name]
     if (!raw) return def
     const n = Number(raw)
-    if (!Number.isFinite(n)) {
+    // These feed ladder/recreate thresholds — reject non-negative-integer garbage
+    // (negatives, fractions, hex like '0x10', whitespace-to-0) instead of coercing.
+    if (!Number.isInteger(n) || n < 0) {
       logger.warn({ name, raw, default: def }, 'Invalid watchdog count env; using default')
       return def
     }
@@ -160,10 +164,13 @@ export function evaluateLiveness(
   if (!createdAt) return 'unknown' // missing timestamp -> skip, never coerce
   if (createdAt.getTime() > now.getTime()) return 'unknown' // skew guard (D5)
 
-  const recent = desc.info.recentActions ?? []
-  const latestTakenAt = recent.length
-    ? new Date(Math.max(...recent.map((a) => a.takenAt.getTime())))
-    : undefined
+  // Guard takenAt: schedule listings are eventual-consistent and an entry can be
+  // partial. This path is now also reached from the web (scheduleLiveness ->
+  // GetScheduleHealth), where an unguarded deref would fail the whole panel (N1).
+  const takenTimes = (desc.info.recentActions ?? [])
+    .filter((a) => a.takenAt)
+    .map((a) => a.takenAt.getTime())
+  const latestTakenAt = takenTimes.length ? new Date(Math.max(...takenTimes)) : undefined
   if (latestTakenAt && latestTakenAt.getTime() > now.getTime()) return 'unknown' // skew guard (D5)
 
   // reference = last AUTONOMOUS fire (excludes our compensating triggers, D3).
@@ -505,6 +512,14 @@ export class ScheduleWatchdog {
           logger.warn({ scheduleId: entry.scheduleId }, 'OBSERVE: stale; persisting observed_unhealthy, mutating nothing')
           await store.setObservedUnhealthy(entry.scheduleId, true)
           return
+        }
+        // Snapshot numActionsTaken as the autonomous-fire baseline the FIRST time we
+        // heal this episode. Without it, a pre-existing schedule with no heal row has
+        // lastActionCount=0, so hasAutonomousFire is always true and our own injected
+        // trigger reads as an autonomous fire → ladder resets → the breaker never
+        // pages a truly-dead scheduler (F7b). unstucks===0 marks heal-start.
+        if (state.unstucks === 0) {
+          await store.baselineActionCount(entry.scheduleId, desc.info.numActionsTaken)
         }
         const { nextBackoffMs } = await healSchedule(handle, client, entry, state, store, config, logger, now)
         this.nextEligibleAt.set(entry.scheduleId, now.getTime() + nextBackoffMs)

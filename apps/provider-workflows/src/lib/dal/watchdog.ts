@@ -38,6 +38,10 @@ export default class Watchdog implements WatchdogStateStore {
     return this.store.compensateInjectedTrigger(scheduleId)
   }
 
+  baselineActionCount(scheduleId: string, lastActionCount: number): Promise<void> {
+    return this.store.baselineActionCount(scheduleId, lastActionCount)
+  }
+
   setUnhealthy(scheduleId: string, unhealthy: boolean): Promise<void> {
     return this.store.setUnhealthy(scheduleId, unhealthy)
   }

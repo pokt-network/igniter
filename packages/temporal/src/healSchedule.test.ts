@@ -47,6 +47,7 @@ function makeStore(over: Partial<HealState> = {}) {
       return { ...defaultHealState(id), ...over, injectedTriggers: (over.injectedTriggers ?? 0) + 1 }
     }),
     compensateInjectedTrigger: jest.fn(async () => { order.push('compensateInjectedTrigger') }),
+    baselineActionCount: jest.fn(async () => { order.push('baselineActionCount') }),
     setUnhealthy: jest.fn(async () => { order.push('setUnhealthy') }),
     setObservedUnhealthy: jest.fn(),
     resetOnRecreate: jest.fn(),
