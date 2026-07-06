@@ -177,7 +177,8 @@ describe('mapWorkflowDetail — activities', () => {
     expect(act.state).toBe('COMPLETED');
     expect(JSON.parse(act.input!.text)).toEqual({ tx: 1 });
     expect(JSON.parse(act.result!.text)).toEqual({ hash: '0xabc' });
-    expect(act.durationMs).toBe(2000);
+    // Duration is execution time (started -> completed), not schedule-to-close (#268).
+    expect(act.durationMs).toBe(1000);
   });
 
   it('maps failure with stack on FAILED activities', () => {

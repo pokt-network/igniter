@@ -24,7 +24,7 @@ export function safeJsonStringify(value: unknown, space = 2): string {
   }
 }
 
-function clamp(text: string): { text: string; truncated: boolean } {
+export function clamp(text: string): { text: string; truncated: boolean } {
   if (text.length <= PAYLOAD_PREVIEW_LIMIT) return { text, truncated: false };
   return { text: text.slice(0, PAYLOAD_PREVIEW_LIMIT), truncated: true };
 }

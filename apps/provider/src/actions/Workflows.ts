@@ -6,6 +6,7 @@ import { listWatchdogHealState } from '@/lib/dal/watchdogHealState'
 import {
   listWorkflowViews,
   mapScheduleToHealth,
+  scheduleLiveness,
   type WorkflowListFilter,
   type WorkflowPageRequest,
   type WorkflowPageResult,
@@ -35,7 +36,12 @@ export async function GetScheduleHealth(): Promise<ActionResult<ScheduleHealthRo
     const healById = new Map<string, WatchdogHealState>(healRows.map((r) => [r.scheduleId, r]))
     const out: ScheduleHealthRow[] = []
     for await (const summary of client.schedule.list()) {
-      out.push(mapScheduleToHealth(summary, healById.get(summary.scheduleId) ?? null))
+      const heal = healById.get(summary.scheduleId) ?? null
+      // describe() (not the list summary) carries runningActions/createdAt/
+      // numActionsTaken, which scheduleLiveness needs to judge staleness without
+      // false-flagging an in-flight SKIP-overlap run (M6).
+      const desc = await client.schedule.getHandle(summary.scheduleId).describe()
+      out.push(mapScheduleToHealth(desc, heal, scheduleLiveness(desc, heal)))
     }
     return out
   })

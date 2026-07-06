@@ -75,7 +75,7 @@ describe('mapWorkflowInfoToView', () => {
 describe('buildWorkflowListQuery / matchesWorkflowFilter', () => {
   it('builds ExecutionStatus + WorkflowType clauses', () => {
     expect(buildWorkflowListQuery({ status: 'RUNNING', type: 'ExecuteTransaction' })).toBe(
-      'ExecutionStatus = "Running" AND WorkflowType = "ExecuteTransaction"',
+      `ExecutionStatus = "Running" AND WorkflowType = 'ExecuteTransaction'`,
     )
   })
 

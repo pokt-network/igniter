@@ -2,7 +2,7 @@ import { temporal } from '@temporalio/proto';
 import { optionalTsToDate } from '@temporalio/common/lib/time';
 import type { WorkflowExecutionDescription, Client } from '@temporalio/client';
 
-import { PayloadPreview, previewPayloads, safeJsonStringify } from '@/payloadPreview';
+import { PayloadPreview, previewPayloads, safeJsonStringify, clamp } from '@/payloadPreview';
 import type { WorkflowStatus } from '@/workflowView';
 
 type IHistory = temporal.api.history.v1.IHistory;
@@ -37,7 +37,7 @@ export type ActivityDetailView = {
   input: PayloadPreview | null;
   result: PayloadPreview | null;
   failure: { message: string; type: string | null; stackTrace: string | null } | null;
-  scheduledAt: string;
+  scheduledAt: string | null;
   startedAt: string | null;
   closedAt: string | null;
   durationMs: number | null;
@@ -236,7 +236,9 @@ function mapActivities(
         input: previewPayloads(scheduled.input?.payloads),
         result: null,
         failure: null,
-        scheduledAt: timeOf(event) ?? new Date(0).toISOString(),
+        // Leave null when the scheduled event has no eventTime; never seed epoch,
+        // which would make a later duration read as a ~56-year span (#306).
+        scheduledAt: timeOf(event),
         startedAt: null,
         closedAt: null,
         durationMs: null,
@@ -274,9 +276,13 @@ function mapActivities(
       row.state = state;
       row.closedAt = timeOf(event);
       Object.assign(row, patch);
-      if (row.closedAt && row.scheduledAt) {
-        row.durationMs =
-          new Date(row.closedAt).getTime() - new Date(row.scheduledAt).getTime();
+      // Duration = actual execution time (started -> closed), NOT schedule-to-close,
+      // which would fold in queue/dispatch wait and, across retries, the whole
+      // schedule-to-final span (#268). Fall back to scheduledAt only when the
+      // activity closed without ever starting.
+      const from = row.startedAt ?? row.scheduledAt;
+      if (row.closedAt && from) {
+        row.durationMs = new Date(row.closedAt).getTime() - new Date(from).getTime();
       }
     };
 
@@ -462,9 +468,10 @@ export function mapWorkflowDetail(
 }
 
 function previewSearchAttributes(attrs: Record<string, unknown[]>): PayloadPreview {
-  // Values are already decoded by the SDK; serialize directly.
-  const text = safeJsonStringify(attrs);
-  return { text, truncated: false, decodeError: null };
+  // Values are already decoded by the SDK; serialize and clamp at the same 32KB
+  // limit as every other payload path, so a large custom search attribute can't
+  // return an unbounded string with truncated:false (#462).
+  return { ...clamp(safeJsonStringify(attrs)), decodeError: null };
 }
 
 export async function getWorkflowDetail(
