@@ -102,8 +102,9 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | Variable | Required | Description | How to generate |
 |----------|----------|-------------|-----------------|
 | `AUTH_SECRET` | Required | Secret used to encrypt website session tokens | `openssl rand -hex 24` |
+| `NOTIFICATION_ENCRYPTION_KEY` | Optional | Secret-at-rest encryption for notification-channel credentials (webhook URL, bot token, SMTP password). Only needed if users configure notification channels; the rest of the app runs without it. **Use a different key than Provider.** | `openssl rand -hex 32` |
 
-> **Note:** Middleman does not use `ENCRYPTION_IV` or `ENCRYPTION_KEY` — it does not store private keys in the database the way Provider does. Only `AUTH_SECRET` is needed for session encryption.
+> **Note:** Middleman does not store private keys in the database the way Provider does, so it needs no `ENCRYPTION_IV` and does not share Provider's `ENCRYPTION_KEY`. It uses its own `NOTIFICATION_ENCRYPTION_KEY` solely to encrypt notification-channel secrets at rest (elective — see the Notifications feature). `AUTH_SECRET` remains required for session encryption.
 
 ### External Services
 
@@ -255,6 +256,7 @@ Step-by-step tutorials for common Middleman workflows.
 | [Staking](../../docs/guides/middleman/staking.md) | Detailed staking flow: select provider, choose amount, pick offer, review, and execute |
 | [Unstaking](../../docs/guides/middleman/unstaking.md) | Detailed unstaking flow: select owner, choose nodes, review, and execute |
 | [Import Suppliers](../../docs/guides/middleman/import-suppliers.md) | Claim already-staked suppliers from a provider |
+| [Notifications](../../docs/guides/middleman/notifications.md) | Set up Discord, Telegram, or email delivery for supplier, transaction, and import events |
 
 ## Reference
 
@@ -265,3 +267,4 @@ Detailed feature documentation for each area.
 | [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
 | [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
 | [Workflows](../../docs/reference/middleman/workflows.md) | Temporal workflow observability, schedule health, and debugging |
+| [Notifications](../../docs/reference/middleman/notifications.md) | Per-wallet event types, channels, in-app feed, and delivery configuration |

@@ -18,3 +18,7 @@ data:
   BETA_INDEXER_API_URL: "https://data.beta.pocket.network/"
   ALPHA_INDEXER_API_URL: "https://data.alpha.pocket.network/"
   MINIMUM_STAKE_BUFFER: "2000000"
+  # SSRF egress allowlist for the notification channel test-send (Add/Edit
+  # channel). Dev/localnet uses private-IP SMTP/webhook targets; trust the
+  # private ranges. Leave UNSET in prod unless you run internal targets.
+  NOTIFICATION_EGRESS_ALLOWLIST: "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, localhost"

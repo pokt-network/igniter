@@ -4,7 +4,7 @@ import {KeyState, RemediationHistoryEntryReason, TransactionResult} from "@ignit
 import {useRouter} from "next/navigation";
 import {UpdateKeysState} from "@/actions/Keys";
 import {ActionButton} from "@/app/admin/details/KeyDetail/ActionButton";
-import {ConfirmationDialog} from "@/components/ConfirmationDialog";
+import {ConfirmationDialog} from "@igniter/ui/components/ConfirmationDialog";
 import {Button} from "@igniter/ui/components/button";
 import { copyToClipboard } from "@igniter/ui/lib/utils";
 

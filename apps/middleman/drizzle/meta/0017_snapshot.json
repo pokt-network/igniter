@@ -1,5 +1,5 @@
 {
-  "id": "37d9a97f-f579-44d8-931f-72834955f91c",
+  "id": "b849d847-11d1-4ac2-992c-33e2caab875a",
   "prevId": "9c2fc35c-993a-4123-a8bb-ff83a139f9ca",
   "version": "7",
   "dialect": "postgresql",
@@ -1138,73 +1138,268 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.watchdog_heal_state": {
-      "name": "watchdog_heal_state",
+    "public.notification_channels": {
+      "name": "notification_channels",
       "schema": "",
       "columns": {
-        "schedule_id": {
-          "name": "schedule_id",
-          "type": "text",
+        "id": {
+          "name": "id",
+          "type": "integer",
           "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "notification_channels_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
           "notNull": true
         },
-        "unstucks": {
-          "name": "unstucks",
-          "type": "integer",
+        "type": {
+          "name": "type",
+          "type": "notification_channel_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notificationFlags": {
+          "name": "notificationFlags",
+          "type": "json",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "'{\"service_change\":true,\"revshare_change\":true,\"stake\":true,\"unstake\":true,\"upstake\":true,\"operational_funds\":true,\"import_result\":true}'::json"
         },
-        "injected_triggers": {
-          "name": "injected_triggers",
-          "type": "integer",
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": true
         },
-        "last_heal_trigger_at": {
-          "name": "last_heal_trigger_at",
+        "createdAt": {
+          "name": "createdAt",
           "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "createdBy": {
+          "name": "createdBy",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updatedBy": {
+          "name": "updatedBy",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_channels_createdBy_users_identity_fk": {
+          "name": "notification_channels_createdBy_users_identity_fk",
+          "tableFrom": "notification_channels",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdBy"
+          ],
+          "columnsTo": [
+            "identity"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notification_channels_updatedBy_users_identity_fk": {
+          "name": "notification_channels_updatedBy_users_identity_fk",
+          "tableFrom": "notification_channels",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updatedBy"
+          ],
+          "columnsTo": [
+            "identity"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notification_events": {
+      "name": "notification_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "notification_events_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "uuid": {
+          "name": "uuid",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "notification_event_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdBy": {
+          "name": "createdBy",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "json",
           "primaryKey": false,
           "notNull": false
         },
-        "last_action_count": {
-          "name": "last_action_count",
-          "type": "integer",
+        "channels": {
+          "name": "channels",
+          "type": "json",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "'[]'::json"
         },
-        "unhealthy": {
-          "name": "unhealthy",
-          "type": "boolean",
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": "now()"
         },
-        "observed_unhealthy": {
-          "name": "observed_unhealthy",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "recreations": {
-          "name": "recreations",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_recreated_at": {
-          "name": "last_recreated_at",
+        "viewedAt": {
+          "name": "viewedAt",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "notification_events_createdBy_users_identity_fk": {
+          "name": "notification_events_createdBy_users_identity_fk",
+          "tableFrom": "notification_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdBy"
+          ],
+          "columnsTo": [
+            "identity"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notification_events_uuid_unique": {
+          "name": "notification_events_uuid_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "uuid"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notification_preferences": {
+      "name": "notification_preferences",
+      "schema": "",
+      "columns": {
+        "userIdentity": {
+          "name": "userIdentity",
+          "type": "varchar(255)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "inAppFeedEnabled": {
+          "name": "inAppFeedEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_preferences_userIdentity_users_identity_fk": {
+          "name": "notification_preferences_userIdentity_users_identity_fk",
+          "tableFrom": "notification_preferences",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userIdentity"
+          ],
+          "columnsTo": [
+            "identity"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1242,6 +1437,28 @@
         "staked",
         "unstaked",
         "unstaking"
+      ]
+    },
+    "public.notification_channel_type": {
+      "name": "notification_channel_type",
+      "schema": "public",
+      "values": [
+        "discord",
+        "telegram",
+        "email"
+      ]
+    },
+    "public.notification_event_type": {
+      "name": "notification_event_type",
+      "schema": "public",
+      "values": [
+        "service_change",
+        "revshare_change",
+        "stake",
+        "unstake",
+        "upstake",
+        "operational_funds",
+        "import_result"
       ]
     },
     "public.provider_fee": {

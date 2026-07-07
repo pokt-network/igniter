@@ -23,6 +23,7 @@
     "@igniter/eslint-config": "workspace:*",
     "@igniter/graphql": "workspace:*",
     "@igniter/logger": "workspace:*",
+    "@igniter/notifications": "workspace:*",
     "@igniter/pocket": "workspace:*",
     "@igniter/temporal": "workspace:*",
     "@igniter/ui": "workspace:*",

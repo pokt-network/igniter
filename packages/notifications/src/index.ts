@@ -12,3 +12,29 @@ export type {
   EmailConfig,
   EmailSmtpConfig,
 } from './types'
+export { assertSafeUrl, assertSafeHost, parseEgressAllowlist } from './egressGuard'
+export type { EgressAllowlist } from './egressGuard'
+export { ChannelDeliveryError, categorizeHttpStatus } from './channelError'
+export type { ChannelErrorCategory } from './channelError'
+export { composeRichMessage } from './richMessage'
+export type { RichMessageParts } from './richMessage'
+export { dispatchToChannels } from './dispatch'
+export type {
+  DispatchChannel,
+  DispatchChannelType,
+  ChannelDeliveryResult,
+} from './dispatch'
+export {
+  DiscordConfigSchema,
+  TelegramConfigSchema,
+  EmailRecipientsSchema,
+  EmailSmtpConfigSchema,
+  EmailConfigSchema,
+} from './validation'
+export type {
+  DiscordConfigInput,
+  TelegramConfigInput,
+  EmailRecipientsInput,
+  EmailSmtpConfigInput,
+  EmailConfigInput,
+} from './validation'

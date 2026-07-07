@@ -8,6 +8,7 @@ import Transaction from '@/lib/dal/transaction'
 import ImportSupplierAttempts from '@/lib/dal/importSupplierAttempts'
 import SupplierChanges from '@/lib/dal/supplierChanges'
 import Watchdog from '@/lib/dal/watchdog'
+import Notifications from '@/lib/dal/notifications'
 
 export default class DAL {
   logger: Logger
@@ -22,6 +23,7 @@ export default class DAL {
   importSupplierAttempts: ImportSupplierAttempts
   supplierChanges: SupplierChanges
   watchdog: Watchdog
+  notifications: Notifications
 
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
@@ -34,6 +36,7 @@ export default class DAL {
     this.importSupplierAttempts = new ImportSupplierAttempts(dbClient, logger)
     this.supplierChanges = new SupplierChanges(dbClient, logger)
     this.watchdog = new Watchdog(dbClient, logger.child({ context: 'Watchdog' }))
+    this.notifications = new Notifications(dbClient, logger)
   }
 
   // add any common queries below

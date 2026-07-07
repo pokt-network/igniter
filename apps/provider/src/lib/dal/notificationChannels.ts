@@ -118,10 +118,10 @@ export async function listNotificationEvents(
   page: number,
   pageSize: number,
   search?: string,
-): Promise<{ data: NotificationEvent[]; total: number }> {
+): Promise<{ data: NotificationEvent[]; total: number; unviewedTotal: number }> {
   const db = getDb()
   const where = search ? eq(notificationEventsTable.uuid, search) : undefined
-  const [rows, [countRow]] = await Promise.all([
+  const [rows, [countRow], [unviewedRow]] = await Promise.all([
     db
       .select()
       .from(notificationEventsTable)
@@ -130,8 +130,11 @@ export async function listNotificationEvents(
       .limit(pageSize)
       .offset(page * pageSize),
     db.select({ total: count() }).from(notificationEventsTable).where(where),
+    // Global unread count (independent of the search filter) so the badge and
+    // mark-all reflect the true unread total, not just the current page/search.
+    db.select({ total: count() }).from(notificationEventsTable).where(isNull(notificationEventsTable.viewedAt)),
   ])
-  return { data: rows, total: countRow?.total ?? 0 }
+  return { data: rows, total: countRow?.total ?? 0, unviewedTotal: unviewedRow?.total ?? 0 }
 }
 
 export async function getNotificationEvent(uuid: string): Promise<NotificationEvent | null> {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Region } from "@igniter/db/provider/schema";
 import { DeleteRegion, ListRegions } from "@/actions/Regions";
 import { Button } from "@igniter/ui/components/button";
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
 import DataTable from '@igniter/ui/components/DataTable/index';
 import { columns } from "./Columns";
