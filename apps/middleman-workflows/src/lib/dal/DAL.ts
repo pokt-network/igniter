@@ -35,7 +35,7 @@ export default class DAL {
     this.provider = new Provider(dbClient, logger)
     this.importSupplierAttempts = new ImportSupplierAttempts(dbClient, logger)
     this.supplierChanges = new SupplierChanges(dbClient, logger)
-    this.watchdog = new Watchdog(dbClient, logger.child({ context: 'Watchdog' }))
+    this.watchdog = new Watchdog(dbClient, logger.getChild('Watchdog'))
     this.notifications = new Notifications(dbClient, logger)
   }
 
