@@ -57,7 +57,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr edit ${{ github.event.pull_request.number }} \
-            --title "Release v${NEW_VERSION}" \
+            --title "chore(release): v${NEW_VERSION}" \
             --body "$(cat <<EOF
           ## Release v${NEW_VERSION}
 
