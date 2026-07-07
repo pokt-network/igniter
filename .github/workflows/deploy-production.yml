@@ -92,6 +92,8 @@ jobs:
           tags: |
             ghcr.io/pokt-network/${{ matrix.app }}:${{ env.NEW_VERSION }}
             ghcr.io/pokt-network/${{ matrix.app }}:latest
+          build-args: |
+            APP_VERSION=${{ env.NEW_VERSION }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,scope=${{ matrix.app }},mode=max,ignore-error=true
 
