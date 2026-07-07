@@ -6,7 +6,13 @@ import {
   type TextFormatter,
 } from '@logtape/logtape'
 import { prettyFormatter } from '@logtape/pretty'
-import { redactByField, redactByPattern, JWT_PATTERN, type RedactionPatterns } from '@logtape/redaction'
+import {
+  redactByField,
+  redactByPattern,
+  JWT_PATTERN,
+  type RedactionPattern,
+  type RedactionPatterns,
+} from '@logtape/redaction'
 
 const REDACTED = '[REDACTED]'
 
@@ -52,6 +58,28 @@ export const SECRET_FIELD_PATTERNS: (string | RegExp)[] = [
 ]
 
 /**
+ * Free-text backstop for `key=value` / `key: value` secrets interpolated into
+ * error messages or template strings (e.g. `` `login failed: password=${pw}` ``)
+ * that never pass through the field-based redactors because they're not a
+ * distinct object property. LOW false-positive risk by design: it only fires
+ * on the literal keywords below, not a generic "looks secret-ish" heuristic
+ * (no 64-hex — would redact tx hashes; no generic base64).
+ *
+ * Capture groups preserve the matched key + separator so the output reads
+ * `password=[REDACTED]` rather than swallowing the key name too.
+ */
+const PASSWORD_VALUE_PATTERN: RedactionPattern = {
+  pattern: /(password|passwd|pwd|secret)(\s*[=:]\s*)\S+/gi,
+  replacement: '$1$2' + REDACTED,
+}
+
+/** Free-text backstop for `Authorization: Bearer <token>` interpolated into logs. */
+const BEARER_TOKEN_PATTERN: RedactionPattern = {
+  pattern: /Bearer\s+[A-Za-z0-9._~+/=-]+/g,
+  replacement: 'Bearer ' + REDACTED,
+}
+
+/**
  * Value-shaped secrets scrubbed from rendered output as a backstop.
  *
  * NOTE (verified against installed @logtape/redaction@2.2.1, deviates from the
@@ -60,7 +88,11 @@ export const SECRET_FIELD_PATTERNS: (string | RegExp)[] = [
  * `redactByPattern`'s second parameter is typed `RedactionPatterns`
  * (`readonly RedactionPattern[]`). `RegExp[]` would not typecheck here.
  */
-export const SECRET_VALUE_PATTERNS: RedactionPatterns = [JWT_PATTERN]
+export const SECRET_VALUE_PATTERNS: RedactionPatterns = [
+  JWT_PATTERN,
+  PASSWORD_VALUE_PATTERN,
+  BEARER_TOKEN_PATTERN,
+]
 
 // DEFERRED (spec §7 optional, intentionally NOT wired in #219):
 // `@logtape/redaction`'s `createHmacPseudonymizer` + the async `redactByFieldAsync`
@@ -73,14 +105,18 @@ function isSecretKey(key: string): boolean {
   return SECRET_FIELD_PATTERNS.some((p) => (typeof p === 'string' ? p === key : p.test(key)))
 }
 
-function redactCredentials(value: Record<string, unknown>, depth: number): Record<string, unknown> {
+function redactCredentials(
+  value: Record<string, unknown>,
+  depth: number,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value)) {
     // Inside credentials.*, publicKey + signature are secrets.
     if (/^publicKey$/i.test(k) || /^signature$/i.test(k) || isSecretKey(k)) {
       out[k] = REDACTED
     } else {
-      out[k] = redactObject(v, depth + 1)
+      out[k] = redactObject(v, depth + 1, seen)
     }
   }
   return out
@@ -89,20 +125,32 @@ function redactCredentials(value: Record<string, unknown>, depth: number): Recor
 /**
  * Hand-built deep redactor (no library equivalent). Shares the §7 field config.
  * Used for explicit deep payloads and the edge/client write paths.
+ *
+ * Cycle guard (F2 hardening): `seen` is a `WeakSet` of every object/array
+ * already entered on the CURRENT recursion. Without it, a self-referential
+ * object (e.g. `a.nested.self = a`) recurses until the depth cap (20) kicks
+ * in and then returns the tail of the cycle un-redacted as-is — which, being
+ * part of the cycle, IS (structurally reachable back to) the original
+ * un-redacted object. The guard catches the re-entry immediately, well
+ * before depth 20, and swaps in the literal string `'[circular]'` instead.
+ * The depth cap stays as a backstop for pathologically deep (non-cyclic)
+ * structures.
  */
-export function redactObject<T>(obj: T, depth = 0): T {
+export function redactObject<T>(obj: T, depth = 0, seen: WeakSet<object> = new WeakSet()): T {
   if (depth > 20 || obj == null || typeof obj !== 'object') return obj
+  if (seen.has(obj as object)) return '[circular]' as unknown as T
+  seen.add(obj as object)
   if (Array.isArray(obj)) {
-    return obj.map((v) => redactObject(v, depth + 1)) as unknown as T
+    return obj.map((v) => redactObject(v, depth + 1, seen)) as unknown as T
   }
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
     if (isSecretKey(k)) {
       out[k] = REDACTED
     } else if (/^credentials$/i.test(k) && v && typeof v === 'object' && !Array.isArray(v)) {
-      out[k] = redactCredentials(v as Record<string, unknown>, depth)
+      out[k] = redactCredentials(v as Record<string, unknown>, depth, seen)
     } else {
-      out[k] = redactObject(v, depth + 1)
+      out[k] = redactObject(v, depth + 1, seen)
     }
   }
   return out as T

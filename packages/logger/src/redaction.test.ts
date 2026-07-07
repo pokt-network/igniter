@@ -61,6 +61,44 @@ describe('redactObject', () => {
     expect(out.Authorization).toBe(SECRET)
     expect(out['Set-Cookie']).toBe(SECRET)
   })
+
+  // F2 hardening: a self-cyclic object must never leak a reachable reference to
+  // the ORIGINAL un-redacted object through the redacted copy. Before the WeakSet
+  // visited guard, the cycle would recurse until the depth cap (20) truncation
+  // kicked in and return the raw tail of the cycle (structurally = the original
+  // object) instead of a redacted copy.
+  it('breaks cycles with [circular] instead of leaking the original object', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a: any = { password: 'p', nested: {} }
+    a.nested.self = a
+
+    const out = redactObject(a)
+
+    // The cycle spot is replaced with the sentinel, not the raw `a`.
+    expect((out.nested as Record<string, unknown>).self).toBe('[circular]')
+    // JSON.stringify must not throw (no live cycle survives into the output).
+    let json = ''
+    expect(() => {
+      json = JSON.stringify(out)
+    }).not.toThrow()
+    // No reachable path carries the un-redacted secret value.
+    expect(out.password).toBe(SECRET)
+    expect(json).not.toContain('"p"')
+
+    // Walk the whole redacted structure defensively: nothing but the sentinel
+    // string or already-redacted values should be reachable from `out`.
+    const visited = new Set<unknown>()
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (visited.has(node)) return // would only happen if a real cycle remained
+      visited.add(node)
+      for (const v of Object.values(node as Record<string, unknown>)) {
+        expect(v).not.toBe(a) // never re-embeds the original object
+        walk(v)
+      }
+    }
+    walk(out)
+  })
 })
 
 describe('promoted supplier redactors', () => {
@@ -132,6 +170,24 @@ describe('getRedactedConsoleSink', () => {
     expect(out).not.toContain('SUPER_SECRET_VALUE')
     expect(out).not.toContain('password')
     expect(out).toContain('ok')
+  })
+
+  // F1-lite hardening: secrets interpolated into free MESSAGE text (error strings,
+  // template literals) never pass through redactByField (no distinct object prop
+  // to delete) — only the pattern backstop on the formatter can catch them.
+  it('scrubs password= and Bearer value-shaped secrets from free text without over-redacting look-alikes', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) }, // isProd → numeric NDJSON
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).info(
+      'login failed: password=hunter2, Authorization: Bearer abc.def, passport=ok',
+    )
+    const out = captured.join('\n')
+    expect(out).not.toContain('hunter2')
+    expect(out).not.toContain('abc.def')
+    expect(out).toContain('passport=ok') // non-secret look-alike must survive untouched
   })
 })
 
