@@ -31,11 +31,27 @@ objects = decode_yaml_stream(kustomize("./overlays/dev"))
 
 LOCALNET_ENABLED = os.getenv('LOCALNET_ENABLED', '') == 'true'
 
+# Schedule watchdog (Temporal self-heal): only inject vars actually set in the
+# env so unset ones fall back to the code defaults in packages/temporal.
+WATCHDOG_ENV_VARS = [
+    'SCHEDULE_WATCHDOG_ENABLED',
+    'SCHEDULE_WATCHDOG_MODE',
+    'SCHEDULE_WATCHDOG_TICK',
+    'SCHEDULE_WATCHDOG_MIN_AGE',
+    'SCHEDULE_WATCHDOG_MISSED_FIRINGS',
+    'SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS',
+    'SCHEDULE_WATCHDOG_RECREATE_AFTER',
+]
+
 for o in objects:
     if o['metadata']['name'] == 'middleman-workflows-config':
         o['data']['PROVIDERS_CDN_URL'] = 'http://governance-nginx.default.svc.cluster.local/providers.json'
         if LOCALNET_ENABLED:
             o['data']['POKT_RPC_URL'] = 'http://validator:26657'
+        for var in WATCHDOG_ENV_VARS:
+            val = os.getenv(var, '')
+            if val != '':
+                o['data'][var] = val
         break
 
 k8s_yaml(encode_yaml_stream(objects), allow_duplicates=False)

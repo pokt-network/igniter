@@ -25,6 +25,7 @@
     "@igniter/logger": "workspace:*",
     "@igniter/notifications": "workspace:*",
     "@igniter/pocket": "workspace:*",
+    "@igniter/temporal": "workspace:*",
     "@igniter/ui": "workspace:*",
     "@poktscan/vault-siwp": "github:trustsoothe/vault-siwp#shannon-adr36",
     "@radix-ui/react-slot": "1.1.1",

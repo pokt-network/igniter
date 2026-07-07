@@ -266,4 +266,5 @@ Detailed feature documentation for each area.
 |-----|----------------|
 | [Overview Dashboard](../../docs/reference/middleman/overview.md) | Staked tokens summary, rewards tracking, and rewards graph |
 | [Transactions](../../docs/reference/middleman/transactions.md) | Transaction history with status tracking and filtering |
+| [Workflows](../../docs/reference/middleman/workflows.md) | Temporal workflow observability, schedule health, and debugging |
 | [Notifications](../../docs/reference/middleman/notifications.md) | Per-wallet event types, channels, in-app feed, and delivery configuration |

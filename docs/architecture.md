@@ -99,6 +99,8 @@ Both apps use Temporal for long-running operations, each in its own namespace an
 
 Middleman workflows handle the full staking lifecycle — signing transactions, broadcasting to the blockchain, waiting for confirmation, and notifying Provider of the result.
 
+Both workers also run a **schedule watchdog** (`@igniter/temporal`) alongside their normal Temporal worker: a self-heal loop that periodically checks whether every schedule it owns is still firing on time, and revives ones that have gone silent (a stuck task queue, a wedged server) through a bounded, non-destructive heal ladder. It can run in `observe` (log-only) or `enforce` mode, and its state — attempts, health — is surfaced in each app's admin Workflows UI. See [Schedule Watchdog](./reference/schedule-watchdog.md) for details.
+
 ---
 
 ## Monorepo Packages
@@ -115,14 +117,14 @@ graph TD
     end
 
     subgraph Packages
-        UI["@repo/ui\nShared React components"]
-        DB["@repo/db\nDrizzle ORM + schemas"]
-        GraphQL["@repo/graphql\nPocket Network GraphQL"]
-        Pocket["@repo/pocket\nPocket Network SDK"]
-        TemporalPkg["@repo/temporal\nWorkflow definitions"]
-        Domain["@repo/domain\nShared types and logic"]
-        Commons["@repo/commons\nUtilities"]
-        Logger["@repo/logger\nStructured logging"]
+        UI["@igniter/ui\nShared React components"]
+        DB["@igniter/db\nDrizzle ORM + schemas"]
+        GraphQL["@igniter/graphql\nPocket Network GraphQL"]
+        Pocket["@igniter/pocket\nPocket Network SDK"]
+        TemporalPkg["@igniter/temporal\nWorkflow definitions"]
+        Domain["@igniter/domain\nShared types and logic"]
+        Commons["@igniter/commons\nUtilities"]
+        Logger["@igniter/logger\nStructured logging"]
     end
 
     %% Web apps use all packages
@@ -136,11 +138,11 @@ graph TD
 
 | Package | Purpose |
 |---------|---------|
-| `@repo/ui` | Shared React component library (buttons, tables, forms, layouts) |
-| `@repo/db` | Drizzle ORM with separate schemas for Provider and Middleman |
-| `@repo/graphql` | GraphQL client for querying Pocket Network on-chain data |
-| `@repo/pocket` | Pocket Network SDK — RPC client, transaction signing, balance queries |
-| `@repo/temporal` | Temporal worker setup, client helpers, and shared workflow utilities |
-| `@repo/domain` | Shared domain types and business logic |
-| `@repo/commons` | General-purpose utilities |
-| `@repo/logger` | Structured logging |
+| `@igniter/ui` | Shared React component library (buttons, tables, forms, layouts) |
+| `@igniter/db` | Drizzle ORM with separate schemas for Provider and Middleman |
+| `@igniter/graphql` | GraphQL client for querying Pocket Network on-chain data |
+| `@igniter/pocket` | Pocket Network SDK — RPC client, transaction signing, balance queries |
+| `@igniter/temporal` | Temporal worker setup, client helpers, and shared workflow utilities |
+| `@igniter/domain` | Shared domain types and business logic |
+| `@igniter/commons` | General-purpose utilities |
+| `@igniter/logger` | Structured logging |

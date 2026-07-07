@@ -1,14 +1,16 @@
-import { Duration } from "@temporalio/common";
 import Long from "long";
-import { Client, ScheduleOverlapPolicy } from '@temporalio/client'
+import { Client } from '@temporalio/client'
+import type { TemporalConfig, WatchdogConfig, WatchdogEntry } from '@igniter/temporal'
 import {
+  ensureSchedule,
   getClient,
   getConfig,
-  TemporalConfig,
+  parseDuration,
+  parseWatchdogConfig,
 } from '@igniter/temporal'
 import { Logger } from '@igniter/logger'
 
-enum ScheduledWorkflowType {
+export enum ScheduledWorkflowType {
   GovernanceSync = 'GovernanceSync',
   ProviderStatus = "ProviderStatus",
   ExecutePendingTransaction = "ExecutePendingTransactions",
@@ -53,17 +55,6 @@ const ScheduledWorkflowConfig: Record<
   },
 };
 
-function parseDurationToMs(duration: string): number {
-  const match = duration.match(/^(\d+)(ms|s|m|h|d)$/)
-  if (!match) throw new Error(`Invalid duration: ${duration}`)
-  const value = match[1]!
-  const unit = match[2]!
-  const multipliers: Record<string, number> = {
-    ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000
-  }
-  return parseInt(value) * multipliers[unit]!
-}
-
 async function bootstrapNamespace(client: Client, config: TemporalConfig, logger: Logger) {
   const workflowService = client.workflowService;
   const { namespace, workflowExecutionRetentionPeriod } = config;
@@ -96,71 +87,42 @@ async function bootstrapNamespace(client: Client, config: TemporalConfig, logger
   }
 }
 
-async function bootstrapScheduledWorkflows(client: Client, config: TemporalConfig, logger: Logger) {
-  for (const workflowType of Object.values(ScheduledWorkflowType)) {
-    const wfConfig = ScheduledWorkflowConfig[workflowType];
-    const interval = process.env[wfConfig.envVar] || wfConfig.interval;
-    const scheduleId = `${workflowType}-scheduled`;
-
-    const handle = client.schedule.getHandle(scheduleId);
-
-    try {
-      const desc = await handle.describe();
-
-      const currentArgs = (desc as any).action.args || [];
-      const currentIntervalMs = desc.spec.intervals?.[0]?.every;
-      const desiredIntervalMs = parseDurationToMs(interval);
-
-      const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(wfConfig.args);
-      const intervalChanged = currentIntervalMs !== desiredIntervalMs;
-
-      if (argsChanged || intervalChanged) {
-        logger.warn(
-          { workflowType, argsChanged, intervalChanged, currentIntervalMs, desiredIntervalMs },
-          'Scheduled workflow config changed. Updating...'
-        );
-        await handle.update((prev) => ({
-          ...prev,
-          action: {
-            ...prev.action,
-            args: wfConfig.args,
-          },
-          spec: {
-            intervals: [{ every: interval as Duration }],
-          },
-          policies: { overlap: ScheduleOverlapPolicy.SKIP },
-        }));
-        logger.info({ workflowType }, 'Scheduled workflow updated successfully');
-      } else {
-        logger.info({ workflowType }, 'Scheduled workflow up to date. Skipping...');
-      }
-    } catch (error: unknown) {
-      // Schedule doesn't exist, create it
-      try {
-        logger.warn({ workflowType }, 'Scheduled workflow does not exist. Registering...');
-        await client.schedule.create({
-          action: {
-            type: "startWorkflow",
-            workflowType,
-            taskQueue: config.taskQueue!,
-            args: wfConfig.args,
-          },
-          scheduleId,
-          spec: {
-            intervals: [{ every: interval as Duration }],
-          },
-          policies: { overlap: ScheduleOverlapPolicy.SKIP },
-        });
-        logger.info({ workflowType, interval }, 'Scheduled workflow created successfully');
-      } catch (createError: any) {
-        if (createError?.code === 6 || createError?.message?.match(/already exists/i)) {
-          logger.info({ workflowType }, 'Scheduled workflow already exists. Skipping registration...');
-        } else {
-          logger.error({ error: createError, workflowType }, 'Error scheduling scheduled workflow');
-          throw createError;
-        }
-      }
+export function buildWatchdogEntries(config: WatchdogConfig, logger?: Logger): WatchdogEntry[] {
+  const { taskQueue } = getConfig()
+  return Object.values(ScheduledWorkflowType).map((wt) => {
+    const wf = ScheduledWorkflowConfig[wt]
+    const rawOverride = process.env[wf.envVar] || wf.interval
+    const parsed = parseDuration(rawOverride)
+    if (parsed == null) {
+      logger?.warn(
+        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: rawOverride, fallback: wf.interval },
+        'Invalid schedule interval override; falling back to default',
+      )
     }
+    // Never carry an invalid override forward: fall the STRING back to the default
+    // too, so `interval` and `intervalMs` can never disagree (M3/#108). The spec is
+    // armed from intervalMs, so an unparseable raw string never reaches the SDK.
+    const interval = parsed == null ? wf.interval : rawOverride
+    const intervalMs = parsed ?? parseDuration(wf.interval)!
+    return {
+      scheduleId: `${wt}-scheduled`,
+      workflowType: wt, // middleman: the enum value IS the workflow type
+      taskQueue,
+      args: wf.args,
+      interval,
+      intervalMs,
+      missedFirings: config.missedFirings,
+      minAgeMs: config.minAgeMs,
+      minGraceMs: config.minGraceMs,
+      graceCapMs: config.graceCapMs,
+    }
+  })
+}
+
+async function bootstrapScheduledWorkflows(client: Client, _config: TemporalConfig, logger: Logger) {
+  const wdConfig = parseWatchdogConfig(logger)
+  for (const entry of buildWatchdogEntries(wdConfig, logger)) {
+    await ensureSchedule(client, entry, logger)
   }
 }
 

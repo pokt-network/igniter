@@ -64,6 +64,11 @@ const adminRoutes = [
     icon: ActivityDark,
   },
   {
+    title: "Workflows",
+    url: "/admin/workflows",
+    icon: ActivityDark,
+  },
+  {
     title: "Settings",
     url: "/admin/settings",
     icon: SettingsDark,
