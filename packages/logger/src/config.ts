@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { configure, type LogLevel } from '@logtape/logtape'
-import { getRedactedConsoleSink } from './redaction'
+import { configure, getConsoleSink, type LogLevel, type Sink, type TextFormatter } from '@logtape/logtape'
+import { prettyFormatter } from '@logtape/pretty'
+import { redactByField } from '@logtape/redaction'
+import { getRedactedConsoleSink, SECRET_FIELD_PATTERNS } from './redaction'
+import { getClientSink, minimalSink } from './client'
 
 export interface ConfigureOpts {
   level?: LogLevel
@@ -48,6 +51,27 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
     'service.version': process.env.APP_VERSION ?? 'unknown',
     env: process.env.NODE_ENV ?? 'development',
     runtime,
+  }
+
+  if (runtime === 'browser') {
+    // dev: pretty console; prod: minimalSink (warn/error/fatal only).
+    const browserBase: Sink = isProd
+      ? minimalSink
+      : getConsoleSink({ formatter: prettyFormatter as TextFormatter })
+    await configure({
+      reset: true,
+      // redactByField defensively drops secret props on the client too.
+      sinks: {
+        browser: redactByField(browserBase, SECRET_FIELD_PATTERNS),
+        client: redactByField(getClientSink(), SECRET_FIELD_PATTERNS),
+      },
+      loggers: [
+        { category: [], sinks: ['browser', 'client'], lowestLevel: level },
+        { category: ['logtape', 'meta'], sinks: ['browser', 'client'], lowestLevel: 'warning' },
+      ],
+      // no contextLocalStorage on browser (ALS is node-only)
+    })
+    return
   }
 
   // NOTE: LogTape's `Config` has NO top-level `lowestLevel` field (verified against
