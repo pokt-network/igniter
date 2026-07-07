@@ -66,7 +66,7 @@ jobs:
           push: true
           tags: ghcr.io/pokt-network/${{ matrix.app }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max,ignore-error=true
 
   post-deploy:
     needs: build-push

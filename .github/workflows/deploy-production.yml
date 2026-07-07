@@ -87,7 +87,7 @@ jobs:
             ghcr.io/pokt-network/${{ matrix.app }}:${{ env.NEW_VERSION }}
             ghcr.io/pokt-network/${{ matrix.app }}:latest
           cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max,ignore-error=true
 
   release:
     needs: build-push
