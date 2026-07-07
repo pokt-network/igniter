@@ -96,7 +96,7 @@ export function parseWatchdogConfig(logger: Logger): WatchdogConfig {
     if (!raw) return def
     const ms = parseDuration(raw)
     if (ms == null) {
-      logger.warn({ name, raw, default: def }, 'Invalid watchdog duration env; using default')
+      logger.warn('Invalid watchdog duration env; using default', { name, raw, default: def })
       return def
     }
     return ms
@@ -109,7 +109,7 @@ export function parseWatchdogConfig(logger: Logger): WatchdogConfig {
     // These feed ladder/recreate thresholds — reject non-negative-integer garbage
     // (negatives, fractions, hex like '0x10', whitespace-to-0) instead of coercing.
     if (!Number.isInteger(n) || n < 0) {
-      logger.warn({ name, raw, default: def }, 'Invalid watchdog count env; using default')
+      logger.warn('Invalid watchdog count env; using default', { name, raw, default: def })
       return def
     }
     return n
@@ -233,11 +233,11 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
 
   const createFresh = async () => {
     try {
-      logger.warn({ scheduleId: entry.scheduleId }, 'Schedule not found; creating')
+      logger.warn('Schedule not found; creating', { scheduleId: entry.scheduleId })
       await client.schedule.create(createOptions(entry))
     } catch (createErr) {
       if (createErr instanceof ScheduleAlreadyRunning) {
-        logger.info({ scheduleId: entry.scheduleId }, 'Schedule already running; skipping create')
+        logger.info('Schedule already running; skipping create', { scheduleId: entry.scheduleId })
         return
       }
       throw createErr
@@ -255,7 +255,7 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
     // A transient RPC blip must NOT abort bootstrap — leave reconciliation for
     // the next bootstrap/tick instead of crash-looping the worker (M3/#229).
     if (isTransient(e)) {
-      logger.warn({ err: e, scheduleId: entry.scheduleId }, 'describe() transient during ensureSchedule; skipping reconcile this round')
+      logger.warn('describe() transient during ensureSchedule; skipping reconcile this round', { err: e, scheduleId: entry.scheduleId })
       return
     }
     throw e
@@ -266,7 +266,7 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
   const argsChanged = JSON.stringify(currentArgs) !== JSON.stringify(entry.args)
   const intervalChanged = currentEvery !== entry.intervalMs
   if (argsChanged || intervalChanged) {
-    logger.warn({ scheduleId: entry.scheduleId, argsChanged, intervalChanged }, 'Schedule config drift; updating')
+    logger.warn('Schedule config drift; updating', { scheduleId: entry.scheduleId, argsChanged, intervalChanged })
     try {
       await handle.update((prev) => reArmOptions(prev, entry))
     } catch (e) {
@@ -278,7 +278,7 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
       // A transient failure to apply drift is not fatal — the schedule keeps
       // running with its prior (valid) config until the next reconcile (#229).
       if (isTransient(e)) {
-        logger.warn({ err: e, scheduleId: entry.scheduleId }, 'drift update() transient; leaving drift for next reconcile')
+        logger.warn('drift update() transient; leaving drift for next reconcile', { err: e, scheduleId: entry.scheduleId })
         return
       }
       throw e
@@ -331,14 +331,14 @@ export async function healSchedule(
       // resets only when an autonomous fire is later observed (M1/#279).
       const row = await store.bumpUnstuck(entry.scheduleId)
       attemptsAfter = row.unstucks
-      logger.info({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: re-armed via update() (attempt consumed)')
+      logger.info('Heal: re-armed via update() (attempt consumed)', { scheduleId: entry.scheduleId, attempts: attemptsAfter })
     } catch (e) {
       if (isTransient(e)) {
-        logger.warn({ err: e, scheduleId: entry.scheduleId }, 'Heal update() transient; no attempt consumed (B4)')
+        logger.warn('Heal update() transient; no attempt consumed (B4)', { err: e, scheduleId: entry.scheduleId })
       } else {
         const row = await store.bumpUnstuck(entry.scheduleId)
         attemptsAfter = row.unstucks
-        logger.warn({ err: e, scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal update() definitive failure; attempt consumed')
+        logger.warn('Heal update() definitive failure; attempt consumed', { err: e, scheduleId: entry.scheduleId, attempts: attemptsAfter })
       }
     }
   } else {
@@ -355,12 +355,12 @@ export async function healSchedule(
     }
     const row = await store.bumpUnstuck(entry.scheduleId)
     attemptsAfter = row.unstucks
-    logger.warn({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal: reconciled + injected one compensating trigger')
+    logger.warn('Heal: reconciled + injected one compensating trigger', { scheduleId: entry.scheduleId, attempts: attemptsAfter })
   }
 
   if (attemptsAfter >= config.maxHealAttempts) {
     await store.setUnhealthy(entry.scheduleId, true)
-    logger.error({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal breaker tripped: schedule marked unhealthy (page-worthy)')
+    logger.error('Heal breaker tripped: schedule marked unhealthy (page-worthy)', { scheduleId: entry.scheduleId, attempts: attemptsAfter })
   }
 
   return { nextBackoffMs: Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs) }
@@ -376,11 +376,11 @@ export async function healSchedule(
  */
 export function installProcessSafetyHandlers(logger: Logger): void {
   process.on('unhandledRejection', (reason) => {
-    logger.error({ reason }, 'Unhandled promise rejection; exiting for a clean restart')
+    logger.error('Unhandled promise rejection; exiting for a clean restart', { reason })
     process.exit(1)
   })
   process.on('uncaughtException', (err) => {
-    logger.error({ err }, 'Uncaught exception; exiting for a clean restart')
+    logger.error('Uncaught exception; exiting for a clean restart', { err })
     process.exit(1)
   })
 }
@@ -411,8 +411,8 @@ export class ScheduleWatchdog {
     if (this.running) return
     this.running = true
     this.deps.logger.info(
-      { mode: this.deps.config.mode, entries: this.deps.entries.length },
       'Schedule watchdog started',
+      { mode: this.deps.config.mode, entries: this.deps.entries.length },
     )
     this.scheduleNext(0)
   }
@@ -436,7 +436,7 @@ export class ScheduleWatchdog {
     this.timer = setTimeout(() => {
       if (!this.running) return
       this.inFlight = this.tick()
-        .catch((err) => this.deps.logger.error({ err }, 'Watchdog tick failed'))
+        .catch((err) => this.deps.logger.error('Watchdog tick failed', { err }))
         .then(() => {
           if (this.running) this.scheduleNext(this.deps.config.tickMs)
         })
@@ -449,7 +449,7 @@ export class ScheduleWatchdog {
       try {
         await this.tickOne(entry, now)
       } catch (err) {
-        this.deps.logger.error({ err, scheduleId: entry.scheduleId }, 'Watchdog per-schedule error (continuing)')
+        this.deps.logger.error('Watchdog per-schedule error (continuing)', { err, scheduleId: entry.scheduleId })
       }
     }
     this.lastHeartbeatAt = Date.now()
@@ -467,7 +467,7 @@ export class ScheduleWatchdog {
     } catch (e) {
       if (isNotFound(e)) {
         if (config.mode === 'enforce') {
-          logger.warn({ scheduleId: entry.scheduleId }, 'Schedule NOT_FOUND; recreating')
+          logger.warn('Schedule NOT_FOUND; recreating', { scheduleId: entry.scheduleId })
           await store.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
           await ensureSchedule(client, entry, logger)
           await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
@@ -476,28 +476,28 @@ export class ScheduleWatchdog {
         }
         return
       }
-      logger.warn({ err: e, scheduleId: entry.scheduleId }, 'describe() transient; skipping (never stale)')
+      logger.warn('describe() transient; skipping (never stale)', { err: e, scheduleId: entry.scheduleId })
       return
     }
 
     const verdict = evaluateLiveness(desc, entry, now, state)
     switch (verdict) {
       case 'paused':
-        logger.debug({ scheduleId: entry.scheduleId }, 'Schedule paused; respecting (no revive)')
+        logger.debug('Schedule paused; respecting (no revive)', { scheduleId: entry.scheduleId })
         return
       case 'unknown':
-        logger.warn({ scheduleId: entry.scheduleId }, 'Liveness unknown (skew/missing ts); skipping')
+        logger.warn('Liveness unknown (skew/missing ts); skipping', { scheduleId: entry.scheduleId })
         return
       case 'healthy':
         // A healthy verdict means the schedule is live again (reference within
         // grace). Clear the one-way observe-mode latch so it can't stay red
         // forever after recovery — nothing else ever sets it false (M5/#425).
         if (state.observedUnhealthy) {
-          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing observed_unhealthy latch')
+          logger.info('Healthy verdict; clearing observed_unhealthy latch', { scheduleId: entry.scheduleId })
           await store.setObservedUnhealthy(entry.scheduleId, false)
         }
         if ((state.unstucks > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
-          logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
+          logger.info('Autonomous fire observed; resetting heal ladder (F6)', { scheduleId: entry.scheduleId })
           await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)
           this.nextEligibleAt.delete(entry.scheduleId)
         }
@@ -505,11 +505,11 @@ export class ScheduleWatchdog {
       case 'stale': {
         const eligibleAt = this.nextEligibleAt.get(entry.scheduleId) ?? 0
         if (now.getTime() < eligibleAt) {
-          logger.debug({ scheduleId: entry.scheduleId }, 'Stale but within backoff; skipping')
+          logger.debug('Stale but within backoff; skipping', { scheduleId: entry.scheduleId })
           return
         }
         if (config.mode === 'observe') {
-          logger.warn({ scheduleId: entry.scheduleId }, 'OBSERVE: stale; persisting observed_unhealthy, mutating nothing')
+          logger.warn('OBSERVE: stale; persisting observed_unhealthy, mutating nothing', { scheduleId: entry.scheduleId })
           await store.setObservedUnhealthy(entry.scheduleId, true)
           return
         }
