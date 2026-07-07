@@ -39,5 +39,5 @@ export {
   redactSupplierServiceConfig,
   redactSupplierServiceConfigs,
 } from './redaction'
-export { setClientSink, getClientSink, minimalSink, type ClientSink } from './client'
+export { setClientSink, minimalSink, type ClientSink } from './client'
 export { FIELD, REQUEST_ID_HEADER, type RequestContext } from './bindings'
