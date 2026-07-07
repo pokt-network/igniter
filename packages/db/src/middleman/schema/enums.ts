@@ -261,6 +261,35 @@ export const supplierChangeTypeEnum = pgEnum(
   enumToPgEnum(SupplierChangeType),
 )
 
+export enum NotificationChannelType {
+  Discord = 'discord',
+  Telegram = 'telegram',
+  Email = 'email',
+}
+
+export const notificationChannelTypeEnum = pgEnum(
+  'notification_channel_type',
+  enumToPgEnum(NotificationChannelType),
+)
+
+// Per-user event types a middleman delegator can subscribe a channel to.
+// Outcome (success/failure, completed/failed) is conveyed in the message, not
+// as a separate type — mirroring the provider notification model.
+export const NOTIFICATION_EVENT_TYPES = [
+  'service_change',
+  'revshare_change',
+  'stake',
+  'unstake',
+  'upstake',
+  'operational_funds',
+  'import_result',
+] as const
+
+export const notificationEventTypeEnum = pgEnum(
+  'notification_event_type',
+  NOTIFICATION_EVENT_TYPES,
+)
+
 
 
 

@@ -4,7 +4,7 @@
 import {useEffect, useMemo, useState} from "react";
 import {DeleteRelayMiner, ListRelayMiners} from "@/actions/RelayMiners";
 import {Button} from "@igniter/ui/components/button";
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import DataTable from '@igniter/ui/components/DataTable/index';
 import {columns} from "./Columns";
 import {AddOrUpdateRelayMinerDialog} from "@/components/AddOrUpdateRelayMinerDialog";

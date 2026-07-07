@@ -20,6 +20,9 @@ import {
   DiscordChannel,
   TelegramChannel,
   EmailChannel,
+  DiscordConfigSchema,
+  TelegramConfigSchema,
+  EmailRecipientsSchema,
 } from '@igniter/notifications'
 import type {
   DiscordChannelConfig,
@@ -29,21 +32,6 @@ import type {
   NotificationChannelConfig,
   NotificationFlags,
 } from '@igniter/db/provider/schema'
-
-const DiscordConfigSchema = z.object({
-  webhookUrl: z.string().url('Please enter a valid webhook URL'),
-})
-
-const TelegramConfigSchema = z.object({
-  botToken: z.string().min(1, 'Bot token is required'),
-  chatId: z.string().min(1, 'Chat ID is required'),
-})
-
-const EmailConfigSchema = z.object({
-  to: z.array(z.string().email('Invalid email address')).min(1, 'At least one recipient is required'),
-  cc: z.array(z.string().email('Invalid email address')).optional(),
-  bcc: z.array(z.string().email('Invalid email address')).optional(),
-})
 
 const BaseChannelSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
@@ -59,7 +47,7 @@ function validateConfig(type: NotificationChannelType, config: unknown) {
     return TelegramConfigSchema.parse(config)
   }
   if (type === NotificationChannelType.Email) {
-    return EmailConfigSchema.parse(config)
+    return EmailRecipientsSchema.parse(config)
   }
   throw new Error(`Unknown channel type: ${type}`)
 }

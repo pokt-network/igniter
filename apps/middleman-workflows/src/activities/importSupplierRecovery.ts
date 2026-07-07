@@ -2,6 +2,7 @@ import { log } from '@temporalio/activity'
 import { ImportSupplierAttempt } from '@igniter/db/middleman/schema'
 import DAL from '@/lib/dal/DAL'
 import { ProviderService } from '@/lib/provider'
+import { dispatchUserNotification } from '@/lib/notifications/dispatch'
 
 export interface ImportStatusResponse {
   status: string
@@ -110,7 +111,16 @@ export const importSupplierRecoveryActivities = (
       importedCount: importedAddresses.length,
     })
 
-    await dal.importSupplierAttempts.markCompleted(attemptId, importedAddresses)
+    // markCompleted is a CAS returning the row only to the transition winner, so
+    // a retried activity won't re-dispatch this notification (best-effort).
+    const completedAttempt = await dal.importSupplierAttempts.markCompleted(attemptId, importedAddresses)
+    if (completedAttempt?.userIdentity) {
+      await dispatchUserNotification(dal, log, {
+        type: 'import_result',
+        ownerIdentity: completedAttempt.userIdentity,
+        metadata: { outcome: 'completed', supplierCount: importedAddresses.length },
+      })
+    }
   },
 
   /**
@@ -128,6 +138,15 @@ export const importSupplierRecoveryActivities = (
       errorMessage,
     })
 
-    await dal.importSupplierAttempts.markFailed(attemptId, errorMessage)
+    // markFailed is a CAS returning the row only to the transition winner (see
+    // markAttemptCompleted) — a retry won't re-dispatch the failure notification.
+    const failedAttempt = await dal.importSupplierAttempts.markFailed(attemptId, errorMessage)
+    if (failedAttempt?.userIdentity) {
+      await dispatchUserNotification(dal, log, {
+        type: 'import_result',
+        ownerIdentity: failedAttempt.userIdentity,
+        metadata: { outcome: 'failed', error: errorMessage },
+      })
+    }
   },
 })

@@ -14,15 +14,20 @@
   "scripts": {
     "build": "tsc --project ./tsconfig.json",
     "lint": "eslint .",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "jest"
   },
   "dependencies": {
     "@igniter/logger": "workspace:*",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "zod": "3.23.8"
   },
   "devDependencies": {
     "@igniter/eslint-config": "workspace:*",
     "@igniter/typescript-config": "workspace:*",
-    "@types/nodemailer": "^6.4.17"
+    "@types/jest": "^30.0.0",
+    "@types/nodemailer": "^6.4.17",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.4"
   }
 }

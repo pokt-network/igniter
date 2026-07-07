@@ -13,7 +13,8 @@ import {addOrUpdateRemediationHistory} from "@/lib/utils";
 import {redactStakeSupplierParams} from "@/lib/redactors";
 import {getExpectedServicesFromKey} from '@igniter/domain/provider/utils'
 import { ServiceConfigUpdate } from '@igniter/pocket/proto/pocket/shared/supplier'
-import { DiscordChannel, TelegramChannel, EmailChannel, createSmtpTransport } from '@igniter/notifications'
+import { createSmtpTransport, dispatchToChannels } from '@igniter/notifications'
+import type { DispatchChannel, ChannelDeliveryResult } from '@igniter/notifications'
 import type { NotificationEvent } from '@/lib/types/notifications'
 import { buildRichMessage } from '@/lib/richMessageBuilder'
 
@@ -1198,13 +1199,10 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
       const richMessage = buildRichMessage(event, uuid, providerAppUrl, providerName)
 
-      // Send to each channel individually and record per-channel delivery status
-      const channelResults: Array<{ id: number; name: string; type: string; status: 'sent' | 'error'; error?: string }> = []
-
-      // All email channels share one SMTP server and differ only in recipients,
-      // so build a single pooled transport once and reuse it across the loop —
-      // one TCP+TLS+AUTH handshake for the whole run instead of one per channel.
-      // Closed in the finally below.
+      // Single-owner provider: all email channels share one SMTP server. Resolve
+      // it into each email channel's config and record an error for any email
+      // channel when SMTP is unconfigured (Discord/Telegram pass through). The
+      // shared dispatch helper then sends to every channel and reports status.
       const emailSmtp = smtpConfig
         ? {
             host: smtpConfig.host,
@@ -1216,41 +1214,42 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
             fromName: smtpConfig.fromName ?? undefined,
           }
         : null
-      const emailTransporter = emailSmtp ? createSmtpTransport(emailSmtp, { pool: true }) : null
+
+      const channelResults: ChannelDeliveryResult[] = []
+      const dispatchable: DispatchChannel[] = []
+      for (const channel of channels) {
+        if (channel.type === NotificationChannelType.Email) {
+          if (!emailSmtp) {
+            channelResults.push({ id: channel.id, name: channel.name, type: 'email', status: 'error', error: 'SMTP configuration not found' })
+            continue
+          }
+          const config = channel.config as { to: string[]; cc?: string[]; bcc?: string[] }
+          dispatchable.push({ id: channel.id, name: channel.name, type: 'email', config: { ...config, smtp: emailSmtp } })
+        } else {
+          dispatchable.push({ id: channel.id, name: channel.name, type: channel.type as 'discord' | 'telegram', config: channel.config as DispatchChannel['config'] })
+        }
+      }
+
+      // Build a single pooled transport once and reuse it across the run — one
+      // TCP+TLS+AUTH handshake instead of one per channel. Closed in the finally.
+      const emailTransporter =
+        emailSmtp && dispatchable.some((c) => c.type === 'email')
+          ? createSmtpTransport(emailSmtp, { pool: true })
+          : null
 
       try {
-        for (const channel of channels) {
-          try {
-            if (channel.type === NotificationChannelType.Discord) {
-              const config = channel.config as { webhookUrl: string }
-              await new DiscordChannel({ webhookUrl: config.webhookUrl }).send(richMessage)
-            } else if (channel.type === NotificationChannelType.Telegram) {
-              const config = channel.config as { botToken: string; chatId: string }
-              await new TelegramChannel({ botToken: config.botToken, chatId: config.chatId }).send(richMessage)
-            } else if (channel.type === NotificationChannelType.Email) {
-              if (!emailSmtp || !emailTransporter) {
-                throw new Error('SMTP configuration not found')
-              }
-              const config = channel.config as { to: string[]; cc?: string[]; bcc?: string[] }
-              await new EmailChannel(
-                {
-                  to: config.to,
-                  cc: config.cc,
-                  bcc: config.bcc,
-                  smtp: emailSmtp,
-                },
-                emailTransporter,
-              ).send(richMessage)
-            }
-            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'sent' })
-          } catch (err) {
-            const error = err instanceof Error ? err.message : String(err)
-            log.warn('sendNotifications: Channel delivery failed', { channelId: channel.id, channelType: channel.type, error })
-            channelResults.push({ id: channel.id, name: channel.name, type: channel.type, status: 'error', error })
-          }
-        }
+        const delivered = await dispatchToChannels(dispatchable, richMessage, {
+          emailTransporter: emailTransporter ?? undefined,
+        })
+        channelResults.push(...delivered)
       } finally {
         emailTransporter?.close()
+      }
+
+      for (const r of channelResults) {
+        if (r.status === 'error') {
+          log.warn('sendNotifications: Channel delivery failed', { channelId: r.id, channelType: r.type, error: r.error })
+        }
       }
 
       // Save event with per-channel delivery status

@@ -8,3 +8,7 @@ data:
   TEMPORAL_TASK_QUEUE: "middleman-operations"
   TEMPORAL_WORKFLOW_RETENTION: "604800"
   POKT_RPC_URL: "https://sauron-rpc.beta.infra.pocket.network"
+  # SSRF egress allowlist for notification channels. Dev/localnet delivers to
+  # in-cluster SMTP relays / mailpit / webhook sinks on private IPs, so trust the
+  # private ranges here. Leave UNSET in prod unless you run internal targets.
+  NOTIFICATION_EGRESS_ALLOWLIST: "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, localhost"

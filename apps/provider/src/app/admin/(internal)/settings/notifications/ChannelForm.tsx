@@ -436,7 +436,7 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
                     <FormItem>
                       <FormLabel className="text-sm">Name</FormLabel>
                       <FormControl>
-                        <Input {...field} className="h-9 text-sm" placeholder="e.g., Discord Ops" />
+                        <Input {...field} className="h-9 text-sm" placeholder={`My ${selectedType === NotificationChannelType.Telegram ? 'Telegram' : selectedType === NotificationChannelType.Email ? 'Email' : 'Discord'} channel`} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

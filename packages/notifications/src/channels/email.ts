@@ -1,6 +1,24 @@
 import { getLogger } from '@igniter/logger'
 import nodemailer, { type Transporter } from 'nodemailer'
 import type { EmailConfig, EmailSmtpConfig, NotificationChannel, NotificationMessage } from '../types'
+import { assertSafeHost } from '../egressGuard'
+import { ChannelDeliveryError, type ChannelErrorCategory } from '../channelError'
+
+// Map a nodemailer/SMTP failure to a coarse category. nodemailer surfaces an SMTP
+// reply code on `responseCode` and a transport error class on `code`.
+function categorizeSmtpError(err: unknown): ChannelErrorCategory {
+  const e = err as { code?: string; responseCode?: number }
+  if (e?.code === 'EAUTH' || e?.responseCode === 535) return 'auth'
+  if (e?.code && ['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'ECONNREFUSED', 'EDNS', 'EHOSTUNREACH'].includes(e.code))
+    return 'transient'
+  const rc = e?.responseCode
+  if (typeof rc === 'number') {
+    if (rc === 550 || rc === 553 || rc === 501) return 'invalid_request' // bad mailbox/recipient
+    if (rc >= 500) return 'invalid_request'
+    if (rc >= 400) return 'transient' // 4xx = temporary per SMTP
+  }
+  return 'transient'
+}
 
 const logger = getLogger()
 
@@ -42,6 +60,9 @@ export class EmailChannel implements NotificationChannel {
   async send(message: NotificationMessage): Promise<void> {
     const { to, cc, bcc, smtp } = this.config
 
+    // SSRF guard: refuse connecting to internal/private SMTP hosts.
+    await assertSafeHost(smtp.host)
+
     const transporter = this.transporter ?? createSmtpTransport(smtp)
     const ownsTransporter = !this.transporter
 
@@ -60,6 +81,12 @@ export class EmailChannel implements NotificationChannel {
       })
 
       logger.debug({ messageId: info.messageId, to }, 'Email notification sent')
+    } catch (err) {
+      // Log the raw error server-side (it leaks host:port reachability); surface
+      // only a category so the caller can tell an auth/recipient problem from a
+      // transient one without seeing the underlying transport detail.
+      logger.error({ err }, 'Email notification failed')
+      throw new ChannelDeliveryError('email', categorizeSmtpError(err))
     } finally {
       if (ownsTransporter) transporter.close()
     }

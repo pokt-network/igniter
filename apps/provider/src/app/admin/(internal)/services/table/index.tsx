@@ -6,7 +6,7 @@ import {DeleteService, ListServices} from "@/actions/Services";
 import {Button} from "@igniter/ui/components/button";
 import { Trash2Icon, PencilIcon } from "lucide-react";
 import DataTable from "@igniter/ui/components/DataTable/index";
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import {columns} from "./columns";
 import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import { useQuery } from '@tanstack/react-query'

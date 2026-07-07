@@ -89,33 +89,6 @@ export async function getRecentChangesByUser(
   }
 }
 
-export async function getUnacknowledgedChangesByUser(userIdentity: string) {
-  return getDb()
-    .select({
-      id: supplierChangesTable.id,
-      nodeId: supplierChangesTable.nodeId,
-      changeType: supplierChangesTable.changeType,
-      serviceId: supplierChangesTable.serviceId,
-      description: supplierChangesTable.description,
-      newValue: supplierChangesTable.newValue,
-      batchId: supplierChangesTable.batchId,
-      createdAt: supplierChangesTable.createdAt,
-      nodeAddress: nodesTable.address,
-      providerId: nodesTable.providerId,
-      providerName: providersTable.name,
-    })
-    .from(supplierChangesTable)
-    .innerJoin(nodesTable, eq(supplierChangesTable.nodeId, nodesTable.id))
-    .leftJoin(providersTable, eq(nodesTable.providerId, providersTable.identity))
-    .where(
-      and(
-        eq(nodesTable.createdBy, userIdentity),
-        isNull(supplierChangesTable.acknowledgedAt),
-      ),
-    )
-    .orderBy(desc(supplierChangesTable.createdAt))
-}
-
 export async function acknowledgeChanges(changeIds: number[]) {
   if (changeIds.length === 0) return
   await getDb()
