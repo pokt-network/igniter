@@ -1,6 +1,7 @@
 import { configure, getLogger as ltGetLogger, reset, type LogRecord } from '@logtape/logtape'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { getLogger, withRequestContext, newRequestId } from './index'
+import { configureLogging } from './config'
 
 let buffer: LogRecord[]
 
@@ -42,6 +43,37 @@ describe('getLogger', () => {
 describe('newRequestId', () => {
   it('generates a uuid-shaped id', () => {
     expect(newRequestId()).toMatch(/^[0-9a-f-]{36}$/i)
+  })
+})
+
+describe('getLogger base fields (late-bind regression)', () => {
+  it('resolves service.name for a logger created BEFORE configureLogging() runs', async () => {
+    // Regression for MF-1: module-scope loggers (workers' worker.ts roots,
+    // notification channels) call getLogger() at import time, before the
+    // app's entrypoint calls configureLogging(). A plain .with(getBaseFields())
+    // snapshot would freeze on the pre-configure value ({}) forever. Simulate
+    // that ordering here.
+    const earlyLogger = getLogger(['worker-root'])
+
+    await configureLogging({ serviceName: 'late-bind-test' })
+
+    // configureLogging() wires its own console sink; redirect back to this
+    // test's buffer sink to capture the record. This does not touch
+    // config.ts's module-level baseFields, which is the state under test.
+    await configure({
+      reset: true,
+      sinks: { buffer: buffer.push.bind(buffer) },
+      loggers: [
+        { category: [], sinks: ['buffer'], lowestLevel: 'debug' },
+        { category: ['logtape', 'meta'], sinks: ['buffer'], lowestLevel: 'warning' },
+      ],
+      contextLocalStorage: new AsyncLocalStorage(),
+    })
+
+    earlyLogger.info('after late configureLogging')
+
+    expect(buffer).toHaveLength(1)
+    expect(buffer[0]!.properties['service.name']).toBe('late-bind-test')
   })
 })
 
