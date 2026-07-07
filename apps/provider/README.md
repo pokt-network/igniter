@@ -126,6 +126,7 @@ Step-by-step tutorials for common Provider workflows.
 | [How to set up a relay miner with address groups](../../docs/guides/provider/relay-miner-setup.md) | Configure a miner, create groups, and assign services step by step |
 | [How to manage your key inventory](../../docs/guides/provider/key-inventory.md) | Import keys, track their lifecycle states, and export when needed |
 | [How to onboard a new delegator](../../docs/guides/provider/onboard-delegator.md) | End-to-end flow from receiving keys to enabling a delegator |
+| [Notifications](../../docs/guides/provider/notifications.md) | Set up Discord, Telegram, or email delivery for supplier and workflow events |
 
 ## Reference
 
@@ -137,3 +138,5 @@ Detailed feature documentation for each admin area.
 | [Address Groups](../../docs/reference/provider/address-groups.md) | Organize miners into groups with service and revenue share configuration |
 | [Key Management](../../docs/reference/provider/key-management.md) | Import, track, and export supplier keys through their lifecycle          |
 | [Delegators](../../docs/reference/provider/delegators.md)         | Enable delegators and manage revenue sharing, including CDN import       |
+| [Workflows](../../docs/reference/provider/workflows.md)           | Inspect running/recent Temporal workflows and schedule health            |
+| [Notifications](../../docs/reference/provider/notifications.md)   | Instance-wide event types, channels, shared SMTP, and delivery config    |

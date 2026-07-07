@@ -35,6 +35,11 @@ const mainRoutes = [
     url: "/app/suppliers",
     icon: NodesDark,
   },
+  {
+    title: "Notifications",
+    url: "/app/notifications",
+    icon: ActivityDark,
+  },
 ];
 
 const adminRoutes = [
@@ -56,6 +61,11 @@ const adminRoutes = [
   {
     title: "Transactions",
     url: "/admin/transactions",
+    icon: ActivityDark,
+  },
+  {
+    title: "Workflows",
+    url: "/admin/workflows",
     icon: ActivityDark,
   },
   {

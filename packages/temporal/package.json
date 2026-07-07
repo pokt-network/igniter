@@ -7,22 +7,39 @@
       "import": "./dist/src/index.js",
       "require": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
+    },
+    "./workflow-view": {
+      "import": "./dist/src/workflowView.js",
+      "require": "./dist/src/workflowView.js",
+      "types": "./dist/src/workflowView.d.ts"
+    },
+    "./workflow-detail": {
+      "import": "./dist/src/workflowDetail.js",
+      "require": "./dist/src/workflowDetail.js",
+      "types": "./dist/src/workflowDetail.d.ts"
     }
   },
   "scripts": {
     "build": "tsc --project ./tsconfig.json && tsc-alias -p ./tsconfig.json",
     "lint": "eslint .",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "jest"
   },
   "dependencies": {
     "@igniter/logger": "workspace:*",
     "@igniter/commons": "workspace:*",
     "@temporalio/worker": "^1.11.7",
-    "@temporalio/client": "^1.11.7"
+    "@temporalio/client": "^1.11.7",
+    "@temporalio/common": "^1.11.7",
+    "@temporalio/proto": "^1.11.7"
   },
   "devDependencies": {
     "@igniter/eslint-config": "workspace:*",
     "@igniter/typescript-config": "workspace:*",
-    "tsc-alias": "^1.8.15"
+    "@types/jest": "^30.0.0",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.4",
+    "tsc-alias": "^1.8.15",
+    "long": "^5.2.3"
   }
 }

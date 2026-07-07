@@ -3,38 +3,18 @@ import 'server-only'
 import { auth } from '@/auth'
 import { UserRole } from '@igniter/db/provider/enums'
 import type { User } from '@igniter/db/provider/schema'
+import {
+  ActionErrorCode,
+  type ActionError,
+  type ActionResult,
+  success,
+  error,
+} from '@igniter/ui/lib/actionResult'
 
-// Error codes for client-side handling
-export const ActionErrorCode = {
-  UNAUTHORIZED: 'UNAUTHORIZED',
-  FORBIDDEN: 'FORBIDDEN',
-  NOT_FOUND: 'NOT_FOUND',
-  VALIDATION_ERROR: 'VALIDATION_ERROR',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
-} as const
-
-export type ActionErrorCode = (typeof ActionErrorCode)[keyof typeof ActionErrorCode]
-
-// Standardized error response
-export interface ActionError {
-  code: ActionErrorCode
-  message: string
-}
-
-// Standardized action result type
-export type ActionResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: ActionError }
-
-// Helper to create success response
-export function success<T>(data: T): ActionResult<T> {
-  return { success: true, data }
-}
-
-// Helper to create error response
-export function error<T>(code: ActionErrorCode, message: string): ActionResult<T> {
-  return { success: false, error: { code, message } }
-}
+// Re-export the shared action-result contract so existing `@/lib/utils/actionUtils`
+// imports keep working while the canonical shape lives in `@igniter/ui`.
+export { ActionErrorCode, success, error }
+export type { ActionError, ActionResult }
 
 // Authentication helpers
 export async function getAuthenticatedUser(): Promise<User | null> {
