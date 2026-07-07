@@ -19,7 +19,7 @@ export function getClientSink(): ClientSink {
   return clientSink
 }
 
-// LogTape's console sink (library writer; not a raw console.* in our source).
+// LogTape's console sink (library writer; not a raw console call in our source).
 const consoleSink: Sink = getConsoleSink()
 
 /**
