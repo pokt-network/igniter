@@ -5,6 +5,12 @@ on:
     types: [closed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Version bump for manual runs (PR-merge runs use the release:* label instead)'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 concurrency:
   group: deploy-production
@@ -62,9 +68,9 @@ jobs:
           if [ -z "$LATEST_TAG" ]; then LATEST_TAG="v0.0.0"; fi
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          if ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}; then
+          if ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }} || [ "${{ github.event.inputs.release_type }}" = "major" ]; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}; then
+          elif ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }} || [ "${{ github.event.inputs.release_type }}" = "minor" ]; then
             MINOR=$((MINOR + 1)); PATCH=0
           else
             PATCH=$((PATCH + 1))
