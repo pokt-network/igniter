@@ -1,5 +1,7 @@
 FROM node:22-slim AS base
 
+ARG APP_VERSION=unknown
+ENV APP_VERSION=${APP_VERSION}
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
 # pnpm 10+ resolves the global bin to $PNPM_HOME/bin and enforces it must be
@@ -64,6 +66,7 @@ COPY --from=base --chown=nextjs:nodejs /app/apps/provider/drizzle/ ./apps/provid
 COPY --from=base --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 ENV PORT 3001
+ENV SERVICE_NAME=provider
 
 # Start the server
 CMD ["node", "apps/provider/server.js"]

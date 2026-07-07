@@ -1,5 +1,7 @@
 FROM node:22-slim AS base
 
+ARG APP_VERSION=unknown
+ENV APP_VERSION=${APP_VERSION}
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -33,6 +35,8 @@ RUN pnpm turbo run build --filter=@igniter/provider-workflows
 
 # Switch user
 USER app
+
+ENV SERVICE_NAME=provider-workflows
 
 # Start the server
 CMD ["node", "./apps/provider-workflows/dist/src/worker.js"]
