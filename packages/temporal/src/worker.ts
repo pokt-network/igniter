@@ -4,7 +4,7 @@ import {
   Worker,
   WorkerOptions,
 } from '@temporalio/worker'
-import { getTemporalLogger } from '@/logger'
+import { getTemporalLogger } from '@igniter/logger/temporal'
 import type { Logger } from '@igniter/logger'
 import { checkEnvVariables } from '@igniter/commons/utils'
 import { TemporalWorker } from '@/types'
@@ -79,7 +79,7 @@ export const getWorker = async (
     }
   }
 
-  const temporalLogger = getTemporalLogger(logger)
+  const temporalLogger = getTemporalLogger(['temporal', 'core'])
   Runtime.install({ logger: temporalLogger })
 
   checkEnvVariables(['TEMPORAL_URL', 'TEMPORAL_NAMESPACE', 'TEMPORAL_TASK_QUEUE'])
