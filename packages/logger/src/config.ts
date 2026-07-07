@@ -1,11 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import {
-  configure,
-  getConsoleSink,
-  jsonLinesFormatter,
-  type LogLevel,
-} from '@logtape/logtape'
-import { prettyFormatter } from '@logtape/pretty'
+import { configure, type LogLevel } from '@logtape/logtape'
+import { getRedactedConsoleSink } from './redaction'
 
 export interface ConfigureOpts {
   level?: LogLevel
@@ -55,16 +50,13 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
     runtime,
   }
 
-  // Plain console sink for now; Task 4 swaps this for getRedactedConsoleSink(isProd).
-  const formatter = isProd ? jsonLinesFormatter : prettyFormatter
-
   // NOTE: LogTape's `Config` has NO top-level `lowestLevel` field (verified against
   // @logtape/logtape@2.2.1 — Config = { sinks, filters?, loggers, contextLocalStorage?,
   // reset? }). The per-logger `lowestLevel` on the root logger `{ category: [], ... }`
   // is what sets the floor. A top-level `lowestLevel` would be a TS excess-property error.
   await configure({
     reset: true,
-    sinks: { console: getConsoleSink({ formatter }) },
+    sinks: { console: getRedactedConsoleSink(isProd) },
     loggers: [
       { category: [], sinks: ['console'], lowestLevel: level },
       // Silence LogTape's own meta logger below warning to avoid noise.
