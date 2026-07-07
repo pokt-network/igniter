@@ -24,8 +24,8 @@
   },
   "dependencies": {
     "@logtape/logtape": "2.2.1",
-    "@logtape/pretty": "^1.1.0",
-    "@logtape/redaction": "1.3.6"
+    "@logtape/pretty": "2.2.1",
+    "@logtape/redaction": "2.2.1"
   },
   "devDependencies": {
     "@igniter/eslint-config": "workspace:*",
