@@ -265,7 +265,7 @@ export class PocketBlockchain {
       if (!this.cometClient) this.cometClient = await connectComet(this.rpcUrl) as Comet38Client
       if (!this.stargateClient) this.stargateClient = await StargateClient.create(this.cometClient, {})
     } catch (error) {
-      console.error('Failed to connect to the blockchain:', error)
+      this.logger.error('Failed to connect to the blockchain', { error })
       throw new Error('Failed to connect to the blockchain.')
     }
   }
@@ -322,7 +322,7 @@ export class PocketBlockchain {
     try {
       return await client.getHeight()
     } catch (err) {
-      console.error(err)
+      this.logger.error('Unexpected blockchain error', { error: err })
       throw new Error('Unable to fetch the height from the blockchain.')
     }
   }

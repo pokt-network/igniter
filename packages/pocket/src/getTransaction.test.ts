@@ -36,16 +36,16 @@ jest.mock('@cosmjs/tendermint-rpc', () => ({
 }))
 
 // Mock @igniter/logger
-jest.mock('@igniter/logger', () => ({
-  getLogger: () => ({
-    child: () => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
-    }),
-  }),
-}))
+jest.mock('@igniter/logger', () => {
+  const mk = () => {
+    const l: Record<string, unknown> = {
+      info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), trace: jest.fn(),
+      with: () => l, getChild: () => l,
+    }
+    return l
+  }
+  return { getLogger: () => mk() }
+})
 
 // Mock global fetch
 const mockFetch = jest.fn()
