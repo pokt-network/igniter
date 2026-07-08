@@ -16,6 +16,9 @@
   },
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
+  "browser": {
+    "./dist/src/context-storage.js": "./dist/src/context-storage.browser.js"
+  },
   "scripts": {
     "build": "tsc --project ./tsconfig.json",
     "lint": "eslint .",

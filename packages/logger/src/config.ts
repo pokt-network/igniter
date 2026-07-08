@@ -10,6 +10,7 @@ import { getPrettyFormatter } from '@logtape/pretty'
 import { redactByField } from '@logtape/redaction'
 import { getRedactedConsoleSink, SECRET_FIELD_PATTERNS } from './redaction'
 import { getClientSink, minimalSink } from './client'
+import { createContextStorage } from './context-storage'
 
 export interface ConfigureOpts {
   level?: LogLevel
@@ -58,23 +59,17 @@ function setBaseFields(fields: Record<string, unknown>): void {
  * 11's real Next.js/Docker build validation (a plain source grep for the
  * literal specifier does not catch this — only an actual bundler run does).
  *
- * A joined-string specifier dodges webpack's static analysis (downgrades to a
- * warning) but is a HARD build error under Turbopack, which analyzes every
- * `require()` call site and fails on non-literal specifiers ("Can't resolve
- * <dynamic>"). `eval('require')` is the established escape hatch opaque to
- * BOTH bundlers (neither traces through eval). It is guarded: only reached at
- * runtime on the `runtime === 'node'` branch, never in a browser/edge bundle,
- * and any failure degrades to "no ALS correlation" rather than a crash.
+ * Resolution history (three bundler failure modes, one per attempt):
+ * joined-string dynamic require → Turbopack hard error ("Can't resolve
+ * <dynamic>"); eval('require') → Next Edge compile error ("Dynamic Code
+ * Evaluation not allowed in Edge Runtime"). Final form: a STATIC import in
+ * `./context-storage` (Edge supports AsyncLocalStorage natively) with a
+ * package.json `browser`-field substitution so client bundles get a no-op —
+ * no dynamic resolution anywhere, every bundler and runtime satisfied.
  */
 function loadContextLocalStorage(): ContextLocalStorage<Record<string, unknown>> | undefined {
   try {
-    // eslint-disable-next-line no-eval
-    const nodeRequire = eval('require') as (id: string) => unknown
-    if (typeof nodeRequire !== 'function') return undefined
-    const { AsyncLocalStorage } = nodeRequire('node:async_hooks') as {
-      AsyncLocalStorage: new () => ContextLocalStorage<Record<string, unknown>>
-    }
-    return new AsyncLocalStorage()
+    return createContextStorage()
   } catch {
     return undefined
   }
