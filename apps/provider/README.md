@@ -40,7 +40,7 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 | Variable    | Required | Description                                          | Example / Default |
 |-------------|----------|------------------------------------------------------|-------------------|
 | `NODE_ENV`  | Optional | Node runtime environment                             | `production`      |
-| `LOG_LEVEL` | Optional | Logging verbosity (`error`, `warn`, `info`, `debug`) | `info`            |
+| `LOG_LEVEL` | Optional | LogTape verbosity (`trace`, `debug`, `info`, `warning`, `error`, `fatal` — note `warning`, not `warn`) | `debug`            |
 
 ### Temporal
 
