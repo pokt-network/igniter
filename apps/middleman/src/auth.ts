@@ -4,12 +4,15 @@ import NextAuth, { type NextAuthResult } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 
 import { SiwpMessage } from '@poktscan/vault-siwp'
+import { getLogger } from '@igniter/logger'
 
 import {
   createUser,
   getUser,
 } from './lib/dal/users'
 import authConfig from './auth.config'
+
+const log = getLogger(['middleman', 'auth'])
 
 const authConfigResult = NextAuth({
   ...authConfig,
@@ -38,17 +41,16 @@ const authConfigResult = NextAuth({
       // @ts-ignore
       authorize: async (credentials, req): Promise<User | null> => {
         try {
-          console.log(credentials?.message)
           const siwp = new SiwpMessage(
             JSON.parse((credentials?.message || '{}') as string),
           )
 
           const nextAuthUrl = new URL(process.env.AUTH_URL ?? '')
 
-          console.log('Verifying signature with:')
-          console.log('Signature:', credentials?.signature)
-          console.log('Domain:', nextAuthUrl.host)
-          console.log('Public Key:', credentials?.publicKey)
+          // NEVER log signature/message/publicKey raw (spec §0, §7): signature
+          // is a secret, message/publicKey are auth material. domain is the
+          // only non-sensitive context worth a line here.
+          log.debug('siwp verification attempt', { domain: nextAuthUrl.host })
 
           const results = await Promise.allSettled([
             siwp.verifyERC4361({
@@ -76,13 +78,16 @@ const authConfigResult = NextAuth({
 
             if (!user) {
               user = await createUser(siwp.address)
+              log.info('user created on first login', { address: siwp.address })
             }
 
+            log.info('siwp login verified', { address: siwp.address })
             return user ?? null
           }
+          log.warn('siwp verification rejected', { address: siwp.address })
           return null
         } catch (error) {
-          console.log(error)
+          log.error('siwp verification failed', { error })
           return null
         }
       },
