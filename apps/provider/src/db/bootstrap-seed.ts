@@ -7,7 +7,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
 import { setup } from '@igniter/db/connection'
-import { getLogger } from '@igniter/logger'
+import { configureLogging, getLogger } from '@igniter/logger'
 
 const {
   usersTable,
@@ -92,6 +92,10 @@ interface CdnDelegator {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // Without this, every getLogger() call in this seed writes to a logger with no
+  // configured sinks (blackhole). Wire the standard config so seed logs surface.
+  await configureLogging({ serviceName: 'provider' })
+
   const configPath = process.env.BOOTSTRAP_CONFIG_PATH
   if (!configPath) {
     console.log('[bootstrap-seed] BOOTSTRAP_CONFIG_PATH not set, skipping.')

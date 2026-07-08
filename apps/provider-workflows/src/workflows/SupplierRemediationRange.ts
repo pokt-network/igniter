@@ -68,7 +68,7 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
 
   const allFailed = r.every(r => {
     if (r.status === 'rejected') {
-      log.warn(`SupplierRemediationByRange: Child workflow failed with: ${r.reason}`)
+      log.warn('SupplierRemediationByRange: Child workflow failed', { reason: r.reason })
     }
     return r.status === 'rejected';
   })

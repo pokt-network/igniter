@@ -1,7 +1,5 @@
 FROM node:22-slim AS base
 
-ARG APP_VERSION=unknown
-ENV APP_VERSION=${APP_VERSION}
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -37,6 +35,10 @@ RUN pnpm turbo run build --filter=@igniter/middleman-workflows
 USER app
 
 ENV SERVICE_NAME=middleman-workflows
+# APP_VERSION sits after the build RUN so a per-deploy version bump only
+# invalidates this layer, not the install/build layers above.
+ARG APP_VERSION=unknown
+ENV APP_VERSION=${APP_VERSION}
 
 # Start the server
 CMD ["node", "./apps/middleman-workflows/dist/src/worker.js"]

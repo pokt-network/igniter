@@ -65,7 +65,7 @@ export class CompareSupplierServiceConfigHandler {
 
     const canonicalA = this.canonicalise(serviceConfigSetA);
 
-    this.logger.debug(`CompareSupplierServiceConfigHandler: Canonicalised service config set A: ${JSON.stringify(canonicalA)}`);
+    this.logger.debug('CompareSupplierServiceConfigHandler: Canonicalised service config set A', { canonicalA });
 
     const canonicalB = this.canonicalise(serviceConfigSetB);
 

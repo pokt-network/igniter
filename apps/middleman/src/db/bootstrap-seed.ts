@@ -4,7 +4,7 @@ import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
 import * as schema from '@igniter/db/middleman/schema'
 import { UserRole, ProviderFee } from '@igniter/db/middleman/enums'
 import { setup } from '@igniter/db/connection'
-import { getLogger } from '@igniter/logger'
+import { configureLogging, getLogger } from '@igniter/logger'
 
 const { usersTable, applicationSettingsTable, providersTable } = schema
 
@@ -32,6 +32,10 @@ interface CdnProvider {
 }
 
 async function main() {
+  // Without this, every getLogger() call in this seed writes to a logger with no
+  // configured sinks (blackhole). Wire the standard config so seed logs surface.
+  await configureLogging({ serviceName: 'middleman' })
+
   const configPath = process.env.BOOTSTRAP_CONFIG_PATH
   if (!configPath) {
     console.log('[bootstrap-seed] BOOTSTRAP_CONFIG_PATH not set, skipping.')
