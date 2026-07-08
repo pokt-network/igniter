@@ -98,6 +98,13 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
     // fulfilled + success + !remediated → nothing was done, skip silently
   }
 
-  log.info('SupplierRemediationByRange: Execution Ended', { height: input.height, minId: input.minId, maxId: input.maxId, failedReasons })
+  log.info('SupplierRemediationByRange: Execution Ended', {
+    height: input.height,
+    minId: input.minId,
+    maxId: input.maxId,
+    keysChecked: rows.length,
+    remediated: result.succeeded.length,
+    failedReasons,
+  })
   return result
 }

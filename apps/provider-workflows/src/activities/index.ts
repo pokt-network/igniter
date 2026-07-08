@@ -829,7 +829,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     if (key.remediationHistory?.length === 0) {
-      log.info('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
+      log.debug('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
       return {
         success: true,
         remediated: false,

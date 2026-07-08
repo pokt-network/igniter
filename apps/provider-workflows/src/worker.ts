@@ -198,7 +198,6 @@ setupTemporalWorker().then(() => {
   logger.info('Worker stopped')
   process.exit(0)
 }).catch((err) => {
-  console.error(err);
   logger.error('failed setting up the worker', { err })
   process.exit(1)
 })

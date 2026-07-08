@@ -3,6 +3,7 @@ import { Buffer } from 'buffer'
 import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
 import { connectComet } from '@cosmjs/tendermint-rpc'
+import { getLogger, type Logger } from '@igniter/logger'
 
 export interface SendTransactionResult {
   transactionHash: string;
@@ -32,16 +33,19 @@ export class Blockchain implements IBlockchain {
   private readonly rpcUrl: string;
   private readonly denom: string;
   private readonly apiUrl?: string;
+  private readonly logger: Logger;
 
   /**
    * @param rpcUrl bech32 Cosmos SDK RPC endpoint, e.g. https://rpc.cosmos.network
    * @param denom  staking token denom, e.g. "uatom" or "upokt"
    * @param apiUrl optional REST API endpoint for Tier 2 tx lookup
+   * @param logger optional injected logger; defaults to the root app logger
    */
-  constructor(rpcUrl: string, denom: string = 'upokt', apiUrl?: string) {
+  constructor(rpcUrl: string, denom: string = 'upokt', apiUrl?: string, logger: Logger = getLogger(['middleman-workflows', 'blockchain'])) {
     this.rpcUrl = rpcUrl;
     this.denom = denom;
     this.apiUrl = apiUrl;
+    this.logger = logger;
   }
 
   /** Returns the numeric token balance for `address` in the configured `denom`. */
@@ -59,7 +63,7 @@ export class Blockchain implements IBlockchain {
     try {
       return await client.getHeight();
     } catch (err) {
-      console.error(err);
+      this.logger.error('Failed to fetch height from blockchain', { error: err });
       throw new Error('Unable to fetch the height from the blockchain.');
     }
   }
@@ -113,12 +117,12 @@ export class Blockchain implements IBlockchain {
         };
       }
     } catch (error) {
-      console.warn('Tier 1 (RPC getTx) failed:', error);
+      this.logger.warn('Tier 1 (RPC getTx) failed', { txHash, error });
     }
 
     // Tier 2: REST API
     if (this.apiUrl) {
-      console.info(`Tier 1 returned null for ${txHash}, trying REST API fallback`);
+      this.logger.debug('Tier 1 returned null, trying REST API fallback', { txHash });
       try {
         const url = `${this.apiUrl.replace(/\/$/, '')}/cosmos/tx/v1beta1/txs/${txHash}`;
         const response = await fetch(url);
@@ -138,13 +142,13 @@ export class Blockchain implements IBlockchain {
           }
         }
       } catch (error) {
-        console.warn('Tier 2 (REST API) failed:', error);
+        this.logger.warn('Tier 2 (REST API) failed', { txHash, error });
       }
     }
 
     // Tier 3: Block scan
     if (height) {
-      console.info(`Tier 2 returned null for ${txHash}, trying block scan at height ${height}`);
+      this.logger.debug('Tier 2 returned null, trying block scan', { txHash, height });
       const maxBlocks = 30;
       try {
         const comet = await connectComet(this.rpcUrl);
@@ -167,7 +171,7 @@ export class Blockchain implements IBlockchain {
                 const results = await comet.blockResults(h);
                 const txData = results.results[i];
                 if (!txData) {
-                  console.warn(`Block results missing entry at index ${i} for height ${h}`);
+                  this.logger.warn('Block results missing entry', { txHash, height: h, index: i });
                   return null;
                 }
                 return {
@@ -182,16 +186,16 @@ export class Blockchain implements IBlockchain {
               }
             }
           } catch (blockError) {
-            console.warn(`Block scan error at height ${h}:`, blockError);
+            this.logger.warn('Block scan error', { txHash, height: h, error: blockError });
             continue;
           }
         }
       } catch (error) {
-        console.warn('Tier 3 (block scan) failed to connect:', error);
+        this.logger.warn('Tier 3 (block scan) failed to connect', { txHash, error });
       }
     }
 
-    console.warn(`All tiers failed to find transaction ${txHash}`);
+    this.logger.warn('All tiers failed to find transaction', { txHash });
     return null;
   }
 }
