@@ -17,6 +17,7 @@ status=0
 
 while IFS= read -r path; do
   [ -z "$path" ] && continue
+  case "$path" in \#*) continue ;; esac
   # Exclude test files; only scan .ts/.tsx source.
   hits=$(grep -rEn \
     --include='*.ts' --include='*.tsx' \

@@ -1,3 +1,27 @@
+# Paths scanned by scripts/no-console-guard.sh for unsanctioned console.*
+# calls. Every path here must be console-free (message-first getLogger
+# pattern per spec §11). Add a path only after migrating it.
+#
+# Excluded: packages/ui/src — client-side wallet-connection + chart-utils
+# code (27 call sites across 5 files: WalletConnection/*, BaseLineBarChart,
+# Height/InitializeContext, WalletPicker) predates the logging initiative
+# and is out of scope for T15; getLogger is browser-safe so this package
+# can be migrated in a follow-up, not blocking repo-wide enforcement here.
+#
+# Excluded: packages/graphql/codegen.ts and
+# packages/temporal/scripts/validate-detail-live.ts — standalone dev/CLI
+# tooling (codegen runner, manual live-validation reporter), not app
+# runtime source; console output is the intended human-readable format
+# for these one-off scripts. Predate the logging initiative, untouched
+# by it, out of T15 scope.
 packages/logger/src
 packages/pocket/src
 packages/commons/src
+apps/middleman/src
+apps/provider/src
+apps/middleman-workflows/src
+apps/provider-workflows/src
+packages/db/src
+packages/domain/src
+packages/notifications/src
+packages/temporal/src
