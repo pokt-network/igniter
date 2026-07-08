@@ -255,8 +255,8 @@ const devPrettyFormatter: TextFormatter = (record) => {
   return basePrettyFormatter({ ...record, properties })
 }
 
-export function getRedactedConsoleSink(isProd: boolean): Sink {
-  const baseFormatter: TextFormatter = isProd ? jsonLinesNumericFormatter : devPrettyFormatter
+export function getRedactedConsoleSink(useJson: boolean): Sink {
+  const baseFormatter: TextFormatter = useJson ? jsonLinesNumericFormatter : devPrettyFormatter
   const safeFormatter = redactByPattern(baseFormatter, SECRET_VALUE_PATTERNS)
   return redactByField(getConsoleSink({ formatter: safeFormatter }), SECRET_FIELD_PATTERNS)
 }

@@ -68,6 +68,11 @@ function loadContextLocalStorage(): ContextLocalStorage<Record<string, unknown>>
 export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> {
   const runtime = detectRuntime()
   const isProd = process.env.NODE_ENV === 'production'
+  // LOG_FORMAT overrides the NODE_ENV-derived output format: 'json' (NDJSON, the
+  // prod/collector/agent-friendly form — localnet sets this) or 'pretty' (human
+  // terminal). Unset → json in prod, pretty in dev.
+  const logFormat = process.env.LOG_FORMAT
+  const useJson = logFormat === 'json' ? true : logFormat === 'pretty' ? false : isProd
   const level: LogLevel = opts.level ?? (process.env.LOG_LEVEL as LogLevel) ?? 'debug'
 
   baseFields = {
@@ -106,7 +111,7 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
   // is what sets the floor. A top-level `lowestLevel` would be a TS excess-property error.
   await configure({
     reset: true,
-    sinks: { console: getRedactedConsoleSink(isProd) },
+    sinks: { console: getRedactedConsoleSink(useJson) },
     loggers: [
       { category: [], sinks: ['console'], lowestLevel: level },
       // Silence LogTape's own meta logger below warning to avoid noise.
