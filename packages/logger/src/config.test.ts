@@ -1,4 +1,4 @@
-import { configureLogging, getBaseFields, detectRuntime, installBigIntJson } from './config'
+import { configureLogging, getBaseFields, detectRuntime } from './config'
 import { reset } from '@logtape/logtape'
 
 afterEach(async () => {
@@ -6,9 +6,14 @@ afterEach(async () => {
 })
 
 describe('configureLogging', () => {
-  it('serializes bigint without throwing after install', () => {
-    installBigIntJson()
-    expect(JSON.stringify({ amount: 10n })).toBe('{"amount":"10"}')
+  it('does NOT install a global BigInt.prototype.toJSON patch (F11)', async () => {
+    // Regression guard: the old installBigIntJson() patched the GLOBAL prototype,
+    // which silently changed Temporal payload boundary semantics (bigint crossed
+    // as a string instead of throwing loud). bigint is now handled ONLY inside the
+    // log formatters, so at global scope JSON.stringify must STILL throw on bigint.
+    await configureLogging({ serviceName: 'no-global-patch' })
+    expect(() => JSON.stringify({ amount: 10n })).toThrow(TypeError)
+    expect((BigInt.prototype as { toJSON?: unknown }).toJSON).toBeUndefined()
   })
 
   it('exposes base fields with service.version fallback "unknown"', async () => {

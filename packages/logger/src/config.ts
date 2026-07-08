@@ -26,21 +26,6 @@ export function detectRuntime(): 'node' | 'edge' | 'browser' {
   return 'node'
 }
 
-/**
- * MANDATORY (spec §0, LOCKED): LogTape's jsonLinesFormatter has no bigint
- * handling, so JSON.stringify throws on bigint. Install a global, idempotent
- * bigint->string replacer via BigInt.prototype.toJSON so every JSON sink
- * (and any JSON.stringify in the process) serializes bigint safely.
- */
-export function installBigIntJson(): void {
-  const proto = BigInt.prototype as unknown as { toJSON?: () => string }
-  if (typeof proto.toJSON !== 'function') {
-    proto.toJSON = function (this: bigint) {
-      return this.toString()
-    }
-  }
-}
-
 export function getBaseFields(): Record<string, unknown> {
   return baseFields
 }
@@ -81,8 +66,6 @@ function loadContextLocalStorage(): ContextLocalStorage<Record<string, unknown>>
 }
 
 export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> {
-  installBigIntJson()
-
   const runtime = detectRuntime()
   const isProd = process.env.NODE_ENV === 'production'
   const level: LogLevel = opts.level ?? (process.env.LOG_LEVEL as LogLevel) ?? 'debug'
