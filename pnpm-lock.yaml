@@ -974,6 +974,9 @@ importers:
       '@igniter/graphql':
         specifier: workspace:*
         version: link:../graphql
+      '@igniter/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@igniter/temporal':
         specifier: workspace:*
         version: link:../temporal

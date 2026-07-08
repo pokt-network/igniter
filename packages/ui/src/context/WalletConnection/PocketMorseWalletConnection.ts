@@ -2,6 +2,9 @@ import {ProviderInfo, TransactionMessage, WalletConnection} from "@igniter/ui/co
 import {
   Provider, SignedTransaction,
 } from "./";
+import { getLogger } from "@igniter/logger";
+
+const log = getLogger(["ui", "wallet-connection", "pocket-morse"]);
 
 export enum PocketMethod {
   REQUEST_ACCOUNTS = "pokt_requestAccounts",
@@ -39,7 +42,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
       this.isConnected = true;
       this.connectedIdentity = connectedIdentity;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to connect to Pocket Network wallet", { error: err });
       throw err;
     }
   };
@@ -56,7 +59,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
 
       return false;
     } catch (error) {
-      console.warn(`Something failed while interacting with the Pocket Network wallet provider. method: ${PocketMethod.ACCOUNTS}`);
+      log.warn("Failed to reconnect to Pocket Network wallet provider", { method: PocketMethod.ACCOUNTS, error });
       return false;
     }
   }
@@ -67,7 +70,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
         PocketMethod.CHAIN,
       );
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get chain from Pocket Network wallet", { error: err });
       throw err;
     }
   }
@@ -80,7 +83,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
       );
       return publicKey;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get public key from Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -93,7 +96,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
       );
       return balance;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get balance from Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -105,7 +108,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
         [{ chainId }],
       );
     } catch (err) {
-      console.error(err);
+      log.error("Failed to switch chain in Pocket Network wallet", { chainId, error: err });
       throw err;
     }
   }
@@ -115,7 +118,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
       const { signature } = await this.provider.send(PocketMethod.SIGN_MESSAGE, [{ message, address }]);
       return signature;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to sign message with Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -146,8 +149,7 @@ export class PocketMorseWalletConnection implements WalletConnection {
   };
 
   signTransaction = async (transaction: TransactionMessage[]): Promise<SignedTransaction> => {
-    console.warn(
-      'Method not implemented: signTransaction. Something is wrong with the wallet connection provider.');
+    log.warn("Method not implemented: signTransaction. Something is wrong with the wallet connection provider.");
 
     return {
       address: '',

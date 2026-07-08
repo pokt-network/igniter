@@ -12,6 +12,9 @@ import {
   isAfter,
   compareAsc,
 } from 'date-fns'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['ui', 'base-line-bar-chart'])
 
 export type UnitTimeGroup = 'hour' | 'day' | 'week' | 'month' | 'year';
 export interface Point {
@@ -569,14 +572,14 @@ export function fillChartData<T extends LineBarItem>({
 
   // Validate totalPoints to prevent Safari RangeError
   if (!Number.isFinite(totalPoints) || totalPoints <= 0 || totalPoints > Number.MAX_SAFE_INTEGER) {
-    console.error(`[fillChartData] Invalid totalPoints: ${totalPoints}. Returning original data.`)
+    log.error('Invalid totalPoints, returning original data', { totalPoints })
     return data
   }
 
   // Performance bailout: if dataset is very large (>100 points), consider skipping fill
   // This prevents multi-second blocking for extreme cases
   if (totalPoints > 100) {
-    console.warn(`[fillChartDataOptimized] Large dataset detected (${totalPoints} points). Consider skipping fillChartData for better performance.`)
+    log.warn('Large dataset detected, consider skipping fillChartData for better performance', { totalPoints })
   }
 
   // Pre-allocate array for better memory performance
