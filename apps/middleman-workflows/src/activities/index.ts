@@ -212,7 +212,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
   async upsertSupplierStatus(params: UpsertSupplierStatusParams): Promise<boolean> {
     try {
-      log.info('Querying supplier status', { params })
+      log.debug('Querying supplier status', { params })
       const [node, balance, supplier] = await Promise.all([
         dal.node.loadNode(params.address),
         pocketRpcClient.getBalance(params.address),
@@ -363,14 +363,14 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         }
       }
 
-      log.info('Updating supplier', { params, update }) //NOTE: adding the update could result in an error due to BIGINT
+      log.debug('Updating supplier', { params, update }) //NOTE: adding the update could result in an error due to BIGINT
       try {
         await dal.node.updateNode(params.address, update, params.height)
       } catch (e) {
         log.error('Error updating node record', { error: e })
         throw new ApplicationFailure('errored updating node record', 'update_error', false, null, e as Error)
       }
-      log.info('Upsert Supplier done!', { params })
+      log.debug('Upsert Supplier done!', { params })
 
       // Node update has persisted — now deliver the captured supplier-change
       // notifications (best-effort; dispatchUserNotification never throws). On a
@@ -1411,9 +1411,10 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const verifyLogFields = {
       transactionId,
       hash: txn.hash ?? undefined,
+      type: txn.type,
       success: decision.tx === 'success',
-      code: decision.code,
-      gasUsed: decision.gasUsed,
+      ...(decision.code !== undefined ? { code: decision.code } : {}),
+      ...(decision.gasUsed !== undefined ? { gasUsed: decision.gasUsed } : {}),
     }
     if (decision.tx === 'success') {
       log.info('transaction verified', verifyLogFields)

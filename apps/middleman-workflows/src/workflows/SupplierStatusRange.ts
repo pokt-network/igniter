@@ -72,4 +72,7 @@ export async function SupplierStatusByRange(input: SupplierStatusByRange): Promi
   if (allFailed) {
     throw new WorkflowError('All activities failed');
   }
+
+  const upserted = r.filter(r => r.status === 'fulfilled').length
+  log.info('supplier sync range done', { keysChecked: rows.length, upserted, minId: input.minId, maxId: input.maxId })
 }

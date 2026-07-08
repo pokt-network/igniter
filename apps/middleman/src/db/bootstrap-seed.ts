@@ -71,7 +71,7 @@ async function main() {
   }
   const appIdentity = Buffer.from(account.pubkey).toString('hex')
 
-  const dbLogger = getLogger()
+  const dbLogger = getLogger(['middleman', 'db'])
   const { db, disconnect } = setup({ schema, logger: dbLogger })
 
   try {
