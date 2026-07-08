@@ -40,6 +40,27 @@ function makeInfo(id: string) {
   }
 }
 
+const schedulePause = jest.fn().mockResolvedValue(undefined)
+const scheduleUnpause = jest.fn().mockResolvedValue(undefined)
+const scheduleDelete = jest.fn().mockResolvedValue(undefined)
+const scheduleGetHandle = jest.fn(() => ({
+  describe: async () => ({
+    scheduleId: 'GovernanceSync-scheduled',
+    state: { paused: true },
+    spec: { intervals: [] },
+    info: {
+      recentActions: [],
+      nextActionTimes: [],
+      runningActions: [],
+      numActionsTaken: 0,
+      createdAt: new Date('2026-07-01T00:00:00Z'),
+    },
+  }),
+  pause: schedulePause,
+  unpause: scheduleUnpause,
+  delete: scheduleDelete,
+}))
+
 const fakeClient = {
   workflow: {
     list: () => ({
@@ -60,20 +81,7 @@ const fakeClient = {
       },
     }),
     // GetScheduleHealth describe()s each schedule for running-actions-aware liveness.
-    getHandle: () => ({
-      describe: async () => ({
-        scheduleId: 'GovernanceSync-scheduled',
-        state: { paused: true },
-        spec: { intervals: [] },
-        info: {
-          recentActions: [],
-          nextActionTimes: [],
-          runningActions: [],
-          numActionsTaken: 0,
-          createdAt: new Date('2026-07-01T00:00:00Z'),
-        },
-      }),
-    }),
+    getHandle: scheduleGetHandle,
   },
 }
 jest.mock('@/lib/temporal', () => ({ getTemporalClient: () => fakeClient }))
@@ -81,13 +89,25 @@ jest.mock('@/lib/dal/watchdogHealState', () => ({
   listWatchdogHealState: jest.fn().mockResolvedValue([]),
 }))
 
-import { ListWorkflows, GetScheduleHealth, TerminateWorkflow } from './Workflows'
+import {
+  ListWorkflows,
+  GetScheduleHealth,
+  TerminateWorkflow,
+  PauseSchedule,
+  ResumeSchedule,
+  RecreateSchedule,
+} from './Workflows'
 
 describe('middleman Workflows actions', () => {
   beforeEach(() => {
     requireAdmin.mockReset()
     terminate.mockClear()
     getHandle.mockClear()
+    schedulePause.mockClear()
+    scheduleUnpause.mockClear()
+    scheduleDelete.mockClear()
+    scheduleDelete.mockResolvedValue(undefined)
+    schedulePause.mockResolvedValue(undefined)
     requireAdmin.mockResolvedValue(undefined)
   })
 
@@ -115,6 +135,54 @@ describe('middleman Workflows actions', () => {
   it('denies when requireAdmin throws Unauthorized', async () => {
     requireAdmin.mockRejectedValue(new Error('Unauthorized'))
     const res = await ListWorkflows({}, { pageIndex: 0, pageSize: 10 })
+    expect(res.success).toBe(false)
+    if (res.success) throw new Error('expected failure')
+    expect(res.error.message).toBe('Unauthorized')
+  })
+
+  it('PauseSchedule pauses with a default operator note', async () => {
+    const res = await PauseSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+    expect(schedulePause).toHaveBeenCalledWith('Paused by operator from admin UI')
+  })
+
+  it('PauseSchedule forwards an explicit note', async () => {
+    const res = await PauseSchedule('GovernanceSync-scheduled', 'ops window')
+    expect(res.success).toBe(true)
+    expect(schedulePause).toHaveBeenCalledWith('ops window')
+  })
+
+  it('ResumeSchedule unpauses', async () => {
+    const res = await ResumeSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+    expect(scheduleUnpause).toHaveBeenCalledWith('Resumed by operator from admin UI')
+  })
+
+  it('RecreateSchedule deletes the schedule', async () => {
+    const res = await RecreateSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+    expect(scheduleDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('RecreateSchedule treats NOT_FOUND as success (idempotent)', async () => {
+    scheduleDelete.mockRejectedValueOnce(Object.assign(new Error('schedule not found'), { code: 5 }))
+    const res = await RecreateSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+  })
+
+  it('PauseSchedule on a corrupt scheduler workflow suggests Recreate', async () => {
+    schedulePause.mockRejectedValueOnce(Object.assign(new Error('Failed to pause schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    }))
+    const res = await PauseSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(false)
+    if (res.success) throw new Error('expected failure')
+    expect(res.error.message).toMatch(/recreate/i)
+  })
+
+  it('schedule actions deny a non-owner', async () => {
+    requireAdmin.mockRejectedValue(new Error('Unauthorized'))
+    const res = await RecreateSchedule('GovernanceSync-scheduled')
     expect(res.success).toBe(false)
     if (res.success) throw new Error('expected failure')
     expect(res.error.message).toBe('Unauthorized')

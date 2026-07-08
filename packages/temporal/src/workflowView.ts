@@ -13,6 +13,10 @@ import { evaluateLiveness, defaultHealState, type Verdict, type WatchdogEntry } 
 
 export { TEMPORAL_SCHEDULED_BY_ID }
 
+// Error classifiers shared with the Next.js apps' schedule actions. Re-exported
+// here because apps must not import the package root (it pulls in the worker).
+export { isCorruptSchedule, isNotFound } from '@/scheduleWatchdog'
+
 export type WorkflowStatus = WorkflowExecutionStatusName
 
 export interface WorkflowView {

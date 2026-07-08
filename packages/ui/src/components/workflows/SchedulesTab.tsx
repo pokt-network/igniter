@@ -6,10 +6,13 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 import { Badge } from '../badge';
+import { Button } from '../button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../table';
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '../dialog';
 import type { ScheduleFireView, ScheduleHealthRow, ScheduleHealthState } from '@igniter/temporal/workflow-view';
+import type { ActionResult } from '../../lib/actionResult';
 
 import { detailHref, formatDateTime, formatRelative, statusBadgeVariant } from './columns';
 import type { WorkflowsActions } from './types';
@@ -34,6 +37,45 @@ export function SchedulesTab({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+  const [confirm, setConfirm] = React.useState<{ kind: 'pause' | 'recreate'; scheduleId: string } | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [resumeError, setResumeError] = React.useState<{ scheduleId: string; message: string } | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  const runAction = async (
+    scheduleId: string,
+    fn: () => Promise<ActionResult<void>>,
+  ): Promise<string | null> => {
+    if (busy) return null;
+    setBusy(scheduleId);
+    try {
+      const result = await fn();
+      if (!result.success) return result.error.message;
+      await health.refetch();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runConfirmed = async () => {
+    if (!confirm) return;
+    const fn = confirm.kind === 'pause' ? actions.PauseSchedule : actions.RecreateSchedule;
+    if (!fn) return;
+    const message = await runAction(confirm.scheduleId, () => fn(confirm.scheduleId));
+    if (message) setActionError(message);
+    else setConfirm(null);
+  };
+
+  const resume = async (scheduleId: string) => {
+    const fn = actions.ResumeSchedule;
+    if (!fn) return;
+    setResumeError(null);
+    const message = await runAction(scheduleId, () => fn(scheduleId));
+    if (message) setResumeError({ scheduleId, message });
+  };
 
   const viewRuns = (scheduleId: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -56,10 +98,12 @@ export function SchedulesTab({
     <div className="rounded-xl border border-border-primary p-4">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide">Schedule health</h2>
-        <span className="text-xs text-text-tertiary">
-          Read-only · surfaces what the watchdog flagged
-        </span>
       </div>
+      {resumeError && (
+        <p className="mb-2 text-sm text-red-400">
+          Resume failed for <span className="font-mono">{resumeError.scheduleId}</span>: {resumeError.message}
+        </p>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
@@ -113,13 +157,53 @@ export function SchedulesTab({
                   {row.note ?? '-'}
                 </TableCell>
                 <TableCell>
-                  <button
-                    type="button"
-                    className="text-xs text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-                    onClick={() => viewRuns(row.scheduleId)}
-                  >
-                    View runs
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    {row.state === 'paused'
+                      ? actions.ResumeSchedule && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!!busy}
+                            onClick={() => resume(row.scheduleId)}
+                          >
+                            Resume
+                          </Button>
+                        )
+                      : actions.PauseSchedule && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setActionError(null);
+                              setResumeError(null);
+                              setConfirm({ kind: 'pause', scheduleId: row.scheduleId });
+                            }}
+                          >
+                            Pause
+                          </Button>
+                        )}
+                    {actions.RecreateSchedule && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-400 hover:text-red-300"
+                        onClick={() => {
+                          setActionError(null);
+                          setResumeError(null);
+                          setConfirm({ kind: 'recreate', scheduleId: row.scheduleId });
+                        }}
+                      >
+                        Recreate
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-xs text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+                      onClick={() => viewRuns(row.scheduleId)}
+                    >
+                      View runs
+                    </button>
+                  </div>
                 </TableCell>
               </TableRow>
               {expanded[row.scheduleId] && (
@@ -133,6 +217,46 @@ export function SchedulesTab({
           ))}
         </TableBody>
       </Table>
+      <Dialog open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>{confirm?.kind === 'pause' ? 'Pause Schedule' : 'Recreate Schedule'}</DialogTitle>
+          {confirm && (
+            <div className="flex flex-col gap-2">
+              {confirm.kind === 'pause' ? (
+                <p>
+                  Pause schedule <span className="font-mono">{confirm.scheduleId}</span>? It stops firing
+                  until resumed — the watchdog never auto-resumes a paused schedule.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    Recreate schedule <span className="font-mono">{confirm.scheduleId}</span>? This deletes
+                    it; the workflows worker recreates it with canonical config within ~30 seconds and its
+                    heal counters reset.
+                  </p>
+                  <p className="text-sm text-amber-400">
+                    If the worker&apos;s watchdog runs in observe mode or is disabled, the schedule stays
+                    deleted until the worker restarts.
+                  </p>
+                </>
+              )}
+              {actionError && <p className="text-sm text-red-400">{actionError}</p>}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={!!busy} onClick={() => setConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={confirm?.kind === 'recreate' ? 'destructive' : 'default'}
+              disabled={!!busy}
+              onClick={runConfirmed}
+            >
+              {confirm?.kind === 'pause' ? 'Pause' : 'Recreate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
