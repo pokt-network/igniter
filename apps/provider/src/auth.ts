@@ -4,6 +4,9 @@ import { SiwpMessage } from "@poktscan/vault-siwp";
 import {createUser, getUser} from "./lib/dal/users";
 import authConfig from "./auth.config";
 import type {User} from "@igniter/db/provider/schema";
+import { getLogger } from "@igniter/logger";
+
+const log = getLogger(["provider", "auth"]);
 
 const authConfigResult = NextAuth({
   ...authConfig,
@@ -70,7 +73,7 @@ const authConfigResult = NextAuth({
           }
           return null;
         } catch (error) {
-          console.error('[AUTH] Authorization error:', error);
+          log.error('authorization failed', { error });
           return null;
         }
       },

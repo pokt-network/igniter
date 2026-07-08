@@ -5,6 +5,10 @@ import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import { getTemporalClient, getTemporalConfig } from '@/lib/temporal'
 import { randomUUID } from 'crypto'
+import { getLogger } from '@igniter/logger'
+import { withLogging } from '@/lib/logging/withLogging'
+
+const log = getLogger(['provider', 'suppliers'])
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
@@ -17,36 +21,29 @@ export async function OPTIONS() {
   })
 }
 
-export async function POST(request: Request): Promise<NextResponse<APIResponse<'OK' | null>>> {
+export const POST = withLogging(async (request: Request): Promise<NextResponse<APIResponse<'OK' | null>>> => {
   try {
-    console.log('Received a request for suppliers')
     const isBootstrappedResponse = await ensureApplicationIsBootstrapped()
 
     if (isBootstrappedResponse instanceof NextResponse) {
-      console.log('Application is not bootstrapped. Exiting.')
       return isBootstrappedResponse
     }
 
     const delegatorIdentity = request.headers.get(REQUEST_IDENTITY_HEADER)
 
     if (!delegatorIdentity) {
-      console.log(`Invalid request. Delegator identity was not provided. REQUEST_IDENTITY_HEADER: ${REQUEST_IDENTITY_HEADER} is required.`)
       return NextResponse.json({ error: `Invalid request. Delegator identity was not provided. REQUEST_IDENTITY_HEADER: ${REQUEST_IDENTITY_HEADER} is required.` }, { status: 400 })
     }
 
-    console.log('Validating signature...')
     const signatureValidationResponse = await validateRequestSignature<SupplierMarkStakedRequest>(request)
 
     if (signatureValidationResponse instanceof NextResponse) {
-      console.log('Signature validation failed. Exiting.')
       return signatureValidationResponse
     }
 
-    console.log('Signature validation successful.')
     const { data } = signatureValidationResponse
 
     if (!data || !data.addresses.length) {
-      console.log('Invalid request. Empty suppliers list.')
       return NextResponse.json({ error: 'Invalid request. Empty suppliers list.' }, { status: 400 })
     }
 
@@ -56,15 +53,17 @@ export async function POST(request: Request): Promise<NextResponse<APIResponse<'
     // Fire-and-forget: verify on-chain state and send notifications via the workflow.
     // This replaces the blind markStaked DB update — upsertSupplierStatus will confirm
     // the on-chain stake and detect the Delivered → Staked transition naturally.
+    const workflowId = `SSA-${randomUUID()}`
+    log.info('supplier stake verification requested', { supplierAddresses: data.addresses, delegatorIdentity, workflowId })
     await client.workflow.start('SupplierStatusForAddresses', {
       taskQueue,
-      workflowId: `SSA-${randomUUID()}`,
+      workflowId,
       args: [{ addresses: data.addresses }],
     })
 
     return NextResponse.json({ data: 'OK' }, { status: 200 })
   } catch (e) {
-    console.error(e)
+    log.error('supplier stake request failed', { error: e })
     return NextResponse.json({ error: 'Invalid request' }, { status: 500 })
   }
-}
+})

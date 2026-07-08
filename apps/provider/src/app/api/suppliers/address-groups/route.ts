@@ -4,8 +4,11 @@ import {APIResponse} from "@/lib/models/response";
 import * as schema from "@igniter/db/provider/schema";
 import {getDbClient} from "@/db";
 import {inArray, eq} from "drizzle-orm";
+import { getLogger } from "@igniter/logger";
+import { withLogging } from "@/lib/logging/withLogging";
 
 const {keysTable, addressGroupTable} = schema;
+const log = getLogger(["provider", "suppliers"]);
 
 type AddressGroupsRequest = {
     addresses: string[]
@@ -32,7 +35,7 @@ export async function OPTIONS() {
     });
 }
 
-export async function POST(request: Request): Promise<NextResponse<APIResponse<AddressGroupsResponse | null>>> {
+export const POST = withLogging(async (request: Request): Promise<NextResponse<APIResponse<AddressGroupsResponse | null>>> => {
     try {
         const isBootstrappedResponse = await ensureApplicationIsBootstrapped();
 
@@ -81,7 +84,7 @@ export async function POST(request: Request): Promise<NextResponse<APIResponse<A
 
         return NextResponse.json({data: {addressGroups}}, {status: 200});
     } catch (e) {
-        console.error(e);
+        log.error('address groups lookup failed', { error: e });
         return NextResponse.json({error: "Invalid request"}, {status: 500});
     }
-}
+})
