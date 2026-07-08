@@ -16,7 +16,16 @@ export interface ConfigureOpts {
   serviceName?: string
 }
 
-let baseFields: Record<string, unknown> = {}
+// Base fields live in the GLOBAL symbol registry, not module state. Next.js can
+// instantiate this package twice on the server (transpilePackages copy for app
+// code + dist CJS copy reached via other workspace packages). LogTape itself is
+// immune to that (its root logger/config hang off Symbol.for globals), but a
+// module-level `let baseFields` is per-copy: configureLogging() in
+// instrumentation.ts would populate copy A while @igniter/db's logger reads copy
+// B's `{}` — lazy base fields then resolve to undefined and vanish from records.
+// Same Symbol.for pattern LogTape uses => one store across all copies.
+const BASE_FIELDS_KEY = Symbol.for('igniter.logger.baseFields')
+type GlobalWithBaseFields = { [BASE_FIELDS_KEY]?: Record<string, unknown> }
 
 export function detectRuntime(): 'node' | 'edge' | 'browser' {
   // Next.js sets NEXT_RUNTIME='edge' in the edge runtime.
@@ -27,7 +36,11 @@ export function detectRuntime(): 'node' | 'edge' | 'browser' {
 }
 
 export function getBaseFields(): Record<string, unknown> {
-  return baseFields
+  return (globalThis as GlobalWithBaseFields)[BASE_FIELDS_KEY] ?? {}
+}
+
+function setBaseFields(fields: Record<string, unknown>): void {
+  ;(globalThis as GlobalWithBaseFields)[BASE_FIELDS_KEY] = fields
 }
 
 /**
@@ -75,12 +88,12 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
   const useJson = logFormat === 'json' ? true : logFormat === 'pretty' ? false : isProd
   const level: LogLevel = opts.level ?? (process.env.LOG_LEVEL as LogLevel) ?? 'debug'
 
-  baseFields = {
+  setBaseFields({
     'service.name': opts.serviceName ?? process.env.SERVICE_NAME ?? 'unknown',
     'service.version': process.env.APP_VERSION ?? 'unknown',
     env: process.env.NODE_ENV ?? 'development',
     runtime,
-  }
+  })
 
   if (runtime === 'browser') {
     // dev: pretty console; prod: minimalSink (warn/error/fatal only).

@@ -8,15 +8,20 @@ export type ClientSink = Sink
  * client-observability initiative wires a real provider (Sentry/PostHog/Faro)
  * via setClientSink(); #219 MUST NOT wire any real provider here. The seam exists
  * so that wiring later touches zero call sites.
+ *
+ * Stored in the global symbol registry (not module state) so a bundler creating
+ * two copies of this package still sees one sink — same dual-copy hazard as the
+ * base fields in config.ts.
  */
-let clientSink: ClientSink = () => {}
+const CLIENT_SINK_KEY = Symbol.for('igniter.logger.clientSink')
+type GlobalWithClientSink = { [CLIENT_SINK_KEY]?: ClientSink }
 
 export function setClientSink(sink: ClientSink): void {
-  clientSink = sink
+  ;(globalThis as GlobalWithClientSink)[CLIENT_SINK_KEY] = sink
 }
 
 export function getClientSink(): ClientSink {
-  return clientSink
+  return (globalThis as GlobalWithClientSink)[CLIENT_SINK_KEY] ?? (() => {})
 }
 
 // LogTape's console sink (library writer; not a raw console call in our source).
