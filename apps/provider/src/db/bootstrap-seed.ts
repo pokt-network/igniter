@@ -95,22 +95,23 @@ async function main() {
   // Without this, every getLogger() call in this seed writes to a logger with no
   // configured sinks (blackhole). Wire the standard config so seed logs surface.
   await configureLogging({ serviceName: 'provider' })
+  const logger = getLogger(['provider', 'seed'])
 
   const configPath = process.env.BOOTSTRAP_CONFIG_PATH
   if (!configPath) {
-    console.log('[bootstrap-seed] BOOTSTRAP_CONFIG_PATH not set, skipping.')
+    logger.info('bootstrap skipped', { reason: 'BOOTSTRAP_CONFIG_PATH not set' })
     process.exit(0)
   }
 
   const resolvedPath = path.resolve(configPath)
   if (!fs.existsSync(resolvedPath)) {
-    console.log(`[bootstrap-seed] Config file not found at ${resolvedPath}, skipping.`)
+    logger.info('bootstrap skipped', { reason: 'config file not found', path: resolvedPath })
     process.exit(0)
   }
 
   const ownerIdentity = process.env.OWNER_IDENTITY
   if (!ownerIdentity) {
-    console.error('[bootstrap-seed] OWNER_IDENTITY is required.')
+    logger.fatal('OWNER_IDENTITY is required')
     process.exit(1)
   }
 
@@ -118,7 +119,7 @@ async function main() {
 
   const appIdentityPrivateKey = process.env.APP_IDENTITY
   if (!appIdentityPrivateKey) {
-    console.error('[bootstrap-seed] APP_IDENTITY is required.')
+    logger.fatal('APP_IDENTITY is required')
     process.exit(1)
   }
 
@@ -127,13 +128,12 @@ async function main() {
   const wallet = await DirectSecp256k1Wallet.fromKey(privateKeyBytes)
   const [account] = await wallet.getAccounts()
   if (!account) {
-    console.error('[bootstrap-seed] Failed to derive public key from APP_IDENTITY.')
+    logger.fatal('failed to derive public key from APP_IDENTITY')
     process.exit(1)
   }
   const appIdentity = Buffer.from(account.pubkey).toString('hex')
 
   // Connect to DB
-  const logger = getLogger()
   const { db, disconnect } = setup({ schema, logger })
 
   try {
@@ -144,7 +144,7 @@ async function main() {
       .limit(1)
 
     if (existingSettings.length > 0 && existingSettings[0]!.isBootstrapped) {
-      console.log('[bootstrap-seed] Already bootstrapped, skipping.')
+      logger.info('bootstrap skipped', { reason: 'already bootstrapped' })
       await disconnect()
       process.exit(0)
     }
@@ -153,7 +153,7 @@ async function main() {
     const rawConfig = fs.readFileSync(resolvedPath, 'utf-8')
     const config: BootstrapConfig = JSON.parse(rawConfig)
 
-    console.log('[bootstrap-seed] Starting bootstrap...')
+    logger.info('bootstrap starting')
 
     // Resolve URLs with backward compat (old configs use rpcUrl for what is now pocketApiUrl)
     const pocketApiUrl = config.settings.pocketApiUrl || config.settings.rpcUrl || ''
@@ -172,29 +172,26 @@ async function main() {
     try {
       // Fetch minimum stake
       const supplierParamsUrl = `${rpcBase}/pokt-network/poktroll/supplier/params`
-      console.log(`[bootstrap-seed] Fetching minimum stake from ${supplierParamsUrl}...`)
       const paramsResponse = await fetch(supplierParamsUrl)
       if (!paramsResponse.ok) throw new Error(`Supplier params: HTTP ${paramsResponse.status}`)
       const paramsData = await paramsResponse.json()
       const rawAmount = parseFloat(paramsData.params.min_stake.amount)
       minimumStake = (rawAmount + stakeBuffer) / 1e6
-      console.log(`[bootstrap-seed] Minimum stake: ${minimumStake} POKT (raw: ${rawAmount}, buffer: ${stakeBuffer})`)
 
       // Fetch current height
       const statusUrl = `${rpcBase}/cosmos/base/node/v1beta1/status`
-      console.log(`[bootstrap-seed] Fetching current height from ${statusUrl}...`)
       const statusResponse = await fetch(statusUrl)
       if (!statusResponse.ok) throw new Error(`Node status: HTTP ${statusResponse.status}`)
       const statusData = await statusResponse.json()
       updatedAtHeight = statusData.height
-      console.log(`[bootstrap-seed] Current height: ${updatedAtHeight}`)
+
+      logger.info('blockchain params fetched', { minimumStake, rawAmount, stakeBuffer, updatedAtHeight })
     } catch (err) {
-      console.error('[bootstrap-seed] Failed to fetch blockchain params:', err)
+      logger.fatal('failed to fetch blockchain params', { error: err })
       process.exit(1)
     }
 
     // 1. Create owner user
-    console.log('[bootstrap-seed] Creating owner user...')
     await db
       .insert(usersTable)
       .values({
@@ -205,7 +202,6 @@ async function main() {
       .onConflictDoNothing()
 
     // 2. Create application settings
-    console.log('[bootstrap-seed] Creating application settings...')
     await db.insert(applicationSettingsTable).values({
       name: config.settings.name,
       appIdentity,
@@ -228,7 +224,6 @@ async function main() {
     })
 
     // 3. Create regions
-    console.log('[bootstrap-seed] Creating regions...')
     const regionNameToId: Record<string, number> = {}
     for (const region of config.regions) {
       const [inserted] = await db
@@ -242,11 +237,11 @@ async function main() {
         .returning({ id: regionsTable.id })
 
       regionNameToId[region.displayName] = inserted!.id
-      console.log(`[bootstrap-seed]   Region "${region.displayName}" -> id ${inserted!.id}`)
+      logger.debug('region created', { displayName: region.displayName, id: inserted!.id })
     }
+    logger.info('regions created', { count: config.regions.length })
 
     // 4. Create relay miners
-    console.log('[bootstrap-seed] Creating relay miners...')
     const relayMinerNameToId: Record<string, number> = {}
     for (const rm of config.relayMiners) {
       const regionId = regionNameToId[rm.regionName]
@@ -270,11 +265,11 @@ async function main() {
         .returning({ id: relayMinersTable.id })
 
       relayMinerNameToId[rm.name] = inserted!.id
-      console.log(`[bootstrap-seed]   Relay miner "${rm.name}" -> id ${inserted!.id}`)
+      logger.debug('relay miner created', { name: rm.name, id: inserted!.id })
     }
+    logger.info('relay miners created', { count: config.relayMiners.length })
 
     // 5. Create services
-    console.log('[bootstrap-seed] Creating services...')
     for (const svc of config.services) {
       await db.insert(servicesTable).values({
         serviceId: svc.serviceId,
@@ -289,11 +284,11 @@ async function main() {
         createdBy: ownerIdentity,
         updatedBy: ownerIdentity,
       })
-      console.log(`[bootstrap-seed]   Service "${svc.serviceId}" created`)
+      logger.debug('service created', { serviceId: svc.serviceId })
     }
+    logger.info('services created', { count: config.services.length })
 
     // 6. Create address groups
-    console.log('[bootstrap-seed] Creating address groups...')
     for (const ag of config.addressGroups) {
       const relayMinerId = relayMinerNameToId[ag.relayMinerName]
       if (relayMinerId === undefined) {
@@ -315,7 +310,7 @@ async function main() {
         })
         .returning({ id: addressGroupTable.id })
 
-      console.log(`[bootstrap-seed]   Address group "${ag.name}" -> id ${insertedAg!.id}`)
+      logger.debug('address group created', { name: ag.name, id: insertedAg!.id })
 
       // 7. Create address group services
       if (ag.services && ag.services.length > 0) {
@@ -327,20 +322,20 @@ async function main() {
             supplierShare: agSvc.supplierShare ?? 0,
             revShare: agSvc.revShare ?? [],
           })
-          console.log(`[bootstrap-seed]     Linked service "${agSvc.serviceId}" to address group "${ag.name}"`)
+          logger.debug('service linked to address group', { serviceId: agSvc.serviceId, addressGroup: ag.name })
         }
       }
     }
+    logger.info('address groups created', { count: config.addressGroups.length })
 
     // 8. Fetch delegators from CDN and create them
     const delegatorsCdnUrl = process.env.DELEGATORS_CDN_URL
     if (delegatorsCdnUrl) {
       const resolvedUrl = delegatorsCdnUrl.replace('{chainId}', config.settings.chainId)
-      console.log(`[bootstrap-seed] Fetching delegators from ${resolvedUrl}...`)
       try {
         const response = await fetch(resolvedUrl)
         if (!response.ok) {
-          console.warn(`[bootstrap-seed] Failed to fetch delegators (${response.status}), skipping.`)
+          logger.warn('failed to fetch delegators, skipping', { status: response.status })
         } else {
           const cdnDelegators: CdnDelegator[] = await response.json()
           for (const del of cdnDelegators) {
@@ -354,26 +349,26 @@ async function main() {
                 updatedBy: ownerIdentity,
               })
               .onConflictDoNothing()
-            console.log(`[bootstrap-seed]   Delegator "${del.name}" created`)
+            logger.debug('delegator created', { name: del.name })
           }
+          logger.info('delegators fetched', { count: cdnDelegators.length })
         }
       } catch (err) {
-        console.warn('[bootstrap-seed] Error fetching delegators, skipping:', err)
+        logger.warn('error fetching delegators, skipping', { error: err })
       }
     } else {
-      console.log('[bootstrap-seed] DELEGATORS_CDN_URL not set, skipping delegators.')
+      logger.debug('delegators skipped', { reason: 'DELEGATORS_CDN_URL not set' })
     }
 
     // 9. Create notification channels (if any)
     if (config.channels && config.channels.length > 0) {
-      console.log('[bootstrap-seed] Creating notification channels...')
       const existingChannels = await db
         .select()
         .from(notificationChannelsTable)
         .limit(1)
 
       if (existingChannels.length > 0) {
-        console.log('[bootstrap-seed] Notification channels already exist, skipping.')
+        logger.info('notification channels skipped', { reason: 'already exist' })
       } else {
         for (const ch of config.channels) {
           await db.insert(notificationChannelsTable).values({
@@ -385,23 +380,23 @@ async function main() {
             createdBy: ownerIdentity,
             updatedBy: ownerIdentity,
           })
-          console.log(`[bootstrap-seed]   Channel "${ch.name}" (${ch.type}) created`)
+          logger.debug('notification channel created', { name: ch.name, type: ch.type })
         }
+        logger.info('notification channels created', { count: config.channels.length })
       }
     } else {
-      console.log('[bootstrap-seed] No channels in config, skipping.')
+      logger.debug('notification channels skipped', { reason: 'none in config' })
     }
 
     // 10. Set isBootstrapped = true
-    console.log('[bootstrap-seed] Setting isBootstrapped = true...')
     await db
       .update(applicationSettingsTable)
       .set({ isBootstrapped: true, updatedBy: ownerIdentity })
       .where(eq(applicationSettingsTable.ownerIdentity, ownerIdentity))
 
-    console.log('[bootstrap-seed] Bootstrap complete!')
+    logger.info('bootstrap complete')
   } catch (error) {
-    console.error('[bootstrap-seed] Bootstrap failed:', error)
+    logger.fatal('bootstrap failed', { error })
     await disconnect()
     process.exit(1)
   }
