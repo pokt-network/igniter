@@ -5,6 +5,9 @@ import type { Delegator } from "@igniter/db/provider/schema";
 import React, { useState } from "react";
 import {UpdateDelegator} from "@/actions/Delegators";
 import {Switch} from "@igniter/ui/components/switch";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'Columns']);
 
 export const columns: ColumnDef<Delegator>[] = [
   {
@@ -26,7 +29,7 @@ export const columns: ColumnDef<Delegator>[] = [
           }
         } catch (error) {
           setIsChecked(!checked);
-          console.error('Error updating delegator status:', error);
+          log.error('Error updating delegator status', { error: error })
         } finally {
           setUpdating(false);
         }

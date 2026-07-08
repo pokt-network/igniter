@@ -12,6 +12,9 @@ import {
 import type { NotificationEvent } from '@igniter/db/provider/schema'
 import { RemediationHistoryEntryReason } from '@igniter/db/provider/enums'
 import { NOTIFICATION_EVENT_LABELS, NOTIFICATION_EVENT_SEVERITY } from '@/lib/constants'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'NotificationEventsBridge']);
 
 // Human phrasing per remediation reason so "Remediation Complete" reads specifically —
 // distinguishing a config-drift fix from a funds/stake top-up, etc.
@@ -125,7 +128,7 @@ export default function NotificationEventsBridge() {
             // Persist failed — drop it from the seen-set so the next poll re-surfaces it
             // instead of silently losing it for the rest of the session.
             shownIds.current.delete(event.uuid)
-            console.error('Failed to mark notification event viewed on dismiss', err)
+            log.error('Failed to mark notification event viewed on dismiss', { error: err })
           }
         },
         actions: [

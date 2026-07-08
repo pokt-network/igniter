@@ -41,6 +41,9 @@ import {ListServices} from "@/actions/Services";
 import {ListRelayMiners} from "@/actions/RelayMiners";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@igniter/ui/components/select";
 import clsx from 'clsx'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'AddOrUpdateAddressGroupDialog']);
 
 const poktAddressRegex = /^pokt[a-zA-Z0-9]{39,42}$/;
 
@@ -797,7 +800,7 @@ export function AddOrUpdateAddressGroupDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to update addressGroup", e);
+        log.error("Failed to update addressGroup", { error: e })
       } finally {
         setIsUpdatingAddressGroup(false);
       }
@@ -824,7 +827,7 @@ export function AddOrUpdateAddressGroupDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to create addressGroup", e);
+        log.error("Failed to create addressGroup", { error: e })
       } finally {
         setIsCreatingAddressGroup(false);
       }

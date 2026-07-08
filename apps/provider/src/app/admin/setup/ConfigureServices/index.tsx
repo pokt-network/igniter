@@ -12,6 +12,9 @@ import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import {LoaderIcon} from "@igniter/ui/assets";
 import {PencilIcon, Trash2Icon} from "lucide-react";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureServices']);
 
 export interface ConfigureServicesProp {
   goNext: () => void;
@@ -87,7 +90,7 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
       }
       setServices(result.data);
     } catch (error) {
-      console.error("Failed to fetch services:", error);
+      log.error("Failed to fetch services", { error: error })
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +107,7 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
       }
       await fetchServices();
     } catch (error) {
-      console.error("Failed to delete service:", error);
+      log.error("Failed to delete service", { error: error })
     } finally {
       setIsLoading(false);
       setServiceToDelete(null);

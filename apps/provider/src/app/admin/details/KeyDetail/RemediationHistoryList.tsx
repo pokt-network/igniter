@@ -7,6 +7,9 @@ import {ActionButton} from "@/app/admin/details/KeyDetail/ActionButton";
 import {ConfirmationDialog} from "@igniter/ui/components/ConfirmationDialog";
 import {Button} from "@igniter/ui/components/button";
 import { copyToClipboard } from "@igniter/ui/lib/utils";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'RemediationHistoryList']);
 
 export function RemediationHistoryList({ entries, keyId, keyState }: { entries: RemediationHistoryEntry[]; keyId: number, keyState: KeyState }) {
 
@@ -118,7 +121,7 @@ export function RemediationHistoryList({ entries, keyId, keyState }: { entries: 
       setShowConfirm(false)
       router.refresh()
     } catch (e) {
-      console.error('Failed to clear remediation state', e)
+      log.error('Failed to clear remediation state', { error: e })
       setError(e instanceof Error ? e.message : 'Failed to update key state. Please try again.')
     } finally {
       setIsSubmitting(false)

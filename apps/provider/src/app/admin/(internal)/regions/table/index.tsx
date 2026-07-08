@@ -11,6 +11,9 @@ import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import type {Region} from "@igniter/db/provider/schema";
 import {AddOrUpdateRegionDialog} from "@/components/AddOrUpdateRegionDialog";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'table']);
 
 export default function RegionsTable() {
     const { data: regions, isLoading: isLoadingRegions, refetch: refetchRegions, isError } = useQuery({
@@ -89,7 +92,7 @@ export default function RegionsTable() {
             }
             await refetchRegions();
         } catch (error) {
-            console.error('Error deleting region:', error);
+            log.error('Error deleting region', { error: error })
             addNotification({
                 id: `delete-relay-miner-error`,
                 type: 'error',
