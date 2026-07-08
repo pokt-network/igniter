@@ -5,6 +5,10 @@ import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import { findLatestRequest, isRequestExpired, markRequestExpired } from '@/lib/dal/importSupplierRequests'
 import { ImportRequestStatus } from '@igniter/db/provider/enums'
+import { getLogger } from '@igniter/logger'
+import { withLogging } from '@/lib/logging/withLogging'
+
+const log = getLogger(['provider', 'import-suppliers'])
 
 const importSuppliersStatusSchema = z.object({
   ownerAddress: z.string().min(1, 'ownerAddress is required'),
@@ -33,21 +37,17 @@ export async function OPTIONS() {
   )
 }
 
-export async function POST(
+export const POST = withLogging(async (
   request: Request,
-): Promise<NextResponse<APIResponse<ImportSuppliersStatusResponse | null>>> {
+): Promise<NextResponse<APIResponse<ImportSuppliersStatusResponse | null>>> => {
   try {
-    console.log('Received import suppliers status request')
-
     const isBootstrappedResponse = await ensureApplicationIsBootstrapped()
     if (isBootstrappedResponse instanceof NextResponse) {
-      console.log('Application is not bootstrapped. Exiting.')
       return isBootstrappedResponse
     }
 
     const delegatorIdentity = request.headers.get(REQUEST_IDENTITY_HEADER)
     if (!delegatorIdentity) {
-      console.log('Invalid request. Delegator identity was not provided.')
       return NextResponse.json(
         {
           error: `Invalid request. Delegator identity was not provided. ${REQUEST_IDENTITY_HEADER} is required.`,
@@ -56,21 +56,17 @@ export async function POST(
       )
     }
 
-    console.log('Validating signature...')
     const signatureValidationResponse =
       await validateRequestSignature<ImportSuppliersStatusPayload>(request)
 
     if (signatureValidationResponse instanceof NextResponse) {
-      console.log('Signature validation failed. Exiting.')
       return signatureValidationResponse
     }
-
-    console.log('Signature validation successful.')
 
     // Validate request payload with Zod schema
     const parseResult = importSuppliersStatusSchema.safeParse(signatureValidationResponse.data)
     if (!parseResult.success) {
-      console.log('Invalid request payload:', parseResult.error.flatten())
+      log.debug('import suppliers status payload failed validation', { delegatorIdentity, issues: parseResult.error.flatten() })
       return NextResponse.json(
         {
           error: `Invalid request: ${parseResult.error.errors.map((e) => e.message).join(', ')}`,
@@ -89,7 +85,7 @@ export async function POST(
     )
 
     if (!latestRequest) {
-      console.log('No import request found.')
+      log.debug('import suppliers status: no request found', { ownerAddress: data.ownerAddress, delegatorIdentity })
       return NextResponse.json(
         { error: 'No import request found for this owner address.' },
         { status: 404 },
@@ -128,7 +124,7 @@ export async function POST(
 
     return NextResponse.json({ data: response }, { status: 200 })
   } catch (e) {
-    console.error('Error processing import suppliers status:', e)
+    log.error('import suppliers status check failed', { error: e })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-}
+})
