@@ -38,7 +38,9 @@ function normalizeMeta(meta?: LogMetadata): Record<string, unknown> {
  * `}}`→`}`) so foreign messages survive verbatim.
  */
 function escapeBraces(message: string): string {
-  return message.replaceAll('{', '{{').replaceAll('}', '}}')
+  // Single pass so an already-doubled brace isn't re-doubled: two sequential
+  // replaceAll calls would turn `{` → `{{` then each of those → `{{{{`.
+  return message.replace(/[{}]/g, (m) => m + m)
 }
 
 export function getTemporalLogger(category: string | string[] = ['temporal']): TemporalLogger {

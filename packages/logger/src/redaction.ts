@@ -28,6 +28,10 @@ const REDACTED = '[REDACTED]'
  * `publicKey` is intentionally ABSENT (locked §0: technically public, NOT globally
  * redacted). It is redacted ONLY under `credentials.*` (handled contextually in
  * `redactObject` below) and truncated at the auth site — never via this global list.
+ * The `[_]?` between words tolerates BOTH camelCase and snake_case field names
+ * (`privateKey` AND `private_key`) — our own Temporal bridge normalizes meta to
+ * snake_case, and env/config-derived secrets arrive snake_cased. `public_key`
+ * stays un-redacted for the same reason `publicKey` does (locked §0).
  *
  * DO NOT `...DEFAULT_REDACT_FIELDS` here: that array is
  * `[/pass.../, /secret/i, /token/i, /key/i, /credential/i, /auth/i, /signature/i,
@@ -37,23 +41,23 @@ const REDACTED = '[REDACTED]'
  * `delegatorRewardsAddress`, etc.). The field-list tests lock both out.
  */
 export const SECRET_FIELD_PATTERNS: (string | RegExp)[] = [
-  /^privateKey$/i,
-  /^signerPrivateKey$/i,
+  /^private[_]?key$/i,
+  /^signer[_]?private[_]?key$/i,
   /^mnemonic$/i,
-  /^seedPhrase$/i,
+  /^seed[_]?phrase$/i,
   /^seed$/i,
-  /^secretKey$/i,
+  /^secret[_]?key$/i,
   /^password$/i,
   /^pass$/i, // smtp.pass
   /^token$/i,
-  /^accessToken$/i,
-  /^refreshToken$/i,
-  /^sessionToken$/i,
-  /^apiKey$/i,
+  /^access[_]?token$/i,
+  /^refresh[_]?token$/i,
+  /^session[_]?token$/i,
+  /^api[_]?key$/i,
   /^secret$/i,
   /^authorization$/i,
   /^cookie$/i,
-  /^set-cookie$/i,
+  /^set[-_]?cookie$/i,
   /^signature$/i, // covers credentials.signature globally
 ]
 

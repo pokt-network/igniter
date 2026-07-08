@@ -173,6 +173,51 @@ describe('getRedactedConsoleSink', () => {
     expect(out).toContain('ok')
   })
 
+  // Otto#1: redaction patterns must match snake_case field names too — our own
+  // Temporal bridge normalizes meta to snake_case, and env/config-derived secrets
+  // arrive snake_cased. All these keys must be DELETED before console output.
+  it('removes snake_case secret props (private_key, api_key, access_token, signer_private_key)', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) }, // isProd → numeric NDJSON
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).info('stake attempt', {
+      private_key: 'PK_SECRET',
+      api_key: 'AK_SECRET',
+      access_token: 'AT_SECRET',
+      refresh_token: 'RT_SECRET',
+      session_token: 'ST_SECRET',
+      signer_private_key: 'SPK_SECRET',
+      seed_phrase: 'SEED_SECRET',
+      secret_key: 'SK_SECRET',
+      set_cookie: 'COOKIE_SECRET',
+      keep: 'ok',
+    })
+    const out = captured.join('\n')
+    for (const secret of [
+      'PK_SECRET', 'AK_SECRET', 'AT_SECRET', 'RT_SECRET', 'ST_SECRET',
+      'SPK_SECRET', 'SEED_SECRET', 'SK_SECRET', 'COOKIE_SECRET',
+    ]) {
+      expect(out).not.toContain(secret)
+    }
+    expect(out).toContain('ok')
+  })
+
+  // Locked §0: publicKey AND public_key are technically public and must SURVIVE
+  // both the camelCase and snake_case redaction paths.
+  it('does NOT redact publicKey / public_key (locked §0)', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) }, // isProd → numeric NDJSON
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).info('addr', { publicKey: 'PUBCAMEL', public_key: 'PUBSNAKE' })
+    const out = captured.join('\n')
+    expect(out).toContain('PUBCAMEL')
+    expect(out).toContain('PUBSNAKE')
+  })
+
   // F1-lite hardening: secrets interpolated into free MESSAGE text (error strings,
   // template literals) never pass through redactByField (no distinct object prop
   // to delete) — only the pattern backstop on the formatter can catch them.
