@@ -1,6 +1,9 @@
 import { StakeDistributionOffer } from "@/lib/models/StakeDistributionOffer";
 import {SupplierStake} from "@/lib/models/Transactions";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
+import {getLogger} from "@igniter/logger";
+
+const log = getLogger(['middleman', 'provider-client'])
 
 export async function requestSuppliers(selectedAddressGroupId: number, stakeOffer: StakeDistributionOffer, settings: ApplicationSettings, ownerAddress: string, region: string = '', simulate = false): Promise<SupplierStake[]> {
     try {
@@ -31,7 +34,7 @@ export async function requestSuppliers(selectedAddressGroupId: number, stakeOffe
         const { data } = await response.json();
         return data;
     } catch (error) {
-        console.error("Failed to request keys:", error);
+        log.error("failed to request keys", { provider: stakeOffer.identity, error });
         throw error;
     }
 }
@@ -57,7 +60,7 @@ export async function releaseSuppliers(stakeOffer: StakeDistributionOffer, addre
             throw new Error(errorBody?.error || "Failed to request keys");
         }
     } catch (error) {
-        console.error("Failed to request keys:", error);
+        log.error("failed to request keys", { provider: stakeOffer.identity, error });
         throw error;
     }
 }

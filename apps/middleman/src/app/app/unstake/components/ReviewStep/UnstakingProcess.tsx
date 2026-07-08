@@ -19,6 +19,9 @@ import { stageFailed, stageSucceeded } from "@/app/app/unstake/utils";
 import { useNotifications } from "@igniter/ui/context/Notifications/index";
 import { useQueryClient } from "@tanstack/react-query";
 import { CreateUnstakeTransaction } from '@/actions/Unstake'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'unstaking-process'])
 
 export interface UnstakingProcessStatus {
   transactionSignatureStatus: StageStatus;
@@ -87,7 +90,7 @@ export function UnstakingProcess({
         setCurrentStep(UnstakingProcessStep.SchedulingTransaction);
       } catch (err) {
         const { message } = err as Error;
-        console.log('An error occurred while collecting the signature. Error:', message);
+        log.error('failed to collect signature', { ownerAddress, error: message });
         handleFailedStage(
           'transactionSignatureStatus',
           'An unknown error occurred while collecting your signature for the transaction. If it was intentionally rejected, this is required in order to proceed. If not, please make sure you have a supported wallet extension enabled. You have incurred no fees. You can try again. If the problem persists, please contact support.'
@@ -120,7 +123,7 @@ export function UnstakingProcess({
         setCurrentStep(UnstakingProcessStep.Completed);
       } catch (err) {
         const { message } = err as Error;
-        console.log('An error occurred while scheduling the signed transactions. Error:', message);
+        log.error('failed to schedule signed transaction', { ownerAddress, selectedNodeAddresses, error: message });
         handleFailedStage(
           'schedulingTransactionStatus',
           'An unknown error occurred while scheduling the signed transactions.'

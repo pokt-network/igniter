@@ -18,6 +18,9 @@ import React, {useMemo, useRef, useState} from "react";
 import { UpsertApplicationSettings } from "@/actions/ApplicationSettings";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import {getLogger} from "@igniter/logger";
+
+const log = getLogger(['middleman', 'settings-form'])
 
 interface FormProps {
   defaultValues: Partial<ApplicationSettings>;
@@ -69,11 +72,10 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
           onSubmit={form.handleSubmit(async (values: any) => {
             setIsLoading(true);
             try {
-              console.log('values:', values, isUpdate);
               await UpsertApplicationSettings(values, isUpdate);
               goNext();
             } catch (error) {
-              console.error(error);
+              log.error("failed to save settings", { isUpdate, error });
               addNotification({
                 id: `settings-form-submit-error`,
                 type: 'error',

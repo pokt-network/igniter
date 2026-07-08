@@ -14,6 +14,9 @@ import {
 import { Checkbox } from "@igniter/ui/components/checkbox";
 import { SyncProvidersFromGovernance, Provider, submitProviders } from '@/actions/Providers'
 import { LoaderIcon } from '@igniter/ui/assets'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'providers-form'])
 
 interface ProvidersFormProps {
   providers: Provider[];
@@ -52,7 +55,7 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
         form.setValue('providers', (providersList || []).map((provider) => provider.identity))
       }
     } catch (error) {
-      console.error("Failed to load providers list", error)
+      log.error("failed to load providers list", { error })
     } finally {
       setIsLoading(false)
     }
@@ -79,7 +82,7 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
             await submitProviders(values, providers);
             goNext();
           } catch (error) {
-            console.error(error);
+            log.error("failed to submit providers", { error });
           } finally {
             setIsLoading(false);
           }

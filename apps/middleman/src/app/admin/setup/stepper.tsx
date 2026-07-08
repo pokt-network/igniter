@@ -10,6 +10,9 @@ import ApplicationSettingsForm from "./settingsForm";
 import { Provider } from "@/actions/Providers";
 import ProvidersForm from "./providersForm";
 import BlockchainFormComponent from '@/app/admin/setup/blockchainFrom'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'setup-stepper'])
 
 interface StepperProps {
   providers: Provider[];
@@ -99,7 +102,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
       const dbSettings = await getApplicationSettings();
       setSettings(dbSettings as ApplicationSettings);
     } catch (error) {
-      console.error("Something went wrong while retrieving the current applications settings", error);
+      log.error("failed to retrieve application settings", { error });
       setHasError(true);
     } finally {
       setIsLoadingSettings(false);

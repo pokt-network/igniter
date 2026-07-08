@@ -7,6 +7,9 @@ import { Checkbox } from '@igniter/ui/components/checkbox'
 import { ListProviders } from '@/actions/Providers'
 import { ProviderOption } from '@/app/app/import-suppliers/types'
 import { ProviderStatus } from '@igniter/db/middleman/enums'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'select-provider-step'])
 
 interface SelectProviderStepProps {
   ownerAddress: string
@@ -52,7 +55,7 @@ export function SelectProviderStep({
         setProviders(enabledProviders)
         setError(null)
       } catch (err) {
-        console.error('Failed to fetch providers:', err)
+        log.error('failed to fetch providers', { error: err })
         setError('Failed to load providers. Please try again.')
       } finally {
         setLoading(false)
