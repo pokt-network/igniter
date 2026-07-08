@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib/utils/routes'
+import { ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity } from '@/lib/utils/routes'
 import { SupplierMarkStakedRequest } from '@/lib/models/supplier'
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
@@ -51,7 +51,7 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
     const client = getTemporalClient()
 
     const workflowId = `SSA-${randomUUID()}`
-    log.info('supplier unstaking verification requested', { supplierAddresses: data.addresses, delegatorIdentity, workflowId })
+    log.info('supplier unstaking verification requested', { supplierAddresses: data.addresses, identity: truncateIdentity(delegatorIdentity), workflowId })
     await client.workflow.start('SupplierStatusForAddresses', {
       taskQueue,
       workflowId,

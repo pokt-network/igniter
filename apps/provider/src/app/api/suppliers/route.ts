@@ -1,5 +1,5 @@
 import {NextResponse} from "next/server";
-import {ensureApplicationIsBootstrapped, validateRequestSignature} from "@/lib/utils/routes";
+import {ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity} from "@/lib/utils/routes";
 import {SupplierStakeRequest} from "@/lib/models/supplier";
 import {Supplier} from '@igniter/domain/provider/models';
 import {APIResponse} from "@/lib/models/response";
@@ -50,11 +50,11 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
     const queryParams = new URL(request.url).searchParams;
     const simulate = queryParams.get('simulate');
 
-    log.info('supplier addresses requested', { ownerAddress: data.ownerAddress, delegatorIdentity, itemCount: data.items.length, simulate: simulate === 'true' });
+    log.info('supplier addresses requested', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), itemCount: data.items.length, simulate: simulate === 'true' });
     const response = await getSupplierStakeConfigurations(data, delegatorIdentity, simulate === 'true');
 
     if (!response || response.length === 0) {
-      log.warn('no addresses available for stake distribution', { ownerAddress: data.ownerAddress, delegatorIdentity });
+      log.warn('no addresses available for stake distribution', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity) });
       return NextResponse.json(
         {error: "No addresses available"},
         {
@@ -66,7 +66,7 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
       );
     }
 
-    log.info('supplier addresses returned', { ownerAddress: data.ownerAddress, delegatorIdentity, addressCount: response.length });
+    log.info('supplier addresses returned', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), addressCount: response.length });
     return NextResponse.json({
       data: response,
     }, {

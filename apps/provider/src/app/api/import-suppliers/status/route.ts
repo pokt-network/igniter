@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib/utils/routes'
+import { ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity } from '@/lib/utils/routes'
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import { findLatestRequest, isRequestExpired, markRequestExpired } from '@/lib/dal/importSupplierRequests'
@@ -66,7 +66,7 @@ export const POST = withLogging(async (
     // Validate request payload with Zod schema
     const parseResult = importSuppliersStatusSchema.safeParse(signatureValidationResponse.data)
     if (!parseResult.success) {
-      log.debug('import suppliers status payload failed validation', { delegatorIdentity, issues: parseResult.error.flatten() })
+      log.debug('import suppliers status payload failed validation', { identity: truncateIdentity(delegatorIdentity), issues: parseResult.error.flatten() })
       return NextResponse.json(
         {
           error: `Invalid request: ${parseResult.error.errors.map((e) => e.message).join(', ')}`,
@@ -85,7 +85,7 @@ export const POST = withLogging(async (
     )
 
     if (!latestRequest) {
-      log.debug('import suppliers status: no request found', { ownerAddress: data.ownerAddress, delegatorIdentity })
+      log.debug('import suppliers status: no request found', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity) })
       return NextResponse.json(
         { error: 'No import request found for this owner address.' },
         { status: 404 },

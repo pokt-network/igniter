@@ -1,5 +1,5 @@
 import {NextResponse} from "next/server";
-import {ensureApplicationIsBootstrapped, validateRequestSignature} from "@/lib/utils/routes";
+import {ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity} from "@/lib/utils/routes";
 import {SupplierReleaseRequest} from "@/lib/models/supplier";
 import {APIResponse} from "@/lib/models/response";
 import {releaseDeliveredSuppliers} from "@/lib/services/suppliers";
@@ -46,7 +46,7 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
             return NextResponse.json({error: "Invalid request. Empty suppliers list."}, {status: 400});
         }
 
-        log.info('supplier release requested', { supplierAddresses: data.addresses, delegatorIdentity });
+        log.info('supplier release requested', { supplierAddresses: data.addresses, identity: truncateIdentity(delegatorIdentity) });
         await releaseDeliveredSuppliers(data.addresses, delegatorIdentity);
         return NextResponse.json({ data: 'OK' }, { status: 200 });
     } catch (e) {

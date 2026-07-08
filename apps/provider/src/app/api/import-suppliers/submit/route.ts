@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib/utils/routes'
+import { ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity } from '@/lib/utils/routes'
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import { pubkeyToAddress, verifySignature } from '@igniter/commons/crypto'
@@ -90,7 +90,7 @@ export const POST = withLogging(async (
     // Validate request payload with Zod schema
     const parseResult = importSuppliersSubmitSchema.safeParse(signatureValidationResponse.data)
     if (!parseResult.success) {
-      log.debug('import suppliers submit payload failed validation', { delegatorIdentity, issues: parseResult.error.flatten() })
+      log.debug('import suppliers submit payload failed validation', { identity: truncateIdentity(delegatorIdentity), issues: parseResult.error.flatten() })
       return NextResponse.json(
         {
           error: `Invalid request: ${parseResult.error.errors.map((e) => e.message).join(', ')}`,
@@ -108,7 +108,7 @@ export const POST = withLogging(async (
     )
 
     if (!pendingRequest) {
-      log.info('import suppliers submit rejected', { ownerAddress: data.ownerAddress, delegatorIdentity, reason: 'no pending request' })
+      log.info('import suppliers submit rejected', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'no pending request' })
       return NextResponse.json(
         { error: 'No pending import request found. Please initiate a new request.' },
         { status: 404 },
@@ -119,7 +119,7 @@ export const POST = withLogging(async (
 
     // Check if request has expired
     if (isRequestExpired(pendingRequest)) {
-      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, reason: 'expired' })
+      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'expired' })
       await markRequestExpired(pendingRequest.id)
       return NextResponse.json(
         { error: 'Import request has expired. Please initiate a new request.' },
@@ -133,7 +133,7 @@ export const POST = withLogging(async (
       // Public key is already in hex format (66 chars = 33 bytes compressed)
       derivedAddress = pubkeyToAddress(data.ownerPublicKey)
     } catch (e) {
-      log.error('failed to derive address from public key', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, error: e })
+      log.error('failed to derive address from public key', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), error: e })
       await markRequestFailed(pendingRequest.id, 'Invalid public key format')
       return NextResponse.json(
         { error: 'Invalid public key format.' },
@@ -142,7 +142,7 @@ export const POST = withLogging(async (
     }
 
     if (derivedAddress !== data.ownerAddress) {
-      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, reason: 'public key does not match owner address' })
+      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'public key does not match owner address' })
       await markRequestFailed(
         pendingRequest.id,
         'Public key does not match owner address',
@@ -171,7 +171,7 @@ export const POST = withLogging(async (
     }
 
     if (!isValidSignature) {
-      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, reason: 'invalid nonce signature' })
+      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'invalid nonce signature' })
       await markRequestFailed(pendingRequest.id, 'Invalid nonce signature')
       return NextResponse.json(
         { error: 'Invalid signature. Nonce signature verification failed.' },
@@ -183,7 +183,7 @@ export const POST = withLogging(async (
     const matchingSuppliers = await findSuppliersByOwner(data.ownerAddress)
 
     if (matchingSuppliers.length === 0) {
-      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, reason: 'no unassigned suppliers' })
+      log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'no unassigned suppliers' })
       await markRequestFailed(pendingRequest.id, 'No suppliers available to import')
       return NextResponse.json(
         { error: 'No unassigned suppliers available for import.' },
@@ -203,7 +203,7 @@ export const POST = withLogging(async (
     // Mark request as completed
     await markRequestCompleted(pendingRequest.id)
 
-    log.info('suppliers imported', { attemptId, ownerAddress: data.ownerAddress, delegatorIdentity, addressCount: assignedSuppliers.length })
+    log.info('suppliers imported', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), addressCount: assignedSuppliers.length })
 
     // Build response with supplier details
     const importedSuppliers: ImportedSupplier[] = assignedSuppliers.map((s) => ({

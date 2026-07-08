@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { ensureApplicationIsBootstrapped, validateRequestSignature } from '@/lib/utils/routes'
+import { ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity } from '@/lib/utils/routes'
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import {
@@ -69,7 +69,7 @@ export const POST = withLogging(async (
     // Validate request payload with Zod schema
     const parseResult = importSuppliersRequestSchema.safeParse(signatureValidationResponse.data)
     if (!parseResult.success) {
-      log.debug('import suppliers request payload failed validation', { delegatorIdentity, issues: parseResult.error.flatten() })
+      log.debug('import suppliers request payload failed validation', { identity: truncateIdentity(delegatorIdentity), issues: parseResult.error.flatten() })
       return NextResponse.json(
         {
           error: `Invalid request: ${parseResult.error.errors.map((e) => e.message).join(', ')}`,
@@ -93,7 +93,7 @@ export const POST = withLogging(async (
     )
 
     if (matchingSuppliers.length === 0) {
-      log.info('import suppliers request rejected', { ownerAddress: data.ownerAddress, delegatorIdentity, cancelledCount, reason: 'no staked suppliers found' })
+      log.info('import suppliers request rejected', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), cancelledCount, reason: 'no staked suppliers found' })
       return NextResponse.json(
         {
           error:
@@ -111,7 +111,7 @@ export const POST = withLogging(async (
       matchingAddresses,
     )
 
-    log.info('import suppliers request created', { attemptId: importRequest.id, ownerAddress: data.ownerAddress, delegatorIdentity, addressCount: matchingSuppliers.length, cancelledCount })
+    log.info('import suppliers request created', { attemptId: importRequest.id, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), addressCount: matchingSuppliers.length, cancelledCount })
 
     return NextResponse.json(
       {

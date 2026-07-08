@@ -8,6 +8,10 @@ import { getLogger } from "@igniter/logger";
 
 const log = getLogger(["provider", "routes"]);
 
+/** Spec §7: publicKey-like identifiers are truncated in logs (auth-site rule). */
+export const truncateIdentity = (id: string | undefined | null): string | undefined =>
+  id ? `${id.slice(0, 12)}…` : undefined;
+
 export interface SignedRequestPayload<TData> {
   delegator: ReturnType<typeof getDelegatorByIdentity> extends Promise<infer T> ? T : unknown;
   data: TData;
@@ -49,7 +53,7 @@ export async function validateRequestSignature<TData>(request: Request): Promise
   const delegatorIdentity = request.headers.get(REQUEST_IDENTITY_HEADER);
 
   if (!delegatorIdentity) {
-    log.debug('request signature validation failed', { delegator: null, identity: null, verified: false, reason: 'missing identity header' });
+    log.debug('request signature validation failed', { delegator: null, identity: truncateIdentity(null), verified: false, reason: 'missing identity header' });
     return NextResponse.json(
       { error: "Invalid request. X-Middleman-Identity header was not provided." },
       { status: 400 }
@@ -59,7 +63,7 @@ export async function validateRequestSignature<TData>(request: Request): Promise
   const delegator = await getDelegatorByIdentity(delegatorIdentity);
 
   if (!delegator) {
-    log.debug('request signature validation failed', { delegator: null, identity: delegatorIdentity, verified: false, reason: 'delegator not found' });
+    log.debug('request signature validation failed', { delegator: null, identity: truncateIdentity(delegatorIdentity), verified: false, reason: 'delegator not found' });
     return NextResponse.json(
       { error: "Forbidden. The client is not allowed." },
       { status: 403 }
@@ -71,7 +75,7 @@ export async function validateRequestSignature<TData>(request: Request): Promise
   try {
     data = await request.json();
   } catch (err) {
-    log.error('failed to parse request payload as JSON', { delegator: delegator.name, identity: delegatorIdentity, error: err });
+    log.error('failed to parse request payload as JSON', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), error: err });
     return NextResponse.json(
       { error: "Invalid request. Is the request valid JSON?" },
       { status: 400 }
@@ -85,14 +89,14 @@ export async function validateRequestSignature<TData>(request: Request): Promise
   const isValidSignature = await verifySignature(rawData, publicKeyBase64, providedSignature);
 
   if (!isValidSignature) {
-    log.debug('request signature validation failed', { delegator: delegator.name, identity: delegatorIdentity, verified: false, reason: 'signature mismatch' });
+    log.debug('request signature validation failed', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), verified: false, reason: 'signature mismatch' });
     return NextResponse.json(
       { error: `Invalid request. Signature could not be verified with public key: ${delegator.identity}` },
       { status: 400 }
     );
   }
 
-  log.debug('request signature validated', { delegator: delegator.name, identity: delegatorIdentity, verified: true });
+  log.debug('request signature validated', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), verified: true });
 
   return { delegator, data };
 }
