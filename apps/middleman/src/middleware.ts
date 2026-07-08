@@ -21,7 +21,7 @@ const middleware: any = auth(async (req: NextRequest) => {
   const isLoggedIn = !!req.auth;
 
   if (!isLoggedIn) {
-    log.info("unauthenticated request redirected", { pathname: req.nextUrl.pathname });
+    log.debug("unauthenticated request redirected", { pathname: req.nextUrl.pathname });
     const response = NextResponse.redirect(new URL("/", req.nextUrl));
     response.headers.set(REQUEST_ID_HEADER, requestId);
     return response;
