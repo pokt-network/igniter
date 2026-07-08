@@ -128,6 +128,50 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
   })
 
+  it('describe() corrupt (WFT failed) + enforce: recordRecreate -> delete -> create -> resetOnRecreate', async () => {
+    const calls: string[] = []
+    const create = jest.fn().mockImplementation(async () => { calls.push('create') })
+    const del = jest.fn().mockImplementation(async () => { calls.push('delete') })
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    ;(store.recordRecreate as jest.Mock).mockImplementation(async () => { calls.push('recordRecreate') })
+    ;(store.resetOnRecreate as jest.Mock).mockImplementation(async () => { calls.push('resetOnRecreate') })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(calls).toEqual(['recordRecreate', 'delete', 'create', 'resetOnRecreate'])
+  })
+
+  it('describe() corrupt + observe: persists observed_unhealthy, mutates nothing', async () => {
+    const del = jest.fn()
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config: { ...config, mode: 'observe' }, logger })
+    await wd.tick()
+    expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    expect(del).not.toHaveBeenCalled()
+    expect(store.recordRecreate).not.toHaveBeenCalled()
+  })
+
+  it('describe() corrupt + enforce: failing delete() skips round without resetOnRecreate', async () => {
+    const del = jest.fn().mockRejectedValue(Object.assign(new Error('boom'), { code: 13 }))
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await expect(wd.tick()).resolves.toBeUndefined()
+    expect(create).not.toHaveBeenCalled()
+    expect(store.resetOnRecreate).not.toHaveBeenCalled()
+  })
+
   it('describe() transient: skips, never treated as stale, never aborts pass', async () => {
     const store = makeStore()
     const handleBad = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('unavailable'), { code: 14 })), update: jest.fn(), trigger: jest.fn() }

@@ -186,10 +186,47 @@ export function evaluateLiveness(
   return 'healthy'
 }
 
+/**
+ * First numeric grpc `code` found walking the `cause` chain. The SDK's
+ * ScheduleClient wraps grpc errors as ServiceError(fallbackMessage, { cause })
+ * — the code (and real message) live ONLY on the cause, never on the thrown
+ * error itself, so top-level `e.code` checks miss every schedule-client error.
+ */
+function grpcCode(e: unknown): number | undefined {
+  let cur: unknown = e
+  for (let depth = 0; depth < 5 && typeof cur === 'object' && cur !== null; depth++) {
+    const code = (cur as { code?: unknown }).code
+    if (typeof code === 'number') return code
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return undefined
+}
+
+/** All messages down the `cause` chain, joined — for regex matching. */
+function messageChain(e: unknown): string {
+  const parts: string[] = []
+  let cur: unknown = e
+  for (let depth = 0; depth < 5 && cur != null; depth++) {
+    parts.push(cur instanceof Error ? cur.message : String(cur))
+    cur = typeof cur === 'object' ? (cur as { cause?: unknown }).cause : undefined
+  }
+  return parts.join(' | ')
+}
+
 export function isNotFound(e: unknown): boolean {
-  if (typeof e === 'object' && e !== null && 'code' in e && (e as { code?: number }).code === 5) return true
-  const msg = e instanceof Error ? e.message : String(e)
-  return /not.?found/i.test(msg)
+  if (grpcCode(e) === 5) return true
+  return /not.?found/i.test(messageChain(e))
+}
+
+/**
+ * The schedule's internal scheduler workflow has a Workflow Task in failed
+ * state: describe/update/trigger are ALL impossible (describe is a query on
+ * that workflow), so delete+recreate is the only possible heal. Deliberately
+ * narrow — FAILED_PRECONDITION alone is not enough, deleting a schedule is
+ * destructive (loses paused flag, operator spec tweaks, action history).
+ */
+export function isCorruptSchedule(e: unknown): boolean {
+  return grpcCode(e) === 9 && /workflow task in failed state/i.test(messageChain(e))
 }
 
 /** Re-arm options for an in-place update() (no absent window). Cannot set memo (SDK). */
@@ -223,12 +260,50 @@ function createOptions(entry: WatchdogEntry): ScheduleOptions {
   }
 }
 
+/** The minimal handle surface recreateCorrupt needs (delete only). */
+interface DeletableHandle {
+  delete(): Promise<void>
+}
+
+/**
+ * Uniform reaction to a corrupt scheduler workflow (WFT in failed state):
+ * delete + recreate, with heal-state bookkeeping when a store is available
+ * (the watchdog paths; bootstrap has none). WRITE-AHEAD recordRecreate before
+ * the effect, resetOnRecreate after — numActionsTaken resets to 0 on recreate,
+ * mirroring the NOT_FOUND recreate contract (S6). NEVER throws: a failed
+ * recreate is logged and retried on the next tick/boot instead of
+ * crash-looping the worker (operator incident: WFT in failed state).
+ */
+async function recreateCorrupt(
+  client: Client,
+  handle: DeletableHandle,
+  entry: WatchdogEntry,
+  logger: Logger,
+  store?: WatchdogStateStore,
+): Promise<void> {
+  logger.error({ scheduleId: entry.scheduleId }, 'Schedule corrupt (workflow task in failed state); deleting and recreating')
+  try {
+    await store?.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
+    await handle.delete()
+    try {
+      await client.schedule.create(createOptions(entry))
+    } catch (createErr) {
+      if (!(createErr instanceof ScheduleAlreadyRunning)) throw createErr
+    }
+    await store?.resetOnRecreate(entry.scheduleId)
+  } catch (healErr) {
+    logger.error({ err: healErr, scheduleId: entry.scheduleId }, 'Corrupt-schedule delete+recreate failed; retrying next tick/boot')
+  }
+}
+
 /**
  * Single create-OR-update primitive shared by bootstrap and the watchdog (D4).
  * describe() ok -> update on drift; describe() NOT_FOUND -> create (swallow
- * ScheduleAlreadyRunning); any other error -> rethrow.
+ * ScheduleAlreadyRunning); corrupt scheduler workflow -> delete+recreate;
+ * any other error -> rethrow. `store` (watchdog paths only) enables heal-state
+ * bookkeeping on a corrupt recreate.
  */
-export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger): Promise<void> {
+export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger, store?: WatchdogStateStore): Promise<void> {
   const handle = client.schedule.getHandle(entry.scheduleId)
 
   const createFresh = async () => {
@@ -250,6 +325,10 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
   } catch (e) {
     if (isNotFound(e)) {
       await createFresh()
+      return
+    }
+    if (isCorruptSchedule(e)) {
+      await recreateCorrupt(client, handle, entry, logger, store)
       return
     }
     // A transient RPC blip must NOT abort bootstrap — leave reconciliation for
@@ -275,6 +354,12 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
         await createFresh()
         return
       }
+      // The scheduler workflow can corrupt between describe() and update() —
+      // same reaction as everywhere a schedule RPC surfaces this state.
+      if (isCorruptSchedule(e)) {
+        await recreateCorrupt(client, handle, entry, logger, store)
+        return
+      }
       // A transient failure to apply drift is not fatal — the schedule keeps
       // running with its prior (valid) config until the next reconcile (#229).
       if (isTransient(e)) {
@@ -290,10 +375,9 @@ const TRANSIENT_GRPC_CODES = new Set([4, 8, 10, 13, 14]) // DEADLINE_EXCEEDED, R
 
 /** Transient (retryable) errors do NOT consume a heal attempt (B4). */
 export function isTransient(e: unknown): boolean {
-  const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: number }).code : undefined
+  const code = grpcCode(e)
   if (code !== undefined) return TRANSIENT_GRPC_CODES.has(code)
-  const msg = e instanceof Error ? e.message : String(e)
-  return /deadline|unavailable|timeout/i.test(msg)
+  return /deadline|unavailable|timeout/i.test(messageChain(e))
 }
 
 /** Race a promise against a deadline; the loser rejects. Used to bound describe(). */
@@ -320,6 +404,7 @@ export async function healSchedule(
   now: Date,
 ): Promise<{ nextBackoffMs: number }> {
   const n = state.unstucks
+  const nextBackoffMs = Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs)
   let attemptsAfter = n
 
   if (n < config.recreateAfter) {
@@ -335,6 +420,12 @@ export async function healSchedule(
     } catch (e) {
       if (isTransient(e)) {
         logger.warn({ err: e, scheduleId: entry.scheduleId }, 'Heal update() transient; no attempt consumed (B4)')
+      } else if (isCorruptSchedule(e)) {
+        // update() goes through the same broken scheduler workflow — no ladder
+        // step can ever succeed. Recreate now; no attempt consumed (recreate is
+        // the terminal action, same contract as the NOT_FOUND path).
+        await recreateCorrupt(client, handle, entry, logger, store)
+        return { nextBackoffMs }
       } else {
         const row = await store.bumpUnstuck(entry.scheduleId)
         attemptsAfter = row.unstucks
@@ -342,7 +433,7 @@ export async function healSchedule(
       }
     }
   } else {
-    await ensureSchedule(client, entry, logger) // create only if NOT_FOUND (D4)
+    await ensureSchedule(client, entry, logger, store) // create only if NOT_FOUND or corrupt (D4)
     await store.bumpInjectedTrigger(entry.scheduleId, now) // WRITE-AHEAD before the effect (D3)
     try {
       await handle.trigger() // one compensating run
@@ -351,6 +442,10 @@ export async function healSchedule(
       // injectedTriggers makes hasAutonomousFire demand an extra real fire before
       // the ladder can reset, keeping a recovered schedule judged stale (M7/#294).
       await store.compensateInjectedTrigger(entry.scheduleId)
+      if (isCorruptSchedule(e)) {
+        await recreateCorrupt(client, handle, entry, logger, store)
+        return { nextBackoffMs }
+      }
       throw e
     }
     const row = await store.bumpUnstuck(entry.scheduleId)
@@ -363,7 +458,7 @@ export async function healSchedule(
     logger.error({ scheduleId: entry.scheduleId, attempts: attemptsAfter }, 'Heal breaker tripped: schedule marked unhealthy (page-worthy)')
   }
 
-  return { nextBackoffMs: Math.min(config.backoffBaseMs * 2 ** n, config.backoffCapMs) }
+  return { nextBackoffMs }
 }
 
 /**
@@ -471,6 +566,17 @@ export class ScheduleWatchdog {
           await store.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
           await ensureSchedule(client, entry, logger)
           await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
+        } else {
+          await store.setObservedUnhealthy(entry.scheduleId, true)
+        }
+        return
+      }
+      // Corrupt scheduler workflow (WFT in failed state): update()/trigger()
+      // also go through that workflow, so the normal heal ladder can never
+      // work — ensureSchedule funnels to delete+recreate with bookkeeping.
+      if (isCorruptSchedule(e)) {
+        if (config.mode === 'enforce') {
+          await ensureSchedule(client, entry, logger, store)
         } else {
           await store.setObservedUnhealthy(entry.scheduleId, true)
         }
