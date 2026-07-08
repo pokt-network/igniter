@@ -58,18 +58,20 @@ function setBaseFields(fields: Record<string, unknown>): void {
  * 11's real Next.js/Docker build validation (a plain source grep for the
  * literal specifier does not catch this — only an actual bundler run does).
  *
- * Building the specifier at runtime by joining two strings keeps it out of
- * webpack's static require analysis (it only downgrades to a "the request
- * of a dependency is an expression" warning, same as e.g.
- * `@temporalio/common`'s own dynamic requires), and this function is only
- * ever called from the `runtime === 'node'` branch below, so the `require`
- * call never actually executes in a browser/edge bundle.
+ * A joined-string specifier dodges webpack's static analysis (downgrades to a
+ * warning) but is a HARD build error under Turbopack, which analyzes every
+ * `require()` call site and fails on non-literal specifiers ("Can't resolve
+ * <dynamic>"). `eval('require')` is the established escape hatch opaque to
+ * BOTH bundlers (neither traces through eval). It is guarded: only reached at
+ * runtime on the `runtime === 'node'` branch, never in a browser/edge bundle,
+ * and any failure degrades to "no ALS correlation" rather than a crash.
  */
 function loadContextLocalStorage(): ContextLocalStorage<Record<string, unknown>> | undefined {
-  if (typeof require !== 'function') return undefined
   try {
-    const specifier = ['node', 'async_hooks'].join(':')
-    const { AsyncLocalStorage } = require(specifier) as {
+    // eslint-disable-next-line no-eval
+    const nodeRequire = eval('require') as (id: string) => unknown
+    if (typeof nodeRequire !== 'function') return undefined
+    const { AsyncLocalStorage } = nodeRequire('node:async_hooks') as {
       AsyncLocalStorage: new () => ContextLocalStorage<Record<string, unknown>>
     }
     return new AsyncLocalStorage()

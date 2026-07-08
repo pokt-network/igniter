@@ -42,19 +42,22 @@ export function withRequestContext<T>(
 /**
  * UUID for request correlation. NEVER call inside a Temporal workflow sandbox.
  *
- * Node 18 (the CI test pin, 18.20.3) exposes no global `crypto` under jest, so a
- * bare `crypto.randomUUID()` throws `ReferenceError`. Prefer the global Web Crypto
- * when present (browser/edge/Node 20+), otherwise fall back to Node's `crypto`
- * builtin. The specifier is assembled at runtime (same variable-indirection trick
- * as config.ts's `loadContextLocalStorage`) so bundlers targeting browser/edge do
- * NOT statically resolve the node builtin — the `require` only ever runs on Node.
+ * Prefers the global Web Crypto (browser/edge/Node 20+). Node 18 (the CI test
+ * pin, 18.20.3) exposes no global `crypto` under jest, so there is a pure-JS
+ * v4-shaped fallback. NO `require` of the node builtin here — even a dynamic
+ * specifier is a hard build error under Turbopack ("Can't resolve <dynamic>"),
+ * which analyzes every `require()` call site; webpack merely warned. The id is
+ * a correlation token, not a security credential, so `Math.random` quality is
+ * acceptable on the (CI-only) fallback path.
  */
 export function newRequestId(): string {
   const webCrypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
   if (typeof webCrypto?.randomUUID === 'function') return webCrypto.randomUUID()
-  const specifier = ['node', 'crypto'].join(':')
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return (require(specifier) as { randomUUID: () => string }).randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
 }
 
 export { configureLogging, type ConfigureOpts } from './config'
