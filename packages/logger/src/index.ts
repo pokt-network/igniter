@@ -39,9 +39,22 @@ export function withRequestContext<T>(
   return withContext(ctx as Record<string, unknown>, fn)
 }
 
-/** UUID for request correlation. NEVER call inside a Temporal workflow sandbox. */
+/**
+ * UUID for request correlation. NEVER call inside a Temporal workflow sandbox.
+ *
+ * Node 18 (the CI test pin, 18.20.3) exposes no global `crypto` under jest, so a
+ * bare `crypto.randomUUID()` throws `ReferenceError`. Prefer the global Web Crypto
+ * when present (browser/edge/Node 20+), otherwise fall back to Node's `crypto`
+ * builtin. The specifier is assembled at runtime (same variable-indirection trick
+ * as config.ts's `loadContextLocalStorage`) so bundlers targeting browser/edge do
+ * NOT statically resolve the node builtin — the `require` only ever runs on Node.
+ */
 export function newRequestId(): string {
-  return crypto.randomUUID()
+  const webCrypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+  if (typeof webCrypto?.randomUUID === 'function') return webCrypto.randomUUID()
+  const specifier = ['node', 'crypto'].join(':')
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return (require(specifier) as { randomUUID: () => string }).randomUUID()
 }
 
 export { configureLogging, type ConfigureOpts } from './config'

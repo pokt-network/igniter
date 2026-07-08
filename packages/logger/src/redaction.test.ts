@@ -1,4 +1,5 @@
 import { configure, getLogger, reset, type LogRecord } from '@logtape/logtape'
+import { prettyFormatter } from '@logtape/pretty'
 import {
   getRedactedConsoleSink,
   jsonLinesNumericFormatter,
@@ -218,5 +219,67 @@ describe('jsonLinesNumericFormatter', () => {
     const parsed = JSON.parse(line)
     expect(parsed.message).toBe('hi')
     expect(parsed.properties).toEqual({ a: 1 })
+  })
+
+  // F11: bigint is serialized INSIDE the formatter (bigint->string), NOT via a
+  // global BigInt.prototype.toJSON patch. The prod path must emit bigint props
+  // as decimal strings without throwing.
+  it('serializes a bigint property as a decimal string (scoped, no global patch)', () => {
+    const bigRec = {
+      category: ['t'],
+      level: 'info',
+      message: ['stake'],
+      rawMessage: 'stake',
+      properties: { amount: 10n },
+      timestamp: Date.parse('2026-06-26T00:00:00.000Z'),
+    } as unknown as LogRecord
+    let line = ''
+    expect(() => {
+      line = jsonLinesNumericFormatter(bigRec)
+    }).not.toThrow()
+    expect(JSON.parse(line).properties.amount).toBe('10')
+    // Proof the fix is formatter-scoped, not global:
+    expect(() => JSON.stringify({ amount: 10n })).toThrow(TypeError)
+  })
+
+  // F12: a cyclic property must NOT make the record vanish; it must always emit
+  // a line with a '[circular]' marker where the cycle was.
+  it('emits a line for a record with a cyclic property instead of dropping it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cyc: any = { name: 'root' }
+    cyc.self = cyc
+    const cycRec = {
+      category: ['t'],
+      level: 'error',
+      message: ['boom'],
+      rawMessage: 'boom',
+      properties: { payload: cyc },
+      timestamp: Date.parse('2026-06-26T00:00:00.000Z'),
+    } as unknown as LogRecord
+    let line = ''
+    expect(() => {
+      line = jsonLinesNumericFormatter(cycRec)
+    }).not.toThrow()
+    expect(line.endsWith('\n')).toBe(true)
+    const parsed = JSON.parse(line)
+    expect(parsed.message).toBe('boom')
+    expect(JSON.stringify(parsed)).toContain('[circular]')
+  })
+})
+
+// F11: dev/browser pretty path must also survive a bigint property without
+// throwing (verified empirically, not assumed).
+describe('prettyFormatter bigint safety', () => {
+  const bigRec = {
+    category: ['t'],
+    level: 'info',
+    message: ['stake', 10n, ''],
+    rawMessage: 'stake {amount}',
+    properties: { amount: 10n },
+    timestamp: Date.parse('2026-06-26T00:00:00.000Z'),
+  } as unknown as LogRecord
+
+  it('does not throw when formatting a bigint property', () => {
+    expect(() => prettyFormatter(bigRec)).not.toThrow()
   })
 })

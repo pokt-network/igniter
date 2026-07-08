@@ -44,4 +44,15 @@ describe('getTemporalLogger', () => {
     getTemporalLogger(['temporal']).info('worker created')
     expect(buffer[0]!.message.join('')).toBe('worker created')
   })
+
+  // F4/F5/F10/F13/F14: Temporal messages are FOREIGN free text and can contain
+  // literal braces (JSON blobs). LogTape would parse `{...}` as a placeholder and
+  // render unmatched keys as `undefined`. The bridge escapes braces so a message
+  // survives verbatim.
+  it('renders a foreign message containing brace-JSON verbatim (no undefined)', () => {
+    getTemporalLogger(['temporal']).error('activity failed: {"json":"blob","n":1}')
+    const rendered = buffer[0]!.message.join('')
+    expect(rendered).toBe('activity failed: {"json":"blob","n":1}')
+    expect(rendered).not.toContain('undefined')
+  })
 })

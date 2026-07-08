@@ -41,8 +41,23 @@ describe('getLogger', () => {
 })
 
 describe('newRequestId', () => {
-  it('generates a uuid-shaped id', () => {
-    expect(newRequestId()).toMatch(/^[0-9a-f-]{36}$/i)
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+  it('generates a uuid-v4-shaped id', () => {
+    expect(newRequestId()).toMatch(UUID_V4)
+  })
+
+  // F8 regression: Node 18 (CI test pin) exposes no global `crypto` under jest,
+  // so a bare `crypto.randomUUID()` throws ReferenceError. Simulate that by
+  // deleting globalThis.crypto and assert the node:crypto fallback still works.
+  it('falls back to node:crypto when globalThis.crypto is absent (Node 18 sim)', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+    delete (globalThis as { crypto?: unknown }).crypto
+    try {
+      expect(newRequestId()).toMatch(UUID_V4)
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'crypto', original)
+    }
   })
 })
 

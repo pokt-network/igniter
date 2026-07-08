@@ -170,19 +170,46 @@ const LEVEL_NUMBER: Record<LogLevel, number> = {
   fatal: 60,
 }
 
-/** Serialize Errors usefully; bigint is handled globally via BigInt.prototype.toJSON. */
+/**
+ * Serialize values that bare `JSON.stringify` mishandles, SCOPED to the logging
+ * paths only (NO global `BigInt.prototype.toJSON` patch — that silently changed
+ * Temporal payload boundary semantics: bigint would cross as a string instead of
+ * throwing loud, which activities/index.ts relies on).
+ *   - `Error` → a plain `{ name, message, stack }` object.
+ *   - `bigint` → its decimal string (LogTape's JSON formatters throw on bigint).
+ */
 function prodJsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === 'bigint') return value.toString()
   if (value instanceof Error) {
     return { name: value.name, message: value.message, stack: value.stack }
   }
   return value
 }
 
+/**
+ * Cycle- AND bigint-safe `JSON.stringify` for the prod NDJSON path (F4/F12): a
+ * cyclic property (or a bigint the replacer somehow misses) would otherwise make
+ * `JSON.stringify` THROW and the whole record silently vanish. This wraps the
+ * value replacer with a per-call `WeakSet` circular guard so a record is ALWAYS
+ * emitted — cycles render as the literal `'[circular]'`.
+ */
+function safeStringify(value: unknown): string {
+  const seen = new WeakSet<object>()
+  return JSON.stringify(value, (key, val) => {
+    const replaced = prodJsonReplacer(key, val)
+    if (replaced !== null && typeof replaced === 'object') {
+      if (seen.has(replaced as object)) return '[circular]'
+      seen.add(replaced as object)
+    }
+    return replaced
+  })
+}
+
 /** Render LogTape's message-parts array ([text, value, text, ...]) to a string. */
 function renderMessage(message: readonly unknown[]): string {
   let out = ''
   for (let i = 0; i < message.length; i++) {
-    out += i % 2 === 0 ? String(message[i]) : JSON.stringify(message[i], prodJsonReplacer)
+    out += i % 2 === 0 ? String(message[i]) : safeStringify(message[i])
   }
   return out
 }
@@ -193,16 +220,13 @@ function renderMessage(message: readonly unknown[]): string {
  * properties }) but `level` is a number. Exported for unit testing.
  */
 export const jsonLinesNumericFormatter: TextFormatter = (record: LogRecord): string =>
-  JSON.stringify(
-    {
-      '@timestamp': new Date(record.timestamp).toISOString(),
-      level: LEVEL_NUMBER[record.level],
-      message: renderMessage(record.message),
-      logger: record.category.join('.'),
-      properties: record.properties,
-    },
-    prodJsonReplacer,
-  ) + '\n'
+  safeStringify({
+    '@timestamp': new Date(record.timestamp).toISOString(),
+    level: LEVEL_NUMBER[record.level],
+    message: renderMessage(record.message),
+    logger: record.category.join('.'),
+    properties: record.properties,
+  }) + '\n'
 
 /**
  * Console sink with both redaction layers wired:
