@@ -62,7 +62,7 @@ export const setup = <TSchema extends Record<string, unknown>>(options: SetupOpt
     schema,
     logger: {
       logQuery: (query: string, params: unknown[]) => {
-        logger.debug('Database Query:', { query, params });
+        logger.debug('database query', { query, params });
       },
     }
   })

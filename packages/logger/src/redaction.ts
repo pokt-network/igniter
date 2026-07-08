@@ -5,7 +5,7 @@ import {
   type Sink,
   type TextFormatter,
 } from '@logtape/logtape'
-import { prettyFormatter } from '@logtape/pretty'
+import { getPrettyFormatter } from '@logtape/pretty'
 import {
   redactByField,
   redactByPattern,
@@ -238,8 +238,25 @@ export const jsonLinesNumericFormatter: TextFormatter = (record: LogRecord): str
  *   2. redactByPattern wraps the FORMATTER (scrubs value-shaped secrets in rendered
  *      text as a backstop).
  */
+// Dev pretty formatter renders structured properties inline (properties: true) so
+// payload-carrying debug lines (e.g. drizzle's query/params) are visible without
+// switching to prod NDJSON. Depth-capped to keep multi-line output sane.
+// Base/resource fields (service.*, env, runtime) are constant per process — they
+// matter for the prod collector but are pure repetition on a local terminal, so
+// dev rendering drops them.
+const DEV_HIDDEN_PROPS = ['service.name', 'service.version', 'env', 'runtime'] as const
+const basePrettyFormatter = getPrettyFormatter({
+  properties: true,
+  inspectOptions: { depth: 4 },
+}) as TextFormatter
+const devPrettyFormatter: TextFormatter = (record) => {
+  const properties = { ...record.properties }
+  for (const key of DEV_HIDDEN_PROPS) delete properties[key]
+  return basePrettyFormatter({ ...record, properties })
+}
+
 export function getRedactedConsoleSink(isProd: boolean): Sink {
-  const baseFormatter: TextFormatter = isProd ? jsonLinesNumericFormatter : prettyFormatter
+  const baseFormatter: TextFormatter = isProd ? jsonLinesNumericFormatter : devPrettyFormatter
   const safeFormatter = redactByPattern(baseFormatter, SECRET_VALUE_PATTERNS)
   return redactByField(getConsoleSink({ formatter: safeFormatter }), SECRET_FIELD_PATTERNS)
 }

@@ -6,7 +6,7 @@ import {
   type Sink,
   type TextFormatter,
 } from '@logtape/logtape'
-import { prettyFormatter } from '@logtape/pretty'
+import { getPrettyFormatter } from '@logtape/pretty'
 import { redactByField } from '@logtape/redaction'
 import { getRedactedConsoleSink, SECRET_FIELD_PATTERNS } from './redaction'
 import { getClientSink, minimalSink } from './client'
@@ -81,7 +81,9 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
     // dev: pretty console; prod: minimalSink (warn/error/fatal only).
     const browserBase: Sink = isProd
       ? minimalSink
-      : getConsoleSink({ formatter: prettyFormatter as TextFormatter })
+      : getConsoleSink({
+          formatter: getPrettyFormatter({ properties: true, inspectOptions: { depth: 4 } }) as TextFormatter,
+        })
     await configure({
       reset: true,
       // redactByField defensively drops secret props on the client too.
