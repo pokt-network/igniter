@@ -1,0 +1,17 @@
+# EXCLUSIONS for scripts/no-console-guard.sh (Otto#8/#9: default-safe).
+#
+# The guard scans EVERY apps/*/src and packages/*/src by default, so newly
+# added source is covered automatically — you must opt a path OUT here, never
+# opt one in. Each line is a path prefix (fixed-string) whose console.* calls
+# are sanctioned. Blank lines and #-comments are ignored.
+#
+# The two entries below are standalone dev/CLI tooling that predate the logging
+# initiative and live OUTSIDE any */src (so the default scan never reaches them
+# anyway) — listed here to document the sanction and guard against a future
+# widened scan:
+#   - packages/graphql/codegen.ts        codegen runner; console is its UX.
+#   - packages/temporal/scripts/         manual live-validation reporters.
+# packages/logger/src is intentionally NOT excluded: it contains zero console.*
+# writers (verified), so the default scan keeps it honest.
+packages/graphql/codegen.ts
+packages/temporal/scripts/
