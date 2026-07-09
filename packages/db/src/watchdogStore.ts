@@ -138,6 +138,17 @@ export function createWatchdogHealStateStore(
           },
         })
     },
+
+    async resetRecreations(scheduleId: string): Promise<void> {
+      // Clear the recreate breaker: zero the counter it compares against and drop
+      // its page flag. lastRecreatedAt is preserved for audit. Used by the operator
+      // Recreate action (manual reset) and by the healthy-verdict episode reset.
+      const clean = { recreations: 0, unhealthy: false }
+      await db
+        .insert(table)
+        .values({ scheduleId, ...clean })
+        .onConflictDoUpdate({ target: table.scheduleId, set: clean })
+    },
   }
 }
 

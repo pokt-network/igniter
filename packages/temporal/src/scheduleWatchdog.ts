@@ -75,6 +75,8 @@ export interface WatchdogStateStore {
   resetOnRecreate(scheduleId: string): Promise<void>
   resetLadder(scheduleId: string, lastActionCount: number): Promise<void>
   recordRecreate(scheduleId: string): Promise<void>
+  /** Clear the recreate breaker (recreations=0, unhealthy=false; keeps lastRecreatedAt). Operator Recreate + episode reset. */
+  resetRecreations(scheduleId: string): Promise<void>
 }
 
 export function defaultHealState(scheduleId: string): HealState {
@@ -283,6 +285,7 @@ async function recreateCorrupt(
   entry: WatchdogEntry,
   logger: Logger,
   store?: WatchdogStateStore,
+  describeDeadlineMs = 5_000,
 ): Promise<void> {
   logger.error({ scheduleId: entry.scheduleId }, 'Schedule corrupt (workflow task in failed state); deleting and recreating')
   try {
@@ -298,7 +301,9 @@ async function recreateCorrupt(
       // the write-ahead recordRecreate keeps this attempt counted toward the
       // recreate breaker instead of marking a non-heal as 'healed'.
       try {
-        await client.schedule.getHandle(entry.scheduleId).describe()
+        // Bound this verify like tickOne's describe: a hung RPC here would stall
+        // the sequential watchdog loop (L1).
+        await withDeadline(client.schedule.getHandle(entry.scheduleId).describe(), describeDeadlineMs)
       } catch (verifyErr) {
         logger.warn(
           { err: verifyErr, scheduleId: entry.scheduleId },
@@ -320,7 +325,7 @@ async function recreateCorrupt(
  * any other error -> rethrow. `store` (watchdog paths only) enables heal-state
  * bookkeeping on a corrupt recreate.
  */
-export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger, store?: WatchdogStateStore): Promise<void> {
+export async function ensureSchedule(client: Client, entry: WatchdogEntry, logger: Logger, store?: WatchdogStateStore, describeDeadlineMs?: number): Promise<void> {
   const handle = client.schedule.getHandle(entry.scheduleId)
 
   const createFresh = async () => {
@@ -345,7 +350,7 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
       return
     }
     if (isCorruptSchedule(e)) {
-      await recreateCorrupt(client, handle, entry, logger, store)
+      await recreateCorrupt(client, handle, entry, logger, store, describeDeadlineMs)
       return
     }
     // A transient RPC blip must NOT abort bootstrap — leave reconciliation for
@@ -374,7 +379,7 @@ export async function ensureSchedule(client: Client, entry: WatchdogEntry, logge
       // The scheduler workflow can corrupt between describe() and update() —
       // same reaction as everywhere a schedule RPC surfaces this state.
       if (isCorruptSchedule(e)) {
-        await recreateCorrupt(client, handle, entry, logger, store)
+        await recreateCorrupt(client, handle, entry, logger, store, describeDeadlineMs)
         return
       }
       // A transient failure to apply drift is not fatal — the schedule keeps
@@ -441,7 +446,7 @@ export async function healSchedule(
         // update() goes through the same broken scheduler workflow — no ladder
         // step can ever succeed. Recreate now; no attempt consumed (recreate is
         // the terminal action, same contract as the NOT_FOUND path).
-        await recreateCorrupt(client, handle, entry, logger, store)
+        await recreateCorrupt(client, handle, entry, logger, store, config.describeDeadlineMs)
         return { nextBackoffMs }
       } else {
         const row = await store.bumpUnstuck(entry.scheduleId)
@@ -450,7 +455,7 @@ export async function healSchedule(
       }
     }
   } else {
-    await ensureSchedule(client, entry, logger, store) // create only if NOT_FOUND or corrupt (D4)
+    await ensureSchedule(client, entry, logger, store, config.describeDeadlineMs) // create only if NOT_FOUND or corrupt (D4)
     await store.bumpInjectedTrigger(entry.scheduleId, now) // WRITE-AHEAD before the effect (D3)
     try {
       await handle.trigger() // one compensating run
@@ -616,7 +621,7 @@ export class ScheduleWatchdog {
           if (!(await this.gateRecreate(entry, state, now))) return
           logger.warn({ scheduleId: entry.scheduleId }, 'Schedule NOT_FOUND; recreating')
           await store.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
-          await ensureSchedule(client, entry, logger, store)
+          await ensureSchedule(client, entry, logger, store, config.describeDeadlineMs)
           await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
         } else {
           await store.setObservedUnhealthy(entry.scheduleId, true)
@@ -629,7 +634,7 @@ export class ScheduleWatchdog {
       if (isCorruptSchedule(e)) {
         if (config.mode === 'enforce') {
           if (!(await this.gateRecreate(entry, state, now))) return
-          await ensureSchedule(client, entry, logger, store)
+          await ensureSchedule(client, entry, logger, store, config.describeDeadlineMs)
         } else {
           await store.setObservedUnhealthy(entry.scheduleId, true)
         }
@@ -655,11 +660,17 @@ export class ScheduleWatchdog {
           logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing observed_unhealthy latch')
           await store.setObservedUnhealthy(entry.scheduleId, false)
         }
-        // A schedule that describes healthy again is no longer corrupt — clear the
-        // recreate breaker's page flag and its backoff gate so a genuinely-recovered
-        // schedule recovers its status (recreations stays: it is the cumulative
-        // audit counter the breaker compares against, reset only by operator action).
-        if (state.unhealthy) {
+        // A schedule that describes healthy again is no longer corrupt — reset the
+        // recreate breaker for this episode: reaching healthy proves recreate worked,
+        // so zero recreations (keeping lastRecreatedAt for audit) and clear the page
+        // flag + backoff gate. Episode-scoped, not lifetime, so a handful of
+        // months-apart single-recreate healings never permanently exhaust the cap
+        // (M1/#279). resetRecreations also clears unhealthy; guard on recreations>0
+        // to skip a needless write when the breaker was never touched.
+        if (state.recreations > 0) {
+          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; resetting recreate breaker (episode)')
+          await store.resetRecreations(entry.scheduleId)
+        } else if (state.unhealthy) {
           logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing unhealthy flag')
           await store.setUnhealthy(entry.scheduleId, false)
         }

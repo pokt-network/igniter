@@ -72,7 +72,10 @@ jest.mock('@/lib/dal/watchdogHealState', () => ({
   listWatchdogHealState: jest.fn().mockResolvedValue([
     { scheduleId: 'GovernanceSync-scheduled', unstucks: 4, injectedTriggers: 0, lastHealTriggerAt: null, lastActionCount: 0, unhealthy: true, observedUnhealthy: false },
   ]),
+  resetWatchdogRecreations: jest.fn().mockResolvedValue(undefined),
 }))
+import { resetWatchdogRecreations } from '@/lib/dal/watchdogHealState'
+const resetRecreations = resetWatchdogRecreations as jest.Mock
 
 import {
   ListWorkflows,
@@ -91,6 +94,7 @@ describe('provider Workflows actions', () => {
     schedulePause.mockClear()
     scheduleUnpause.mockClear()
     scheduleDelete.mockClear()
+    resetRecreations.mockClear()
     scheduleDelete.mockResolvedValue(undefined)
     schedulePause.mockResolvedValue(undefined)
     auth.mockResolvedValue({ user: { role: UserRole.Owner } })
@@ -150,6 +154,16 @@ describe('provider Workflows actions', () => {
     const res = await RecreateSchedule('GovernanceSync-scheduled')
     expect(res.success).toBe(true)
     expect(scheduleDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('RecreateSchedule resets the recreate breaker BEFORE deleting (H1)', async () => {
+    const order: string[] = []
+    resetRecreations.mockImplementationOnce(async () => { order.push('reset') })
+    scheduleDelete.mockImplementationOnce(async () => { order.push('delete') })
+    const res = await RecreateSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+    expect(resetRecreations).toHaveBeenCalledWith('GovernanceSync-scheduled')
+    expect(order).toEqual(['reset', 'delete'])
   })
 
   it('RecreateSchedule treats NOT_FOUND as success (idempotent)', async () => {

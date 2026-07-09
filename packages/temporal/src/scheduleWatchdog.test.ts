@@ -37,6 +37,7 @@ function makeStore(state?: HealState): WatchdogStateStore {
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
     recordRecreate: jest.fn(),
+    resetRecreations: jest.fn(),
   }
 }
 
@@ -272,12 +273,64 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
   })
 
-  it('healthy verdict after corrupt episode: clears the unhealthy flag', async () => {
+  it('healthy verdict after corrupt episode: resets the recreate breaker (episode-scoped, M1)', async () => {
     const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
     const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3 })
     const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
     await wd.tick()
+    // resetRecreations zeroes the counter AND clears unhealthy in one write; the
+    // separate setUnhealthy(false) is not used when recreations>0.
+    expect(store.resetRecreations).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('healthy verdict with recreations=0: skips the breaker-reset write', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId) }) // recreations 0, healthy
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('healthy verdict, recreations=0 but unhealthy latched: clears just the unhealthy flag', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true }) // recreations 0
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
     expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, false)
+  })
+
+  it('capped schedule after resetRecreations: next NOT_FOUND tick recreates again (operator reset, H1)', async () => {
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
+    // Breaker had tripped (recreations at cap) but the operator Recreate reset it to 0.
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), recreations: 0 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('verify-describe after AlreadyRunning is deadline-bounded (L1): a hung re-describe is a verify-failure, no resetOnRecreate', async () => {
+    const del = jest.fn()
+    const create = jest.fn().mockRejectedValue(new ScheduleAlreadyRunning('dup', entry.scheduleId))
+    const handle = {
+      // corrupt for tickOne + ensureSchedule describes; the post-swallow verify hangs forever.
+      describe: jest.fn()
+        .mockRejectedValueOnce(corruptErr())
+        .mockRejectedValueOnce(corruptErr())
+        .mockImplementation(() => new Promise(() => {})), // never resolves
+      update: jest.fn(), trigger: jest.fn(), delete: del,
+    }
+    const store = makeStore()
+    const fastConfig = { ...config, describeDeadlineMs: 20 }
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config: fastConfig, logger })
+    await wd.tick()
+    // The bounded verify rejects -> treated as verify-failure -> NOT marked healed.
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.resetOnRecreate).not.toHaveBeenCalled()
   })
 
   it('describe() transient: skips, never treated as stale, never aborts pass', async () => {

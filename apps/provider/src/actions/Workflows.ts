@@ -2,7 +2,7 @@
 
 import { type ActionResult, withRequireOwner } from '@/lib/utils/actionUtils'
 import { getTemporalClient } from '@/lib/temporal'
-import { listWatchdogHealState } from '@/lib/dal/watchdogHealState'
+import { listWatchdogHealState, resetWatchdogRecreations } from '@/lib/dal/watchdogHealState'
 import {
   listWorkflowViews,
   mapScheduleToHealth,
@@ -126,10 +126,17 @@ export async function ResumeSchedule(scheduleId: string): Promise<ActionResult<v
  * "Recreate" is delete-only on purpose: canonical schedule config lives in the
  * workflows worker (bootstrap + watchdog entries), which recreates a missing
  * schedule with fresh heal counters within one watchdog tick (~30s).
+ *
+ * Reset the recreate breaker FIRST: manual Recreate is the documented operator
+ * reset for a tripped breaker. Without it, delete → the watchdog's next tick sees
+ * NOT_FOUND → the still-tripped breaker gates the recreate → the schedule stays
+ * deleted forever (H1). Reset-before-delete is the correct order since the reset
+ * only zeroes counters; the delete is what the watchdog reacts to.
  */
 export async function RecreateSchedule(scheduleId: string): Promise<ActionResult<void>> {
   return withRequireOwner(async () => {
     const client = getTemporalClient()
+    await resetWatchdogRecreations(scheduleId)
     try {
       await client.schedule.getHandle(scheduleId).delete()
     } catch (e) {

@@ -87,7 +87,10 @@ const fakeClient = {
 jest.mock('@/lib/temporal', () => ({ getTemporalClient: () => fakeClient }))
 jest.mock('@/lib/dal/watchdogHealState', () => ({
   listWatchdogHealState: jest.fn().mockResolvedValue([]),
+  resetWatchdogRecreations: jest.fn().mockResolvedValue(undefined),
 }))
+import { resetWatchdogRecreations } from '@/lib/dal/watchdogHealState'
+const resetRecreations = resetWatchdogRecreations as jest.Mock
 
 import {
   ListWorkflows,
@@ -106,6 +109,7 @@ describe('middleman Workflows actions', () => {
     schedulePause.mockClear()
     scheduleUnpause.mockClear()
     scheduleDelete.mockClear()
+    resetRecreations.mockClear()
     scheduleDelete.mockResolvedValue(undefined)
     schedulePause.mockResolvedValue(undefined)
     requireAdmin.mockResolvedValue(undefined)
@@ -162,6 +166,16 @@ describe('middleman Workflows actions', () => {
     const res = await RecreateSchedule('GovernanceSync-scheduled')
     expect(res.success).toBe(true)
     expect(scheduleDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('RecreateSchedule resets the recreate breaker BEFORE deleting (H1)', async () => {
+    const order: string[] = []
+    resetRecreations.mockImplementationOnce(async () => { order.push('reset') })
+    scheduleDelete.mockImplementationOnce(async () => { order.push('delete') })
+    const res = await RecreateSchedule('GovernanceSync-scheduled')
+    expect(res.success).toBe(true)
+    expect(resetRecreations).toHaveBeenCalledWith('GovernanceSync-scheduled')
+    expect(order).toEqual(['reset', 'delete'])
   })
 
   it('RecreateSchedule treats NOT_FOUND as success (idempotent)', async () => {

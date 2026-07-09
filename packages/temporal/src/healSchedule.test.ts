@@ -54,6 +54,7 @@ function makeStore(over: Partial<HealState> = {}) {
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
     recordRecreate: jest.fn(),
+    resetRecreations: jest.fn(),
   }
   return { store, order }
 }
