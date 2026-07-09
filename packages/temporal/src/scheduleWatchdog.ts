@@ -660,23 +660,21 @@ export class ScheduleWatchdog {
           logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing observed_unhealthy latch')
           await store.setObservedUnhealthy(entry.scheduleId, false)
         }
-        // A schedule that describes healthy again is no longer corrupt — reset the
-        // recreate breaker for this episode: reaching healthy proves recreate worked,
-        // so zero recreations (keeping lastRecreatedAt for audit) and clear the page
-        // flag + backoff gate. Episode-scoped, not lifetime, so a handful of
-        // months-apart single-recreate healings never permanently exhaust the cap
-        // (M1/#279). resetRecreations also clears unhealthy; guard on recreations>0
-        // to skip a needless write when the breaker was never touched.
-        if (state.recreations > 0) {
-          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; resetting recreate breaker (episode)')
-          await store.resetRecreations(entry.scheduleId)
-        } else if (state.unhealthy) {
-          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing unhealthy flag')
-          await store.setUnhealthy(entry.scheduleId, false)
-        }
+        // A merely-DESCRIBABLE healthy verdict does NOT prove recreate cured anything —
+        // a freshly recreated schedule reports healthy during infancy grace (minAgeMs),
+        // before it has ever fired on its own. Resetting the recreate breaker on that
+        // alone re-opens the exact incident it exists to stop: a deterministically
+        // broken scheduler recreate-loops forever at backoff pace, healthy every tick,
+        // cap never trips. Only a CONFIRMED AUTONOMOUS FIRE is proof recreate worked —
+        // same bar the heal ladder already holds itself to (F6) — so both breaker
+        // resets live in that single gated branch below (M1/#279, infancy-grace fix).
         this.recreateEligibleAt.delete(entry.scheduleId)
-        if ((state.unstucks > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
+        if ((state.unstucks > 0 || state.unhealthy || state.recreations > 0) && hasAutonomousFire(desc, state)) {
           logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
+          if (state.recreations > 0) {
+            logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting recreate breaker (episode)')
+            await store.resetRecreations(entry.scheduleId)
+          }
           await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)
           this.nextEligibleAt.delete(entry.scheduleId)
         }

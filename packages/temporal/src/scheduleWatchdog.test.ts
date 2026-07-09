@@ -273,15 +273,28 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
   })
 
-  it('healthy verdict after corrupt episode: resets the recreate breaker (episode-scoped, M1)', async () => {
-    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
-    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3 })
+  it('healthy + autonomous fire after corrupt episode: resets the recreate breaker (episode-scoped, M1)', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 15 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3, lastActionCount: 10 })
     const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
     await wd.tick()
     // resetRecreations zeroes the counter AND clears unhealthy in one write; the
     // separate setUnhealthy(false) is not used when recreations>0.
     expect(store.resetRecreations).toHaveBeenCalledWith(entry.scheduleId)
     expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('healthy verdict WITHOUT autonomous fire, recreations>0: does NOT reset the breaker (infancy-grace guard)', async () => {
+    // numActionsTaken === lastActionCount: a recreated schedule describing healthy
+    // during infancy grace, before it has ever fired on its own. Resetting here would
+    // re-open the silent recreate-loop this breaker exists to stop.
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 10 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3, lastActionCount: 10 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).not.toHaveBeenCalled()
   })
 
   it('healthy verdict with recreations=0: skips the breaker-reset write', async () => {
@@ -293,13 +306,25 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.setUnhealthy).not.toHaveBeenCalled()
   })
 
-  it('healthy verdict, recreations=0 but unhealthy latched: clears just the unhealthy flag', async () => {
-    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
-    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true }) // recreations 0
+  it('healthy + autonomous fire, recreations=0 but unhealthy latched: clears the flag via ladder reset', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 15 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, lastActionCount: 10 }) // recreations 0
     const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
     await wd.tick()
     expect(store.resetRecreations).not.toHaveBeenCalled()
-    expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, false)
+    // unhealthy is now cleared by resetLadder (bundled with the ladder reset),
+    // not by a standalone setUnhealthy(false) call.
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 15)
+  })
+
+  it('healthy verdict WITHOUT autonomous fire, unhealthy latched: does NOT clear the flag (infancy-grace guard)', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 10 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, lastActionCount: 10 }) // recreations 0
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).not.toHaveBeenCalled()
   })
 
   it('capped schedule after resetRecreations: next NOT_FOUND tick recreates again (operator reset, H1)', async () => {
