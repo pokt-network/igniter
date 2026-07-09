@@ -25,6 +25,7 @@ const config: WatchdogConfig = {
   missedFirings: 5,
   maxHealAttempts: 5,
   recreateAfter: 2,
+  maxRecreateAttempts: 3,
   minGraceMs: 90_000,
   graceCapMs: 600_000,
   backoffBaseMs: 30_000,

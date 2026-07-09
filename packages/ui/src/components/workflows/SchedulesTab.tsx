@@ -17,11 +17,12 @@ import type { ActionResult } from '../../lib/actionResult';
 import { detailHref, formatDateTime, formatRelative, statusBadgeVariant } from './columns';
 import type { WorkflowsActions } from './types';
 
-const STATE_VARIANT: Record<ScheduleHealthState, 'success' | 'secondary' | 'warning' | 'destructive'> = {
+const STATE_VARIANT: Record<ScheduleHealthState, 'success' | 'secondary' | 'warning' | 'destructive' | 'outline'> = {
   healthy: 'success',
   paused: 'secondary',
   stale: 'warning',
   unhealthy: 'destructive',
+  unknown: 'outline',
 };
 
 const LAG_WARN_MS = 30_000;

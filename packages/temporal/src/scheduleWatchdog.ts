@@ -49,6 +49,8 @@ export interface WatchdogConfig {
   missedFirings: number
   maxHealAttempts: number
   recreateAfter: number
+  /** Breaker for the destructive delete+recreate paths (corrupt/NOT_FOUND) — distinct from recreateAfter, the ladder's stale-escalation knob. */
+  maxRecreateAttempts: number
   minGraceMs: number
   graceCapMs: number
   backoffBaseMs: number
@@ -123,6 +125,7 @@ export function parseWatchdogConfig(logger: Logger): WatchdogConfig {
     missedFirings: count('SCHEDULE_WATCHDOG_MISSED_FIRINGS', 5),
     maxHealAttempts: count('SCHEDULE_WATCHDOG_MAX_HEAL_ATTEMPTS', 5),
     recreateAfter: count('SCHEDULE_WATCHDOG_RECREATE_AFTER', 2),
+    maxRecreateAttempts: count('SCHEDULE_WATCHDOG_MAX_RECREATE_ATTEMPTS', 3),
     minGraceMs: 90_000,
     graceCapMs: 600_000,
     backoffBaseMs: 30_000,
@@ -289,6 +292,20 @@ async function recreateCorrupt(
       await client.schedule.create(createOptions(entry))
     } catch (createErr) {
       if (!(createErr instanceof ScheduleAlreadyRunning)) throw createErr
+      // ScheduleAlreadyRunning right after delete() usually means the delete has
+      // not propagated yet — the "existing" schedule may STILL be the corrupt one.
+      // Verify with one describe(); if it still fails, do NOT reset heal counters:
+      // the write-ahead recordRecreate keeps this attempt counted toward the
+      // recreate breaker instead of marking a non-heal as 'healed'.
+      try {
+        await client.schedule.getHandle(entry.scheduleId).describe()
+      } catch (verifyErr) {
+        logger.warn(
+          { err: verifyErr, scheduleId: entry.scheduleId },
+          'ScheduleAlreadyRunning after delete but re-describe still fails; not marking healed (retry next tick)',
+        )
+        return
+      }
     }
     await store?.resetOnRecreate(entry.scheduleId)
   } catch (healErr) {
@@ -498,6 +515,8 @@ export class ScheduleWatchdog {
   private timer: NodeJS.Timeout | null = null
   private inFlight: Promise<void> = Promise.resolve()
   private readonly nextEligibleAt = new Map<string, number>()
+  /** Sibling of nextEligibleAt for the destructive recreate paths (corrupt/NOT_FOUND), so the heal ladder's backoff/reset never clobbers it. */
+  private readonly recreateEligibleAt = new Map<string, number>()
   private lastHeartbeatAt = 0
 
   constructor(private readonly deps: ScheduleWatchdogDeps) {}
@@ -550,6 +569,38 @@ export class ScheduleWatchdog {
     this.lastHeartbeatAt = Date.now()
   }
 
+  /**
+   * Cap + exponential-backoff gate for the destructive delete+recreate paths
+   * (corrupt / NOT_FOUND). Mirrors the heal ladder's breaker+backoff mechanics
+   * but on its own counter (recreations) and its own eligibility map: without
+   * it an incurable corruption thrashes delete+recreate every tick forever,
+   * wiping run history while the UI renders green. Returns true when a
+   * recreate may proceed (and arms the next backoff window).
+   */
+  private async gateRecreate(entry: WatchdogEntry, state: HealState, now: Date): Promise<boolean> {
+    const { store, config, logger } = this.deps
+    if (state.recreations >= config.maxRecreateAttempts) {
+      if (!state.unhealthy) {
+        await store.setUnhealthy(entry.scheduleId, true)
+        logger.error(
+          { scheduleId: entry.scheduleId, recreations: state.recreations, cap: config.maxRecreateAttempts },
+          'Corrupt schedule not curable by recreate; marked unhealthy, halting recreate loop (page-worthy)',
+        )
+      } else {
+        logger.debug({ scheduleId: entry.scheduleId }, 'Recreate breaker tripped; skipping (already unhealthy)')
+      }
+      return false
+    }
+    const eligibleAt = this.recreateEligibleAt.get(entry.scheduleId) ?? 0
+    if (now.getTime() < eligibleAt) {
+      logger.debug({ scheduleId: entry.scheduleId }, 'Recreate within backoff; skipping')
+      return false
+    }
+    const backoffMs = Math.min(config.backoffBaseMs * 2 ** state.recreations, config.backoffCapMs)
+    this.recreateEligibleAt.set(entry.scheduleId, now.getTime() + backoffMs)
+    return true
+  }
+
   private async tickOne(entry: WatchdogEntry, now: Date): Promise<void> {
     const { client } = this.deps.client
     const { store, config, logger } = this.deps
@@ -562,9 +613,10 @@ export class ScheduleWatchdog {
     } catch (e) {
       if (isNotFound(e)) {
         if (config.mode === 'enforce') {
+          if (!(await this.gateRecreate(entry, state, now))) return
           logger.warn({ scheduleId: entry.scheduleId }, 'Schedule NOT_FOUND; recreating')
           await store.recordRecreate(entry.scheduleId) // WRITE-AHEAD before the effect
-          await ensureSchedule(client, entry, logger)
+          await ensureSchedule(client, entry, logger, store)
           await store.resetOnRecreate(entry.scheduleId) // S6: re-baseline after numActionsTaken resets to 0
         } else {
           await store.setObservedUnhealthy(entry.scheduleId, true)
@@ -576,6 +628,7 @@ export class ScheduleWatchdog {
       // work — ensureSchedule funnels to delete+recreate with bookkeeping.
       if (isCorruptSchedule(e)) {
         if (config.mode === 'enforce') {
+          if (!(await this.gateRecreate(entry, state, now))) return
           await ensureSchedule(client, entry, logger, store)
         } else {
           await store.setObservedUnhealthy(entry.scheduleId, true)
@@ -602,6 +655,15 @@ export class ScheduleWatchdog {
           logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing observed_unhealthy latch')
           await store.setObservedUnhealthy(entry.scheduleId, false)
         }
+        // A schedule that describes healthy again is no longer corrupt — clear the
+        // recreate breaker's page flag and its backoff gate so a genuinely-recovered
+        // schedule recovers its status (recreations stays: it is the cumulative
+        // audit counter the breaker compares against, reset only by operator action).
+        if (state.unhealthy) {
+          logger.info({ scheduleId: entry.scheduleId }, 'Healthy verdict; clearing unhealthy flag')
+          await store.setUnhealthy(entry.scheduleId, false)
+        }
+        this.recreateEligibleAt.delete(entry.scheduleId)
         if ((state.unstucks > 0 || state.unhealthy) && hasAutonomousFire(desc, state)) {
           logger.info({ scheduleId: entry.scheduleId }, 'Autonomous fire observed; resetting heal ladder (F6)')
           await store.resetLadder(entry.scheduleId, desc.info.numActionsTaken)

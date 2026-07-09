@@ -33,6 +33,7 @@ describe('parseWatchdogConfig', () => {
       missedFirings: 5,
       maxHealAttempts: 5,
       recreateAfter: 2,
+      maxRecreateAttempts: 3,
     })
   })
 

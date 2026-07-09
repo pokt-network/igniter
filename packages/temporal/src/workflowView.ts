@@ -67,7 +67,7 @@ export interface WatchdogHealState {
   lastRecreatedAt: string | null
 }
 
-export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy'
+export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy' | 'unknown'
 
 export type ScheduleFireView = {
   scheduledAt: string
@@ -296,6 +296,10 @@ export function mapScheduleToHealth(
   if (paused) state = 'paused'
   else if (heal?.unhealthy || heal?.observedUnhealthy) state = 'unhealthy'
   else if (liveness === 'stale' || (heal && heal.unstucks > 0)) state = 'stale'
+  // No live verdict at all (describe() failed -> summary-only fallback): render
+  // 'unknown', NOT green — a corrupt schedule lands exactly here (#323 review).
+  // liveness === 'unknown' (cron/non-interval) still degrades to the counters above.
+  else if (liveness === undefined) state = 'unknown'
   else state = 'healthy'
 
   // Schedule listing is eventual-consistent (SDK doc comment on ScheduleSummary), so
