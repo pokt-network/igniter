@@ -8,7 +8,12 @@ import {
 } from '@logtape/logtape'
 import { getPrettyFormatter } from '@logtape/pretty'
 import { redactByField } from '@logtape/redaction'
-import { getRedactedConsoleSink, SECRET_FIELD_PATTERNS } from './redaction'
+import {
+  getRedactedConsoleSink,
+  redactSinkByPattern,
+  SECRET_FIELD_PATTERNS,
+  SECRET_VALUE_PATTERNS,
+} from './redaction'
 import { getClientSink, minimalSink } from './client'
 import { createContextStorage } from './context-storage'
 
@@ -66,6 +71,15 @@ function setBaseFields(fields: Record<string, unknown>): void {
  * `./context-storage` (Edge supports AsyncLocalStorage natively) with a
  * package.json `browser`-field substitution so client bundles get a no-op —
  * no dynamic resolution anywhere, every bundler and runtime satisfied.
+ *
+ * ACCEPTED LIMITATION (PR #322 review, LOW): the substitution rides the legacy
+ * top-level `browser` field, not an `exports` condition — `exports` cannot
+ * remap this file's INTERNAL relative import, and routing it through a
+ * self-referencing subpath doesn't typecheck under this package's classic
+ * `moduleResolution: node`. Every bundler in use (webpack, Turbopack) and the
+ * mainstream rest (Vite, esbuild, Metro) honor the `browser` field alongside
+ * `exports`; a resolver that ignored it would fail the client build LOUDLY on
+ * `node:async_hooks`, never silently misbehave.
  */
 function loadContextLocalStorage(): ContextLocalStorage<Record<string, unknown>> | undefined {
   try {
@@ -101,10 +115,13 @@ export async function configureLogging(opts: ConfigureOpts = {}): Promise<void> 
         })
     await configure({
       reset: true,
-      // redactByField defensively drops secret props on the client too.
+      // Same two layers as the node path: redactByField drops secret props, and
+      // redactSinkByPattern scrubs value-shaped secrets interpolated into the
+      // message — browser sinks have no TextFormatter stage for the library's
+      // redactByPattern to wrap, so the record-level wrapper keeps parity.
       sinks: {
-        browser: redactByField(browserBase, SECRET_FIELD_PATTERNS),
-        client: redactByField(getClientSink(), SECRET_FIELD_PATTERNS),
+        browser: redactByField(redactSinkByPattern(browserBase, SECRET_VALUE_PATTERNS), SECRET_FIELD_PATTERNS),
+        client: redactByField(redactSinkByPattern(getClientSink(), SECRET_VALUE_PATTERNS), SECRET_FIELD_PATTERNS),
       },
       loggers: [
         { category: [], sinks: ['browser', 'client'], lowestLevel: level },

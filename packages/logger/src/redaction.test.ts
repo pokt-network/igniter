@@ -4,9 +4,11 @@ import {
   getRedactedConsoleSink,
   jsonLinesNumericFormatter,
   redactObject,
+  redactSinkByPattern,
   redactStakeSupplierParams,
   redactSupplierServiceConfig,
   SECRET_FIELD_PATTERNS,
+  SECRET_VALUE_PATTERNS,
 } from './redaction'
 
 const SECRET = '[REDACTED]'
@@ -36,6 +38,19 @@ describe('redactObject', () => {
     expect(out.a.b.privateKey).toBe(SECRET)
     expect((out.list[0] as Record<string, unknown>).password).toBe(SECRET)
     expect((out.list[1] as Record<string, unknown>).ok).toBe(1)
+  })
+
+  it('redacts channel + encryption secrets (botToken, webhookUrl, encryptionKey + snake_case)', () => {
+    const out = redactObject({
+      botToken: 'bt', bot_token: 'bt2',
+      webhookUrl: 'https://hooks.example/T/B/x', webhook_url: 'wh2',
+      encryptionKey: 'ek', encryption_key: 'ek2',
+      url: 'https://public.example', // plain url must survive
+    })
+    for (const k of ['botToken', 'bot_token', 'webhookUrl', 'webhook_url', 'encryptionKey', 'encryption_key']) {
+      expect((out as Record<string, unknown>)[k]).toBe(SECRET)
+    }
+    expect(out.url).toBe('https://public.example')
   })
 
   it('redacts smtp.pass and cookie/set-cookie', () => {
@@ -234,6 +249,67 @@ describe('getRedactedConsoleSink', () => {
     expect(out).not.toContain('hunter2')
     expect(out).not.toContain('abc.def')
     expect(out).toContain('passport=ok') // non-secret look-alike must survive untouched
+  })
+
+  it('scrubs a lowercase "authorization: bearer <tok>" header dump (case-insensitive backstop)', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) },
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).info('header dump: authorization: bearer opaque0token9value')
+    const out = captured.join('\n')
+    expect(out).not.toContain('opaque0token9value')
+  })
+})
+
+describe('redactSinkByPattern', () => {
+  const collect = () => {
+    const records: LogRecord[] = []
+    const sink = (record: LogRecord) => { records.push(record) }
+    return { records, sink }
+  }
+  const fakeRecord = (message: readonly unknown[], properties: Record<string, unknown> = {}): LogRecord =>
+    ({
+      category: ['t'],
+      level: 'error',
+      timestamp: 0,
+      message,
+      rawMessage: '',
+      properties,
+    }) as unknown as LogRecord
+
+  it('scrubs value-shaped secrets interpolated into message text parts', () => {
+    const { records, sink } = collect()
+    redactSinkByPattern(sink, SECRET_VALUE_PATTERNS)(
+      fakeRecord(['login failed: password=hunter2 Authorization: Bearer abc.def', undefined]),
+    )
+    const text = records[0]!.message[0] as string
+    expect(text).not.toContain('hunter2')
+    expect(text).not.toContain('abc.def')
+    expect(text).toContain('password=[REDACTED]')
+  })
+
+  it('scrubs string property values, including nested ones', () => {
+    const { records, sink } = collect()
+    redactSinkByPattern(sink, SECRET_VALUE_PATTERNS)(
+      fakeRecord(['msg'], { note: 'password=pw1', nested: { dump: 'Bearer tok123' }, n: 42 }),
+    )
+    expect(records[0]!.properties.note).toBe('password=[REDACTED]')
+    expect((records[0]!.properties.nested as Record<string, unknown>).dump).toBe('Bearer [REDACTED]')
+    expect(records[0]!.properties.n).toBe(42)
+  })
+
+  it('leaves non-secret text and non-string values untouched', () => {
+    const { records, sink } = collect()
+    const err = new Error('passport=ok')
+    redactSinkByPattern(sink, SECRET_VALUE_PATTERNS)(
+      fakeRecord(['plain text', 7], { ok: true, err }),
+    )
+    expect(records[0]!.message[0]).toBe('plain text')
+    expect(records[0]!.message[1]).toBe(7)
+    expect(records[0]!.properties.ok).toBe(true)
+    expect(records[0]!.properties.err).toBe(err) // Errors pass through by reference
   })
 })
 

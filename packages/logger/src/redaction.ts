@@ -59,6 +59,12 @@ export const SECRET_FIELD_PATTERNS: (string | RegExp)[] = [
   /^cookie$/i,
   /^set[-_]?cookie$/i,
   /^signature$/i, // covers credentials.signature globally
+  // Notification-channel + crypto config secrets (defense-in-depth: channels are
+  // stored encrypted and encryptionKey only ever lives in process.env, but a
+  // debug dump of either must still come out scrubbed).
+  /^bot[_]?token$/i,
+  /^webhook[_]?url$/i,
+  /^encryption[_]?key$/i,
 ]
 
 /**
@@ -77,9 +83,14 @@ const PASSWORD_VALUE_PATTERN: RedactionPattern = {
   replacement: '$1$2' + REDACTED,
 }
 
-/** Free-text backstop for `Authorization: Bearer <token>` interpolated into logs. */
+/**
+ * Free-text backstop for `Authorization: Bearer <token>` interpolated into logs.
+ * Case-insensitive: a lowercase `authorization: bearer <tok>` header dump is the
+ * common shape from HTTP client debug output, and an opaque (non-JWT) token has
+ * no other backstop.
+ */
 const BEARER_TOKEN_PATTERN: RedactionPattern = {
-  pattern: /Bearer\s+[A-Za-z0-9._~+/=-]+/g,
+  pattern: /Bearer\s+[A-Za-z0-9._~+/=-]+/gi,
   replacement: 'Bearer ' + REDACTED,
 }
 
@@ -97,6 +108,55 @@ export const SECRET_VALUE_PATTERNS: RedactionPatterns = [
   PASSWORD_VALUE_PATTERN,
   BEARER_TOKEN_PATTERN,
 ]
+
+/**
+ * Record-level value-pattern scrub for sinks that never pass through a
+ * TextFormatter. `redactByPattern` (the library layer) wraps FORMATTERS, so it
+ * covers the node console path — but the browser sinks (minimalSink, and any
+ * future provider wired via setClientSink()) consume raw LogRecords and would
+ * ship interpolated secrets (`` `password=${pw}` ``) intact. This wrapper keeps
+ * both realms at parity: it applies the same SECRET_VALUE_PATTERNS to every
+ * string in the record's message parts and (recursively) its property values
+ * before delegating to the wrapped sink.
+ *
+ * Non-string leaves pass through by reference (an Error keeps its identity for
+ * downstream sinks); the field layer (redactByField) remains responsible for
+ * secret-named props.
+ */
+export function redactSinkByPattern(sink: Sink, patterns: RedactionPatterns): Sink {
+  const scrub = (text: string): string => {
+    let out = text
+    for (const { pattern, replacement } of patterns) {
+      // RedactionPattern.replacement is string | function — both are valid
+      // String.prototype.replace arguments; TS just can't pick the overload.
+      out = out.replace(pattern, replacement as string)
+    }
+    return out
+  }
+  const scrubValue = (value: unknown, depth: number, seen: WeakSet<object>): unknown => {
+    if (typeof value === 'string') return scrub(value)
+    if (depth > 20 || value === null || typeof value !== 'object') return value
+    if (seen.has(value)) return value // cycle: leave as-is, field layer already ran
+    seen.add(value)
+    if (Array.isArray(value)) return value.map((v) => scrubValue(v, depth + 1, seen))
+    if (value instanceof Error || Object.getPrototypeOf(value) !== Object.prototype) {
+      return value // keep class instances (Error, Date, ...) intact by reference
+    }
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = scrubValue(v, depth + 1, seen)
+    }
+    return out
+  }
+  return (record: LogRecord) => {
+    const seen = new WeakSet<object>()
+    sink({
+      ...record,
+      message: record.message.map((part) => scrubValue(part, 0, seen)) as LogRecord['message'],
+      properties: scrubValue(record.properties, 0, seen) as LogRecord['properties'],
+    })
+  }
+}
 
 // DEFERRED (spec §7 optional, intentionally NOT wired in #219):
 // `@logtape/redaction`'s `createHmacPseudonymizer` + the async `redactByFieldAsync`

@@ -19,8 +19,12 @@ cd "$(dirname "$0")/.." || exit 2
 
 EXCLUSIONS_FILE="scripts/no-console-exclusions.txt"
 # Call-shape only: requires an opening paren, so it won't match prose
-# mentions of "console." in comments/docs.
-PATTERN='console\.(log|error|warn|info|debug|trace)[[:space:]]*\('
+# mentions of "console." in comments/docs. Full console method alternation —
+# not just the log-level six — so console.table()/dir()/assert()/group()/...
+# can't drift in. KNOWN BLIND SPOTS (accepted): bracket access console['log'],
+# aliasing (const c = console), a call split across lines, and .js/.mjs/.jsx
+# sources (repo source is TS-only; revisit if that changes).
+PATTERN='console\.(log|error|warn|info|debug|trace|table|dir|dirxml|assert|group|groupCollapsed|groupEnd|count|countReset|time|timeEnd|timeLog|profile|profileEnd)[[:space:]]*\('
 
 # Scan roots: every app + package source dir.
 roots=()
@@ -63,9 +67,19 @@ case "$rc" in
     ;;
 esac
 
-# Drop lines under an excluded path prefix.
+# Drop lines under an excluded path prefix. Hits are `path:lineno:content` —
+# anchor the match to the PATH FIELD ONLY (prefix match on column 1). A plain
+# `grep -vFf` would match the exclusion substring anywhere in the line,
+# including code content (e.g. a string literal mentioning an excluded path),
+# silently dropping a real violation.
 if [ "${#excludes[@]}" -gt 0 ]; then
-  hits=$(printf '%s\n' "$hits" | grep -vFf <(printf '%s\n' "${excludes[@]}"))
+  hits=$(printf '%s\n' "$hits" | awk -F: '
+    NR == FNR { if ($0 != "") ex[++n] = $0; next }
+    {
+      for (i = 1; i <= n; i++) if (index($1, ex[i]) == 1) next
+      print
+    }
+  ' <(printf '%s\n' "${excludes[@]}") -)
 fi
 
 if [ -z "$hits" ]; then
