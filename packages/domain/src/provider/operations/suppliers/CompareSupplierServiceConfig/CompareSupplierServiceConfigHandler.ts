@@ -65,11 +65,11 @@ export class CompareSupplierServiceConfigHandler {
 
     const canonicalA = this.canonicalise(serviceConfigSetA);
 
-    this.logger.debug(`CompareSupplierServiceConfigHandler: Canonicalised service config set A: ${JSON.stringify(canonicalA)}`);
+    this.logger.debug('CompareSupplierServiceConfigHandler: Canonicalised service config set A', { canonicalA });
 
     const canonicalB = this.canonicalise(serviceConfigSetB);
 
-    this.logger.debug('CompareSupplierServiceConfigHandler: Canonicalized service config set B:', canonicalB);
+    this.logger.debug('CompareSupplierServiceConfigHandler: Canonicalized service config set B', { canonicalB });
 
     if (canonicalA.length !== canonicalB.length) {
       this.logger.info(`CompareSupplierServiceConfigHandler: Execution ended. Service config sets have different lengths: ${ canonicalA.length}, ${canonicalB.length}`);

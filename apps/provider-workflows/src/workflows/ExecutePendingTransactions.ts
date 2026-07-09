@@ -13,7 +13,10 @@ export async function ExecutePendingTransactions() {
   })
 
   const txs = await listPending()
-  if (txs.length === 0) return
+  if (txs.length === 0) {
+    log.debug('ExecutePendingTransactions: no pending transactions')
+    return
+  }
 
   const limit = pLimit(MAX_CONCURRENT)
 

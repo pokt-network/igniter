@@ -27,7 +27,7 @@ const getTLSConfig = (logger: Logger) => {
     throw new Error('Missing TLS client cert/key paths')
   }
 
-  logger.info({ crtPath, keyPath, caPath }, 'Loading TLS config for Temporal client')
+  logger.info('Loading TLS config for Temporal client', { crtPath, keyPath, caPath })
 
   return {
     clientCertPair: {
@@ -56,7 +56,7 @@ export const getClient = async (logger: Logger): Promise<TemporalClient> => {
   const address = process.env.TEMPORAL_URL!
   const namespace = process.env.TEMPORAL_NAMESPACE!
 
-  logger.info({ address, namespace }, 'Connecting to Temporal...')
+  logger.info('Connecting to Temporal...', { address, namespace })
 
   const tls = getTLSConfig(logger)
 
@@ -97,7 +97,7 @@ export const createDedicatedClient = async (logger: Logger): Promise<TemporalCli
   const tls = getTLSConfig(logger)
   const connection = await Connection.connect({ address, tls })
   const client = new Client({ connection, namespace })
-  logger.info({ address, namespace }, 'Dedicated Temporal client initialized (watchdog)')
+  logger.info('Dedicated Temporal client initialized (watchdog)', { address, namespace })
   return {
     client,
     disconnect: async () => {

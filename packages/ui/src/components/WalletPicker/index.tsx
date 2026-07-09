@@ -22,6 +22,9 @@ import { copyToClipboard, getShortAddress } from "../../lib/utils";
 import { Checkbox } from '../checkbox'
 import { LoaderIcon } from '../../assets'
 import AvatarByString from "../AvatarByString";
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['ui', 'wallet-picker'])
 
 const latestSignedInIdentityKey = 'last-signed-in-identity'
 
@@ -501,7 +504,7 @@ function SignInStep({
           setStatus('auth-error')
         }
       } catch (e) {
-        console.log(e)
+        log.error('Failed to sign in with wallet', { address: connectedIdentity, error: e })
         if (e instanceof Error) {
           setStatus(e.message.includes('rejected') ? 'rejected' : 'error')
         } else {

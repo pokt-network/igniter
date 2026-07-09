@@ -26,7 +26,10 @@ export async function VerifyPendingTransactions() {
   })
 
   const txs = await listPendingWithHash()
-  if (txs.length === 0) return
+  if (txs.length === 0) {
+    log.debug('VerifyPendingTransactions: no pending transactions')
+    return
+  }
 
   const limit = pLimit(MAX_CONCURRENT)
   const results = await Promise.allSettled(

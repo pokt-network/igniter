@@ -16,6 +16,10 @@ import { Button } from '@igniter/ui/components/button'
 import { CheckSuccess, LoaderIcon, XIcon } from '@igniter/ui/assets'
 import { FileWarning } from 'lucide-react'
 import {isValidPrivateKey} from '@igniter/pocket/utils';
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ImportProcess']);
+
 type StageStatus = 'pending' | 'success' | 'error' | 'invalid';
 
 export interface ImportProcessStatus {
@@ -95,7 +99,7 @@ export default function ImportProcess({file, addressGroupId, onImportCompleted}:
       setCurrentStep(ImportProcessStep.ImportingKeys)
     } catch (e) {
       if (e instanceof SyntaxError || e instanceof z.ZodError) {
-        console.log('invalid file:', e)
+        log.debug('invalid file rejected during import', { error: e })
         setImportStatus({
           validateFile: 'invalid',
           importKeys: 'pending',

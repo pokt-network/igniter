@@ -21,6 +21,11 @@ export async function ExecutePendingTransactions(args: ExecutePendingTransaction
 
   const txs = await listTransactions();
 
+  if (txs.length === 0) {
+    log.debug('ExecutePendingTransactions: no pending transactions');
+    return;
+  }
+
   const limit = pLimit(MAX_CONCURRENT_TRANSACTIONS);
 
   const childPromises = txs.map(({ id, createdAt }) =>

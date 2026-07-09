@@ -80,12 +80,12 @@ export class EmailChannel implements NotificationChannel {
         html: message.email?.html ?? message.body,
       })
 
-      logger.debug({ messageId: info.messageId, to }, 'Email notification sent')
+      logger.debug('Email notification sent', { messageId: info.messageId, to })
     } catch (err) {
       // Log the raw error server-side (it leaks host:port reachability); surface
       // only a category so the caller can tell an auth/recipient problem from a
       // transient one without seeing the underlying transport detail.
-      logger.error({ err }, 'Email notification failed')
+      logger.error('Email notification failed', { err })
       throw new ChannelDeliveryError('email', categorizeSmtpError(err))
     } finally {
       if (ownsTransporter) transporter.close()

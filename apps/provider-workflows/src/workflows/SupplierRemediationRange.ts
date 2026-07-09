@@ -68,7 +68,7 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
 
   const allFailed = r.every(r => {
     if (r.status === 'rejected') {
-      log.warn(`SupplierRemediationByRange: Child workflow failed with: ${r.reason}`)
+      log.warn('SupplierRemediationByRange: Child workflow failed', { reason: r.reason })
     }
     return r.status === 'rejected';
   })
@@ -98,6 +98,13 @@ export async function SupplierRemediationByRange(input: SupplierRemediationByRan
     // fulfilled + success + !remediated → nothing was done, skip silently
   }
 
-  log.info('SupplierRemediationByRange: Execution Ended', { height: input.height, minId: input.minId, maxId: input.maxId, failedReasons })
+  log.info('SupplierRemediationByRange: Execution Ended', {
+    height: input.height,
+    minId: input.minId,
+    maxId: input.maxId,
+    keysChecked: rows.length,
+    remediated: result.succeeded.length,
+    failedReasons,
+  })
   return result
 }

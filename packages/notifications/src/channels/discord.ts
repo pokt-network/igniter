@@ -31,7 +31,7 @@ export class DiscordChannel implements NotificationChannel {
       })
     } catch (err) {
       // Don't reflect the transport error (host/port/connect detail) to callers.
-      logger.error({ err }, 'Discord webhook request failed')
+      logger.error('Discord webhook request failed', { err })
       throw new ChannelDeliveryError('discord', 'transient')
     }
 
@@ -40,7 +40,7 @@ export class DiscordChannel implements NotificationChannel {
       // Log status+body server-side; surface only the status CLASS (not the
       // body) so a caller can distinguish a bad/revoked webhook from a transient
       // failure without the response becoming a read oracle for probed endpoints.
-      logger.error({ status: response.status, body: text }, 'Discord webhook failed')
+      logger.error('Discord webhook failed', { status: response.status, body: text })
       throw new ChannelDeliveryError('discord', categorizeHttpStatus(response.status), {
         statusCode: response.status,
       })

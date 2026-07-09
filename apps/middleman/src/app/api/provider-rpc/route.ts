@@ -5,9 +5,13 @@ import {Provider} from "@igniter/db/middleman/schema";
 import {signPayload} from "@igniter/commons/crypto";
 import {getApplicationSettings} from "@/lib/dal/applicationSettings";
 import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@igniter/commons/constants";
+import {getLogger, redactObject} from "@igniter/logger";
+import {withLogging} from "@/lib/logging/withLogging";
 
-export async function POST(request: Request) {
-  console.log('Preparing a request to a provider');
+const log = getLogger(['middleman', 'provider-rpc'])
+
+export const POST = withLogging(async (request: Request) => {
+  const startedAt = Date.now();
 
   const schema = z.object({
     provider: z.string(),
@@ -23,22 +27,19 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     validatedData = schema.parse(body);
-    console.log('Request payload validated:', JSON.stringify(validatedData, null, 2));
   } catch (error) {
-    console.error('Request payload validation failed:', error);
+    log.error('provider-rpc payload validation failed', { error })
     return new Response("Invalid request payload", {status: 400});
   }
 
   try {
-    console.log('Loading the provider');
     provider = await GetProviderByIdentity(validatedData.provider);
     if (!provider) {
-      console.error('Provider not found');
+      log.warn('provider-rpc provider not found', { provider: validatedData.provider })
       return new Response("Provider not found", {status: 404});
     }
-    console.log('Provider loaded:', JSON.stringify({ id: provider.id, name: provider.name, }, null, 2))
   } catch (error) {
-    console.error(error);
+    log.error('provider-rpc provider lookup failed', { provider: validatedData.provider, error })
     return new Response("Unable to load the provider", {status: 500});
   }
 
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     const applicationSettings = await getApplicationSettings();
     identity = applicationSettings.appIdentity;
   } catch (error) {
-    console.error(error);
+    log.error('provider-rpc app identity lookup failed', { error })
     return new Response("There has been an error while setting the identity of the app", {status: 500});
   }
 
@@ -54,12 +55,13 @@ export async function POST(request: Request) {
     const signatureBuffer = await signPayload(JSON.stringify(validatedData.data));
     signature = signatureBuffer.toString('base64');
   } catch (error) {
-    console.error(error);
+    log.error('provider-rpc payload signing failed', { provider: provider.identity, error })
     return new Response("There has been an error while signing the payload.", {status: 500});
   }
 
   try {
-    console.log('Executing the request');
+    log.debug('provider-rpc request payload', redactObject({ provider: provider.identity, path: validatedData.path, data: validatedData.data }))
+
     const response = await fetch(urlJoin(provider.url, validatedData.path), {
       method: 'POST',
       body: JSON.stringify(validatedData.data),
@@ -72,9 +74,21 @@ export async function POST(request: Request) {
 
     const responseBody = await response.json();
 
+    log.info('provider-rpc request completed', {
+      provider: provider.identity,
+      path: validatedData.path,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+    })
+
     return new Response(JSON.stringify(responseBody), {status: 200});
   } catch (error) {
-    console.error(error);
+    log.error('provider-rpc request failed', {
+      provider: provider.identity,
+      path: validatedData.path,
+      durationMs: Date.now() - startedAt,
+      error,
+    })
     return new Response("Unable to fetch the provider", {status: 500});
   }
-}
+})

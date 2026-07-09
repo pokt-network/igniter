@@ -12,6 +12,9 @@ import {LoaderIcon} from "@igniter/ui/assets";
 import {Trash2Icon, PencilIcon} from 'lucide-react';
 import type {RelayMinerWithDetails} from "@igniter/db/provider/schema";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureRelayMiners']);
 
 export interface ConfigureRelayMinersProp {
   goNext: () => void;
@@ -94,7 +97,7 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
         setRelayMiners(result.data);
       }
     } catch (error) {
-      console.error("Failed to fetch relayMiners:", error);
+      log.error("Failed to fetch relayMiners", { error: error })
     } finally {
       setIsLoadingRelayMiners(false);
     }
@@ -108,7 +111,7 @@ export default function ConfigureRelayMiners({ goNext, goBack }: Readonly<Config
       await DeleteRelayMiner(relayMinerToDelete.id);
       await fetchRelayMiners();
     } catch (error) {
-      console.error("Failed to delete relayMiner:", error);
+      log.error("Failed to delete relayMiner", { error: error })
     } finally {
       setIsDeletingRelayMiner(false);
       setRelayMinerToDelete(null);

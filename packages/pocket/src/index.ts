@@ -238,7 +238,7 @@ export class PocketBlockchain {
     this.denom = denom
     this.gasPrice = GasPrice.fromString(`${gasPrice}${denom}`)
     this.apiUrl = apiUrl
-    this.logger = getLogger().child({ service: 'pocket-blockchain' })
+    this.logger = getLogger(['pocket', 'blockchain'])
   }
 
   /**
@@ -265,7 +265,7 @@ export class PocketBlockchain {
       if (!this.cometClient) this.cometClient = await connectComet(this.rpcUrl) as Comet38Client
       if (!this.stargateClient) this.stargateClient = await StargateClient.create(this.cometClient, {})
     } catch (error) {
-      console.error('Failed to connect to the blockchain:', error)
+      this.logger.error('Failed to connect to the blockchain', { error })
       throw new Error('Failed to connect to the blockchain.')
     }
   }
@@ -322,7 +322,7 @@ export class PocketBlockchain {
     try {
       return await client.getHeight()
     } catch (err) {
-      console.error(err)
+      this.logger.error('Unexpected blockchain error', { error: err })
       throw new Error('Unable to fetch the height from the blockchain.')
     }
   }
@@ -365,7 +365,7 @@ export class PocketBlockchain {
     try {
       direct = await this.getTransactionDirect(txHash)
     } catch (error) {
-      this.logger.warn({ txHash, error }, 'Tier 1 (RPC getTx) failed')
+      this.logger.warn('Tier 1 (RPC getTx) failed', { txHash, error })
       // Tier 1 errored; still attempt Tier 2 (REST API).
       const apiResult = await this.getTransactionViaApi(txHash)
       if (apiResult) return apiResult
@@ -374,12 +374,12 @@ export class PocketBlockchain {
 
     // Tier 3: Block scan
     if (height) {
-      this.logger.info({ txHash, height }, 'Tier 2 returned null, trying block scan')
+      this.logger.info('Tier 2 returned null, trying block scan', { txHash, height })
       const blockResult = await this.getTransactionFromBlock(txHash, height)
       if (blockResult) return blockResult
     }
 
-    this.logger.warn({ txHash, height }, 'All tiers failed to find transaction')
+    this.logger.warn('All tiers failed to find transaction', { txHash, height })
     return null
   }
 
@@ -407,7 +407,7 @@ export class PocketBlockchain {
     }
 
     // Tier 2: REST API
-    this.logger.info({ txHash }, 'Tier 1 did not find TX, trying REST API fallback')
+    this.logger.info('Tier 1 did not find TX, trying REST API fallback', { txHash })
     const apiResult = await this.getTransactionViaApi(txHash)
     if (apiResult) return apiResult
 
@@ -432,7 +432,7 @@ export class PocketBlockchain {
       const direct = await this.getTransactionDirect(txHash)
       if (direct) return { status: 'confirmed', data: direct }
     } catch (error) {
-      this.logger.warn({ txHash, error }, 'verifyTransaction: Tier 1/2 lookup failed; falling through to block scan')
+      this.logger.warn('verifyTransaction: Tier 1/2 lookup failed; falling through to block scan', { txHash, error })
     }
 
     let head: number
@@ -457,7 +457,7 @@ export class PocketBlockchain {
       try {
         block = await comet.block(h)
       } catch (error) {
-        this.logger.warn({ txHash, height: h, error }, 'verifyTransaction: block fetch failed')
+        this.logger.warn('verifyTransaction: block fetch failed', { txHash, height: h, error })
         return { status: 'unavailable' } // could not cover the window
       }
       // Track the time of the last successfully fetched block so callers can use
@@ -471,7 +471,7 @@ export class PocketBlockchain {
       // on-chain, we just can't read its outcome. That is NOT negative evidence;
       // treat as unavailable so the verifier keeps retrying instead of failing.
       if (match === 'result-missing') {
-        this.logger.warn({ txHash, height: h }, 'verifyTransaction: matched tx has no block result entry')
+        this.logger.warn('verifyTransaction: matched tx has no block result entry', { txHash, height: h })
         return { status: 'unavailable' }
       }
       return { status: 'confirmed', data: match }
@@ -541,7 +541,7 @@ export class PocketBlockchain {
         code: txResponse.code,
       }
     } catch (error) {
-      this.logger.warn({ txHash, error }, 'API tx lookup failed')
+      this.logger.warn('API tx lookup failed', { txHash, error })
       return null
     }
   }
@@ -555,7 +555,7 @@ export class PocketBlockchain {
     try {
       latestHeight = await this.getHeight()
     } catch (error) {
-      this.logger.warn({ txHash, startHeight, error }, 'Block scan: failed to read chain head, scanning full window')
+      this.logger.warn('Block scan: failed to read chain head, scanning full window', { txHash, startHeight, error })
       latestHeight = startHeight + maxBlocks - 1
     }
 
@@ -573,7 +573,7 @@ export class PocketBlockchain {
       try {
         return { h, block: await comet.block(h) }
       } catch (error) {
-        this.logger.warn({ txHash, height: h, error }, 'Block scan error at height')
+        this.logger.warn('Block scan error at height', { txHash, height: h, error })
         return { h, block: null }
       }
     })
@@ -585,7 +585,7 @@ export class PocketBlockchain {
       const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
       if (match === 'no-match') continue
       if (match === 'result-missing') {
-        this.logger.warn({ txHash, height: h }, 'Block results missing entry for matched TX')
+        this.logger.warn('Block results missing entry for matched TX', { txHash, height: h })
         return null
       }
       return match
@@ -718,7 +718,7 @@ export class PocketBlockchain {
       try {
         gasEstimation = await signingClient.simulate(signer, msgs as any, '')
       } catch (simErr: any) {
-        this.logger.warn({ signer, error: simErr?.message ?? simErr }, 'signUnorderedTx: simulate failed, using fallback gas')
+        this.logger.warn('signUnorderedTx: simulate failed, using fallback gas', { signer, error: simErr?.message ?? simErr })
         gasEstimation = 350_000
       }
       const stdFee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
@@ -785,7 +785,7 @@ export class PocketBlockchain {
       [{ typeUrl, value: { signer, ...value } as MsgStakeSupplier }],
     )
 
-    this.logger.info({ signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signSupplierTx: signed unordered tx')
+    this.logger.info('signSupplierTx: signed unordered tx', { signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp })
 
     return result
   }
@@ -808,7 +808,7 @@ export class PocketBlockchain {
       [{ typeUrl, value: { signer, ...value } as MsgUnstakeSupplier }],
     )
 
-    this.logger.info({ signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signUnstakeTx: signed unordered tx')
+    this.logger.info('signUnstakeTx: signed unordered tx', { signer, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp })
 
     return result
   }
@@ -836,7 +836,7 @@ export class PocketBlockchain {
       feeUpoktOverride,
     )
 
-    this.logger.info({ fromAddress, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp }, 'signSendTx: signed unordered tx')
+    this.logger.info('signSendTx: signed unordered tx', { fromAddress, transactionHash: result.transactionHash, timeoutTimestamp: result.timeoutTimestamp })
 
     return result
   }
@@ -886,7 +886,7 @@ export class PocketBlockchain {
       drainTo ? 500_000 : undefined,
     )
 
-    this.logger.info({ operatorAddress, drained: Boolean(drainTo), transactionHash: result.transactionHash }, 'signUnstakeAndDrainTx: signed unordered tx')
+    this.logger.info('signUnstakeAndDrainTx: signed unordered tx', { operatorAddress, drained: Boolean(drainTo), transactionHash: result.transactionHash })
 
     return result
   }
@@ -928,7 +928,7 @@ export class PocketBlockchain {
       // is rejected because the tx is already tracked in the unordered nonce cache.
       // Treat as idempotent success — the tx is (or will be) included on-chain.
       if (isUnorderedDedupRejection(e)) {
-        this.logger.info({ transactionHash }, 'broadcastSupplierTx: unordered dedup (already broadcast), treating as success')
+        this.logger.info('broadcastSupplierTx: unordered dedup (already broadcast), treating as success', { transactionHash })
         return {
           transactionHash,
           code: 0,
@@ -940,7 +940,7 @@ export class PocketBlockchain {
 
       // A BroadcastTxError is a hard CheckTx rejection — the tx will never land on-chain.
       if (e instanceof BroadcastTxError) {
-        this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: hard CheckTx rejection')
+        this.logger.error('broadcastSupplierTx: hard CheckTx rejection', { code: e.code, codespace: e.codespace, message: e.message })
         return {
           transactionHash,
           success: false,
@@ -954,7 +954,7 @@ export class PocketBlockchain {
       // may already have been accepted into the mempool and can still land on-chain.
       // Do NOT mark as rejected — the verifier will resolve it via chain-time bound.
       if (e instanceof TimeoutError) {
-        this.logger.warn({ transactionHash, message: e.message }, 'broadcastSupplierTx: RPC timeout (tx may still land, not rejected)')
+        this.logger.warn('broadcastSupplierTx: RPC timeout (tx may still land, not rejected)', { transactionHash, message: e.message })
         return {
           transactionHash,
           success: false,
@@ -964,7 +964,7 @@ export class PocketBlockchain {
         }
       }
 
-      this.logger.error({ code: e.code, codespace: e.codespace, message: e.message }, 'broadcastSupplierTx: broadcast failed')
+      this.logger.error('broadcastSupplierTx: broadcast failed', { code: e.code, codespace: e.codespace, message: e.message })
       return {
         transactionHash,
         success: false,
@@ -982,12 +982,12 @@ export class PocketBlockchain {
   async stakeSupplier(params: StakeSupplierParams, explicitSequence?: number): Promise<SendTransactionResult> {
     const { signerPrivateKey, signer, ...value } = params
 
-    this.logger.info({ params: { signer, ...value }, explicitSequence },'stakeSupplier: Execution started')
+    this.logger.info('stakeSupplier: Execution started', { params: { signer, ...value }, explicitSequence })
 
     if (!isValidPrivateKey(signerPrivateKey)) throw new Error('Invalid secp256k1 private key')
     if (!signer) throw new Error('`signer` (bech32) is required')
 
-    this.logger.debug({ params: { signer, ...value } },'stakeSupplier: Validated params')
+    this.logger.debug('stakeSupplier: Validated params', { params: { signer, ...value } })
 
     const pkBytes = Uint8Array.from(Buffer.from(signerPrivateKey, 'hex'))
     const wallet = await DirectSecp256k1Wallet.fromKey(pkBytes, 'pokt')
@@ -1018,42 +1018,42 @@ export class PocketBlockchain {
       // TODO: Create signed memo
       currentHeight = await this.getHeight();
 
-      this.logger.debug({
+      this.logger.debug('stakeSupplier: Signing and broadcasting transaction', {
         currentHeight,
         signer,
         messages: [msg],
         fee: 'auto',
         explicitSequence,
-      },'stakeSupplier: Signing and broadcasting transaction')
+      })
 
       let result
       if (explicitSequence != null) {
         // Use explicit sequence to avoid sequence mismatch on retry
-        this.logger.info({ signer, explicitSequence }, 'stakeSupplier: Using explicit sequence for signing')
+        this.logger.info('stakeSupplier: Using explicit sequence for signing', { signer, explicitSequence })
         let gasEstimation: number
         try {
           gasEstimation = await signingClient.simulate(signer, [msg], '')
         } catch (simErr: any) {
-          this.logger.warn({ signer, error: simErr?.message ? simErr.message : simErr }, 'stakeSupplier: simulate failed in explicit-sequence path, using fallback gas estimate')
+          this.logger.warn('stakeSupplier: simulate failed in explicit-sequence path, using fallback gas estimate', { signer, error: simErr?.message ? simErr.message : simErr })
           gasEstimation = 350_000
         }
         const fee = calculateFee(Math.round(gasEstimation * 1.3), this.gasPrice!)
         const { accountNumber } = await signingClient.getSequence(signer)
         const chainId = await signingClient.getChainId()
-        this.logger.debug({ signer, accountNumber, explicitSequence, chainId }, 'stakeSupplier: Signing with explicit signer data')
+        this.logger.debug('stakeSupplier: Signing with explicit signer data', { signer, accountNumber, explicitSequence, chainId })
         const txRaw = await signingClient.sign(signer, [msg], fee, '', {
           accountNumber,
           sequence: explicitSequence,
           chainId,
         }, BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
         const txBytes = TxRaw.encode(TxRaw.fromPartial(txRaw as any)).finish()
-        this.logger.debug({ signer }, 'stakeSupplier: Broadcasting transaction with explicit sequence')
+        this.logger.debug('stakeSupplier: Broadcasting transaction with explicit sequence', { signer })
         result = await signingClient.broadcastTx(txBytes)
       } else {
         result = await signingClient.signAndBroadcast(signer, [msg], 'auto', '', BigInt(currentHeight + TX_EXPIRATION_BLOCKS))
       }
 
-      this.logger.info({ result },'stakeSupplier: Execution ended. Transaction sent.')
+      this.logger.info('stakeSupplier: Execution ended. Transaction sent.', { result })
 
       return {
         transactionHash: result.transactionHash,
@@ -1065,7 +1065,7 @@ export class PocketBlockchain {
       }
     } catch (e: any) {
       const errorMessage = e.log && e.message ? `${e.log} - ${e.message}` : e.message ?? 'Unknown error'
-      this.logger.error({ code: e.code, message: e.message, log: e.log },'stakeSupplier: An error occurred while trying to execute the transaction.')
+      this.logger.error('stakeSupplier: An error occurred while trying to execute the transaction.', { code: e.code, message: e.message, log: e.log })
       if (e instanceof BroadcastTxError) {
         return {
           transactionHash: '',
@@ -1088,7 +1088,7 @@ export class PocketBlockchain {
         }
       }
 
-      this.logger.info({ error: e },'stakeSupplier: Execution ended  in errors.')
+      this.logger.info('stakeSupplier: Execution ended  in errors.', { error: e })
 
       return {
         transactionHash: '',

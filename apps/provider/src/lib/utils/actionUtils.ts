@@ -10,6 +10,10 @@ import {
   success,
   error,
 } from '@igniter/ui/lib/actionResult'
+import { getLogger } from '@igniter/logger'
+import { runWithRequestContext } from '@/lib/logging/withLogging'
+
+const log = getLogger(['provider', 'actions'])
 
 // Re-export the shared action-result contract so existing `@/lib/utils/actionUtils`
 // imports keep working while the canonical shape lives in `@igniter/ui`.
@@ -55,35 +59,41 @@ export async function requireOwnerOrAdmin(): Promise<ActionResult<User>> {
   return requireRole([UserRole.Owner, UserRole.Admin])
 }
 
-// Wrapper for server actions that handles errors consistently
+// Wrapper for server actions that handles errors consistently. This is the
+// single chokepoint every provider server action funnels through (via
+// withRequireAuth/withRequireOwner/withRequireOwnerOrAdmin below), so it also
+// binds request correlation (spec §6) for the whole action call — the provider
+// equivalent of middleman's per-action `runWithRequestContext` wrap.
 export async function withAuth<T>(
   authCheck: () => Promise<ActionResult<User>>,
   action: (user: User) => Promise<T>,
 ): Promise<ActionResult<T>> {
-  try {
-    const authResult = await authCheck()
-    if (!authResult.success) {
-      return authResult
-    }
-
-    const result = await action(authResult.data)
-    return success(result)
-  } catch (err) {
-    console.error('[ActionError]', err)
-
-    if (err instanceof Error) {
-      // Check for known error types
-      if (err.message === 'Unauthorized' || err.message === 'Not logged in') {
-        return error('UNAUTHORIZED', err.message)
+  return runWithRequestContext(async () => {
+    try {
+      const authResult = await authCheck()
+      if (!authResult.success) {
+        return authResult
       }
-      if (err.message.includes('validation') || err.message.includes('Invalid')) {
-        return error('VALIDATION_ERROR', err.message)
-      }
-      return error('INTERNAL_ERROR', err.message)
-    }
 
-    return error('INTERNAL_ERROR', 'An unexpected error occurred')
-  }
+      const result = await action(authResult.data)
+      return success(result)
+    } catch (err) {
+      log.error('server action failed', { error: err })
+
+      if (err instanceof Error) {
+        // Check for known error types
+        if (err.message === 'Unauthorized' || err.message === 'Not logged in') {
+          return error('UNAUTHORIZED', err.message)
+        }
+        if (err.message.includes('validation') || err.message.includes('Invalid')) {
+          return error('VALIDATION_ERROR', err.message)
+        }
+        return error('INTERNAL_ERROR', err.message)
+      }
+
+      return error('INTERNAL_ERROR', 'An unexpected error occurred')
+    }
+  })
 }
 
 // Simplified wrapper that just requires authentication

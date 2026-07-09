@@ -22,6 +22,9 @@ import {StageStatus} from "@/app/app/stake/types";
 import {stageFailed, stageSucceeded} from "@/app/app/stake/utils";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";
 import {useQueryClient} from "@tanstack/react-query";
+import {getLogger} from "@igniter/logger";
+
+const log = getLogger(['middleman', 'staking-process'])
 
 export interface StakingProcessStatus {
   requestSuppliersStatus: StageStatus;
@@ -108,7 +111,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
         setCurrentStep(StakingProcessStep.transactionSignature);
       } catch (err) {
         const { message } = err as Error;
-        console.log('An error occurred while retrieving the supplier stake info. Error:', message);
+        log.error('failed to retrieve supplier stake info', { ownerAddress, error: message });
         handleFailedStage('requestSuppliersStatus', 'An error occurred while retrieving the supplier stake info. You have incurred no fees. You can try again. If the problem persists, please contact support.');
       }
     })();
@@ -136,7 +139,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
         setCurrentStep(StakingProcessStep.SchedulingTransaction);
       } catch (err) {
         const { message } = err as Error;
-        console.log('An error occurred while collecting the signature.Error:', message);
+        log.error('failed to collect signature', { ownerAddress, error: message });
         handleFailedStage('transactionSignatureStatus', 'An unknown error occurred while collecting your signature for the transaction. If it was intentionally rejected, this is required in order to proceed. If not, please make sure you have a supported wallet extension enabled. You have incurred no fees. You can try again. If the problem persists, please contact support.');
       }
     })();
@@ -167,7 +170,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
         setCurrentStep(StakingProcessStep.Completed);
       } catch (err) {
         const { message } = err as Error;
-        console.log('An error occurred while scheduling the signed transactions. Error:', message);
+        log.error('failed to schedule signed transaction', { ownerAddress, error: message });
         handleFailedStage('schedulingTransactionStatus', 'An unknown error occurred while scheduling the signed transactions.');
       }
     })();

@@ -49,7 +49,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | Variable | Required | Description | Example / Default |
 |----------|----------|-------------|-------------------|
 | `NODE_ENV` | Optional | Node runtime environment | `production` |
-| `LOG_LEVEL` | Optional | Logging verbosity (`error`, `warn`, `info`, `debug`) | `info` |
+| `LOG_LEVEL` | Optional | LogTape verbosity (`trace`, `debug`, `info`, `warning`, `error`, `fatal` — note `warning`, not `warn`) | `debug` |
 
 ### Temporal
 

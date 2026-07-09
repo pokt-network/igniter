@@ -22,14 +22,14 @@ export default class Settings {
   async update(data: Partial<{ pocketRpcUrl: string; pocketApiUrl: string }>) {
     const settings = await this.loadSettings()
     if (!settings) {
-      this.logger.warn({ data }, 'Cannot update settings — no settings row exists')
+      this.logger.warn('Cannot update settings — no settings row exists', { data })
       return
     }
     await this.dbClient.db
       .update(schema.applicationSettingsTable)
       .set(data)
       .where(eq(schema.applicationSettingsTable.id, settings.id))
-    this.logger.info({ data }, 'Updated application settings')
+    this.logger.info('Updated application settings', { data })
   }
 
   async isBootstrapped(): Promise<boolean> {

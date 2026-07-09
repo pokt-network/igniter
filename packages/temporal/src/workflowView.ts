@@ -5,6 +5,7 @@ import type {
   ScheduleSummary,
   ScheduleDescription,
 } from '@temporalio/client'
+import type { Logger } from '@igniter/logger'
 
 // Type-only import from workflowDetail is erased at runtime (no require-cycle);
 // the value import below is what actually loads the module.
@@ -182,7 +183,7 @@ export async function listWorkflowViews(
   filter: WorkflowListFilter,
   page: WorkflowPageRequest,
   nowMs: number = Date.now(),
-  logger?: { warn: (obj: unknown, msg: string) => void },
+  logger?: Logger,
 ): Promise<WorkflowPageResult> {
   const { pageIndex, pageSize } = page
   const skip = pageIndex * pageSize
@@ -221,8 +222,8 @@ export async function listWorkflowViews(
     result = await collect(false, true, MAX_FALLBACK_SCAN)
     if (result.truncated) {
       logger?.warn(
-        { pageIndex, pageSize, maxScan: MAX_FALLBACK_SCAN },
         'Basic-visibility fallback scan hit the row cap; result may be incomplete',
+        { pageIndex, pageSize, maxScan: MAX_FALLBACK_SCAN },
       )
     }
   }

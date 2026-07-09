@@ -26,6 +26,10 @@ import {
   getCompressedPublicKeyFromAppIdentity,
   signPayload,
 } from '@igniter/commons/crypto'
+import { getLogger } from '@igniter/logger'
+import { runWithRequestContext } from '@/lib/logging/withLogging'
+
+const log = getLogger(['middleman', 'stake'])
 
 export interface CreateStakeTransactionRequest {
   offer: StakeDistributionOffer;
@@ -110,20 +114,36 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
 }
 
 export async function CreateStakeTransaction(request: CreateStakeTransactionRequest) {
-  const userIdentity = await requireAuth()
+  return runWithRequestContext(async () => {
+    const userIdentity = await requireAuth()
 
-  return insert({
-    type: TransactionType.Stake,
-    status: TransactionStatus.Pending,
-    signedPayload: request.transaction.signedPayload,
-    fromAddress: request.transaction.address,
-    unsignedPayload: request.transaction.unsignedPayload,
-    providerFee: Number(request.offer.fee),
-    providerId: request.offer.identity,
-    estimatedFee: request.transaction.estimatedFee,
-    consumedFee: 0,
-    typeProviderFee: request.offer.feeType,
-    createdBy: userIdentity,
+    log.info('stake transaction requested', {
+      ownerAddress: request.transaction.address,
+      providerId: request.offer.identity,
+      estimatedFee: request.transaction.estimatedFee,
+    })
+
+    const created = await insert({
+      type: TransactionType.Stake,
+      status: TransactionStatus.Pending,
+      signedPayload: request.transaction.signedPayload,
+      fromAddress: request.transaction.address,
+      unsignedPayload: request.transaction.unsignedPayload,
+      providerFee: Number(request.offer.fee),
+      providerId: request.offer.identity,
+      estimatedFee: request.transaction.estimatedFee,
+      consumedFee: 0,
+      typeProviderFee: request.offer.feeType,
+      createdBy: userIdentity,
+    })
+
+    log.info('stake transaction created', {
+      transactionId: created.id,
+      ownerAddress: request.transaction.address,
+      providerId: request.offer.identity,
+    })
+
+    return created
   })
 }
 

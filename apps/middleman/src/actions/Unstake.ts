@@ -10,6 +10,10 @@ import { requireAuth } from '@/lib/utils/actions'
 import { InsertTransaction } from '@igniter/db/middleman/schema'
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
+import { getLogger } from '@igniter/logger'
+import { runWithRequestContext } from '@/lib/logging/withLogging'
+
+const log = getLogger(['middleman', 'unstake'])
 
 export interface UnstakeDurationData {
   durationSeconds: number;
@@ -80,16 +84,30 @@ export interface CreateUnstakeTransactionRequest {
 }
 
 export async function CreateUnstakeTransaction(request: CreateUnstakeTransactionRequest) {
-  const userIdentity = await requireAuth()
+  return runWithRequestContext(async () => {
+    const userIdentity = await requireAuth()
 
-  return insert({
-    type: TransactionType.Unstake,
-    status: TransactionStatus.Pending,
-    signedPayload: request.transaction.signedPayload,
-    fromAddress: request.transaction.address,
-    unsignedPayload: request.transaction.unsignedPayload,
-    estimatedFee: request.transaction.estimatedFee,
-    consumedFee: 0,
-    createdBy: userIdentity,
+    log.info('unstake transaction requested', {
+      ownerAddress: request.transaction.address,
+      estimatedFee: request.transaction.estimatedFee,
+    })
+
+    const created = await insert({
+      type: TransactionType.Unstake,
+      status: TransactionStatus.Pending,
+      signedPayload: request.transaction.signedPayload,
+      fromAddress: request.transaction.address,
+      unsignedPayload: request.transaction.unsignedPayload,
+      estimatedFee: request.transaction.estimatedFee,
+      consumedFee: 0,
+      createdBy: userIdentity,
+    })
+
+    log.info('unstake transaction created', {
+      transactionId: created.id,
+      ownerAddress: request.transaction.address,
+    })
+
+    return created
   })
 }

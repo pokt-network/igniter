@@ -30,6 +30,9 @@ import {
 import type { ApplicationSettings } from '@igniter/db/provider/schema'
 import { SetupHelpBar } from '@/components/SetupHelpBar'
 import { ChainId } from '@igniter/db/provider/enums'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureBlockChain']);
 
 interface FormProps {
   defaultValues: Partial<ApplicationSettings>;
@@ -211,8 +214,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       await UpsertApplicationSettings(values, isUpdate)
       goNext()
     } catch (error) {
-      console.error('Something failed while updating the application settings', error)
-    } finally {
+      log.error('Something failed while updating the application settings', { error: error })
+      } finally {
       setIsLoading(false)
     }
   }

@@ -137,7 +137,7 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
 
   const allFailed = r.every(r => {
     if (r.status === 'rejected') {
-      log.warn(`SupplierStatus: Child workflow failed with: ${r.reason}`)
+      log.warn('SupplierStatus: Child workflow failed', { reason: r.reason })
     }
     return r.status === 'rejected';
   })

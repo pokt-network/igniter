@@ -10,6 +10,9 @@ import {
   type RemediationSummary,
 } from '@/actions/Remediation'
 import { CountTransactions } from '@/actions/Transactions'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'RequestRemediationButton']);
 
 type State = 'idle' | 'evaluating' | 'summary' | 'confirming' | 'progress' | 'done' | 'error'
 
@@ -52,7 +55,7 @@ export default function RequestRemediationButton() {
       setSummary(result.data)
       setState('summary')
     } catch (e) {
-      console.error('Failed to evaluate remediation needs', e)
+      log.error('Failed to evaluate remediation needs', { error: e })
       setError(e instanceof Error ? e.message : 'Failed to evaluate remediation needs.')
       setState('error')
     }
@@ -102,7 +105,7 @@ export default function RequestRemediationButton() {
       setState('progress')
       startProgressPolling(baseline, summary.total)
     } catch (e) {
-      console.error('Failed to request remediation', e)
+      log.error('Failed to request remediation', { error: e })
       setError(e instanceof Error ? e.message : 'Failed to request remediation.')
       setState('error')
     }
