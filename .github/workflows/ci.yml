@@ -79,6 +79,9 @@ jobs:
       - name: Test
         run: pnpm turbo test
 
+      - name: No-console guard
+        run: bash scripts/no-console-guard.sh
+
   docker-build:
     needs: quality
     runs-on: ubuntu-latest

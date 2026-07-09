@@ -1,6 +1,7 @@
 import { DirectSecp256k1Wallet } from "@cosmjs/proto-signing";
 import { fromHex, toUtf8, toBech32 } from '@cosmjs/encoding';
 import { Secp256k1, Secp256k1Signature, sha256, ripemd160 } from '@cosmjs/crypto';
+import { getLogger, type Logger } from '@igniter/logger';
 
 /**
  * Signs the given payload string using secp256k1 and the APP_IDENTITY private key from the environment.
@@ -26,7 +27,8 @@ export async function verifySignature(
   payload: string,
   publicKeyStr: string,
   signatureStr: string,
-  encoding: BufferEncoding = 'base64'
+  encoding: BufferEncoding = 'base64',
+  logger: Logger = getLogger(['commons', 'crypto'])
 ): Promise<boolean> {
   try {
     const publicKeyBytes = Buffer.from(publicKeyStr, encoding);
@@ -42,7 +44,7 @@ export async function verifySignature(
 
     return await Secp256k1.verifySignature(Secp256k1Signature.fromFixedLength(signature.subarray(0, 64)), sha256(toUtf8(payload)), publicKeyBytes);
   } catch (e: unknown) {
-    console.error('Signature verification failed:', (e as Error).message);
+    logger.error('Signature verification failed', { error: e });
     return false;
   }
 }

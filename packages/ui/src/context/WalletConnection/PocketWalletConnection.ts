@@ -1,6 +1,9 @@
 import type {Provider, ProviderInfo} from "./";
 import { WalletConnection, WalletSettings } from './WalletConnection'
 import {SignedMemo, SignedTransaction, TransactionMessage} from "../../lib/models";
+import { getLogger } from "@igniter/logger";
+
+const log = getLogger(["ui", "wallet-connection", "pocket"]);
 
 export enum PocketMethod {
   REQUEST_ACCOUNTS = "pokt_requestAccounts",
@@ -45,7 +48,7 @@ export class PocketWalletConnection extends WalletConnection {
 
       return connectedIdentities
     } catch (err) {
-      console.error(err);
+      log.error("Failed to connect to Pocket Network wallet", { error: err });
       throw err;
     }
   };
@@ -63,7 +66,7 @@ export class PocketWalletConnection extends WalletConnection {
 
       return false;
     } catch (error) {
-      console.warn(`Something failed while interacting with the Pocket Network wallet provider. method: ${PocketMethod.ACCOUNTS}`);
+      log.warn("Failed to reconnect to Pocket Network wallet provider", { method: PocketMethod.ACCOUNTS, error });
       return false;
     }
   }
@@ -86,7 +89,7 @@ export class PocketWalletConnection extends WalletConnection {
         PocketMethod.CHAIN,
       ).then((res) => res.chain);
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get chain from Pocket Network wallet", { error: err });
       throw err;
     }
   }
@@ -99,7 +102,7 @@ export class PocketWalletConnection extends WalletConnection {
       );
       return publicKey;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get public key from Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -112,7 +115,7 @@ export class PocketWalletConnection extends WalletConnection {
       const data = await response.json()
       return ((data.balance?.amount || 0) / 1e6)
     } catch (err) {
-      console.error(err);
+      log.error("Failed to get balance from Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -124,7 +127,7 @@ export class PocketWalletConnection extends WalletConnection {
         [{ chainId }],
       );
     } catch (err) {
-      console.error(err);
+      log.error("Failed to switch chain in Pocket Network wallet", { chainId, error: err });
       throw err;
     }
   }
@@ -134,7 +137,7 @@ export class PocketWalletConnection extends WalletConnection {
       const { signature } = await this.provider.send(PocketMethod.SIGN_MESSAGE, [{ message, address }]);
       return signature;
     } catch (err) {
-      console.error(err);
+      log.error("Failed to sign message with Pocket Network wallet", { address, error: err });
       throw err;
     }
   }
@@ -200,7 +203,7 @@ export class PocketWalletConnection extends WalletConnection {
         estimatedFee: fee,
       };
     } catch (err) {
-      console.error(err);
+      log.error("Failed to sign transaction with Pocket Network wallet", { address: addr, error: err });
       throw err;
     }
   }

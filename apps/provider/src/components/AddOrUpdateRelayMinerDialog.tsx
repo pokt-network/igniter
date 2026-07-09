@@ -27,6 +27,9 @@ import {CreateRelayMiner, UpdateRelayMiner} from "@/actions/RelayMiners";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@igniter/ui/components/select";
 import { ListRegions } from "@/actions/Regions";
 import { useQuery } from "@tanstack/react-query";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'AddOrUpdateRelayMinerDialog']);
 
 const Code = ({ children }: { children: React.ReactNode }) => (
     <code className="rounded-sm border border-border-subtle bg-bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">
@@ -149,7 +152,7 @@ export function AddOrUpdateRelayMinerDialog({
                 }
                 onClose?.(true);
             } catch (e) {
-                console.error("Failed to update relay miner", e);
+                log.error("Failed to update relay miner", { error: e })
                 setError(e instanceof Error ? e.message : "Failed to update relay miner. Make sure the combination of identity and region is unique and try again.");
             } finally {
                 setIsUpdatingRelayMiner(false);
@@ -163,7 +166,7 @@ export function AddOrUpdateRelayMinerDialog({
                 }
                 onClose?.(true);
             } catch (e) {
-                console.error("Failed to create relay miner", e);
+                log.error("Failed to create relay miner", { error: e })
                 setError("Failed to create relay miner. Make sure the combination of identity and region is unique and try again.");
             } finally {
                 setIsCreatingRelayMiner(false);

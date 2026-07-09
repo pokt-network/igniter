@@ -11,6 +11,9 @@ import {CalculateStakeDistribution} from "@/actions/Stake";
 import {ActivityContentLoading} from "@/app/app/stake/components/ActivityContentLoading";
 import {getApplicationSettings} from "@/actions/ApplicationSettings";
 import {ProviderStatus} from "@igniter/db/middleman/enums";
+import {getLogger} from "@igniter/logger";
+
+const log = getLogger(['middleman', 'pick-offer-step'])
 
 export interface PickOfferStepProps {
     amount: number;
@@ -139,8 +142,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                     }
                 }
             } catch (error) {
-                console.warn('An error occurred while calculating the stake distribution!');
-                console.error(error);
+                log.error('failed to calculate stake distribution', { error });
             } finally {
                 setIsLoadingOffers(false);
             }

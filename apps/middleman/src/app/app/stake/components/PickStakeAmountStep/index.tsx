@@ -10,6 +10,9 @@ import {useApplicationSettings} from "@/app/context/ApplicationSettings";
 import {ActivityContentLoading} from "@/app/app/stake/components/ActivityContentLoading";
 import {QuickInfoPopOverIcon} from "@igniter/ui/components/QuickInfoPopOverIcon";
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'pick-stake-amount-step'])
 
 export interface PickStakeAmountStepProps {
     defaultAmount: number;
@@ -37,8 +40,8 @@ export function PickStakeAmountStep({onAmountSelected, defaultAmount, ownerAddre
         try {
           const balance = await getBalance(ownerAddress);
           setBalance(balance);
-        } catch {
-          console.log('An error occurred while getting the balance from your connected wallet.');
+        } catch (error) {
+          log.warn('failed to get balance from connected wallet', { ownerAddress, error });
         }
       })();
     }, [ownerAddress]);

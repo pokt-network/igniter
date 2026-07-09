@@ -24,6 +24,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { LoaderIcon } from "@igniter/ui/assets";
 import type { Region } from "@igniter/db/provider/schema";
 import { CreateRegion, UpdateRegion } from "@/actions/Regions";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'AddOrUpdateRegionDialog']);
 
 const Code = ({ children }: { children: React.ReactNode }) => (
   <code className="rounded-sm border border-border-subtle bg-bg-surface px-1 py-0.5 font-mono text-[11px] text-text-primary">
@@ -110,7 +113,7 @@ export function AddOrUpdateRegionDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to update region", e);
+        log.error("Failed to update region", { error: e })
         setError('There has been an error updating the region. Please, try again.');
       } finally {
         setIsUpdatingRegion(false);
@@ -124,7 +127,7 @@ export function AddOrUpdateRegionDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to create region", e);
+        log.error("Failed to create region", { error: e })
         setError('There has been an error creating the region. Please, try again.');
       } finally {
         setIsCreatingRegion(false);

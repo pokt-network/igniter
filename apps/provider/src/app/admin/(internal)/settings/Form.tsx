@@ -28,6 +28,9 @@ import { Trash2Icon } from 'lucide-react'
 import { ChainId } from '@igniter/db/provider/enums'
 import { isPoktBech32Address } from '@igniter/commons/crypto'
 import clsx from 'clsx'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'Form']);
 
 const FormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -264,7 +267,7 @@ export default function SettingsForm() {
       await refetchSettings()
       form.reset(values)
     } catch (error) {
-      console.error('Failed to update settings:', error)
+      log.error('Failed to update settings', { error: error })
       setSubmitError('Failed to save settings. Please try again.')
     } finally {
       setIsSubmitting(false)

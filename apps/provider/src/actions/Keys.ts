@@ -30,6 +30,9 @@ import {
 } from '@/lib/utils/actionUtils'
 import { findById as findAddressGroupById } from '@/lib/dal/addressGroups'
 import { TriggerAddressGroupMigrationSchedule } from '@/actions/Schedules'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['provider', 'keys'])
 
 export async function CountKeys(): Promise<ActionResult<number>> {
   return withRequireOwner(async () => countKeys())
@@ -75,7 +78,10 @@ export async function ImportKeys(keys: string[], addressGroupId: number): Promis
       })
     }))
 
-    await insertMany(keysToInsert)
+    const inserted = await insertMany(keysToInsert)
+    for (const key of inserted) {
+      log.info('key imported', { address: key.address, ownerAddress: key.ownerAddress, state: key.state })
+    }
   })
 }
 
@@ -258,9 +264,11 @@ export async function MigrateKeysToAddressGroup(filters: KeyMigrationFilters, ta
 
     const scheduleResult = await TriggerAddressGroupMigrationSchedule()
     if (!scheduleResult.success) {
-      console.warn(
-        `[MigrateKeysToAddressGroup] keys migrated but schedule trigger failed; the recurring migration schedule will pick them up: ${scheduleResult.error.message}`,
-      )
+      log.warn('keys migrated but schedule trigger failed; the recurring migration schedule will pick them up', {
+        targetAddressGroupId: parsed.targetAddressGroupId,
+        migratedCount: migrated,
+        error: scheduleResult.error.message,
+      })
     }
 
     return migrated

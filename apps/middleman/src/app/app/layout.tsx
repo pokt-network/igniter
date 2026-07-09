@@ -11,6 +11,9 @@ import {
 import { useNotifications } from '@igniter/ui/context/Notifications/index'
 import { Button } from '@igniter/ui/components/button'
 import { EVENT_LABELS, SUPPLIER_TYPES, describeEvent } from '@/lib/notificationEvents'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'app-layout'])
 
 // Single source of truth for the in-app header feed: the per-wallet
 // notification_events store. Every event the user is subscribed to (supplier
@@ -79,7 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           } catch (err) {
             // Marking viewed failed — drop from the seen-set so the next poll re-surfaces it.
             notifiedRef.current.delete(ev.id)
-            console.error('Failed to mark notification event viewed', err)
+            log.error('failed to mark notification event viewed', { eventId: ev.id, error: err })
           }
         },
         actions: isSupplier

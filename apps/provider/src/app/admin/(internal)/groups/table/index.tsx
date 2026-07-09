@@ -24,6 +24,9 @@ import {
   Trash2Icon,
 } from 'lucide-react'
 import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'table']);
 
 export default function AddressGroupsTable() {
   const { data: addressGroups, refetch: fetchAddressGroups, isLoading: isLoadingAddressGroups, isError } = useQuery({
@@ -114,7 +117,7 @@ export default function AddressGroupsTable() {
       }
       await fetchAddressGroups()
     } catch (error) {
-      console.error('Failed to delete addressGroup:', error)
+      log.error('Failed to delete addressGroup', { error: error })
       addNotification({
         id: `delete-ag-error`,
         type: 'error',

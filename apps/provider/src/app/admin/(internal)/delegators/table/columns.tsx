@@ -12,6 +12,9 @@ import {
 } from '@igniter/ui/components/DataTable/index'
 import {CsvColumnDef} from "@igniter/ui/lib/csv";
 import { copyToClipboard } from "@igniter/ui/lib/utils";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'columns']);
 
 export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
   {
@@ -82,7 +85,7 @@ export const columns: Array<ColumnDef<Delegator> & CsvColumnDef<Delegator>> = [
                   if (!result.success) throw new Error(result.error.message)
                   setIsEnabled(checked)
                 } catch (error) {
-                  console.error('Error updating delegator status:', error)
+                  log.error('Error updating delegator status', { error: error })
                 } finally {
                   setUpdating(false)
                 }

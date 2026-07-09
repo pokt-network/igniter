@@ -697,7 +697,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     log.debug('Updating supplier', { params, update })
     await dal.keys.updateKey(params.address, update, params.height)
-    log.info('Update Supplier done!', {params})
+    log.debug('Update Supplier done!', {params})
 
     // Drain trigger (D6): unbonding entered (Unstaking OR Unstaked) and not yet retired.
     // Fires for middleman-initiated unstakes (the provider has no INTENT for those, so no
@@ -792,7 +792,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * and an accompanying message.
    */
   async remediateSupplier(params: RemediateSupplierParams) {
-    log.info('remediateSupplier: Execution started', {params})
+    log.debug('remediateSupplier: Execution started', {params})
     const [key, supportedServices, balance, supplier]: [KeyWithGroup, Service[], number, Supplier] = await Promise.all([
       dal.keys.loadKey(params.address),
       dal.services.loadServices(),
@@ -829,7 +829,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     if (key.remediationHistory?.length === 0) {
-      log.info('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
+      log.debug('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
       return {
         success: true,
         remediated: false,

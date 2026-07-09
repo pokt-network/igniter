@@ -18,6 +18,9 @@ import {
 } from '@/app/app/import-suppliers/types'
 import { ImportedSupplier } from '@/lib/services/importSuppliers'
 import { CancelPendingImportAttempts } from '@/actions/ImportSuppliers'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'import-suppliers-page'])
 
 export default function ClientImportSuppliersPage() {
   const { connectedIdentity, connectedIdentities, isConnected } =
@@ -123,7 +126,7 @@ export default function ClientImportSuppliersPage() {
           setIsAborting(false)
           await router.push('/app')
         } catch (error) {
-          console.error(error)
+          log.error('failed to abort import', { error })
           addNotification({
             id: `abort-import-error`,
             type: 'error',

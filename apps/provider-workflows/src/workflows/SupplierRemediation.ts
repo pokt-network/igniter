@@ -157,7 +157,7 @@ export async function SupplierRemediation(input: SupplierRemediationInput): Prom
 
   const allFailed = r.every(r => {
     if (r.status === 'rejected') {
-      log.warn(`SupplierRemediation: Child workflow failed with: ${r.reason}`)
+      log.warn('SupplierRemediation: Child workflow failed', { reason: r.reason })
     }
     return r.status === 'rejected';
   })

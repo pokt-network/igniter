@@ -25,13 +25,13 @@ export default class DAL {
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
     this.dbClient = dbClient
-    this.keys = new Keys(dbClient, logger.child({ context: 'Keys' }))
-    this.services = new Services(dbClient, logger.child({ context: 'Services' }))
-    this.settings = new Settings(dbClient, logger.child({ context: 'Settings' }))
-    this.transactions = new Transactions(dbClient, logger.child({ context: 'Transactions' }))
-    this.delegators = new Delegators(dbClient, logger.child({ context: 'Delegators' }))
-    this.notificationChannels = new NotificationChannels(dbClient, logger.child({ context: 'NotificationChannels' }))
-    this.watchdog = new Watchdog(dbClient, logger.child({ context: 'Watchdog' }))
+    this.keys = new Keys(dbClient, logger.getChild('Keys'))
+    this.services = new Services(dbClient, logger.getChild('Services'))
+    this.settings = new Settings(dbClient, logger.getChild('Settings'))
+    this.transactions = new Transactions(dbClient, logger.getChild('Transactions'))
+    this.delegators = new Delegators(dbClient, logger.getChild('Delegators'))
+    this.notificationChannels = new NotificationChannels(dbClient, logger.getChild('NotificationChannels'))
+    this.watchdog = new Watchdog(dbClient, logger.getChild('Watchdog'))
   }
 
   // add any common queries below

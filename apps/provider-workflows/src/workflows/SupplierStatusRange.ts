@@ -62,7 +62,7 @@ export async function SupplierStatusByRange(input: SupplierStatusByRange): Promi
 
   const allFailed = r.every(r => {
     if (r.status === 'rejected') {
-      log.warn(`SupplierStatusByRange: Child workflow failed with: ${r.reason}`)
+      log.warn('SupplierStatusByRange: Child workflow failed', { reason: r.reason })
     }
     return r.status === 'rejected';
   })

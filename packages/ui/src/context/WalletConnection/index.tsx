@@ -7,6 +7,9 @@ import { PROVIDER_COOKIE_KEY } from './constants';
 import { KeplrWalletConnection } from './KeplrWalletConnection';
 import {PocketWalletConnection} from "./PocketWalletConnection";
 import { setCookie } from '../../lib/cookies'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['ui', 'wallet-connection'])
 
 const WALLET_TIMEOUT_MS = 15_000
 
@@ -66,47 +69,47 @@ export const WalletConnectionContext = createContext<WalletConnectionContext>({
   isConnected: false,
   expectedChainId: '',
   connect: async () => {
-    console.warn('Method not implemented: connect. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: connect. Something is wrong with the wallet connection provider.');
     return [];
   },
   getChain: async () => {
-    console.warn('Method not implemented: getChain. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: getChain. Something is wrong with the wallet connection provider.');
     return '';
   },
   connectIdentity: (address: string) => {
-    console.warn('Method not implemented: connectedIdentity. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: connectedIdentity. Something is wrong with the wallet connection provider.');
   },
   clearConnectedIdentity: () => {
-    console.warn('Method not implemented: clearConnectedIdentity. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: clearConnectedIdentity. Something is wrong with the wallet connection provider.');
   },
   getPublicKey: async (address: string) => {
-    console.warn('Method not implemented: getPublicKey. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: getPublicKey. Something is wrong with the wallet connection provider.');
     return '';
   },
   getBalance: async (address: string) => {
-    console.warn('Method not implemented: getBalance. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: getBalance. Something is wrong with the wallet connection provider.');
     return 0;
   },
   switchChain: async () => {
-    console.warn('Method not implemented: switchChain. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: switchChain. Something is wrong with the wallet connection provider.');
   },
   signMessage: async () => {
-    console.warn('Method not implemented: signMessage. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: signMessage. Something is wrong with the wallet connection provider.');
     return '';
   },
   getAvailableProviders: async (): Promise<ProviderInfoWithConnection[]> => {
-    console.warn('Method not implemented: getProvidersInfo. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: getProvidersInfo. Something is wrong with the wallet connection provider.');
     return [];
   },
   reconnect: async (
     address: string,
     provider: string
   )=> {
-    console.warn('Method not implemented: reconnect. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: reconnect. Something is wrong with the wallet connection provider.');
     return false;
   },
   signTransaction: async (messages: TransactionMessage[]) : Promise<SignedTransaction> => {
-    console.warn('Method not implemented: signTransaction. Something is wrong with the wallet connection provider.');
+    log.warn('Method not implemented: signTransaction. Something is wrong with the wallet connection provider.');
     return {
       address: '',
       signedPayload: '',
@@ -199,7 +202,7 @@ export const WalletConnectionProvider = ({
 
       return connectedIdentities
     } catch (error) {
-      console.error(error);
+      log.error('Failed to connect wallet', { error });
       throw error;
     }
 

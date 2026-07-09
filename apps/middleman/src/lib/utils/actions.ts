@@ -2,6 +2,9 @@ import 'server-only'
 import { auth } from '@/auth'
 import { UserRole } from '@igniter/db/middleman/enums'
 import { type ActionResult, success, error } from '@igniter/ui/lib/actionResult'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'actions'])
 
 export async function getCurrentUser() {
   const session = await auth()
@@ -56,7 +59,7 @@ export async function withRequireOwner<T>(
     const result = await action()
     return success(result)
   } catch (err) {
-    console.error('[ActionError]', err)
+    log.error('server action failed', { error: err })
 
     if (err instanceof Error) {
       if (err.message === 'Unauthorized' || err.message === 'Not logged in') {

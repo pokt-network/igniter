@@ -7,6 +7,10 @@ import {StatusRequest, StatusResponse} from "@/lib/models/status";
 import type {AddressGroupWithDetails} from "@igniter/db/provider/schema";
 import {ProviderFee} from "@igniter/db/provider/enums";
 import {getRevShare} from "@igniter/domain/provider/utils";
+import { getLogger } from "@igniter/logger";
+import { withLogging } from "@/lib/logging/withLogging";
+
+const log = getLogger(["provider", "status"]);
 
 async function getUniqueRegions(): Promise<string[]> {
   const regions = await listRegions();
@@ -48,7 +52,7 @@ export function stripAuditFields<T>(value: T): T {
   return value;
 }
 
-export async function POST(request: Request) {
+export const POST = withLogging(async (request: Request) => {
   try {
     const isBootstrappedResponse = await ensureApplicationIsBootstrapped();
 
@@ -97,7 +101,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response);
   } catch (e) {
-    console.error(e);
+    log.error('status request failed', { error: e });
     return NextResponse.json({ error: "Invalid request" }, { status: 500 });
   }
-}
+})

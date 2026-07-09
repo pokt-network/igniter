@@ -9,6 +9,9 @@ import {
 } from "react";
 import { getApplicationSettings } from "@/actions/ApplicationSettings";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
+import {getLogger} from "@igniter/logger";
+
+const log = getLogger(['middleman', 'application-settings-context'])
 
 const ApplicationSettingsContext = createContext<ApplicationSettings | undefined>(undefined);
 
@@ -26,7 +29,7 @@ export const ApplicationSettingsProvider = ({
         const settings = await getApplicationSettings();
         setApplicationSettings(settings);
       } catch (error) {
-       console.error(error);
+        log.error("failed to load application settings", { error });
       }
     })();
   }, []);

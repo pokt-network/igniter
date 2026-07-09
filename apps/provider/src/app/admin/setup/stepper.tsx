@@ -22,6 +22,9 @@ import ConfigureBlockChain from "@/app/admin/setup/ConfigureBlockChain";
 import ConfigureRelayMiners from "@/app/admin/setup/ConfigureRelayMiners";
 import ConfigureRegions from "@/app/admin/setup/ConfigureRegions";
 import ConfigureNotifications from "@/app/admin/setup/ConfigureNotifications";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'stepper']);
 
 const { useStepper, steps, utils } = defineStepper(
   {
@@ -176,7 +179,7 @@ export const Stepper: React.FC = () => {
       const dbSettings = await GetApplicationSettings();
       setSettings(dbSettings as ApplicationSettings);
     } catch (error) {
-      console.error("Something went wrong while retrieving the current applications settings", error);
+      log.error("Something went wrong while retrieving the current applications settings", { error: error })
       setHasError(true);
     } finally {
       setIsLoadingSettings(false);

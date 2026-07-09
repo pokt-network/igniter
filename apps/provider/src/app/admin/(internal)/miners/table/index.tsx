@@ -20,6 +20,9 @@ import {
   Trash2Icon,
 } from 'lucide-react'
 import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'table']);
 
 export default function RelayMinersTable() {
   const { data: relayMiners, refetch: fetchRelayMiners, isLoading: isLoadingRelayMiners, isError } = useQuery({
@@ -97,7 +100,7 @@ export default function RelayMinersTable() {
       }
       await fetchRelayMiners()
     } catch (error) {
-      console.error('Failed to delete relay miner:', error)
+      log.error('Failed to delete relay miner', { error: error })
       addNotification({
         id: `delete-relay-miner-error`,
         type: 'error',

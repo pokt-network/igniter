@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: middleman-workflows-config
 data:
+  # NDJSON in localnet: agent/jq-friendly and format-parity with prod (Loki).
+  LOG_FORMAT: "json"
   TEMPORAL_URL: "temporal-frontend.default.svc.cluster.local:7233"
   TEMPORAL_NAMESPACE: "middleman"
   TEMPORAL_TASK_QUEUE: "middleman-operations"

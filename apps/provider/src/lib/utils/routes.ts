@@ -4,6 +4,13 @@ import { getDelegatorByIdentity } from "@/lib/dal/delegators";
 import { verifySignature } from "@igniter/commons/crypto";
 import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@igniter/commons/constants";
 import {APIResponse} from "@/lib/models/response";
+import { getLogger } from "@igniter/logger";
+
+const log = getLogger(["provider", "routes"]);
+
+/** Spec §7: publicKey-like identifiers are truncated in logs (auth-site rule). */
+export const truncateIdentity = (id: string | undefined | null): string | undefined =>
+  id ? `${id.slice(0, 12)}…` : undefined;
 
 export interface SignedRequestPayload<TData> {
   delegator: ReturnType<typeof getDelegatorByIdentity> extends Promise<infer T> ? T : unknown;
@@ -43,68 +50,53 @@ export async function ensureApplicationIsBootstrapped(): Promise<void | NextResp
  * otherwise it returns the allowed delegator and the parsed JSON data.
  */
 export async function validateRequestSignature<TData>(request: Request): Promise<SignedRequestPayload<TData> | NextResponse<APIResponse>> {
-  console.log('Validating request signature...');
   const delegatorIdentity = request.headers.get(REQUEST_IDENTITY_HEADER);
-  console.log(`X-Middleman-Identity header: ${delegatorIdentity}`);
 
   if (!delegatorIdentity) {
-    console.log(`Invalid request. X-Middleman-Identity header was not provided.`);
+    log.debug('request signature validation failed', { delegator: null, identity: truncateIdentity(null), verified: false, reason: 'missing identity header' });
     return NextResponse.json(
       { error: "Invalid request. X-Middleman-Identity header was not provided." },
       { status: 400 }
     );
   }
 
-  console.log('Authenticating delegator...');
-
   const delegator = await getDelegatorByIdentity(delegatorIdentity);
 
   if (!delegator) {
-    console.log('Delegator not found.');
+    log.debug('request signature validation failed', { delegator: null, identity: truncateIdentity(delegatorIdentity), verified: false, reason: 'delegator not found' });
     return NextResponse.json(
       { error: "Forbidden. The client is not allowed." },
       { status: 403 }
     );
   }
 
-  console.log(`Delegator authenticated. Name: "${delegator?.name}"`);
-
-
   let data: TData;
 
-  console.log('Authenticating request signature...');
-
   try {
-    console.log('Extracting payload from request...');
     data = await request.json();
-    console.log('Payload extracted successfully');
   } catch (err) {
-    console.error('Failed to extract payload from request.');
-    console.error(err);
+    log.error('failed to parse request payload as JSON', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), error: err });
     return NextResponse.json(
       { error: "Invalid request. Is the request valid JSON?" },
       { status: 400 }
     );
   }
 
-  console.log('Parsing payload and verifying signature...');
   const rawData = JSON.stringify(data);
-  console.log('Payload parsed successfully.');
   const providedSignature = request.headers.get(REQUEST_SIGNATURE_HEADER) || "";
-  console.log(`X-Middleman-Signature header: ${providedSignature}`);
+  // NEVER log signature/pubkey values — only the outcome (audit item 6).
   const publicKeyBase64 = Buffer.from(delegator.identity, "hex").toString("base64");
-  console.log(`Public key (base64): ${publicKeyBase64}`);
   const isValidSignature = await verifySignature(rawData, publicKeyBase64, providedSignature);
 
   if (!isValidSignature) {
-    console.log('Signature could not be verified with public key.');
+    log.debug('request signature validation failed', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), verified: false, reason: 'signature mismatch' });
     return NextResponse.json(
       { error: `Invalid request. Signature could not be verified with public key: ${delegator.identity}` },
       { status: 400 }
     );
   }
 
-  console.log('Signature verified successfully.');
+  log.debug('request signature validated', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), verified: true });
 
   return { delegator, data };
 }

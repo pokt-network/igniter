@@ -35,6 +35,9 @@ import {
 import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { getShortAddress } from '@igniter/ui/lib/utils'
 import { fromBase64, toHex } from '@cosmjs/encoding'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'import-process'])
 
 interface ImportProcessProps {
   provider: ProviderOption
@@ -139,7 +142,7 @@ export function ImportProcess({
         setCurrentStep(ImportProcessStep.SignNonce)
       } catch (err) {
         const { message } = err as Error
-        console.error('Failed to request import:', message)
+        log.error('failed to request import', { provider: provider.identity, ownerAddress, error: message })
 
         // Set user-friendly error message
         let userFriendlyError: string
@@ -197,7 +200,7 @@ export function ImportProcess({
         setCurrentStep(ImportProcessStep.SubmitImport)
       } catch (err) {
         const { message } = err as Error
-        console.error('Failed to sign nonce:', message)
+        log.error('failed to sign nonce', { ownerAddress, error: message })
 
         const userFriendlyError = message
         setProcessError(userFriendlyError)
@@ -259,7 +262,7 @@ export function ImportProcess({
         setCurrentStep(ImportProcessStep.Completed)
       } catch (err) {
         const { message } = err as Error
-        console.error('Failed to submit import:', message)
+        log.error('failed to submit import', { attemptId, provider: provider.identity, error: message })
 
         const userFriendlyError = message
         setProcessError(userFriendlyError)

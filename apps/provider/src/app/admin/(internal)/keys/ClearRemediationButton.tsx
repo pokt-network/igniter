@@ -5,6 +5,9 @@ import { Button } from '@igniter/ui/components/button'
 import { ConfirmationDialog } from '@igniter/ui/components/ConfirmationDialog'
 import { useRouter } from 'next/navigation'
 import { ClearKeysRemediation } from '@/actions/Keys'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ClearRemediationButton']);
 
 export default function ClearRemediationButton() {
   const router = useRouter()
@@ -26,7 +29,7 @@ export default function ClearRemediationButton() {
       setOpen(false)
       router.refresh()
     } catch (e) {
-      console.error('Failed to clear remediation state', e)
+      log.error('Failed to clear remediation state', { error: e })
       setError(e instanceof Error ? e.message : 'Failed to update keys state. Please try again.')
     } finally {
       setIsSubmitting(false)

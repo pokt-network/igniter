@@ -12,6 +12,9 @@ import { columns } from "./Columns";
 import { AddOrUpdateRegionDialog } from "@/components/AddOrUpdateRegionDialog";
 import { LoaderIcon } from "@igniter/ui/assets";
 import {PencilIcon, Trash2Icon} from "lucide-react";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureRegions']);
 
 export interface ConfigureRegionsProps {
   goNext?: () => void;
@@ -87,10 +90,10 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
       if (response.success) {
         setRegions(response.data);
       } else {
-        console.error("Failed to fetch regions:", response.error);
+        log.error("Failed to fetch regions", { error: response.error })
       }
     } catch (error) {
-      console.error("Failed to fetch regions:", error);
+      log.error("Failed to fetch regions", { error: error })
     } finally {
       setIsLoadingRegions(false);
     }
@@ -107,7 +110,7 @@ export default function ConfigureRegions({ goNext, goBack }: Readonly<ConfigureR
       }
       await fetchRegions();
     } catch (error) {
-      console.error("Failed to delete region:", error);
+      log.error("Failed to delete region", { error: error })
     } finally {
       setIsDeletingRegion(false);
       setRegionToDelete(null);
