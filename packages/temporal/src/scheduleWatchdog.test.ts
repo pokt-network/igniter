@@ -1,3 +1,4 @@
+import { ScheduleAlreadyRunning } from '@temporalio/client'
 import { ScheduleWatchdog, defaultHealState } from '@/scheduleWatchdog'
 import type { HealState, WatchdogConfig, WatchdogEntry, WatchdogStateStore } from '@/scheduleWatchdog'
 import type { TemporalClient } from '@/types'
@@ -20,7 +21,7 @@ const entry: WatchdogEntry = {
 
 const config: WatchdogConfig = {
   enabled: true, mode: 'enforce', tickMs: 30_000, minAgeMs: 180_000, missedFirings: 5,
-  maxHealAttempts: 5, recreateAfter: 2, minGraceMs: 90_000, graceCapMs: 600_000,
+  maxHealAttempts: 5, recreateAfter: 2, maxRecreateAttempts: 3, minGraceMs: 90_000, graceCapMs: 600_000,
   backoffBaseMs: 30_000, backoffCapMs: 300_000, describeDeadlineMs: 5_000,
 }
 
@@ -36,6 +37,7 @@ function makeStore(state?: HealState): WatchdogStateStore {
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
     recordRecreate: jest.fn(),
+    resetRecreations: jest.fn(),
   }
 }
 
@@ -126,6 +128,234 @@ describe('ScheduleWatchdog.tick', () => {
     await wd.tick()
     expect(store.recordRecreate).not.toHaveBeenCalled()
     expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+  })
+
+  it('describe() corrupt (WFT failed) + enforce: recordRecreate -> delete -> create -> resetOnRecreate', async () => {
+    const calls: string[] = []
+    const create = jest.fn().mockImplementation(async () => { calls.push('create') })
+    const del = jest.fn().mockImplementation(async () => { calls.push('delete') })
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    ;(store.recordRecreate as jest.Mock).mockImplementation(async () => { calls.push('recordRecreate') })
+    ;(store.resetOnRecreate as jest.Mock).mockImplementation(async () => { calls.push('resetOnRecreate') })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(calls).toEqual(['recordRecreate', 'delete', 'create', 'resetOnRecreate'])
+  })
+
+  it('describe() corrupt + observe: persists observed_unhealthy, mutates nothing', async () => {
+    const del = jest.fn()
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config: { ...config, mode: 'observe' }, logger })
+    await wd.tick()
+    expect(store.setObservedUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    expect(del).not.toHaveBeenCalled()
+    expect(store.recordRecreate).not.toHaveBeenCalled()
+  })
+
+  it('describe() corrupt + enforce: failing delete() skips round without resetOnRecreate', async () => {
+    const del = jest.fn().mockRejectedValue(Object.assign(new Error('boom'), { code: 13 }))
+    const corrupt = Object.assign(new Error('Failed to describe schedule'), {
+      cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+    })
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(corrupt), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await expect(wd.tick()).resolves.toBeUndefined()
+    expect(create).not.toHaveBeenCalled()
+    expect(store.resetOnRecreate).not.toHaveBeenCalled()
+  })
+
+  const corruptErr = () => Object.assign(new Error('Failed to describe schedule'), {
+    cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+  })
+
+  it('corrupt + enforce at the recreate cap: setUnhealthy(true), no recreate', async () => {
+    const del = jest.fn()
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(corruptErr()), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), recreations: 3 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    expect(del).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(store.recordRecreate).not.toHaveBeenCalled()
+  })
+
+  it('corrupt + enforce at the cap, already unhealthy: skips without re-marking', async () => {
+    const del = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(corruptErr()), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), recreations: 3, unhealthy: true })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('NOT_FOUND + enforce at the recreate cap: setUnhealthy(true), no recreate', async () => {
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), recreations: 3 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    expect(create).not.toHaveBeenCalled()
+    expect(store.recordRecreate).not.toHaveBeenCalled()
+  })
+
+  it('corrupt + enforce: recreate backoff grows exponentially and halts at the cap', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-09T00:00:00Z'))
+    try {
+      const stateRef = { ...defaultHealState(entry.scheduleId) }
+      const del = jest.fn()
+      const create = jest.fn()
+      const handle = { describe: jest.fn().mockRejectedValue(corruptErr()), update: jest.fn(), trigger: jest.fn(), delete: del }
+      const store = makeStore()
+      ;(store.getState as jest.Mock).mockImplementation(async () => ({ ...stateRef }))
+      ;(store.recordRecreate as jest.Mock).mockImplementation(async () => { stateRef.recreations++ })
+      const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+
+      await wd.tick() // t=0, recreations 0 -> recreate #1, backoff 30s
+      expect(del).toHaveBeenCalledTimes(1)
+      await wd.tick() // still t=0: within backoff -> skipped
+      expect(del).toHaveBeenCalledTimes(1)
+      jest.setSystemTime(new Date('2026-07-09T00:00:30Z'))
+      await wd.tick() // recreations 1 -> recreate #2, backoff 60s
+      expect(del).toHaveBeenCalledTimes(2)
+      jest.setSystemTime(new Date('2026-07-09T00:01:00Z')) // only +30s -> backoff grew, skipped
+      await wd.tick()
+      expect(del).toHaveBeenCalledTimes(2)
+      jest.setSystemTime(new Date('2026-07-09T00:01:30Z')) // +60s since #2 -> eligible
+      await wd.tick() // recreations 2 -> recreate #3
+      expect(del).toHaveBeenCalledTimes(3)
+      jest.setSystemTime(new Date('2026-07-09T00:10:00Z'))
+      await wd.tick() // recreations 3 >= cap -> halt + page
+      expect(del).toHaveBeenCalledTimes(3)
+      expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('corrupt recreate: AlreadyRunning swallow + re-describe still failing -> no resetOnRecreate', async () => {
+    const del = jest.fn()
+    const create = jest.fn().mockRejectedValue(new ScheduleAlreadyRunning('dup', entry.scheduleId))
+    const handle = { describe: jest.fn().mockRejectedValue(corruptErr()), update: jest.fn(), trigger: jest.fn(), delete: del }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(del).toHaveBeenCalledTimes(1)
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId) // attempt still counted
+    expect(store.resetOnRecreate).not.toHaveBeenCalled()
+  })
+
+  it('corrupt recreate: AlreadyRunning swallow + re-describe succeeding -> resetOnRecreate', async () => {
+    const del = jest.fn()
+    const create = jest.fn().mockRejectedValue(new ScheduleAlreadyRunning('dup', entry.scheduleId))
+    const handle = {
+      // corrupt for tickOne's describe AND ensureSchedule's describe; the third
+      // (post-swallow verify) describe succeeds -> recreate may be marked healed.
+      describe: jest.fn().mockRejectedValueOnce(corruptErr()).mockRejectedValueOnce(corruptErr()).mockResolvedValue(descWith({})),
+      update: jest.fn(), trigger: jest.fn(), delete: del,
+    }
+    const store = makeStore()
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
+  })
+
+  it('healthy + autonomous fire after corrupt episode: resets the recreate breaker (episode-scoped, M1)', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 15 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3, lastActionCount: 10 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    // resetRecreations zeroes the counter AND clears unhealthy in one write; the
+    // separate setUnhealthy(false) is not used when recreations>0.
+    expect(store.resetRecreations).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('healthy verdict WITHOUT autonomous fire, recreations>0: does NOT reset the breaker (infancy-grace guard)', async () => {
+    // numActionsTaken === lastActionCount: a recreated schedule describing healthy
+    // during infancy grace, before it has ever fired on its own. Resetting here would
+    // re-open the silent recreate-loop this breaker exists to stop.
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 10 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, recreations: 3, lastActionCount: 10 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).not.toHaveBeenCalled()
+  })
+
+  it('healthy verdict with recreations=0: skips the breaker-reset write', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}] })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId) }) // recreations 0, healthy
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('healthy + autonomous fire, recreations=0 but unhealthy latched: clears the flag via ladder reset', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 15 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, lastActionCount: 10 }) // recreations 0
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.resetRecreations).not.toHaveBeenCalled()
+    // unhealthy is now cleared by resetLadder (bundled with the ladder reset),
+    // not by a standalone setUnhealthy(false) call.
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 15)
+  })
+
+  it('healthy verdict WITHOUT autonomous fire, unhealthy latched: does NOT clear the flag (infancy-grace guard)', async () => {
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ runningActions: [{}], numActionsTaken: 10 })), update: jest.fn(), trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), unhealthy: true, lastActionCount: 10 }) // recreations 0
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+    expect(store.resetLadder).not.toHaveBeenCalled()
+  })
+
+  it('capped schedule after resetRecreations: next NOT_FOUND tick recreates again (operator reset, H1)', async () => {
+    const create = jest.fn()
+    const handle = { describe: jest.fn().mockRejectedValue(Object.assign(new Error('not found'), { code: 5 })), update: jest.fn(), trigger: jest.fn() }
+    // Breaker had tripped (recreations at cap) but the operator Recreate reset it to 0.
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), recreations: 0 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.setUnhealthy).not.toHaveBeenCalled()
+  })
+
+  it('verify-describe after AlreadyRunning is deadline-bounded (L1): a hung re-describe is a verify-failure, no resetOnRecreate', async () => {
+    const del = jest.fn()
+    const create = jest.fn().mockRejectedValue(new ScheduleAlreadyRunning('dup', entry.scheduleId))
+    const handle = {
+      // corrupt for tickOne + ensureSchedule describes; the post-swallow verify hangs forever.
+      describe: jest.fn()
+        .mockRejectedValueOnce(corruptErr())
+        .mockRejectedValueOnce(corruptErr())
+        .mockImplementation(() => new Promise(() => {})), // never resolves
+      update: jest.fn(), trigger: jest.fn(), delete: del,
+    }
+    const store = makeStore()
+    const fastConfig = { ...config, describeDeadlineMs: 20 }
+    const wd = new ScheduleWatchdog({ client: makeClient(handle, create), entries: [entry], store, config: fastConfig, logger })
+    await wd.tick()
+    // The bounded verify rejects -> treated as verify-failure -> NOT marked healed.
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.resetOnRecreate).not.toHaveBeenCalled()
   })
 
   it('describe() transient: skips, never treated as stale, never aborts pass', async () => {

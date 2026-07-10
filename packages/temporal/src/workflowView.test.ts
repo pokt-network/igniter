@@ -165,7 +165,7 @@ describe('mapScheduleToHealth', () => {
   })
 
   it('healthy when not paused and no heal escalation', () => {
-    const row = mapScheduleToHealth(makeSummary(), heal())
+    const row = mapScheduleToHealth(makeSummary(), heal(), 'healthy')
     expect(row.state).toBe('healthy')
     expect(row.lastFire).toBe('2026-07-01T00:05:00.000Z')
     expect(row.nextFire).toBe('2026-07-01T00:10:00.000Z')
@@ -184,8 +184,22 @@ describe('mapScheduleToHealth', () => {
     expect(mapScheduleToHealth(makeSummary(), heal({ unstucks: 2 })).state).toBe('stale')
   })
 
+  it("renders 'unknown' (not green) when no live verdict is available (describe() failed fallback)", () => {
+    expect(mapScheduleToHealth(makeSummary(), heal()).state).toBe('unknown')
+    expect(mapScheduleToHealth(makeSummary(), null).state).toBe('unknown')
+  })
+
+  it("liveness 'unknown' (cron/non-interval) still degrades to the counter signal", () => {
+    expect(mapScheduleToHealth(makeSummary(), heal(), 'unknown').state).toBe('healthy')
+    expect(mapScheduleToHealth(makeSummary(), heal({ unstucks: 1 }), 'unknown').state).toBe('stale')
+  })
+
+  it("heal.unhealthy wins over a live verdict (corrupt-recreate breaker pages the UI)", () => {
+    expect(mapScheduleToHealth(makeSummary(), heal({ unhealthy: true }), 'healthy').state).toBe('unhealthy')
+  })
+
   it('degrades to healthy with zeroed health when no watchdog row', () => {
-    const row = mapScheduleToHealth(makeSummary(), null)
+    const row = mapScheduleToHealth(makeSummary(), null, 'healthy')
     expect(row.state).toBe('healthy')
     expect(row.unstucks).toBe(0)
     expect(row.unhealthy).toBe(false)

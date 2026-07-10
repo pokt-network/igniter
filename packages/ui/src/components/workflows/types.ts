@@ -22,6 +22,14 @@ export interface WorkflowsActions {
   TerminateWorkflow: (workflowId: string, runId?: string) => Promise<ActionResult<void>>
   GetWorkflowDetail: (workflowId: string, runId?: string) => Promise<ActionResult<WorkflowDetailView>>
   GetWorkflowHistoryJson: (workflowId: string, runId?: string) => Promise<ActionResult<string>>
+
+  /**
+   * Optional schedule controls. Buttons render only when the app injects them,
+   * so an app build that predates these actions keeps a read-only tab.
+   */
+  PauseSchedule?: (scheduleId: string, note?: string) => Promise<ActionResult<void>>
+  ResumeSchedule?: (scheduleId: string) => Promise<ActionResult<void>>
+  RecreateSchedule?: (scheduleId: string) => Promise<ActionResult<void>>
 }
 
 /**
