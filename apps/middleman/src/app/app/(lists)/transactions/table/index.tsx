@@ -115,6 +115,7 @@ export default function TransactionsTable() {
                         provider: tx.provider?.name || 'Height Pending',
                         providerFee: tx.providerFee,
                         typeProviderFee: tx.typeProviderFee,
+                        log: tx.log,
                     }
                 }) || []
             }

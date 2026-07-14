@@ -157,9 +157,12 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
       <div className="flex flex-col xl:flex-row gap-4">
         {/* Table card */}
         <div className={`${cardClasses} flex-1 min-w-0 overflow-x-auto`}>
+          {/* Bounded scroll box: invisible until the table outgrows it, then the
+              header below stays pinned. */}
+          <div className="max-h-[60vh] overflow-y-auto">
           <table className="w-full">
-            <thead>
-              <tr className="border-b border-[color:--divider] bg-muted/50">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-[color:--divider] bg-muted">
                 <th className={HEADER_CLASSES} onClick={() => handleSort('name')}>
                   Provider{sortIndicator('name')}
                 </th>
@@ -200,6 +203,7 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Pie charts */}

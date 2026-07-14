@@ -7,6 +7,7 @@ import {ActivitySuccessIcon, ActivityWarningIcon, RightArrowIcon} from '@igniter
 import { Button } from '@igniter/ui/components/button'
 import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import { amountToPokt } from '@igniter/ui/lib/utils'
+import { failureReasonDisplay } from '@igniter/commons/utils'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
 import Amount from '@igniter/ui/components/Amount'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
@@ -27,6 +28,7 @@ export type Transaction = {
     provider: string,
     providerFee?: number | null,
     typeProviderFee?: ProviderFee | null,
+    log?: string | null,
 };
 
 export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
@@ -66,6 +68,24 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
             return <TransactionStatusBadge status={status} />;
         },
         csvFormatterFn: ({status}) => status.charAt(0).toUpperCase() + status.slice(1),
+    },
+    {
+        id: "failureReason",
+        header: "Failure Reason",
+        cell: ({ row }) => {
+            const { status, log } = row.original;
+            const text = failureReasonDisplay(status === TransactionStatus.Failure, log);
+            if (text === null) {
+                return <span className="text-muted-foreground">-</span>;
+            }
+            return (
+                <span className="block max-w-[16rem] truncate text-red-400" title={text}>
+                    {text}
+                </span>
+            );
+        },
+        csvFormatterFn: (item) =>
+            failureReasonDisplay(item.status === TransactionStatus.Failure, item.log) ?? '',
     },
     {
         accessorKey: "hash",

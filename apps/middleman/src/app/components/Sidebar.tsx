@@ -80,6 +80,13 @@ export const dynamic = "force-dynamic";
 export default function Sidebar({}: Readonly<AppSidebarProps>) {
   const pathname = usePathname();
 
+  // Sidebar chrome belongs only to the authenticated app/admin areas. On the
+  // portal (landing) and auth pages the whole rail is hidden — returning null
+  // drops both the fixed rail and its layout spacer so content is full width.
+  const isInternal =
+    pathname.startsWith("/app") || pathname.startsWith("/admin");
+  if (!isInternal) return null;
+
   const routes = pathname.startsWith("/admin") ? adminRoutes : mainRoutes;
 
   const MainRoutesMenu = routes.map((route) => (
@@ -91,7 +98,7 @@ export default function Sidebar({}: Readonly<AppSidebarProps>) {
           : "text-text-secondary"
       }
     >
-      <SidebarMenuButton asChild>
+      <SidebarMenuButton asChild tooltip={route.title}>
         <Link href={route.url}>
           <route.icon />
           <span>{route.title}</span>

@@ -105,8 +105,8 @@ export function SchedulesTab({
           Resume failed for <span className="font-mono">{resumeError.scheduleId}</span>: {resumeError.message}
         </p>
       )}
-      <Table>
-        <TableHeader>
+      <Table containerClassName="max-h-[60vh]">
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--bg-root) [&_th]:border-b [&_th]:border-border-primary">
           <TableRow>
             <TableHead />
             <TableHead>Schedule</TableHead>

@@ -94,10 +94,10 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
           name="providers"
           render={() => (
             <FormItem>
-              <div className="rounded-md border">
+              <div className="rounded-md border max-h-[60vh] overflow-y-auto">
                 <table className="w-full">
-                  <thead>
-                    <tr className="border-b text-left text-sm text-muted-foreground">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="border-b text-left text-sm text-muted-foreground bg-background">
                       <th className="p-3 w-10"></th>
                       <th className="p-3">Name</th>
                       <th className="p-3">Identity</th>

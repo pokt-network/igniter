@@ -5,6 +5,7 @@ import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import Address from '@igniter/ui/components/Address'
 import type { Transaction } from '@igniter/db/provider/schema'
 import { TransactionStatus, TransactionType, TransactionTrigger, RemediationHistoryEntryReason } from '@igniter/db/provider/enums'
+import { failureReasonDisplay } from '@igniter/commons/utils'
 import { Button } from '@igniter/ui/components/button'
 import { RightArrowIcon } from '@igniter/ui/assets'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
@@ -95,6 +96,22 @@ export const columns: Array<ColumnDef<Transaction>> = [
       return (
         <span className="text-slightly-muted-foreground">
           {reason ? (ReasonLabels[reason] || reason) : '-'}
+        </span>
+      )
+    },
+  },
+  {
+    accessorKey: "message",
+    header: "Failure Reason",
+    cell: ({ row }) => {
+      const status = row.getValue("status") as string
+      const text = failureReasonDisplay(status === TransactionStatus.Failure, row.original.message)
+      if (text === null) {
+        return <span className="text-slightly-muted-foreground">-</span>
+      }
+      return (
+        <span className="block max-w-[16rem] truncate text-red-400" title={text}>
+          {text}
         </span>
       )
     },

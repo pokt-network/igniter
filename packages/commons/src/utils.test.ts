@@ -1,4 +1,4 @@
-import { parseEnvInt, checkEnvVariables } from './utils';
+import { parseEnvInt, checkEnvVariables, failureReasonDisplay } from './utils';
 
 describe('parseEnvInt', () => {
   it('parses a valid integer string', () => {
@@ -63,5 +63,25 @@ describe('checkEnvVariables', () => {
 
   it('does not throw for an empty list', () => {
     expect(() => checkEnvVariables([])).not.toThrow();
+  });
+});
+
+describe('failureReasonDisplay', () => {
+  it('returns null when the transaction is not a failure (caller shows a dash)', () => {
+    expect(failureReasonDisplay(false, 'insufficient funds')).toBeNull();
+    expect(failureReasonDisplay(false, null)).toBeNull();
+    expect(failureReasonDisplay(false, undefined)).toBeNull();
+  });
+
+  it('returns the trimmed reason for a failure', () => {
+    expect(failureReasonDisplay(true, 'insufficient funds')).toBe('insufficient funds');
+    expect(failureReasonDisplay(true, '  sequence mismatch  ')).toBe('sequence mismatch');
+  });
+
+  it('falls back to "Unknown error" when a failure has no usable reason', () => {
+    expect(failureReasonDisplay(true, null)).toBe('Unknown error');
+    expect(failureReasonDisplay(true, undefined)).toBe('Unknown error');
+    expect(failureReasonDisplay(true, '')).toBe('Unknown error');
+    expect(failureReasonDisplay(true, '   ')).toBe('Unknown error');
   });
 });

@@ -10,3 +10,17 @@ export const checkEnvVariables = (vars: string[]) => {
     }
   }
 }
+
+/**
+ * Display text for a transaction's failure reason, shared by both apps'
+ * transaction tables. Returns `null` when the row is not a failure (the caller
+ * renders a placeholder such as "-"); otherwise the trimmed reason, or
+ * "Unknown error" when the reason is absent, empty, or whitespace-only.
+ */
+export const failureReasonDisplay = (
+  isFailure: boolean,
+  reason: string | null | undefined,
+): string | null => {
+  if (!isFailure) return null
+  return reason?.trim() || 'Unknown error'
+}

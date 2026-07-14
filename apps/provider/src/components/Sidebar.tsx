@@ -104,7 +104,7 @@ export default function Sidebar({}: Readonly<AppSidebarProps>) {
           : "text-text-secondary"
       }
     >
-      <SidebarMenuButton asChild>
+      <SidebarMenuButton asChild tooltip={route.title}>
         <Link href={route.url}>
           <route.icon />
           <span>{route.title}</span>
