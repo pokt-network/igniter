@@ -151,8 +151,6 @@ export default function ChainOverview() {
 
   const handleExport = useCallback(() => exportChainOverviewCsv(sortedRows), [sortedRows])
 
-  if (!isLoading && !isError && !allRows.length) return null
-
   const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
   if (isLoading) {

@@ -115,6 +115,8 @@ export interface DataTableProps<TData extends object, TValue> {
   enableRowSelection?: boolean
   /** Derive a stable string key from a row; passed to tanstack getRowId. */
   getRowId?: (row: TData) => string
+  /** Lock the header row so it stays visible while the table body scrolls. On by default. */
+  stickyHeader?: boolean
   /** Called whenever the selection changes; receives the selected row originals. */
   onSelectionChange?: (selectedRows: TData[]) => void
 }
@@ -143,6 +145,7 @@ export default function DataTable<TData extends object, TValue>({
   enableRowSelection,
   getRowId,
   onSelectionChange,
+  stickyHeader = true,
 }: DataTableProps<TData, TValue>) {
   const isServerPaginated = !!manualPagination
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
@@ -427,6 +430,12 @@ export default function DataTable<TData extends object, TValue>({
                           "text-text-tertiary uppercase text-xs font-semibold tracking-wide px-4",
                           align === 'center' && 'text-center',
                           align === 'right' && 'text-right',
+                          // Locks the header to the top of the (already scrollable)
+                          // table container. Needs an opaque bg (the page/table
+                          // root color) so scrolled rows don't bleed through, plus
+                          // a bottom border since the header row's own divider
+                          // scrolls away with the body.
+                          stickyHeader && 'sticky top-0 z-10 bg-(--bg-root) border-b border-border-primary',
                         )
                       }
                     >
@@ -434,7 +443,7 @@ export default function DataTable<TData extends object, TValue>({
                     </TableHead>
                   )
                 })}
-                {itemActions && <TableHead />}
+                {itemActions && <TableHead className={clsx(stickyHeader && 'sticky top-0 z-10 bg-(--bg-root) border-b border-border-primary')} />}
               </TableRow>
             ))}
           </TableHeader>

@@ -276,8 +276,8 @@ export function WorkflowDetailClient({
               <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
                 Child workflows ({detail.children.length})
               </h2>
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh]">
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--bg-root) [&_th]:border-b [&_th]:border-border-primary">
                   <TableRow>
                     <TableHead>Workflow ID</TableHead>
                     <TableHead>Type</TableHead>
@@ -456,8 +456,8 @@ function ActivitiesTable({
     return <p className="text-xs text-text-tertiary">No activities recorded.</p>
   }
   return (
-    <Table>
-      <TableHeader>
+    <Table containerClassName="max-h-[60vh]">
+      <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--bg-root) [&_th]:border-b [&_th]:border-border-primary">
         <TableRow>
           <TableHead className="w-8" />
           <TableHead>#</TableHead>

@@ -176,8 +176,12 @@ export async function TestNotificationChannel(id: number) {
   })
 }
 
-export async function ListNotificationEvents(page = 0, pageSize = 25) {
-  return run(async () => dal.listNotificationEvents(await requireAuth(), page, pageSize))
+export async function ListNotificationEvents(
+  page = 0,
+  pageSize = 25,
+  filters?: dal.NotificationEventFilters,
+) {
+  return run(async () => dal.listNotificationEvents(await requireAuth(), page, pageSize, filters))
 }
 
 export async function GetNotificationEvent(uuid: string) {

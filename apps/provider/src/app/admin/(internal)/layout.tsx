@@ -3,7 +3,7 @@ import "@/app/globals.css";
 import { ThemeProvider } from "@/app/theme";
 import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import { ApplicationSettingsProvider } from "@/app/context/ApplicationSettings";
-import { SidebarInset, SidebarProvider } from "@igniter/ui/components/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@igniter/ui/components/sidebar";
 import { AppTopBar } from "@igniter/ui/components/AppTopBar/index";
 import CurrentUser from "@/components/CurrentUser";
 import Sidebar from "@/components/Sidebar";
@@ -33,7 +33,7 @@ export default function RootLayout({
               <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
                 <QuickDetailProvider>
                   <NotificationsProvider>
-                    <AppTopBar>
+                    <AppTopBar leading={<SidebarTrigger />}>
                       <CurrentUser />
                       <ThemeToggle />
                     </AppTopBar>
@@ -41,7 +41,7 @@ export default function RootLayout({
                         <Sidebar />
                         <SidebarInset className="!min-h-0">
                           <div className={"w-full h-full flex overflow-x-hidden"}>
-                            <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-[calc(100dvw)] md:w-[calc(100dvw-255px)]">
+                            <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-full min-w-0">
                               <RegisterPlugins />
                               <NotificationEventsBridge />
                               {children}

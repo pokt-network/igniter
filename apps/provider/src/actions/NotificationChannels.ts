@@ -13,6 +13,7 @@ import {
   listUnviewedNotificationEvents,
   markNotificationEventsViewed,
   markAllNotificationEventsViewed,
+  type NotificationEventFilters,
 } from '@/lib/dal/notificationChannels'
 import { withRequireOwner } from '@/lib/utils/actionUtils'
 import { NotificationChannelType } from '@igniter/db/provider/enums'
@@ -267,8 +268,12 @@ export async function TestNotificationChannel(id: number) {
   })
 }
 
-export async function ListNotificationEvents(page = 0, pageSize = 25, search?: string) {
-  return withRequireOwner(async () => listNotificationEvents(page, pageSize, search))
+export async function ListNotificationEvents(
+  page = 0,
+  pageSize = 25,
+  filters?: NotificationEventFilters,
+) {
+  return withRequireOwner(async () => listNotificationEvents(page, pageSize, filters))
 }
 
 export async function GetNotificationEvent(uuid: string) {

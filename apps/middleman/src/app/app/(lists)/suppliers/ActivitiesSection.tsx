@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { GetPendingState } from '@/actions/Pending'
+import { Input } from '@igniter/ui/components/input'
 import Address from '@igniter/ui/components/Address'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
 import Amount from '@igniter/ui/components/Amount'
@@ -21,11 +22,6 @@ import type { PendingStateSerialized, PendingOperationSerialized } from '@/lib/p
 function hasPendingOrLinger(state: PendingStateSerialized | undefined): boolean {
   if (!state) return false
   return (state.pendingOperations?.length ?? 0) > 0
-}
-
-function pendingCount(state: PendingStateSerialized | undefined): number {
-  if (!state) return 0
-  return Object.keys(state.byOperator).length
 }
 
 // Status-aware label and color per design spec:
@@ -63,33 +59,42 @@ export default function ActivitiesSection() {
     refetchInterval: (q) => (hasPendingOrLinger(q.state.data) ? 7000 : false),
   })
 
+  const [search, setSearch] = useState('')
+
   const rows = useMemo(() => {
     return pendingState?.pendingOperations ?? []
   }, [pendingState])
 
-  const count = pendingCount(pendingState)
-
-  // Render nothing when no pending and no recently-settled rows.
-  if (rows.length === 0) return null
+  // Client-side filter across supplier/owner addresses and provider name —
+  // mirrors the Suppliers tab search, scoped to the fields this strip shows.
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((row) =>
+      [row.operatorAddress, row.ownerAddress, row.providerName]
+        .some((field) => field?.toLowerCase().includes(q)),
+    )
+  }, [rows, search])
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Section heading — matches RecentChanges / Services Overview style.
-          Badge shows PENDING count only; settled-linger rows don't inflate it. */}
-      <h3 className="text-lg font-semibold">
-        In progress
-        {count > 0 && (
-          <span className="text-sm font-normal text-text-tertiary ml-2">· {count}</span>
-        )}
-      </h3>
-
       {/* Hand-built using the shared Table primitives (the same ones DataTable
           renders internally) + DataTable's exact header-cell classes. DataTable's
           own toolbar + pagination chrome would still render with no props, so we
           reuse the Table primitives directly for a compact, chrome-free strip that
           is visually identical to our tables. ~5 rows then internal scroll. */}
-      <Table containerClassName="max-h-[260px]">
-        <TableHeader>
+      {rows.length > 0 && (
+        <Input
+          placeholder="Search by supplier, owner, or provider…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+      )}
+      <Table containerClassName="max-h-[420px]">
+        {/* Lock header to the top of the scroll box; opaque root bg so rows
+            don't bleed through, plus a bottom divider that stays put. */}
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--bg-root) [&_th]:border-b [&_th]:border-border-primary">
           <TableRow className="bg-transparent">
             {/* Column order: Tx Hash · Submitted · Supplier · Owner · Provider · Amount · Op Funds · Status */}
             <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
@@ -103,7 +108,17 @@ export default function ActivitiesSection() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
+          {filteredRows.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={8}
+                className="h-24 text-center text-text-secondary"
+              >
+                {search.trim() ? 'No matches.' : 'No activity yet.'}
+              </TableCell>
+            </TableRow>
+          )}
+          {filteredRows.map((row) => {
             const statusLabel = getStatusLabel(row)
             const statusClass = getStatusClass(row)
             const submittedStr = row.createdAt

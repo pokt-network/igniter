@@ -6,6 +6,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarRail,
 } from "./sidebar";
 
 import { ComponentType } from "react";
@@ -28,6 +29,7 @@ export default function AppSidebar({
 }: Readonly<AppSidebarProps>) {
   return (
     <Sidebar
+      collapsible="icon"
       className="top-[calc(var(--header-height)+var(--notification-height,0px))] !h-[calc(100svh-var(--header-height)-var(--notification-height,0px))]"
       {...sidebarProps}
     >
@@ -46,6 +48,7 @@ export default function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
