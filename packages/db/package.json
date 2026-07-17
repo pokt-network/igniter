@@ -42,6 +42,11 @@
       "import": "./dist/src/watchdogStore.js",
       "require": "./dist/src/watchdogStore.js",
       "types": "./dist/src/watchdogStore.d.ts"
+    },
+    "./notifications": {
+      "import": "./dist/src/notifications.js",
+      "require": "./dist/src/notifications.js",
+      "types": "./dist/src/notifications.d.ts"
     }
   },
   "scripts": {

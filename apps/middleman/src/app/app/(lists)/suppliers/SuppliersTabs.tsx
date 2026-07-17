@@ -2,9 +2,11 @@
 
 import * as React from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@igniter/ui/components/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger, TabsBadge } from '@igniter/ui/components/tabs'
 
+import { GetPendingState } from '@/actions/Pending'
 import NodesTable from '@/app/app/(lists)/suppliers/table'
 import ActivitiesSection from '@/app/app/(lists)/suppliers/ActivitiesSection'
 import ChainOverview from '@/app/app/(lists)/suppliers/ChainOverview'
@@ -25,6 +27,17 @@ export default function SuppliersTabs() {
     ? (param as TabValue)
     : 'suppliers'
 
+  // Lifted above the tab boundary so the pending count stays live regardless of
+  // the active tab — ActivitiesSection (its own consumer of this same queryKey)
+  // only mounts on the Activity tab, so the badge needs its own always-mounted
+  // read. Same queryKey → react-query dedups to a single poll + shared cache.
+  const { data: pendingState } = useQuery({
+    queryKey: ['pendingState'],
+    queryFn: GetPendingState,
+    refetchInterval: (q) => ((q.state.data?.pendingOperations?.length ?? 0) > 0 ? 7000 : false),
+  })
+  const pendingCount = Object.keys(pendingState?.byOperator ?? {}).length
+
   const onTabChange = (next: string) => {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', next)
@@ -35,7 +48,10 @@ export default function SuppliersTabs() {
     <Tabs value={tab} onValueChange={onTabChange}>
       <TabsList>
         <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
-        <TabsTrigger value="activity">Activity</TabsTrigger>
+        <TabsTrigger value="activity">
+          Activity
+          <TabsBadge count={pendingCount} variant="warning" />
+        </TabsTrigger>
         <TabsTrigger value="overview">Overview</TabsTrigger>
       </TabsList>
       <TabsContent value="suppliers">

@@ -107,6 +107,7 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
 
   return (
     <NotificationHistory
+      enableSearch
       eventTypeOptions={EVENT_TYPE_OPTIONS}
       channelOptions={CHANNEL_OPTIONS}
       onMarkAllViewed={onMarkAllViewed}
