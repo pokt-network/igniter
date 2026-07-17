@@ -1,7 +1,11 @@
 import 'server-only'
 import { getDb } from '@/db'
-import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { NOTIFICATION_EVENT_TYPES } from '@igniter/db/middleman/enums'
+import {
+  buildNotificationEventFilterConditions as buildConditions,
+  type NotificationEventFilters,
+} from '@igniter/db/notifications'
 import {
   notificationChannelsTable,
   notificationEventsTable,
@@ -10,45 +14,16 @@ import {
   type InsertNotificationEvent,
   type NotificationChannel,
   type NotificationEvent,
-  type NotificationEventType,
   type NotificationPreferences,
 } from '@igniter/db/middleman/schema'
 
-// Server-side filters for the notification history table. All optional; an
-// absent field means "no constraint on that dimension".
-export type NotificationEventFilters = {
-  /** Partial, case-insensitive match on the event UUID. */
-  search?: string
-  /** Exact event type (e.g. 'stake', 'service_change'). */
-  type?: string
-  /** Read/unread by viewedAt presence. */
-  read?: 'read' | 'unread'
-  /** Delivering channel type (e.g. 'discord') — matched against the channels JSON. */
-  channel?: string
-}
+export type { NotificationEventFilters }
 
-// Translates the optional filter set into a list of AND-able SQL conditions.
-// Exported for unit testing of the filter branching.
+// Binds the middleman events table + enum to the shared filter builder in
+// @igniter/db/notifications. Kept as a same-signature wrapper so call sites and
+// the unit tests (notificationChannels.filters.test.ts) stay unchanged.
 export function buildNotificationEventFilterConditions(filters?: NotificationEventFilters) {
-  const conds = []
-  // Only push a type condition for a KNOWN enum member — an arbitrary string
-  // (e.g. a hand-crafted request bypassing the UI) would otherwise reach the
-  // enum column and make Postgres throw "invalid input value for enum".
-  if (filters?.type && (NOTIFICATION_EVENT_TYPES as readonly string[]).includes(filters.type)) {
-    conds.push(eq(notificationEventsTable.type, filters.type as NotificationEventType))
-  }
-  if (filters?.read === 'unread') conds.push(isNull(notificationEventsTable.viewedAt))
-  if (filters?.read === 'read') conds.push(isNotNull(notificationEventsTable.viewedAt))
-  if (filters?.search) {
-    conds.push(sql`${notificationEventsTable.uuid}::text ILIKE ${'%' + filters.search + '%'}`)
-  }
-  if (filters?.channel) {
-    // channels is a JSON array of { type, ... }; match any element's type.
-    conds.push(
-      sql`EXISTS (SELECT 1 FROM json_array_elements(${notificationEventsTable.channels}) elem WHERE elem->>'type' = ${filters.channel})`,
-    )
-  }
-  return conds
+  return buildConditions(notificationEventsTable, NOTIFICATION_EVENT_TYPES, filters)
 }
 
 // The list/table view never receives the encrypted config — secrets stay on the

@@ -24,3 +24,12 @@ export const failureReasonDisplay = (
   if (!isFailure) return null
   return reason?.trim() || 'Unknown error'
 }
+
+/**
+ * Whether a pathname belongs to the authenticated internal areas (app/admin),
+ * as opposed to the portal (landing) and auth pages. Single source of truth for
+ * the sidebar gate: both the rail (Sidebar) and its toggle (SidebarTriggerGate)
+ * must agree, so the prefix set lives here rather than being duplicated.
+ */
+export const isInternalPath = (pathname: string): boolean =>
+  pathname.startsWith('/app') || pathname.startsWith('/admin')
