@@ -36,7 +36,7 @@ export default function KeysTabs() {
       const res = await GetKeysPendingState()
       return res.success ? res.data : { byKey: {}, pendingOperations: [] }
     },
-    refetchInterval: 4000,
+    refetchInterval: (q) => (Object.keys(q.state.data?.byKey ?? {}).length > 0 ? 4000 : false),
   })
   const pendingCount = Object.keys(pendingState?.byKey ?? {}).length
 
