@@ -42,6 +42,7 @@ export const labelByRpcType: Record<string, string> = {
   [RPCType.GRPC]: "GRPC",
   [RPCType.WEBSOCKET]: "WEBSOCKET",
   [RPCType.REST]: "REST",
+  [RPCType.COMET_BFT]: "COMET_BFT",
 }
 
 export const validRpcTypes = [
@@ -49,4 +50,5 @@ export const validRpcTypes = [
   RPCType.GRPC,
   RPCType.WEBSOCKET,
   RPCType.REST,
+  RPCType.COMET_BFT,
 ] as const;
