@@ -10,6 +10,7 @@ export function getSchemeForRpcType(rpcType: RPCType) {
     switch (rpcType) {
         case RPCType.JSON_RPC:
         case RPCType.REST:
+        case RPCType.COMET_BFT:
             return 'https';
         case RPCType.GRPC:
             return 'grpcs';
@@ -30,6 +31,8 @@ export function getUrlTokenFromRpcType(rpcType: RPCType) {
             return 'grpc';
         case RPCType.WEBSOCKET:
             return 'ws';
+        case RPCType.COMET_BFT:
+            return 'cometbft';
         default:
             return 'json';
     }

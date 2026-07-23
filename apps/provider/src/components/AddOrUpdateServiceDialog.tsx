@@ -54,6 +54,7 @@ const validRpcTypes = [
   validRpcTypesEnums[1].toString(),
   validRpcTypesEnums[2].toString(),
   validRpcTypesEnums[3].toString(),
+  validRpcTypesEnums[4].toString(),
 ] as const;
 
 const RPCTypeSchema = z.enum(validRpcTypes).default(PROTOCOL_DEFAULT_TYPE).transform(v => Number(v));
