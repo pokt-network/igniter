@@ -64,7 +64,9 @@ export default function TransactionsTable() {
                             consumedFee: newTx.consumedFee,
                             provider: newTx.provider?.name || '',
                             providerFee: newTx.providerFee,
-                            typeProviderFee: newTx.typeProviderFee
+                            typeProviderFee: newTx.typeProviderFee,
+                            log: newTx.log,
+                            code: newTx.code,
                         }
                     }, index)
                 }
@@ -116,6 +118,7 @@ export default function TransactionsTable() {
                         providerFee: tx.providerFee,
                         typeProviderFee: tx.typeProviderFee,
                         log: tx.log,
+                        code: tx.code,
                     }
                 }) || []
             }

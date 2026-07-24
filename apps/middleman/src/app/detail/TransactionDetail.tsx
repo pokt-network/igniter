@@ -15,6 +15,7 @@ import { BaseQuickInfoTooltip } from '@igniter/ui/components/BaseQuickInfoToolti
 import Address from '@igniter/ui/components/Address'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
 import { MessageType } from '@igniter/commons/constants'
+import { failureReasonDisplay } from '@igniter/commons/utils'
 import { GetNode } from '@/actions/Nodes'
 import {
   TransactionsToNodesWithDetails,
@@ -83,6 +84,8 @@ export interface TransactionDetailBody {
   provider: string
   providerFee?: number | null
   typeProviderFee?: ProviderFee | null
+  log?: string | null
+  code?: number | null
 }
 
 export interface TransactionDetail {
@@ -301,9 +304,14 @@ export default function TransactionDetail({
   provider,
   providerFee,
   typeProviderFee,
+  log,
+  code,
 }: TransactionDetailBody) {
   const addItemToDetail = useAddItemToDetail()
   const [isShowingTransactionDetails, setIsShowingTransactionDetails] = useState(false);
+
+  const isFailure = status === TransactionStatus.Failure
+  const failureReason = failureReasonDisplay(isFailure, log, code)
 
   let onClickAddress: ((address: string) => void) | undefined = undefined
 
@@ -333,6 +341,8 @@ export default function TransactionDetail({
                   providerFee: tx.providerFee,
                   typeProviderFee: tx.typeProviderFee,
                   operations: JSON.parse(tx.unsignedPayload).body.messages,
+                  log: tx.log,
+                  code: tx.code,
                 }
               }),
               provider: node.provider || null,
@@ -354,11 +364,10 @@ export default function TransactionDetail({
       label: 'Status',
       value: (
         <div className={'flex items-center gap-2'}>
-          {status === TransactionStatus.Failure && (
+          {isFailure && failureReason && (
             <BaseQuickInfoTooltip
-              title={'Not Enough Coins'}
-              description={'Validator does not have enough coins in their account.'}
-              actionText={'View In Explorer'}
+              title={'Transaction Failed'}
+              description={failureReason}
             >
               <Button variant={'icon'} className={'h-4 w-4 mr-[-6px] mb-[-5px]'}>
                 <WarningIcon />
