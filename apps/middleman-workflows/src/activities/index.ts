@@ -1284,7 +1284,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    * height (or its execution height on the first sweep). Maps the pocket tri-state
    * result down to the minimal shape the pure decision logic consumes.
    */
-  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>> {
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string; rawLog?: string }>> {
     const txn = await dal.transaction.getTransaction(transactionId)
     if (!txn?.hash) {
       throw new Error('verifyTxHash: tx missing hash')
@@ -1296,7 +1296,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     // activity boundary (the default payload converter cannot encode BigInt).
     return {
       status: 'confirmed',
-      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString() },
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString(), rawLog: out.data.rawLog },
     }
   },
 
@@ -1399,11 +1399,16 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
     const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
+    // Failure log: prefer the chain's own error text (rawLog, present when the tx
+    // was found on-chain and failed) so the UI can show the real reason; the
+    // hardcoded summaries remain for paths where no chain text exists (absent-tx
+    // failure) or as suffix context (sibling-met goal).
     const fields: { code?: number; consumedFee?: number; verificationHeight?: number; log?: string } = {
       verificationHeight,
       log: decision.tx === 'success' ? 'verified'
-        : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
-        : 'verification negative (validity bound covered, no effect)',
+        : decision.effects === 'apply-success'
+          ? `tx failed on-chain; goal met by sibling tx${decision.rawLog ? ` (${decision.rawLog})` : ''}`
+          : decision.rawLog || 'verification negative (validity bound covered, no effect)',
     }
     if (decision.code !== undefined) fields.code = decision.code
     if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)

@@ -8,7 +8,7 @@ import type { VerifyOutcome, SupplierPathOutcome } from './verifyOutcome'
 export const TX_EXPIRATION_BLOCKS = 30
 
 export interface DecideInput {
-  hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>
+  hash: VerifyOutcome<{ success: boolean; code: number; gasUsed: string; rawLog?: string }>
   /** null when the tx type has no supplier path (e.g. send / OperationalFunds) */
   supplier: SupplierPathOutcome | null
   /** advisory only, not read — kept so existing callers compile without changes */
@@ -50,6 +50,8 @@ export interface VerificationDecision {
   failedOperators?: string[]
   code?: number
   gasUsed?: string
+  /** Chain error text (ABCI log) when the tx was found on-chain and failed. */
+  rawLog?: string
   newLastCoveredHeight?: number
   /** any applicable path was unavailable */
   incUnavailable: boolean
@@ -85,14 +87,14 @@ export function decideVerification(input: DecideInput): VerificationDecision {
   //    but destructive effects require knowing the goal-state.
   if (hash.status === 'confirmed' && !hash.data.success) {
     if (!supplierApplicable) {
-      return { tx: 'failure', effects: 'none', code: hash.data.code, gasUsed: hash.data.gasUsed, incUnavailable: false }
+      return { tx: 'failure', effects: 'none', code: hash.data.code, gasUsed: hash.data.gasUsed, rawLog: hash.data.rawLog, incUnavailable: false }
     }
     if (supplier!.status === 'confirmed') {
       // Goal met by a sibling tx — do NOT release/penalize staked state.
-      return { tx: 'failure', effects: 'apply-success', code: hash.data.code, gasUsed: hash.data.gasUsed, incUnavailable: false }
+      return { tx: 'failure', effects: 'apply-success', code: hash.data.code, gasUsed: hash.data.gasUsed, rawLog: hash.data.rawLog, incUnavailable: false }
     }
     if (supplier!.status === 'absent') {
-      return { tx: 'failure', effects: 'apply-failure', failedOperators: supplier!.absentOperators, code: hash.data.code, gasUsed: hash.data.gasUsed, incUnavailable: false }
+      return { tx: 'failure', effects: 'apply-failure', failedOperators: supplier!.absentOperators, code: hash.data.code, gasUsed: hash.data.gasUsed, rawLog: hash.data.rawLog, incUnavailable: false }
     }
     // supplier unavailable: wait — never run destructive effects on an unknown goal-state.
     return { tx: 'pending', effects: 'none', incUnavailable: true }

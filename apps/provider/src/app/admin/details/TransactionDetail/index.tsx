@@ -119,8 +119,6 @@ export default function TransactionDetail({ tx }: TransactionDetailProps) {
     lastCoveredHeight,
     timeoutHeight,
     timeoutTimestamp,
-    code,
-    message,
     unavailableChecks,
     lastVerificationAt,
     createdAt,
@@ -150,7 +148,7 @@ export default function TransactionDetail({ tx }: TransactionDetailProps) {
       value: <Badge variant={variant}>{StatusLabels[status] || status}</Badge>,
     },
     {
-      label: 'Reason',
+      label: 'Remediation',
       value: <span>{reason ? (ReasonLabels[reason] || reason) : '—'}</span>,
     },
     {
@@ -172,14 +170,6 @@ export default function TransactionDetail({ tx }: TransactionDetailProps) {
     {
       label: 'Timeout Timestamp',
       value: <span className="font-mono">{formatDate(timeoutTimestamp)}</span>,
-    },
-    {
-      label: 'Code',
-      value: <span className="font-mono">{code ?? '—'}</span>,
-    },
-    {
-      label: 'Message',
-      value: <span className="text-xs break-all">{message || '—'}</span>,
     },
     {
       label: 'Unavailable Checks',

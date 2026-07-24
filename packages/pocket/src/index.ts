@@ -339,12 +339,13 @@ export class PocketBlockchain {
       const transactionHash = await client.broadcastTxSync(txBytes)
       return { transactionHash, success: true }
     } catch (error) {
-      const { code, message } = error as { code: number; message: string }
+
+      const err = error as { code?: number; message?: string; log?: string }
       return {
         transactionHash: '',
         success: false,
-        code,
-        message,
+        code: err.code,
+        message: err.log ?? err.message,
       }
     }
   }
@@ -403,6 +404,7 @@ export class PocketBlockchain {
         gasWanted: tx.gasWanted,
         success: tx.code === 0,
         code: tx.code,
+        rawLog: tx.rawLog,
       }
     }
 
@@ -516,7 +518,7 @@ export class PocketBlockchain {
         const results = await comet.blockResults(height)
         const txData = results.results[i]
         if (!txData) return 'result-missing'
-        return { hash: txHash, height, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code }
+        return { hash: txHash, height, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code, rawLog: txData.log }
       }
     }
     return 'no-match'
@@ -539,6 +541,7 @@ export class PocketBlockchain {
         gasWanted: BigInt(txResponse.gas_wanted || '0'),
         success: txResponse.code === 0,
         code: txResponse.code,
+        rawLog: txResponse.raw_log ?? undefined,
       }
     } catch (error) {
       this.logger.warn('API tx lookup failed', { txHash, error })
@@ -946,7 +949,8 @@ export class PocketBlockchain {
           success: false,
           rejected: true,
           code: e.code,
-          message: e.message ?? 'broadcast rejected',
+          // `.log` is the clean ABCI error; `.message` is the verbose cosmjs wrapper.
+          message: e.log ?? e.message ?? 'broadcast rejected',
         }
       }
 
@@ -970,7 +974,8 @@ export class PocketBlockchain {
         success: false,
         rejected: false,
         code: e.code,
-        message: e.message ?? 'broadcast failed',
+        // Prefer the clean ABCI `.log` when present (undefined on non-cosmjs errors).
+        message: e.log ?? e.message ?? 'broadcast failed',
       }
     }
   }
