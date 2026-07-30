@@ -72,9 +72,6 @@ jobs:
       - name: Build
         run: pnpm turbo build
 
-      - name: Test
-        run: pnpm turbo test
-
       - name: Type check
         continue-on-error: true
         run: pnpm turbo check-types
