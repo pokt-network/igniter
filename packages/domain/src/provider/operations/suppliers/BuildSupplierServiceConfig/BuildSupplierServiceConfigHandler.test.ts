@@ -70,7 +70,6 @@ describe('BuildSupplierServiceConfigHandler', () => {
         mockedGetRevShare.mockReturnValue([
             { address: operatorAddress, revSharePercentage: 30 },
         ]);
-
         mockedGetEpUrl.mockReturnValue('https://interpolated');
     });
 
@@ -111,6 +110,34 @@ describe('BuildSupplierServiceConfigHandler', () => {
             input.services[0]?.endpoints[0],
             interpolationParams,
         );
+    });
+
+    it.each([
+        ['4', 'https://numeric-override.example.com'],
+        ['REST', 'https://legacy-override.example.com'],
+    ])('applies endpoint override key %s for string rpc types', (overrideKey, overrideUrl) => {
+        const overrideInput = {
+            ...input,
+            addressGroup: {
+                ...input.addressGroup,
+                addressGroupServices: [
+                    {
+                        ...addressGroupServiceConfig,
+                        endpointOverrides: {
+                            [overrideKey]: overrideUrl,
+                        },
+                    },
+                ],
+            },
+        } as BuildSupplierServiceConfigInput;
+
+        const result = handler.execute(overrideInput);
+
+        expect(result[0]?.endpoints[0]).toMatchObject({
+            url: overrideUrl,
+            rpcType: 4,
+            configs: [],
+        });
     });
 
     it('leaves the client (owner) with 0% when supplier share + rev shares total 100% (kleomedes/Marco case)', () => {
