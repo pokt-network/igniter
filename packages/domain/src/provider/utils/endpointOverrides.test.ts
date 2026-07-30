@@ -36,6 +36,10 @@ describe('endpoint override compatibility', () => {
     ).toBe('https://numeric.example.com');
   });
 
+  it('returns undefined when no override key matches', () => {
+    expect(getEndpointOverride({'3': 'https://json.example.com'}, 'REST')).toBeUndefined();
+  });
+
   const makeKey = (endpointOverrides?: Record<string, string>) => ({
     address: 'pokt1supplier',
     ownerAddress: 'pokt1owner',
