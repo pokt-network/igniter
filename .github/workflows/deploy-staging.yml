@@ -1,7 +1,16 @@
 name: Deploy Staging
 
 on:
-  pull_request:
+  # pull_request_target, NOT pull_request: a `pull_request` event raised by a PR
+  # from a FORK gets a read-only GITHUB_TOKEN and no secrets, regardless of the
+  # `permissions:` block below — so the GHCR push fails with "installation not
+  # allowed to Write organization package" and post-deploy never runs. That is
+  # exactly what happened when PR #326 (external contributor) was merged.
+  # pull_request_target runs in the base-repo context with a read/write token.
+  # The usual pull_request_target hazard (running untrusted PR-head code with a
+  # privileged token) does not apply here: every checkout below pins `ref: staging`,
+  # never the PR head, and the job only runs once the PR is already merged.
+  pull_request_target:
     types: [closed]
     branches: [staging]
   workflow_dispatch:
