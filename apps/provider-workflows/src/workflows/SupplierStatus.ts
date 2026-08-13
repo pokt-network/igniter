@@ -2,7 +2,6 @@ import * as wf from '@temporalio/workflow'
 import {
   log,
   proxyActivities,
-  WorkflowError,
 } from '@temporalio/workflow'
 import {
   providerActivities,

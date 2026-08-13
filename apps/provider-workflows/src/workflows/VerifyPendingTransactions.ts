@@ -22,7 +22,15 @@ export async function VerifyPendingTransactions() {
     applyVerificationDecision,
   } = proxyActivities<ReturnType<typeof providerActivities>>({
     startToCloseTimeout: '120s',
-    retry: { maximumAttempts: 3 },
+    // The default 3 attempts at a 1s base exhaust in ~4s — shorter than a single
+    // block (~60s on mainnet), so an RPC hiccup tied to the chain's own cadence
+    // burns every attempt inside one block. Span more than one block instead.
+    retry: {
+      initialInterval: '5s',
+      backoffCoefficient: 2,
+      maximumInterval: '30s',
+      maximumAttempts: 5,
+    },
   })
 
   const txs = await listPendingWithHash()
@@ -71,10 +79,12 @@ export async function VerifyPendingTransactions() {
 
   // Match the SupplierStatus pattern: tolerate partial failure, but surface a
   // systemic one (all failed → RPC/DB down) instead of completing green. Use a
-  // non-retryable ApplicationFailure (NOT WorkflowError — which is not exported by
-  // @temporalio/workflow; `new WorkflowError()` throws TypeError, wedging the
-  // workflow task forever under ScheduleOverlapPolicy.SKIP). A failed execution lets
-  // the next scheduled sweep run fresh.
+  // non-retryable ApplicationFailure (NOT WorkflowError — it IS exported and does
+  // construct, but it extends plain Error rather than TemporalFailure, so throwing
+  // it fails the workflow TASK instead of the workflow; the task then retries
+  // forever, wedging the schedule under ScheduleOverlapPolicy.SKIP — exactly what
+  // hit middleman on mainnet on 2026-08-10). A failed execution lets the next
+  // scheduled sweep run fresh.
   if (results.length > 0 && failedReasons.length === results.length) {
     throw new ApplicationFailure(
       'VerifyPendingTransactions: all transactions failed',

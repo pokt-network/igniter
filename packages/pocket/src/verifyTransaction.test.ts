@@ -167,6 +167,29 @@ describe('PocketBlockchain.verifyTransaction', () => {
     expect(r.status).toBe('confirmed')
   })
 
+  // Commit-boundary race (mainnet, 2026-08-10): the hash matched inside the block
+  // — so the block store had the height — but blockResults for that SAME height
+  // threw "could not find results for height #N" because the node had not yet
+  // persisted its ABCI responses. The tx IS on-chain; we just cannot read its
+  // outcome yet, which is exactly `unavailable`. Before the fix this error escaped
+  // verifyTransaction, failed the activity, and wedged the sweep workflow.
+  it('unavailable when blockResults throws for a matched tx (commit-boundary race)', async () => {
+    mockGetTx.mockResolvedValue(null)
+    mockFetch.mockResolvedValue({ ok: false })
+    mockGetHeight.mockResolvedValue(1005)
+    mockBlock.mockImplementation((h: number) =>
+      Promise.resolve({ block: { txs: h === 1000 ? [txContent] : [] } }),
+    )
+    mockBlockResults.mockRejectedValue(
+      new Error('{"code":-32603,"message":"Internal error","data":"could not find results for height #1000"}'),
+    )
+
+    const bc = await createInstance('http://api.example.com')
+    const r = await bc.verifyTransaction(txHash, 1000, 30)
+
+    expect(r.status).toBe('unavailable')
+  })
+
   it('returns absent with coveredUpToHeight = startHeight - 1 when caught up to head', async () => {
     // getTx returns null (no direct hit)
     mockGetTx.mockResolvedValue(null)

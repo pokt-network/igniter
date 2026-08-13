@@ -1,7 +1,7 @@
 import {
   log,
   proxyActivities,
-  WorkflowError,
+  ApplicationFailure,
 } from '@temporalio/workflow'
 import {
   delegatorActivities,
@@ -70,7 +70,7 @@ export async function SupplierStatusByRange(input: SupplierStatusByRange): Promi
     return r.status === 'rejected'
   });
   if (allFailed) {
-    throw new WorkflowError('All activities failed');
+    throw new ApplicationFailure('SupplierStatusByRange: all activities failed', 'fatal_error', true);
   }
 
   const upserted = r.filter(r => r.status === 'fulfilled').length

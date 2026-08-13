@@ -1,7 +1,7 @@
 import {
   log,
   proxyActivities,
-  WorkflowError,
+  ApplicationFailure,
 } from '@temporalio/workflow'
 import { delegatorActivities } from "@/activities";
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
@@ -66,7 +66,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
 
   const result = await executeTransaction(transaction.id);
   if (!result) {
-    throw new WorkflowError("Transaction execution failed");
+    throw new ApplicationFailure("Transaction execution failed", "fatal_error", true);
   }
 
   if (!result.transactionHash) {

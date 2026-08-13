@@ -501,7 +501,8 @@ export class PocketBlockchain {
    * Scans the already-fetched `block` at `height` for the tx whose SHA256 equals
    * `normalizedHash`. Returns the built TransactionResult on a hit, 'no-match' if
    * the hash is not in this block, or 'result-missing' if the hash matched but
-   * blockResults had no entry at the matched index.
+   * its result row could not be read — either blockResults had no entry at the
+   * matched index, or the blockResults call itself failed.
    */
   private async matchTxInBlock(
     comet: Awaited<ReturnType<typeof this.getCometClient>>,
@@ -515,7 +516,20 @@ export class PocketBlockchain {
       const bytes = txs[i]
       if (!bytes) continue
       if (toHex(sha256(bytes)).toUpperCase() === normalizedHash) {
-        const results = await comet.blockResults(height)
+        // The hash matched, so the block store already holds this height. Its ABCI
+        // responses may still be unreadable — a node that has just saved the block
+        // but not yet persisted its results answers "could not find results for
+        // height #N" (observed on mainnet at the commit boundary of a block). That
+        // is a transient read failure over a tx we KNOW is on-chain, so it must
+        // degrade to 'result-missing' -> unavailable, never escape as a throw and
+        // fail the caller's activity.
+        let results
+        try {
+          results = await comet.blockResults(height)
+        } catch (error) {
+          this.logger.warn('matchTxInBlock: blockResults failed for a matched tx', { txHash, height, error })
+          return 'result-missing'
+        }
         const txData = results.results[i]
         if (!txData) return 'result-missing'
         return { hash: txHash, height, index: i, gasUsed: txData.gasUsed, gasWanted: txData.gasWanted, success: txData.code === 0, code: txData.code, rawLog: txData.log }
