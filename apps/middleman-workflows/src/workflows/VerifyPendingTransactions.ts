@@ -1,4 +1,4 @@
-import { proxyActivities, log, WorkflowError } from '@temporalio/workflow'
+import { proxyActivities, log, ApplicationFailure } from '@temporalio/workflow'
 import { delegatorActivities } from '@/activities'
 import { decideVerification, TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
@@ -23,7 +23,17 @@ export async function VerifyPendingTransactions() {
     applyVerificationDecision,
   } = proxyActivities<ReturnType<typeof delegatorActivities>>({
     startToCloseTimeout: '120s',
-    retry: { maximumAttempts: 3 },
+    // The default 3 attempts at a 1s base exhaust in ~4s — shorter than a single
+    // block (~60s on mainnet), so any RPC hiccup tied to the chain's own cadence
+    // (a node at a commit boundary, a backend a block behind) burns every attempt
+    // inside one block and reports a permanent failure for a transient condition.
+    // Span more than one block instead.
+    retry: {
+      initialInterval: '5s',
+      backoffCoefficient: 2,
+      maximumInterval: '30s',
+      maximumAttempts: 5,
+    },
   })
 
   const txs = await listPendingWithHash()
@@ -59,15 +69,29 @@ export async function VerifyPendingTransactions() {
     ),
   )
 
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      log.warn('VerifyPendingTransactions: tx verification failed', { reason: String(r.reason) })
-    }
+  const failedReasons = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => String(r.reason))
+  for (const reason of failedReasons) {
+    log.warn('VerifyPendingTransactions: tx verification failed', { reason })
   }
 
   // Match the SupplierStatus pattern: tolerate partial failure, but surface a
-  // systemic one (all failed → RPC/DB down) instead of completing green.
-  if (results.length > 0 && results.every((r) => r.status === 'rejected')) {
-    throw new WorkflowError('VerifyPendingTransactions: all transactions failed')
+  // systemic one (all failed → RPC/DB down) instead of completing green. It MUST
+  // be an ApplicationFailure: `WorkflowError` is a plain Error subclass (not a
+  // TemporalFailure), so throwing it fails the workflow TASK instead of the
+  // workflow, and the task then retries forever — under ScheduleOverlapPolicy.SKIP
+  // that wedges the whole schedule (mainnet, 2026-08-10: 3 days without a sweep).
+  // A failed execution lets the next scheduled sweep run fresh.
+  if (results.length > 0 && failedReasons.length === results.length) {
+    throw new ApplicationFailure(
+      'VerifyPendingTransactions: all transactions failed',
+      'fatal_error',
+      true,
+      // Capped: the realistic trigger for a big backlog is the aftermath of a
+      // stall, and an oversized details payload would fail the workflow task that
+      // reports the failure — the exact wedge this file exists to prevent.
+      [failedReasons.slice(0, 20)],
+    )
   }
 }

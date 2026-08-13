@@ -2,7 +2,7 @@ import * as wf from '@temporalio/workflow'
 import {
   log,
   proxyActivities,
-  WorkflowError,
+  ApplicationFailure,
 } from '@temporalio/workflow'
 import {
   delegatorActivities,
@@ -101,7 +101,7 @@ export async function SupplierStatus(): Promise<{ height: number, minId: number,
   const r = await Promise.allSettled(childPromises)
   const allFailed = r.every(r => r.status === 'rejected')
   if (allFailed) {
-    throw new WorkflowError('All activities failed')
+    throw new ApplicationFailure('SupplierStatus: all child ranges failed', 'fatal_error', true)
   }
 
   log.debug('Completed SupplierStatus', { height, minId, maxId })

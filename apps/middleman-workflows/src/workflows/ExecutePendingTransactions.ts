@@ -1,6 +1,6 @@
 import {proxyActivities, WorkflowIdReusePolicy, ParentClosePolicy} from "@temporalio/workflow";
 import { delegatorActivities } from '@/activities';
-import {executeChild, log, WorkflowError} from "@temporalio/workflow";
+import {executeChild, log, ApplicationFailure} from "@temporalio/workflow";
 
 // @ts-expect-error p-limit is ESM-only; its default export has no CJS types under this build's module resolution
 import pLimit from 'p-limit'
@@ -65,6 +65,6 @@ export async function ExecutePendingTransactions(args: ExecutePendingTransaction
   const allFailed =
     results.length > 0 && results.every((r) => r.status === "rejected");
   if (allFailed) {
-    throw new WorkflowError("ExecutePendingTransactions: all child workflows failed");
+    throw new ApplicationFailure("ExecutePendingTransactions: all child workflows failed", "fatal_error", true);
   }
 }
