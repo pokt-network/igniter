@@ -34,6 +34,9 @@ import {Region} from "@/lib/models/commons";
 import { labelByRpcType, validRpcTypes as validRpcTypesEnums } from '@/lib/constants'
 import {RPCTypeMap} from '@igniter/pocket/constants';
 import type {ValidRPCTypes} from '@igniter/pocket';
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'AddOrUpdateServiceDialog']);
 
 interface ServiceOnChain {
   serviceId: string;
@@ -51,6 +54,7 @@ const validRpcTypes = [
   validRpcTypesEnums[1].toString(),
   validRpcTypesEnums[2].toString(),
   validRpcTypesEnums[3].toString(),
+  validRpcTypesEnums[4].toString(),
 ] as const;
 
 const RPCTypeSchema = z.enum(validRpcTypes).default(PROTOCOL_DEFAULT_TYPE).transform(v => Number(v));
@@ -152,7 +156,7 @@ export function AddOrUpdateServiceDialog({
 
         setAllServicesOnChain(allServices);
       } catch (error) {
-        console.error("Failed to load services from chain:", error);
+        log.error("Failed to load services from chain", { error: error })
         setHasLoadServiceError(true);
       } finally {
         setIsLoadingAllServices(false);
@@ -172,7 +176,7 @@ export function AddOrUpdateServiceDialog({
       }
       return false;
     } catch (error) {
-      console.error("Error checking local service:", error);
+      log.error("Error checking local service", { error: error })
       return false;
     }
   }, [service]);
@@ -267,7 +271,7 @@ export function AddOrUpdateServiceDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to update service", e);
+        log.error("Failed to update service", { error: e })
       } finally {
         setIsUpdatingService(false);
       }
@@ -287,7 +291,7 @@ export function AddOrUpdateServiceDialog({
         }
         onClose?.(true);
       } catch (e) {
-        console.error("Failed to create service", e);
+        log.error("Failed to create service", { error: e })
       } finally {
         setIsCreatingService(false);
       }

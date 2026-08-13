@@ -37,6 +37,10 @@ describe('getSchemeForRpcType', () => {
     expect(getSchemeForRpcType(RPCType.WEBSOCKET)).toBe('wss');
   });
 
+  it('returns https for COMET_BFT', () => {
+    expect(getSchemeForRpcType(RPCType.COMET_BFT)).toBe('https');
+  });
+
   it('falls back to https for unknown RPC types', () => {
     expect(getSchemeForRpcType(RPCType.UNKNOWN_RPC)).toBe('https');
     expect(getSchemeForRpcType(RPCType.UNRECOGNIZED)).toBe('https');
@@ -59,6 +63,10 @@ describe('getUrlTokenFromRpcType', () => {
 
   it('returns ws for WEBSOCKET', () => {
     expect(getUrlTokenFromRpcType(RPCType.WEBSOCKET)).toBe('ws');
+  });
+
+  it('returns cometbft for COMET_BFT', () => {
+    expect(getUrlTokenFromRpcType(RPCType.COMET_BFT)).toBe('cometbft');
   });
 
   it('falls back to json for unknown RPC types', () => {

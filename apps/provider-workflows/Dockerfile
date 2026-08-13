@@ -34,5 +34,11 @@ RUN pnpm turbo run build --filter=@igniter/provider-workflows
 # Switch user
 USER app
 
+ENV SERVICE_NAME=provider-workflows
+# APP_VERSION sits after the build RUN so a per-deploy version bump only
+# invalidates this layer, not the install/build layers above.
+ARG APP_VERSION=unknown
+ENV APP_VERSION=${APP_VERSION}
+
 # Start the server
 CMD ["node", "./apps/provider-workflows/dist/src/worker.js"]

@@ -4,6 +4,9 @@ import { UserRole } from '@igniter/db/middleman/enums'
 import { getDb } from '@/db'
 import { eq } from 'drizzle-orm'
 import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'users'])
 
 export async function createUser(identity: string) {
   try {
@@ -23,7 +26,7 @@ export async function createUser(identity: string) {
 
     return await getDb().insert(usersTable).values(newUser).returning().then((res) => res[0])
   } catch (error) {
-    console.error(`An error occurred while creating a user with Identity: ${identity}`, error)
+    log.error('user creation failed', { identity, error })
     throw error
   }
 }

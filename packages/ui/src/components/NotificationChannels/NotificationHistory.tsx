@@ -5,6 +5,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import DataTable from '../DataTable/index'
 import { Button } from '../button'
 import { Input } from '../input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../select'
 import { RightArrowIcon } from '../../assets'
 import type { ColumnDef } from '../table'
 import type { CsvColumnDef } from '../../lib/csv'
@@ -33,18 +40,37 @@ export interface NotificationHistoryEvent {
   viewedAt: Date | string | null
 }
 
+/** A selectable value for one of the filter dropdowns. */
+export interface NotificationFilterOption {
+  value: string
+  label: string
+}
+
+/** Server-side filter selection sent to `listEvents`. Absent field = unconstrained. */
+export interface NotificationHistoryFilters {
+  search?: string
+  type?: string
+  read?: 'read' | 'unread'
+  channel?: string
+}
+
 export interface NotificationHistoryProps {
   /**
    * App-specific, wallet/owner-scoped fetch returning a page + total count.
    * `unviewedTotal` is the server-side count of ALL unread events (not just this
    * page) so the badge and the mark-all control reflect the true unread total
    * rather than however many unread rows happen to land on the current page.
+   * `filters` carries the active dropdown/search selection (all optional).
    */
   listEvents: (
     page: number,
     pageSize: number,
-    search?: string,
+    filters?: NotificationHistoryFilters,
   ) => Promise<{ data: NotificationHistoryEvent[]; total: number; unviewedTotal?: number }>
+  /** When set, renders an event-type filter dropdown (each app's own vocabulary). */
+  eventTypeOptions?: NotificationFilterOption[]
+  /** When set, renders a channel filter dropdown (e.g. Discord/Telegram/Email). */
+  channelOptions?: NotificationFilterOption[]
   /** Marks every unread event viewed (app-scoped). */
   markAllViewed: () => Promise<void>
   /** Human label for an event type (vocabularies differ per app). */
@@ -83,6 +109,8 @@ function formatDate(date: Date | string) {
  */
 export function NotificationHistory({
   listEvents,
+  eventTypeOptions,
+  channelOptions,
   markAllViewed,
   labelFor,
   summaryFor,
@@ -97,11 +125,27 @@ export function NotificationHistory({
   const [pageIndex, setPageIndex] = useState(0)
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [readFilter, setReadFilter] = useState<'' | 'read' | 'unread'>('')
+  const [channelFilter, setChannelFilter] = useState('')
   const [isMarkingAll, setIsMarkingAll] = useState(false)
 
+  // Any filter change resets to page 0 so the user isn't stranded on a page
+  // that no longer exists under the narrower result set.
+  const onFilterChange = (apply: () => void) => {
+    apply()
+    setPageIndex(0)
+  }
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [queryKey, pageIndex, pageSize, search],
-    queryFn: () => listEvents(pageIndex, pageSize, search || undefined),
+    queryKey: [queryKey, pageIndex, pageSize, search, typeFilter, readFilter, channelFilter],
+    queryFn: () =>
+      listEvents(pageIndex, pageSize, {
+        search: search || undefined,
+        type: typeFilter || undefined,
+        read: readFilter || undefined,
+        channel: channelFilter || undefined,
+      }),
   })
 
   const handleMarkAll = async () => {
@@ -180,35 +224,81 @@ export function NotificationHistory({
 
   return (
     <div className="flex flex-col gap-3">
-      {(enableSearch || unviewedCount > 0) && (
-        <div className="flex items-center gap-3">
-          {enableSearch && (
-            <Input
-              placeholder="Search by UUID…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPageIndex(0)
-              }}
-              className="max-w-xs"
-            />
-          )}
-          {unviewedCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs shrink-0"
-              disabled={isMarkingAll}
-              onClick={handleMarkAll}
-            >
-              Mark all as read
-              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-yellow-400 text-black text-[10px] font-bold">
-                {unviewedCount}
-              </span>
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {enableSearch && (
+          <Input
+            placeholder="Search by UUID…"
+            value={search}
+            onChange={(e) => onFilterChange(() => setSearch(e.target.value))}
+            className="max-w-xs"
+          />
+        )}
+        {eventTypeOptions && eventTypeOptions.length > 0 && (
+          <Select
+            value={typeFilter || 'all'}
+            onValueChange={(v) => onFilterChange(() => setTypeFilter(v === 'all' ? '' : v))}
+          >
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="All events" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All events</SelectItem>
+              {eventTypeOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Select
+          value={readFilter || 'all'}
+          onValueChange={(v) =>
+            onFilterChange(() => setReadFilter(v === 'all' ? '' : (v as 'read' | 'unread')))
+          }
+        >
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="unread">Unread</SelectItem>
+            <SelectItem value="read">Read</SelectItem>
+          </SelectContent>
+        </Select>
+        {channelOptions && channelOptions.length > 0 && (
+          <Select
+            value={channelFilter || 'all'}
+            onValueChange={(v) => onFilterChange(() => setChannelFilter(v === 'all' ? '' : v))}
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="All channels" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All channels</SelectItem>
+              {channelOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {unviewedCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs shrink-0 ml-auto"
+            disabled={isMarkingAll}
+            onClick={handleMarkAll}
+          >
+            Mark all as read
+            <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-yellow-400 text-black text-[10px] font-bold">
+              {unviewedCount}
+            </span>
+          </Button>
+        )}
+      </div>
 
       <DataTable
         isLoading={isLoading}

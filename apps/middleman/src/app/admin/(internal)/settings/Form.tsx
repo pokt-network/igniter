@@ -23,6 +23,9 @@ import {
 } from '@/actions/ApplicationSettings'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { ChainId } from '@igniter/db/middleman/enums'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'internal-settings-form'])
 
 const FormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -235,7 +238,7 @@ export default function SettingsForm() {
       await refetchSettings()
       form.reset(values)
     } catch (error) {
-      console.error('Failed to update settings:', error)
+      log.error('failed to update settings', { error })
       setSubmitError('Failed to save settings. Please try again.')
     } finally {
       setIsSubmitting(false)

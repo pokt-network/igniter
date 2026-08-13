@@ -1,3 +1,5 @@
+import {getLogger, type Logger} from '@igniter/logger'
+
 export const STAKE_TYPE_URL = "/pocket.supplier.MsgStakeSupplier";
 export const UNSTAKE_TYPE_URL = "/pocket.supplier.MsgUnstakeSupplier";
 export const SEND_TYPE_URL = "/cosmos.bank.v1beta1.MsgSend";
@@ -65,7 +67,7 @@ export interface UnstakeOperation {
   }
 }
 
-export function extractTransactionStakingSuppliers(tx: { unsignedPayload: string }): NewStake[] {
+export function extractTransactionStakingSuppliers(tx: { unsignedPayload: string }, logger: Logger = getLogger(['commons', 'transactions'])): NewStake[] {
   try {
     const {body} = JSON.parse(tx.unsignedPayload);
     const messages: Array<StakeOperation | SendOperation> = body.messages;
@@ -103,13 +105,12 @@ export function extractTransactionStakingSuppliers(tx: { unsignedPayload: string
 
     return Object.values(nodes);
   } catch (err) {
-    console.log("Something went wrong while parsing the transaction to extract the staked nodes information.");
-    console.error(err);
+    logger.error('Failed to parse transaction while extracting staked nodes', { error: err });
     return [];
   }
 }
 
-export function extractTransactionUnstakingSuppliers(tx: { unsignedPayload: string }): Array<NewUnstake> {
+export function extractTransactionUnstakingSuppliers(tx: { unsignedPayload: string }, logger: Logger = getLogger(['commons', 'transactions'])): Array<NewUnstake> {
   try {
     const {body} = JSON.parse(tx.unsignedPayload);
     const nodes: Record<string, NewUnstake> = body.messages.reduce((nodes: Record<string, NewUnstake>, message: UnstakeOperation) => {
@@ -126,8 +127,7 @@ export function extractTransactionUnstakingSuppliers(tx: { unsignedPayload: stri
 
     return Object.values(nodes);
   } catch (err) {
-    console.log("Something went wrong while parsing the transaction to extract the staked nodes information.");
-    console.error(err);
+    logger.error('Failed to parse transaction while extracting unstaked nodes', { error: err });
     return [];
   }
 }

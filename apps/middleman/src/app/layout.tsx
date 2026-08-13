@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/app/theme";
 import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import { ApplicationSettingsProvider } from "@/app/context/ApplicationSettings";
 import { SidebarInset, SidebarProvider } from "@igniter/ui/components/sidebar";
+import SidebarTriggerGate from "@/app/components/SidebarTriggerGate";
 import { AppTopBar } from "@igniter/ui/components/AppTopBar/index";
 
 import CurrentUser from "@/app/components/CurrentUser";
@@ -59,7 +60,7 @@ export default function RootLayout({
                     <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
                       <QuickDetailProvider>
                         <NotificationsProvider>
-                          <AppTopBar>
+                          <AppTopBar leading={<SidebarTriggerGate />}>
                             <CurrentUser />
                             <ThemeToggle />
                           </AppTopBar>

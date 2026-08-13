@@ -5,6 +5,9 @@ import React from 'react'
 import { TriggerGovernanceSync } from '@/actions/Delegators'
 import { Button } from '@igniter/ui/components/button'
 import { LoaderIcon } from '@igniter/ui/assets'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'Refresh']);
 
 export default function RefreshDelegators() {
   const queryClient = useQueryClient();
@@ -22,7 +25,7 @@ export default function RefreshDelegators() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await queryClient.invalidateQueries({ queryKey: ['delegators'] });
     } catch (error) {
-      console.error("Failed to update delegators from source:", error);
+      log.error("Failed to update delegators from source", { error: error })
     } finally {
       setIsUpdatingDelegators(false);
     }

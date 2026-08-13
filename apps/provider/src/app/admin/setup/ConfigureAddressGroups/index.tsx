@@ -13,6 +13,9 @@ import {LoaderIcon} from "@igniter/ui/assets";
 import {ListServices} from "@/actions/Services";
 import {PencilIcon, Trash2Icon} from "lucide-react";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureAddressGroups']);
 
 export interface ConfigureAddressGroupsProp {
   goNext: () => void;
@@ -96,7 +99,7 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
       }
       setAddressGroups(result.data);
     } catch (error) {
-      console.error("Failed to fetch addressGroups:", error);
+      log.error("Failed to fetch addressGroups", { error: error })
     } finally {
       setIsLoadingAddressGroups(false);
     }
@@ -113,7 +116,7 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
       }
       await fetchAddressGroups();
     } catch (error) {
-      console.error("Failed to delete addressGroup:", error);
+      log.error("Failed to delete addressGroup", { error: error })
     } finally {
       setIsDeletingAddressGroup(false);
       setAddressGroupToDelete(null);
@@ -129,7 +132,7 @@ export default function ConfigureAddressGroups({ goNext, goBack }: Readonly<Conf
       }
       setServices(result.data);
     } catch (error) {
-      console.error("Failed to fetch services:", error);
+      log.error("Failed to fetch services", { error: error })
     } finally {
       setIsLoadingServices(false);
     }

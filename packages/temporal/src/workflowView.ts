@@ -5,6 +5,7 @@ import type {
   ScheduleSummary,
   ScheduleDescription,
 } from '@temporalio/client'
+import type { Logger } from '@igniter/logger'
 
 // Type-only import from workflowDetail is erased at runtime (no require-cycle);
 // the value import below is what actually loads the module.
@@ -12,6 +13,10 @@ import { TEMPORAL_SCHEDULED_BY_ID } from '@/workflowDetail'
 import { evaluateLiveness, defaultHealState, type Verdict, type WatchdogEntry } from '@/scheduleWatchdog'
 
 export { TEMPORAL_SCHEDULED_BY_ID }
+
+// Error classifiers shared with the Next.js apps' schedule actions. Re-exported
+// here because apps must not import the package root (it pulls in the worker).
+export { isCorruptSchedule, isNotFound } from '@/scheduleWatchdog'
 
 export type WorkflowStatus = WorkflowExecutionStatusName
 
@@ -63,7 +68,7 @@ export interface WatchdogHealState {
   lastRecreatedAt: string | null
 }
 
-export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy'
+export type ScheduleHealthState = 'healthy' | 'paused' | 'stale' | 'unhealthy' | 'unknown'
 
 export type ScheduleFireView = {
   scheduledAt: string
@@ -178,7 +183,7 @@ export async function listWorkflowViews(
   filter: WorkflowListFilter,
   page: WorkflowPageRequest,
   nowMs: number = Date.now(),
-  logger?: { warn: (obj: unknown, msg: string) => void },
+  logger?: Logger,
 ): Promise<WorkflowPageResult> {
   const { pageIndex, pageSize } = page
   const skip = pageIndex * pageSize
@@ -217,8 +222,8 @@ export async function listWorkflowViews(
     result = await collect(false, true, MAX_FALLBACK_SCAN)
     if (result.truncated) {
       logger?.warn(
-        { pageIndex, pageSize, maxScan: MAX_FALLBACK_SCAN },
         'Basic-visibility fallback scan hit the row cap; result may be incomplete',
+        { pageIndex, pageSize, maxScan: MAX_FALLBACK_SCAN },
       )
     }
   }
@@ -292,6 +297,10 @@ export function mapScheduleToHealth(
   if (paused) state = 'paused'
   else if (heal?.unhealthy || heal?.observedUnhealthy) state = 'unhealthy'
   else if (liveness === 'stale' || (heal && heal.unstucks > 0)) state = 'stale'
+  // No live verdict at all (describe() failed -> summary-only fallback): render
+  // 'unknown', NOT green — a corrupt schedule lands exactly here (#323 review).
+  // liveness === 'unknown' (cron/non-interval) still degrades to the counters above.
+  else if (liveness === undefined) state = 'unknown'
   else state = 'healthy'
 
   // Schedule listing is eventual-consistent (SDK doc comment on ScheduleSummary), so

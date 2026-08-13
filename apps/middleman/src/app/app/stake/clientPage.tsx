@@ -18,6 +18,9 @@ import {SupplierStake} from "@/lib/models/Transactions";
 import {releaseSuppliers} from "@/lib/services/provider";
 import {useNotifications} from "@igniter/ui/context/Notifications/index";
 import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['middleman', 'stake-page'])
 
 
 enum StakeActivitySteps {
@@ -113,7 +116,7 @@ export default function ClientStakePage() {
         setIsAborting(false);
         await router.push('/app');
       } catch (error) {
-        console.error(error);
+        log.error('failed to abort staking process', { error });
         addNotification({
           id: `abort-stake-error`,
           type: 'error',

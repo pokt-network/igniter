@@ -20,8 +20,8 @@ export class Notifier {
       const channel = this.channels[i]!
       if (result.status === 'rejected') {
         logger.error(
-          { channel: channel.name, error: result.reason },
           'Failed to send notification',
+          { channel: channel.name, error: result.reason },
         )
       }
     }

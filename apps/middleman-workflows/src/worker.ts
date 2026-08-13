@@ -2,6 +2,7 @@ import { delegatorActivities, governanceActivities } from './activities'
 import { importSupplierRecoveryActivities } from './activities/importSupplierRecovery'
 import bootstrap from './bootstrap'
 import {
+  configureLogging,
   getLogger,
   Logger,
 } from '@igniter/logger'
@@ -35,7 +36,7 @@ async function waitForAppBootstrap(dal: DAL, logger: Logger) {
       }
       logger.warn('Application is not yet bootstrapped. Retrying...')
     } catch (error) {
-      logger.warn({ error }, 'Failed to check bootstrap status. Retrying...')
+      logger.warn('Failed to check bootstrap status. Retrying...', { error })
     }
     await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_POLL_INTERVAL))
   }
@@ -57,10 +58,10 @@ export const registerGracefulShutdown = (
     }
 
     shuttingDown = true
-    logger.info({ signal }, 'Received shutdown signal, attempting graceful shutdown...')
+    logger.info('Received shutdown signal, attempting graceful shutdown...', { signal })
 
     const timeout = setTimeout(() => {
-      logger.error({ timeout: graceTimeoutMs }, 'Grace period exceeded. Forcing exit.')
+      logger.error('Grace period exceeded. Forcing exit.', { timeout: graceTimeoutMs })
       process.exit(1)
     }, graceTimeoutMs)
 
@@ -70,7 +71,7 @@ export const registerGracefulShutdown = (
       logger.info('Graceful shutdown complete. Exiting.')
       process.exit(0)
     } catch (err) {
-      logger.error({ err }, 'Error during shutdown. Forcing exit.')
+      logger.error('Error during shutdown. Forcing exit.', { err })
       process.exit(1)
     }
   }
@@ -81,6 +82,8 @@ export const registerGracefulShutdown = (
 }
 
 export async function setupTemporalWorker() {
+  await configureLogging({ serviceName: 'middleman-workflows' })
+
   const dbClient = getDb<typeof schema>(logger)
 
   const dal = new DAL(dbClient, logger)
@@ -136,7 +139,7 @@ export async function setupTemporalWorker() {
       entries: watchdogEntries,
       store: dal.watchdog,
       config: wdConfig,
-      logger: logger.child({ context: 'ScheduleWatchdog' }),
+      logger: logger.getChild('ScheduleWatchdog'),
     })
     watchdog.start()
   } else {

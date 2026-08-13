@@ -52,14 +52,14 @@ export class TelegramChannel implements NotificationChannel {
         signal: AbortSignal.timeout(10_000),
       })
     } catch (err) {
-      logger.error({ err }, 'Telegram request failed')
+      logger.error('Telegram request failed', { err })
       throw new ChannelDeliveryError('telegram', 'transient')
     }
 
     if (!response.ok) {
       const body = await response.text()
       // Status class only (not body): 401 = bad bot token, 400 = bad chat id, etc.
-      logger.error({ status: response.status, body }, 'Telegram message failed')
+      logger.error('Telegram message failed', { status: response.status, body })
       throw new ChannelDeliveryError('telegram', categorizeHttpStatus(response.status), {
         statusCode: response.status,
       })

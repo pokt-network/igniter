@@ -15,7 +15,18 @@ import {
 } from '@/actions/NotificationChannels'
 import type { ProviderQuickDetailItem } from '@/app/admin/details/types'
 import type { NotificationEvent, NotificationEventMetadata } from '@igniter/db/provider/schema'
+import { NOTIFICATION_EVENT_TYPES, NotificationChannelType } from '@igniter/db/provider/enums'
 import { NOTIFICATION_EVENT_LABELS, REMEDIATION_REASON_LABELS } from '@/lib/constants'
+
+// Event-type + channel dropdown options for the history filters.
+const EVENT_TYPE_OPTIONS = NOTIFICATION_EVENT_TYPES.map((t) => ({
+  value: t,
+  label: NOTIFICATION_EVENT_LABELS[t as keyof typeof NOTIFICATION_EVENT_LABELS] ?? t,
+}))
+const CHANNEL_OPTIONS = Object.values(NotificationChannelType).map((t) => ({
+  value: t,
+  label: t.charAt(0).toUpperCase() + t.slice(1),
+}))
 
 function metadataSummary(type: string, metadata: NotificationEventMetadata | null | undefined): string {
   if (!metadata) return '—'
@@ -97,6 +108,8 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
   return (
     <NotificationHistory
       enableSearch
+      eventTypeOptions={EVENT_TYPE_OPTIONS}
+      channelOptions={CHANNEL_OPTIONS}
       onMarkAllViewed={onMarkAllViewed}
       onOpenEvent={openEvent}
       renderChannelIcon={(type) => <NotificationChannelIcon type={type} className="h-3 w-3 shrink-0" />}
@@ -104,8 +117,8 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
         NOTIFICATION_EVENT_LABELS[type as keyof typeof NOTIFICATION_EVENT_LABELS] ?? type
       }
       summaryFor={(type, metadata) => metadataSummary(type, metadata as NotificationEventMetadata)}
-      listEvents={async (page, pageSize, search) => {
-        const result = await ListNotificationEvents(page, pageSize, search)
+      listEvents={async (page, pageSize, filters) => {
+        const result = await ListNotificationEvents(page, pageSize, filters)
         if (!result.success) throw new Error(result.error.message)
         return result.data
       }}

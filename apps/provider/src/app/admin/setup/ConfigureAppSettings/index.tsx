@@ -21,6 +21,9 @@ import { Textarea } from '@igniter/ui/components/textarea'
 import { isPoktBech32Address } from '@igniter/commons/crypto'
 import { cn } from '@igniter/ui/lib/utils'
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureAppSettings']);
 
 interface FormProps {
   defaultValues: Partial<ApplicationSettings>;
@@ -56,7 +59,6 @@ export const FormSchema = z.object({
 type FormValues = z.infer<typeof FormSchema>;
 
 const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) => {
-  console.log(defaultValues)
   const [isLoading, setIsLoading] = useState(false);
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -88,7 +90,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
               }, isUpdate);
               goNext();
             } catch (error) {
-              console.error(error);
+              log.error('unhandled error', { error: error })
             } finally {
               setIsLoading(false);
             }

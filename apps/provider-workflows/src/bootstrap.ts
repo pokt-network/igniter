@@ -81,11 +81,11 @@ async function bootstrapNamespace(client: Client, config: TemporalConfig, logger
 
   try {
     await workflowService.describeNamespace({ namespace })
-    logger.info({ namespace }, 'Namespace already exists. Skipping registration...')
+    logger.info('Namespace already exists. Skipping registration...', { namespace })
   } catch (error: any) {
     if (error.details.match(/not found/i)) {
       try {
-        logger.warn({ namespace }, 'Namespace does not exist. Registering...')
+        logger.warn('Namespace does not exist. Registering...', { namespace })
         await workflowService.registerNamespace({
           namespace,
           workflowExecutionRetentionPeriod: {
@@ -94,14 +94,14 @@ async function bootstrapNamespace(client: Client, config: TemporalConfig, logger
             ),
           },
         })
-        logger.info({ namespace }, 'Namespace registered successfully, waiting 20s for it to be fully registered...')
+        logger.info('Namespace registered successfully, waiting 20s for it to be fully registered...', { namespace })
         await new Promise((resolve) => setTimeout(resolve, 20000))
       } catch (error) {
-        logger.error({ error, namespace }, 'Error registering namespace')
+        logger.error('Error registering namespace', { error, namespace })
         throw error
       }
     } else {
-      logger.error({ error, namespace }, 'Error describing namespace')
+      logger.error('Error describing namespace', { error, namespace })
       throw error
     }
   }
@@ -115,8 +115,8 @@ export function buildWatchdogEntries(config: WatchdogConfig, logger?: Logger): W
     const parsed = parseDuration(rawOverride)
     if (parsed == null) {
       logger?.warn(
-        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: rawOverride, fallback: wf.interval },
         'Invalid schedule interval override; falling back to default',
+        { scheduleId: `${wt}-scheduled`, envVar: wf.envVar, raw: rawOverride, fallback: wf.interval },
       )
     }
     // Never carry an invalid override forward: fall the STRING back to the default

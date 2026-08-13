@@ -13,7 +13,10 @@ export async function ExecutePendingTransactions() {
   })
 
   const txs = await listPending()
-  if (txs.length === 0) return
+  if (txs.length === 0) {
+    log.debug('ExecutePendingTransactions: no pending transactions')
+    return
+  }
 
   const limit = pLimit(MAX_CONCURRENT)
 
@@ -45,10 +48,11 @@ export async function ExecutePendingTransactions() {
     log.warn('ExecutePendingTransactions: child workflow failed', { reason })
   }
 
-  // Non-retryable ApplicationFailure (NOT WorkflowError — not exported by
-  // @temporalio/workflow; `new WorkflowError()` throws TypeError and wedges the
-  // workflow task forever under ScheduleOverlapPolicy.SKIP). A failed execution lets
-  // the next scheduled dispatch run fresh.
+  // Non-retryable ApplicationFailure (NOT WorkflowError — it IS exported and does
+  // construct, but it extends plain Error rather than TemporalFailure, so throwing
+  // it fails the workflow TASK instead of the workflow; the task then retries
+  // forever, wedging the schedule under ScheduleOverlapPolicy.SKIP). A failed
+  // execution lets the next scheduled dispatch run fresh.
   if (results.length > 0 && failedReasons.length === results.length) {
     throw new ApplicationFailure(
       'ExecutePendingTransactions: all child workflows failed',

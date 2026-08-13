@@ -697,7 +697,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     log.debug('Updating supplier', { params, update })
     await dal.keys.updateKey(params.address, update, params.height)
-    log.info('Update Supplier done!', {params})
+    log.debug('Update Supplier done!', {params})
 
     // Drain trigger (D6): unbonding entered (Unstaking OR Unstaked) and not yet retired.
     // Fires for middleman-initiated unstakes (the provider has no INTENT for those, so no
@@ -792,7 +792,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * and an accompanying message.
    */
   async remediateSupplier(params: RemediateSupplierParams) {
-    log.info('remediateSupplier: Execution started', {params})
+    log.debug('remediateSupplier: Execution started', {params})
     const [key, supportedServices, balance, supplier]: [KeyWithGroup, Service[], number, Supplier] = await Promise.all([
       dal.keys.loadKey(params.address),
       dal.services.loadServices(),
@@ -829,7 +829,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     if (key.remediationHistory?.length === 0) {
-      log.info('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
+      log.debug('remediateSupplier: No remediation history found. Nothing to do here. Bye!', {params})
       return {
         success: true,
         remediated: false,
@@ -1001,7 +1001,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * now carries coveredBlockTime (chain block time at coveredUpToHeight) so callers
    * can supply chainTimeAtCoverage to decideVerification without a wall-clock.
    */
-  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }> & { chainTimeAtCoverage?: Date | null }> {
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string; rawLog?: string }> & { chainTimeAtCoverage?: Date | null }> {
     const txn = await dal.transactions.getTransaction(transactionId)
     if (!txn?.hash) {
       throw new Error('verifyTxHash: tx missing hash')
@@ -1016,7 +1016,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     // boundary (default payload converter cannot encode BigInt).
     return {
       status: 'confirmed',
-      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString() },
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString(), rawLog: out.data.rawLog },
     }
   },
 
@@ -1131,11 +1131,16 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
+    // Failure message: prefer the chain's own error text (rawLog, present when the tx
+    // was found on-chain and failed) so the UI can show the real reason; the hardcoded
+    // summaries remain for paths with no chain text (absent-tx failure) or as suffix
+    // context (sibling-met goal).
     const claimed = await dal.transactions.claimTerminalTransition(transactionId, status, {
       code: decision.code,
       message: decision.tx === 'success' ? 'verified'
-        : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
-        : 'verification negative (validity bound covered, no effect)',
+        : decision.effects === 'apply-success'
+          ? `tx failed on-chain; goal met by sibling tx${decision.rawLog ? ` (${decision.rawLog})` : ''}`
+          : decision.rawLog || 'verification negative (validity bound covered, no effect)',
     })
 
     // Provider-UI drain path: an Unstake verified success kicks off the drain using the

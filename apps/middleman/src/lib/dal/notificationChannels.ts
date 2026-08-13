@@ -1,6 +1,11 @@
 import 'server-only'
 import { getDb } from '@/db'
 import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { NOTIFICATION_EVENT_TYPES } from '@igniter/db/middleman/enums'
+import {
+  buildNotificationEventFilterConditions as buildConditions,
+  type NotificationEventFilters,
+} from '@igniter/db/notifications'
 import {
   notificationChannelsTable,
   notificationEventsTable,
@@ -11,6 +16,15 @@ import {
   type NotificationEvent,
   type NotificationPreferences,
 } from '@igniter/db/middleman/schema'
+
+export type { NotificationEventFilters }
+
+// Binds the middleman events table + enum to the shared filter builder in
+// @igniter/db/notifications. Kept as a same-signature wrapper so call sites and
+// the unit tests (notificationChannels.filters.test.ts) stay unchanged.
+export function buildNotificationEventFilterConditions(filters?: NotificationEventFilters) {
+  return buildConditions(notificationEventsTable, NOTIFICATION_EVENT_TYPES, filters)
+}
 
 // The list/table view never receives the encrypted config — secrets stay on the
 // server. Only these non-secret columns are selected.
@@ -126,12 +140,21 @@ export async function listNotificationEvents(
   userIdentity: string,
   page = 0,
   pageSize = 25,
+  filters?: NotificationEventFilters,
 ): Promise<{ data: NotificationEvent[]; total: number; unviewedTotal: number }> {
   const db = getDb()
   // Scoped to the owning wallet on BOTH the rows query and the counts, so the
-  // paginated total never leaks other wallets' events.
-  const where = eq(notificationEventsTable.createdBy, userIdentity)
-  const unviewedWhere = and(where, isNull(notificationEventsTable.viewedAt))
+  // paginated total never leaks other wallets' events. Filters are ANDed on top.
+  const where = and(
+    eq(notificationEventsTable.createdBy, userIdentity),
+    ...buildNotificationEventFilterConditions(filters),
+  )
+  // Unread count stays scoped-but-unfiltered so the badge/mark-all reflect the
+  // true unread total regardless of the active filters.
+  const unviewedWhere = and(
+    eq(notificationEventsTable.createdBy, userIdentity),
+    isNull(notificationEventsTable.viewedAt),
+  )
   const [rows, [countRow], [unviewedRow]] = await Promise.all([
     db
       .select()

@@ -14,6 +14,9 @@ import {
   SyncDelegatorsFromGovernance,
 } from "@/actions/Delegators";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'ConfigureDelegators']);
 
 export interface ConfigureDelegatorsProp {
   goNext: () => void;
@@ -44,7 +47,7 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
         }
         await updateDelegatorsList();
       } catch (err) {
-        console.error("Failed to disable all delegators:", err);
+        log.error("Failed to disable all delegators", { error: err })
       } finally {
         setIsDisablingAllDelegators(false);
       }
@@ -61,7 +64,7 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
         }
         await updateDelegatorsList();
       } catch (err) {
-        console.error("Failed to select all delegators:", err);
+        log.error("Failed to select all delegators", { error: err })
       } finally {
         setIsEnablingAllDelegators(false);
       }
@@ -112,7 +115,7 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
       }
       setDelegators(result.data);
     } catch (error) {
-      console.error("Failed to fetch delegators:", error);
+      log.error("Failed to fetch delegators", { error: error })
     } finally {
       setIsLoading(false);
     }
@@ -126,9 +129,8 @@ export default function ConfigureDelegators({ goNext, goBack }: Readonly<Configu
         if (!result.success) {
           throw new Error(result.error.message);
         }
-        console.log('debug: update succeeded?');
       } catch (err) {
-        console.error("Failed to update delegators from source:", err);
+        log.error("Failed to update delegators from source", { error: err })
       }
 
       await updateDelegatorsList();

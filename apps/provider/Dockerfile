@@ -64,6 +64,11 @@ COPY --from=base --chown=nextjs:nodejs /app/apps/provider/drizzle/ ./apps/provid
 COPY --from=base --chown=nextjs:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 ENV PORT 3001
+ENV SERVICE_NAME=provider
+# APP_VERSION lives in the FINAL stage so a per-deploy version bump only
+# invalidates this layer, not the install/build layers above.
+ARG APP_VERSION=unknown
+ENV APP_VERSION=${APP_VERSION}
 
 # Start the server
 CMD ["node", "apps/provider/server.js"]

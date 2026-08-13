@@ -5,6 +5,8 @@ import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import Address from '@igniter/ui/components/Address'
 import type { Transaction } from '@igniter/db/provider/schema'
 import { TransactionStatus, TransactionType, TransactionTrigger, RemediationHistoryEntryReason } from '@igniter/db/provider/enums'
+import { failureReasonDisplay } from '@igniter/commons/utils'
+import { FailureReasonPopover } from '@igniter/ui/components/FailureReasonPopover'
 import { Button } from '@igniter/ui/components/button'
 import { RightArrowIcon } from '@igniter/ui/assets'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
@@ -89,7 +91,7 @@ export const columns: Array<ColumnDef<Transaction>> = [
   },
   {
     accessorKey: "reason",
-    header: "Reason",
+    header: "Remediation",
     cell: ({ row }) => {
       const reason = row.getValue("reason") as string | null
       return (
@@ -97,6 +99,19 @@ export const columns: Array<ColumnDef<Transaction>> = [
           {reason ? (ReasonLabels[reason] || reason) : '-'}
         </span>
       )
+    },
+  },
+  {
+    accessorKey: "message",
+    header: "Failure Reason",
+    cell: ({ row }) => {
+      const status = row.getValue("status") as string
+      const text = failureReasonDisplay(status === TransactionStatus.Failure, row.original.message, row.original.code)
+      if (text === null) {
+        return <span className="text-slightly-muted-foreground">-</span>
+      }
+      // Friendly text in the cell; click to open the full raw message (copyable) inline.
+      return <FailureReasonPopover friendly={text} full={row.original.message?.trim() || ''} code={row.original.code} />
     },
   },
   {

@@ -61,4 +61,8 @@ export default class Watchdog implements WatchdogStateStore {
   recordRecreate(scheduleId: string): Promise<void> {
     return this.store.recordRecreate(scheduleId)
   }
+
+  resetRecreations(scheduleId: string): Promise<void> {
+    return this.store.resetRecreations(scheduleId)
+  }
 }

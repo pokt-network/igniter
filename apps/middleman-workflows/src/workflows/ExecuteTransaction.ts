@@ -1,6 +1,7 @@
 import {
+  log,
   proxyActivities,
-  WorkflowError,
+  ApplicationFailure,
 } from '@temporalio/workflow'
 import { delegatorActivities } from "@/activities";
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
@@ -43,6 +44,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
 
   // Already broadcast (has a hash) → the verifier owns it; nothing to do here.
   if (transaction.hash) {
+    log.debug('ExecuteTransaction: already broadcast, handing off to verifier', { transactionId, hash: transaction.hash });
     return { ...transaction };
   }
 
@@ -50,6 +52,7 @@ export async function ExecuteTransaction(args: TransactionArgs) {
 
   // No hash and the broadcast window already expired → mark failed immediately.
   if (transaction.executionHeight && txHeight - transaction.executionHeight > TX_EXPIRATION_BLOCKS) {
+    log.warn('ExecuteTransaction: expired before broadcast', { transactionId });
     await updateTransaction(transactionId, {
       status: TransactionStatus.Failure,
       log: 'TX expired before broadcast',
@@ -63,10 +66,11 @@ export async function ExecuteTransaction(args: TransactionArgs) {
 
   const result = await executeTransaction(transaction.id);
   if (!result) {
-    throw new WorkflowError("Transaction execution failed");
+    throw new ApplicationFailure("Transaction execution failed", "fatal_error", true);
   }
 
   if (!result.transactionHash) {
+    log.warn('ExecuteTransaction: broadcast returned no hash', { transactionId, code: result.code, message: result.message });
     await updateTransaction(transactionId, {
       status: TransactionStatus.Failure,
       code: result.code,
@@ -79,6 +83,8 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   // Broadcast succeeded: parse timeoutHeight from the signed payload (embedded at signing
   // by KeplrWalletConnection; null for external-wallet txs that omit it).
   const timeoutHeight = await getTxTimeoutHeight(transactionId);
+
+  log.info('ExecuteTransaction: broadcast succeeded', { transactionId, hash: result.transactionHash, executionHeight: txHeight });
 
   // Persist hash + height + timeoutHeight and hand off to the verifier.
   // executionHeight was sampled BEFORE broadcast (line ~47) — this must not move after

@@ -25,6 +25,7 @@ const config: WatchdogConfig = {
   missedFirings: 5,
   maxHealAttempts: 5,
   recreateAfter: 2,
+  maxRecreateAttempts: 3,
   minGraceMs: 90_000,
   graceCapMs: 600_000,
   backoffBaseMs: 30_000,
@@ -53,12 +54,16 @@ function makeStore(over: Partial<HealState> = {}) {
     resetOnRecreate: jest.fn(),
     resetLadder: jest.fn(),
     recordRecreate: jest.fn(),
+    resetRecreations: jest.fn(),
   }
   return { store, order }
 }
 
 const transient = () => Object.assign(new Error('server unavailable'), { code: 14 })
 const definitive = () => Object.assign(new Error('bad request'), { code: 3 })
+const corrupt = () => Object.assign(new Error('Failed to update schedule'), {
+  cause: Object.assign(new Error('9 FAILED_PRECONDITION: Unable to query workflow due to Workflow Task in failed state.'), { code: 9 }),
+})
 
 /**
  * Working handle+client for the RECREATE branch: describe() resolves so
@@ -127,6 +132,39 @@ describe('healSchedule ladder', () => {
     const state: HealState = { ...defaultHealState(entry.scheduleId), unstucks: 4 }
     await healSchedule(handle as never, client as never, entry, state, store, config, logger, NOW)
     expect(store.setUnhealthy).toHaveBeenCalledWith(entry.scheduleId, true)
+  })
+
+  it('update() corrupt (WFT failed): deletes+recreates, no ladder attempt consumed', async () => {
+    const del = jest.fn().mockResolvedValue(undefined)
+    const create = jest.fn().mockResolvedValue(undefined)
+    const handle = { update: jest.fn().mockRejectedValue(corrupt()), delete: del, trigger: jest.fn() }
+    const client = { schedule: { getHandle: () => handle, create } }
+    const { store } = makeStore({ unstucks: 0 })
+    await healSchedule(handle as never, client as never, entry, defaultHealState(entry.scheduleId), store, config, logger, NOW)
+    expect(del).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(store.recordRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
+    expect(store.bumpUnstuck).not.toHaveBeenCalled()
+  })
+
+  it('trigger() corrupt (WFT failed): compensates write-ahead, then deletes+recreates', async () => {
+    const del = jest.fn().mockResolvedValue(undefined)
+    const create = jest.fn().mockResolvedValue(undefined)
+    const handle = {
+      trigger: jest.fn().mockRejectedValue(corrupt()),
+      describe: jest.fn().mockResolvedValue({ action: { args: [] }, spec: { intervals: [{ every: 30_000 }] } }),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: del,
+    }
+    const client = { schedule: { getHandle: () => handle, create } }
+    const { store } = makeStore({ unstucks: 2 })
+    const state: HealState = { ...defaultHealState(entry.scheduleId), unstucks: 2 }
+    await expect(healSchedule(handle as never, client as never, entry, state, store, config, logger, NOW)).resolves.toBeDefined()
+    expect(store.compensateInjectedTrigger).toHaveBeenCalledWith(entry.scheduleId)
+    expect(del).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(store.resetOnRecreate).toHaveBeenCalledWith(entry.scheduleId)
   })
 
   it('returns exponential backoff capped at backoffCapMs', async () => {

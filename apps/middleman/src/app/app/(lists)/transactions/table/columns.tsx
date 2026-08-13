@@ -7,6 +7,8 @@ import {ActivitySuccessIcon, ActivityWarningIcon, RightArrowIcon} from '@igniter
 import { Button } from '@igniter/ui/components/button'
 import { FilterGroup, SortOption } from '@igniter/ui/components/DataTable/index'
 import { amountToPokt } from '@igniter/ui/lib/utils'
+import { failureReasonDisplay } from '@igniter/commons/utils'
+import { FailureReasonPopover } from '@igniter/ui/components/FailureReasonPopover'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
 import Amount from '@igniter/ui/components/Amount'
 import TransactionHash from '@igniter/ui/components/TransactionHash'
@@ -27,6 +29,8 @@ export type Transaction = {
     provider: string,
     providerFee?: number | null,
     typeProviderFee?: ProviderFee | null,
+    log?: string | null,
+    code?: number | null,
 };
 
 export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
@@ -66,6 +70,23 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
             return <TransactionStatusBadge status={status} />;
         },
         csvFormatterFn: ({status}) => status.charAt(0).toUpperCase() + status.slice(1),
+    },
+    {
+        id: "failureReason",
+        header: "Failure Reason",
+        cell: ({ row }) => {
+            const { status, log, code } = row.original;
+            const text = failureReasonDisplay(status === TransactionStatus.Failure, log, code);
+            if (text === null) {
+                return <span className="text-muted-foreground">-</span>;
+            }
+            // Friendly text in the cell; click to open the full raw log (copyable) inline.
+            return <FailureReasonPopover friendly={text} full={log?.trim() || ''} code={code} />;
+        },
+        // CSV keeps the RAW chain log (more detail for debugging/support exports);
+        // the table cell shows the friendly mapped text. Intentionally no `code` arg.
+        csvFormatterFn: (item) =>
+            failureReasonDisplay(item.status === TransactionStatus.Failure, item.log) ?? '',
     },
     {
         accessorKey: "hash",
@@ -140,6 +161,8 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
                                     provider: row.original.provider,
                                     providerFee: row.original.providerFee,
                                     typeProviderFee: row.original.typeProviderFee,
+                                    log: row.original.log,
+                                    code: row.original.code,
                                 }
                             })
                         }}

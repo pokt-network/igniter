@@ -80,6 +80,8 @@ export interface TransactionResult {
   gasWanted?: bigint;
   success: boolean;
   code: number;
+  /** Chain error text (ABCI log) for failed txs; empty/undefined on success. */
+  rawLog?: string;
 }
 
 /**

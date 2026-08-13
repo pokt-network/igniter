@@ -14,6 +14,29 @@ type SetupOptions<TSchema> = {
 
 export type { DBClient }
 
+/**
+ * Drizzle's query logger receives POSITIONAL params (a bare array), so the
+ * logger package's key-name-based redaction (`redactByField`) cannot see what
+ * each value is — an `insert into "keys"` would emit the encrypted privateKey
+ * blob verbatim. Two defenses:
+ * 1. Table denylist: any query touching a secret-bearing table logs
+ *    '[redacted]' instead of its params (values there are secrets by design).
+ * 2. Length cap: long string params elsewhere are truncated — multi-KB
+ *    blobs/hex payloads are a leak vector and add no debugging value.
+ */
+const SENSITIVE_TABLES_RE =
+  /"(keys|notification_channels|smtp_configuration|sessions|accounts|verification_tokens?)"/i
+const PARAM_MAX_LEN = 256
+
+function safeQueryParams(query: string, params: unknown[]): unknown {
+  if (SENSITIVE_TABLES_RE.test(query)) return '[redacted: sensitive table]'
+  return params.map((p) =>
+    typeof p === 'string' && p.length > PARAM_MAX_LEN
+      ? `${p.slice(0, 64)}…[truncated ${p.length} chars]`
+      : p,
+  )
+}
+
 export const setup = <TSchema extends Record<string, unknown>>(options: SetupOptions<TSchema>): DBClient<TSchema>  => {
   const {
     DATABASE_URL,
@@ -62,7 +85,7 @@ export const setup = <TSchema extends Record<string, unknown>>(options: SetupOpt
     schema,
     logger: {
       logQuery: (query: string, params: unknown[]) => {
-        logger.debug('Database Query:', { query, params });
+        logger.debug('database query', { query, params: safeQueryParams(query, params) });
       },
     }
   })

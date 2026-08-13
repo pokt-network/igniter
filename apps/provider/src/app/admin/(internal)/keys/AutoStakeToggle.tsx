@@ -6,6 +6,9 @@ import { ConfirmationDialog } from '@igniter/ui/components/ConfirmationDialog'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GetRemediationScheduleStatus, ToggleRemediationSchedule } from '@/actions/Schedules'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'AutoStakeToggle']);
 
 export default function AutoStakeToggle() {
   const router = useRouter()
@@ -44,7 +47,7 @@ export default function AutoStakeToggle() {
       await queryClient.invalidateQueries({ queryKey: ['remediation-schedule-status'] })
       setOpen(false)
     } catch (e) {
-      console.error('Failed to toggle remediation schedule', e)
+      log.error('Failed to toggle remediation schedule', { error: e })
       setError(e instanceof Error ? e.message : 'Failed to toggle schedule. Please try again.')
     } finally {
       setIsSubmitting(false)

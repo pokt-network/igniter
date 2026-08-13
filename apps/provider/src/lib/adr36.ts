@@ -1,6 +1,9 @@
 import { Secp256k1, Secp256k1Signature, sha256 } from '@cosmjs/crypto'
 import { fromHex, fromBase64 } from '@cosmjs/encoding'
 import { serializeSignDoc, type StdSignDoc } from '@cosmjs/amino'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['provider', 'adr36'])
 
 /**
  * Verifies an ADR-36 signature as produced by Keplr's signArbitrary.
@@ -42,7 +45,7 @@ export async function verifyAdr36Signature(
       publicKeyBytes,
     )
   } catch (e: unknown) {
-    console.error('ADR-36 signature verification failed:', (e as Error).message)
+    log.error('ADR-36 signature verification failed', { error: e })
     return false
   }
 }

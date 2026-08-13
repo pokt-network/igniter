@@ -10,6 +10,9 @@ import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import {columns} from "./columns";
 import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import { useQuery } from '@tanstack/react-query'
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'table']);
 
 export default function ServicesTable() {
   const {data: services, refetch: refetchServices, isLoading: isLoadingServices, isError} = useQuery({
@@ -85,7 +88,7 @@ export default function ServicesTable() {
       }
       await refetchServices();
     } catch (error) {
-      console.error("Failed to delete service:", error);
+      log.error("Failed to delete service", { error: error })
     } finally {
       setIsDeletingService(false);
       setServiceToDelete(null);

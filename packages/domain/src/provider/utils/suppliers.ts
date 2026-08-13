@@ -6,10 +6,33 @@ import {KeyWithGroup} from "@igniter/db/provider/schema";
 import {RPCTypeMap} from '@igniter/pocket/constants';
 import {deduplicateRevShare} from "./services";
 
+export function normalizeRpcType(rpcType: RPCType | string | undefined): RPCType {
+  if (typeof rpcType === 'string') {
+    return RPCTypeMap[rpcType as keyof typeof RPCTypeMap] ?? RPCType.UNRECOGNIZED;
+  }
+
+  return rpcType ?? RPCType.UNRECOGNIZED;
+}
+
+export function getEndpointOverride(
+  endpointOverrides: Record<string, string> | null | undefined,
+  rpcType: RPCType | string | undefined,
+): string | undefined {
+  if (!endpointOverrides) {
+    return undefined;
+  }
+
+  const rawKey = String(rpcType);
+  const normalizedKey = String(normalizeRpcType(rpcType));
+
+  return endpointOverrides[rawKey] ?? endpointOverrides[normalizedKey];
+}
+
 export function getSchemeForRpcType(rpcType: RPCType) {
     switch (rpcType) {
         case RPCType.JSON_RPC:
         case RPCType.REST:
+        case RPCType.COMET_BFT:
             return 'https';
         case RPCType.GRPC:
             return 'grpcs';
@@ -30,6 +53,8 @@ export function getUrlTokenFromRpcType(rpcType: RPCType) {
             return 'grpc';
         case RPCType.WEBSOCKET:
             return 'ws';
+        case RPCType.COMET_BFT:
+            return 'cometbft';
         default:
             return 'json';
     }
@@ -163,19 +188,24 @@ export function getExpectedServicesFromKey(key: KeyWithGroup): Array<SupplierSer
     const newExpectedService: SupplierServiceConfig = {
       serviceId: addressGroupService.serviceId,
       revShare: deduplicateRevShare(filteredRevShare),
-      endpoints: addressGroupService.service.endpoints?.map((endpoint) => ({
-        url: getEndpointInterpolatedUrl(endpoint, {
-          sid: addressGroupService.serviceId,
-          rm: key.addressGroup?.relayMiner?.identity || '',
-          region: key.addressGroup?.relayMiner?.region?.urlValue || '',
-          domain: key.addressGroup?.relayMiner?.domain || '',
-        }),
-        // Normalize rpcType to numeric to match BuildSupplierServiceConfigHandler
-        rpcType: typeof endpoint.rpcType === 'string'
-          ? (RPCTypeMap[endpoint.rpcType as keyof typeof RPCTypeMap] ?? -1)
-          : endpoint.rpcType,
-        configs: []
-      })),
+      endpoints: addressGroupService.service.endpoints?.map((endpoint) => {
+        const rpcType = normalizeRpcType(endpoint.rpcType);
+        const overrideUrl = getEndpointOverride(
+          addressGroupService.endpointOverrides,
+          endpoint.rpcType,
+        );
+
+        return {
+          url: overrideUrl || getEndpointInterpolatedUrl(endpoint, {
+            sid: addressGroupService.serviceId,
+            rm: key.addressGroup?.relayMiner?.identity || '',
+            region: key.addressGroup?.relayMiner?.region?.urlValue || '',
+            domain: key.addressGroup?.relayMiner?.domain || '',
+          }),
+          rpcType,
+          configs: [],
+        };
+      }),
     }
 
     expectedServices.push(newExpectedService)

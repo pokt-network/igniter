@@ -23,6 +23,9 @@ import React, { useCallback, useState } from "react";
 import { LoaderIcon } from "@igniter/ui/assets";
 import type { Key } from "@igniter/db/provider/schema";
 import { UpdateKeyRewardsSettings as UpdateKeyRewardsSettingsAction } from "@/actions/Keys";
+import { getLogger } from '@igniter/logger';
+
+const log = getLogger(['provider', 'ui', 'UpdateKeyRewardsSettings']);
 
 const poktAddressRegex = /^pokt[a-zA-Z0-9]{39,42}$/;
 
@@ -86,7 +89,7 @@ export function UpdateKeyRewardsSettings({
       await UpdateKeyRewardsSettingsAction(keyId, values);
       onClose?.(true);
     } catch (e) {
-      console.error("Failed to update key rewards settings", e);
+      log.error("Failed to update key rewards settings", { error: e })
       setError(
         e instanceof Error
           ? e.message

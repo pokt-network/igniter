@@ -22,6 +22,9 @@ import {
 } from '@/actions/ApplicationSettings'
 import { ApplicationSettings } from "@igniter/db/middleman/schema";
 import { ChainId } from "@igniter/db/middleman/enums";
+import { getLogger } from "@igniter/logger";
+
+const log = getLogger(['middleman', 'blockchain-form'])
 
 interface FormProps {
   defaultValues: Partial<ApplicationSettings>;
@@ -197,7 +200,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       await UpsertApplicationSettings(values, isUpdate);
       goNext();
     } catch (error) {
-      console.error("Something failed while updating the application settings", error);
+      log.error("failed to update application settings", { error });
     } finally {
       setIsLoading(false);
     }

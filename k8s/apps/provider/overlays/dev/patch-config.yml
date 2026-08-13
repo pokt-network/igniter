@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: provider-config
 data:
+  # NDJSON in localnet: agent/jq-friendly and format-parity with prod (Loki).
+  LOG_FORMAT: "json"
   DELEGATORS_CDN_URL: "https://soothe-vault.nyc3.cdn.digitaloceanspaces.com/{chainId}/delegators.json"
   AUTH_TRUST_HOST: "true"
   APP_URL: "http://localhost:3001"

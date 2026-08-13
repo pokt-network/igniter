@@ -163,6 +163,19 @@ const VERIFY_UNAVAILABLE_ALERT_THRESHOLD = Number(process.env.VERIFY_UNAVAILABLE
 // TX_EXPIRATION_BLOCKS imported from @igniter/tx-verify above
 
 /**
+ * Warns once per worker process that `indexerApiUrl` is missing from app settings,
+ * instead of every sweep (this fired ~34x/2h in the debuggability audit — pure noise
+ * once the operator has seen it once). Module-level state is safe here: this file
+ * only runs activity/node-side, never inside the Temporal workflow sandbox.
+ */
+let indexerApiUrlWarned = false
+function warnIndexerApiUrlMissingOnce(context: Record<string, unknown> = {}) {
+  if (indexerApiUrlWarned) return
+  indexerApiUrlWarned = true
+  log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', context)
+}
+
+/**
  * Parses a transaction's unsigned payload into the expected on-chain supplier effect.
  * Returns null when the tx has no supplier-state path (send / OperationalFunds), so the
  * verifier knows to skip the supplier verification path for it.
@@ -199,7 +212,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
   async upsertSupplierStatus(params: UpsertSupplierStatusParams): Promise<boolean> {
     try {
-      log.info('Querying supplier status', { params })
+      log.debug('Querying supplier status', { params })
       const [node, balance, supplier] = await Promise.all([
         dal.node.loadNode(params.address),
         pocketRpcClient.getBalance(params.address),
@@ -350,14 +363,14 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         }
       }
 
-      log.info('Updating supplier', { params, update }) //NOTE: adding the update could result in an error due to BIGINT
+      log.debug('Updating supplier', { params, update }) //NOTE: adding the update could result in an error due to BIGINT
       try {
         await dal.node.updateNode(params.address, update, params.height)
       } catch (e) {
         log.error('Error updating node record', { error: e })
         throw new ApplicationFailure('errored updating node record', 'update_error', false, null, e as Error)
       }
-      log.info('Upsert Supplier done!', { params })
+      log.debug('Upsert Supplier done!', { params })
 
       // Node update has persisted — now deliver the captured supplier-change
       // notifications (best-effort; dispatchUserNotification never throws). On a
@@ -492,7 +505,20 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       throw new Error('Transaction is not signed')
     }
 
-    return pocketRpcClient.sendTransaction(transaction.signedPayload)
+    const result = await pocketRpcClient.sendTransaction(transaction.signedPayload)
+
+    if (result.transactionHash) {
+      log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type })
+    } else {
+      log.warn('transaction broadcast failed', {
+        transactionId,
+        type: transaction.type,
+        code: result.code,
+        message: result.message,
+      })
+    }
+
+    return result
   },
   /**
    * Retrieves the current block height from the RPC client.
@@ -584,8 +610,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
       return dal.node.insert(newNodes, transaction.id)
     } catch (error) {
-      console.log('Something went wrong while parsing the transaction to extract the staked nodes information.')
-      console.error(error)
+      log.error('Failed to parse transaction for staked nodes', { transactionId, error })
       return []
     }
   },
@@ -619,8 +644,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
       return addresses
     } catch (error) {
-      console.log('Something went wrong while parsing the transaction to extract the unstaking nodes information.')
-      console.error(error)
+      log.error('Failed to parse transaction for unstaking nodes', { transactionId, error })
       return []
     }
   },
@@ -815,7 +839,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const indexerApiUrl = appSettings?.indexerApiUrl
 
     if (!indexerApiUrl) {
-      log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch')
+      warnIndexerApiUrlMissingOnce()
       return
     }
 
@@ -1019,7 +1043,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const indexerApiUrl = appSettings?.indexerApiUrl
 
     if (!indexerApiUrl) {
-      log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', { providerIdentity })
+      warnIndexerApiUrlMissingOnce({ providerIdentity })
       return { statusResult }
     }
 
@@ -1260,7 +1284,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    * height (or its execution height on the first sweep). Maps the pocket tri-state
    * result down to the minimal shape the pure decision logic consumes.
    */
-  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string }>> {
+  async verifyTxHash(transactionId: number): Promise<VerifyOutcome<{ success: boolean; code: number; gasUsed: string; rawLog?: string }>> {
     const txn = await dal.transaction.getTransaction(transactionId)
     if (!txn?.hash) {
       throw new Error('verifyTxHash: tx missing hash')
@@ -1272,7 +1296,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     // activity boundary (the default payload converter cannot encode BigInt).
     return {
       status: 'confirmed',
-      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString() },
+      data: { success: out.data.success, code: out.data.code, gasUsed: out.data.gasUsed.toString(), rawLog: out.data.rawLog },
     }
   },
 
@@ -1375,14 +1399,34 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const status = decision.tx === 'success' ? TransactionStatus.Success : TransactionStatus.Failure
     const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
+    // Failure log: prefer the chain's own error text (rawLog, present when the tx
+    // was found on-chain and failed) so the UI can show the real reason; the
+    // hardcoded summaries remain for paths where no chain text exists (absent-tx
+    // failure) or as suffix context (sibling-met goal).
     const fields: { code?: number; consumedFee?: number; verificationHeight?: number; log?: string } = {
       verificationHeight,
       log: decision.tx === 'success' ? 'verified'
-        : decision.effects === 'apply-success' ? 'tx failed on-chain; goal met by sibling tx'
-        : 'verification negative (validity bound covered, no effect)',
+        : decision.effects === 'apply-success'
+          ? `tx failed on-chain; goal met by sibling tx${decision.rawLog ? ` (${decision.rawLog})` : ''}`
+          : decision.rawLog || 'verification negative (validity bound covered, no effect)',
     }
     if (decision.code !== undefined) fields.code = decision.code
     if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)
+
+    const verifyLogFields = {
+      transactionId,
+      hash: txn.hash ?? undefined,
+      type: txn.type,
+      success: decision.tx === 'success',
+      ...(decision.code !== undefined ? { code: decision.code } : {}),
+      ...(decision.gasUsed !== undefined ? { gasUsed: decision.gasUsed } : {}),
+    }
+    if (decision.tx === 'success') {
+      log.info('transaction verified', verifyLogFields)
+    } else {
+      log.warn('transaction verification failed', { ...verifyLogFields, reason: fields.log })
+    }
+
     const claimed = await dal.transaction.claimTerminalTransition(transactionId, status, fields)
 
     // Only the CAS winner gets the row back, so the owner is notified exactly

@@ -5,10 +5,11 @@ import { PocketBrandLogo } from "../PocketBrandLogo";
 
 export interface AppTopBarProps {
   logoIcon?: ComponentType;
+  leading?: React.ReactNode;
   children?: React.ReactNode;
 }
 
-export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppTopBarProps>) {
+export async function AppTopBar({ logoIcon: LogoIcon, leading, children } : Readonly<AppTopBarProps>) {
 
   return (
     <header
@@ -21,7 +22,8 @@ export async function AppTopBar({ logoIcon: LogoIcon, children } : Readonly<AppT
           "h-(--header-height) w-full flex items-center justify-between"
         }
       >
-        <div>
+        <div className="flex items-center gap-2">
+          { leading }
           { LogoIcon ? <LogoIcon /> : <PocketBrandLogo /> }
         </div>
         <div className="w-full md:w-auto flex flex-row items-center gap-3 justify-end">

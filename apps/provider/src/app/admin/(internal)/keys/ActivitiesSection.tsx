@@ -15,16 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@igniter/ui/components/table'
-import type {
-  PendingStateSerialized,
-  PendingOperationSerialized,
-} from '@/lib/pending/derivePendingState'
-
-// PENDING-only count — recently-settled linger rows don't inflate the badge.
-function pendingCount(state: PendingStateSerialized | undefined): number {
-  if (!state) return 0
-  return Object.keys(state.byKey).length
-}
+import type { PendingOperationSerialized } from '@/lib/pending/derivePendingState'
 
 const TYPE_LABELS: Record<PendingOperationSerialized['kind'], string> = {
   stake: 'Stake',
@@ -86,26 +77,14 @@ export default function ActivitiesSection() {
     return pendingState?.pendingOperations ?? []
   }, [pendingState])
 
-  const count = pendingCount(pendingState)
-
-  // Render nothing when no pending and no recently-settled rows — section only
-  // appears during activity.
-  if (rows.length === 0) return null
-
   return (
     <div className="flex flex-col gap-3">
-      {/* Badge shows PENDING count only; settled-linger rows don't inflate it. */}
-      <h3 className="text-lg font-semibold">
-        In progress
-        {count > 0 && (
-          <span className="text-sm font-normal text-text-tertiary ml-2">· {count}</span>
-        )}
-      </h3>
-
       {/* Compact, chrome-free strip built from the shared Table primitives (no
           DataTable toolbar/pagination). ~5 rows then internal scroll. */}
       <Table containerClassName="max-h-[260px]">
-        <TableHeader>
+        {/* Lock header to the top of the scroll box; opaque root bg so rows
+            don't bleed through, plus a bottom divider that stays put. */}
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--bg-root) [&_th]:border-b [&_th]:border-border-primary">
           <TableRow className="bg-transparent">
             {/* Column order: Tx Hash · Submitted · Supplier · Type · Status */}
             <TableHead className={clsx(HEAD_CLASS, TX_HASH_COL_CLASS)}>Tx Hash</TableHead>
@@ -116,6 +95,16 @@ export default function ActivitiesSection() {
           </TableRow>
         </TableHeader>
         <TableBody>
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={5}
+                className="h-24 text-center text-text-secondary"
+              >
+                No activity yet.
+              </TableCell>
+            </TableRow>
+          )}
           {rows.map((row) => {
             const statusLabel = getStatusLabel(row)
             const statusClass = getStatusClass(row)

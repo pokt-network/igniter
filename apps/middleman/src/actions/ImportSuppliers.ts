@@ -11,6 +11,10 @@ import { getDb } from '@/db'
 import { ImportedSupplier } from '@/lib/services/importSuppliers'
 import { getExistingNodes, getNodeAddressesByOwnerAndProvider } from '@/lib/dal/nodes'
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
+import { getLogger } from '@igniter/logger'
+import { runWithRequestContext } from '@/lib/logging/withLogging'
+
+const log = getLogger(['middleman', 'import-suppliers'])
 
 async function getCurrentHeight(): Promise<number> {
   try {
@@ -44,19 +48,22 @@ export async function CreateImportAttempt(
   providerId: number,
   nonce: string,
 ): Promise<number> {
-  const userIdentity = await requireAuth()
+  return runWithRequestContext(async () => {
+    const userIdentity = await requireAuth()
 
-  const attempt: InsertImportSupplierAttempt = {
-    userIdentity,
-    ownerAddress,
-    providerIdentity,
-    providerId,
-    nonce,
-    status: ImportAttemptStatus.Initiated,
-  }
+    const attempt: InsertImportSupplierAttempt = {
+      userIdentity,
+      ownerAddress,
+      providerIdentity,
+      providerId,
+      nonce,
+      status: ImportAttemptStatus.Initiated,
+    }
 
-  const created = await importAttemptsDal.create(attempt)
-  return created.id
+    const created = await importAttemptsDal.create(attempt)
+    log.info('import attempt created', { attemptId: created.id, ownerAddress, providerIdentity })
+    return created.id
+  })
 }
 
 /**
@@ -72,16 +79,19 @@ export async function UpdateImportAttemptStatus(
     errorMessage?: string
   },
 ): Promise<void> {
-  const userIdentity = await requireAuth()
-  const attempt = await getOwnedImportAttempt(attemptId, userIdentity)
+  return runWithRequestContext(async () => {
+    const userIdentity = await requireAuth()
+    const attempt = await getOwnedImportAttempt(attemptId, userIdentity)
 
-  if (attempt.status === ImportAttemptStatus.Submitted) {
-    throw new Error(`Import attempt ${attemptId} already submitted. Cannot update status.`)
-  }
+    if (attempt.status === ImportAttemptStatus.Submitted) {
+      throw new Error(`Import attempt ${attemptId} already submitted. Cannot update status.`)
+    }
 
-  await importAttemptsDal.update(attemptId, {
-    status,
-    ...data,
+    await importAttemptsDal.update(attemptId, {
+      status,
+      ...data,
+    })
+    log.info('import attempt status updated', { attemptId, status })
   })
 }
 
@@ -93,50 +103,56 @@ export async function CompleteImportAttempt(
   suppliers: ImportedSupplier[],
   providerIdentity: string,
 ): Promise<void> {
-  const userIdentity = await requireAuth()
-  const attempt = await getOwnedImportAttempt(attemptId, userIdentity)
+  return runWithRequestContext(async () => {
+    const userIdentity = await requireAuth()
+    const attempt = await getOwnedImportAttempt(attemptId, userIdentity)
 
-  const db = getDb()
-  const supplierAddresses = suppliers.map((s) => s.address)
-  const existingSuppliers = await getExistingNodes(supplierAddresses, userIdentity)
-  const height = await getCurrentHeight()
+    const db = getDb()
+    const supplierAddresses = suppliers.map((s) => s.address)
+    const existingSuppliers = await getExistingNodes(supplierAddresses, userIdentity)
+    const height = await getCurrentHeight()
 
-  const nodesToInsert: Array<InsertNode> = []
+    const nodesToInsert: Array<InsertNode> = []
 
-  for (const supplier of suppliers) {
-    if (existingSuppliers.includes(supplier.address)) {
-      continue
+    for (const supplier of suppliers) {
+      if (existingSuppliers.includes(supplier.address)) {
+        continue
+      }
+
+      nodesToInsert.push({
+        address: supplier.address,
+        ownerAddress: attempt.ownerAddress,
+        status: NodeStatus.Staked,
+        stakeAmount: supplier.stakeAmount,
+        providerId: providerIdentity,
+        createdBy: attempt.userIdentity,
+        balance: BigInt(0),
+        lastUpdatedHeight: height,
+      })
     }
 
-    nodesToInsert.push({
-      address: supplier.address,
-      ownerAddress: attempt.ownerAddress,
-      status: NodeStatus.Staked,
-      stakeAmount: supplier.stakeAmount,
-      providerId: providerIdentity,
-      createdBy: attempt.userIdentity,
-      balance: BigInt(0),
-      lastUpdatedHeight: height,
-    })
-  }
-
-  let importedAddresses: string[] = []
-  if (nodesToInsert.length > 0) {
-    // The nodes.address unique constraint silently drops rows whose address already
-    // exists under ANOTHER user (getExistingNodes only sees this user's rows).
-    // Derive the completed set from what actually landed.
-    const inserted = await db
-      .insert(nodesTable)
-      .values(nodesToInsert)
-      .onConflictDoNothing()
-      .returning({ address: nodesTable.address })
-    importedAddresses = inserted.map((r) => r.address)
-    const dropped = nodesToInsert.filter((n) => !importedAddresses.includes(n.address))
-    if (dropped.length > 0) {
-      console.warn('CompleteImportAttempt: addresses skipped (already owned by another account)', dropped.map((n) => n.address))
+    let importedAddresses: string[] = []
+    if (nodesToInsert.length > 0) {
+      // The nodes.address unique constraint silently drops rows whose address already
+      // exists under ANOTHER user (getExistingNodes only sees this user's rows).
+      // Derive the completed set from what actually landed.
+      const inserted = await db
+        .insert(nodesTable)
+        .values(nodesToInsert)
+        .onConflictDoNothing()
+        .returning({ address: nodesTable.address })
+      importedAddresses = inserted.map((r) => r.address)
+      const dropped = nodesToInsert.filter((n) => !importedAddresses.includes(n.address))
+      if (dropped.length > 0) {
+        log.warn('import attempt addresses skipped (already owned by another account)', {
+          attemptId,
+          skippedCount: dropped.length,
+        })
+      }
     }
-  }
-  await importAttemptsDal.markCompleted(attemptId, importedAddresses)
+    await importAttemptsDal.markCompleted(attemptId, importedAddresses)
+    log.info('import attempt completed', { attemptId, importedCount: importedAddresses.length })
+  })
 }
 
 /**

@@ -1,4 +1,9 @@
-import { count, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { NOTIFICATION_EVENT_TYPES } from '@igniter/db/provider/enums'
+import {
+  buildNotificationEventFilterConditions as buildConditions,
+  type NotificationEventFilters,
+} from '@igniter/db/notifications'
 import {
   notificationChannelsTable,
   notificationEventsTable,
@@ -10,6 +15,15 @@ import {
   type InsertSmtpConfiguration,
 } from '@igniter/db/provider/schema'
 import { getDb } from '@/db'
+
+export type { NotificationEventFilters }
+
+// Binds the provider events table + enum to the shared filter builder in
+// @igniter/db/notifications. Kept as a same-signature wrapper so call sites and
+// the unit tests (notificationChannels.filters.test.ts) stay unchanged.
+export function buildNotificationEventFilterConditions(filters?: NotificationEventFilters) {
+  return buildConditions(notificationEventsTable, NOTIFICATION_EVENT_TYPES, filters)
+}
 
 // Deliberately excludes `config`: it holds channel secrets (webhook URL, bot
 // token) and must not be shipped to the client with the list view. Use
@@ -117,10 +131,11 @@ export async function deleteSmtpConfig(): Promise<void> {
 export async function listNotificationEvents(
   page: number,
   pageSize: number,
-  search?: string,
+  filters?: NotificationEventFilters,
 ): Promise<{ data: NotificationEvent[]; total: number; unviewedTotal: number }> {
   const db = getDb()
-  const where = search ? eq(notificationEventsTable.uuid, search) : undefined
+  const conds = buildNotificationEventFilterConditions(filters)
+  const where = conds.length ? and(...conds) : undefined
   const [rows, [countRow], [unviewedRow]] = await Promise.all([
     db
       .select()

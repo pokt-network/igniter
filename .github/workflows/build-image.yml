@@ -68,6 +68,8 @@ jobs:
           file: ./apps/${{ inputs.app }}/Dockerfile
           push: ${{ inputs.push }}
           tags: ghcr.io/pokt-network/${{ inputs.app }}:${{ inputs.tag }}
+          build-args: |
+            APP_VERSION=${{ inputs.tag }}
           no-cache: ${{ inputs.no-cache }}
           cache-from: ${{ inputs.no-cache && ' ' || 'type=gha' }}
           cache-to: type=gha,mode=max
