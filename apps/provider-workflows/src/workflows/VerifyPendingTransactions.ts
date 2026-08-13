@@ -90,7 +90,9 @@ export async function VerifyPendingTransactions() {
       'VerifyPendingTransactions: all transactions failed',
       'fatal_error',
       true,
-      [failedReasons],
+      // Capped: an oversized details payload would fail the workflow task that
+      // reports the failure — the exact wedge this guard exists to prevent.
+      [failedReasons.slice(0, 20)],
     )
   }
 }

@@ -180,7 +180,10 @@ describe('PocketBlockchain.verifyTransaction', () => {
     mockBlock.mockImplementation((h: number) =>
       Promise.resolve({ block: { txs: h === 1000 ? [txContent] : [] } }),
     )
-    mockBlockResults.mockRejectedValue(
+    // Once, not persistently: clearAllMocks() resets calls but NOT implementations,
+    // and this config sets neither resetMocks nor restoreMocks — a persistent
+    // rejection here would silently poison any confirmed-path test added below.
+    mockBlockResults.mockRejectedValueOnce(
       new Error('{"code":-32603,"message":"Internal error","data":"could not find results for height #1000"}'),
     )
 

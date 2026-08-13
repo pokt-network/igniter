@@ -88,7 +88,10 @@ export async function VerifyPendingTransactions() {
       'VerifyPendingTransactions: all transactions failed',
       'fatal_error',
       true,
-      [failedReasons],
+      // Capped: the realistic trigger for a big backlog is the aftermath of a
+      // stall, and an oversized details payload would fail the workflow task that
+      // reports the failure — the exact wedge this file exists to prevent.
+      [failedReasons.slice(0, 20)],
     )
   }
 }

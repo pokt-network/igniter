@@ -472,8 +472,13 @@ export class PocketBlockchain {
       // Hash matched in this block but its result row is missing — the tx IS
       // on-chain, we just can't read its outcome. That is NOT negative evidence;
       // treat as unavailable so the verifier keeps retrying instead of failing.
-      if (match === 'result-missing') {
-        this.logger.warn('verifyTransaction: matched tx has no block result entry', { txHash, height: h })
+      if (match === 'result-missing' || match === 'result-unreadable') {
+        this.logger.warn(
+          match === 'result-missing'
+            ? 'verifyTransaction: matched tx has no block result entry'
+            : 'verifyTransaction: matched tx result row could not be read',
+          { txHash, height: h },
+        )
         return { status: 'unavailable' }
       }
       return { status: 'confirmed', data: match }
@@ -500,9 +505,11 @@ export class PocketBlockchain {
   /**
    * Scans the already-fetched `block` at `height` for the tx whose SHA256 equals
    * `normalizedHash`. Returns the built TransactionResult on a hit, 'no-match' if
-   * the hash is not in this block, or 'result-missing' if the hash matched but
-   * its result row could not be read — either blockResults had no entry at the
-   * matched index, or the blockResults call itself failed.
+   * the hash is not in this block, 'result-missing' if blockResults had no entry
+   * at the matched index, or 'result-unreadable' if the blockResults call itself
+   * failed. The last two are kept apart so the logs say which one happened; both
+   * mean the same thing to the caller (the tx is on-chain, its outcome is not
+   * readable yet) and both map to `unavailable`.
    */
   private async matchTxInBlock(
     comet: Awaited<ReturnType<typeof this.getCometClient>>,
@@ -510,7 +517,7 @@ export class PocketBlockchain {
     height: number,
     normalizedHash: string,
     txHash: string,
-  ): Promise<TransactionResult | 'no-match' | 'result-missing'> {
+  ): Promise<TransactionResult | 'no-match' | 'result-missing' | 'result-unreadable'> {
     const txs = block.block.txs
     for (let i = 0; i < txs.length; i++) {
       const bytes = txs[i]
@@ -528,7 +535,7 @@ export class PocketBlockchain {
           results = await comet.blockResults(height)
         } catch (error) {
           this.logger.warn('matchTxInBlock: blockResults failed for a matched tx', { txHash, height, error })
-          return 'result-missing'
+          return 'result-unreadable'
         }
         const txData = results.results[i]
         if (!txData) return 'result-missing'
@@ -601,8 +608,13 @@ export class PocketBlockchain {
       if (!block) continue
       const match = await this.matchTxInBlock(comet, block, h, normalizedHash, txHash)
       if (match === 'no-match') continue
-      if (match === 'result-missing') {
-        this.logger.warn('Block results missing entry for matched TX', { txHash, height: h })
+      if (match === 'result-missing' || match === 'result-unreadable') {
+        this.logger.warn(
+          match === 'result-missing'
+            ? 'Block results missing entry for matched TX'
+            : 'Block results unreadable for matched TX',
+          { txHash, height: h },
+        )
         return null
       }
       return match
