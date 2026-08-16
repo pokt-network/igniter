@@ -117,6 +117,36 @@ const UNORDERED_TIMEOUT_MS = 9 * 60 * 1000
  * errorsmod.Wrapf message from the unordered handler). This is a best-effort match;
  * if pocket-network's fork uses a different code, update the code number here.
  */
+/**
+ * The transaction hash for a signed payload, derived without asking the chain: sha256 of the
+ * exact bytes broadcast, uppercase hex. Identical to what CometBFT returns from
+ * `broadcast_tx_sync` and to the derivation `matchTxInBlock` uses when scanning a block, so a
+ * hash produced here is findable on-chain later.
+ *
+ * @param signedPayloadHex hex-encoded signed TxRaw bytes (middleman's storage encoding)
+ * @throws if the payload is not valid hex — `Buffer.from(x, 'hex')` truncates silently at the
+ *   first invalid character, and an empty result would yield sha256('') for every bad payload,
+ *   writing one constant hash across unrelated transactions.
+ */
+export function deriveTxHash(signedPayloadHex: string): string {
+  if (!/^[0-9a-fA-F]*$/.test(signedPayloadHex) || signedPayloadHex.length === 0 || signedPayloadHex.length % 2 !== 0) {
+    throw new Error('deriveTxHash: signed payload is not valid hex')
+  }
+  return toHex(sha256(Uint8Array.from(Buffer.from(signedPayloadHex, 'hex')))).toUpperCase()
+}
+
+/**
+ * CheckTx codes that do NOT prove the transaction can never land, even though cosmjs raises the
+ * same BroadcastTxError for them as for a real rejection:
+ *   32 (ErrWrongSequence)  — the sequence is already consumed (the tx ALREADY LANDED) or a
+ *                            predecessor is still in the mempool (this tx lands after it).
+ *   20 (ErrMempoolIsFull)  — the node had no room; the bytes are still valid and may be accepted
+ *                            on a later attempt or by another node.
+ * Treating either as terminal is how a landed transaction gets recorded as failed — the exact
+ * defect #339 is about. Route them to the verifier instead and let the chain answer.
+ */
+const INDETERMINATE_CHECKTX_CODES = new Set([20, 32])
+
 function isUnorderedDedupRejection(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const err = e as Error & { code?: number; codespace?: string; rawLog?: string }
@@ -329,22 +359,106 @@ export class PocketBlockchain {
 
   /**
    * Broadcasts a signed transaction (hex-encoded) to the network.
+   *
+   * The returned hash is derived LOCALLY (sha256 of the exact bytes broadcast, the same
+   * derivation `matchTxInBlock` uses during a block scan), so the caller holds it even when
+   * the node's reply never arrives. That matters because a transport failure is not evidence
+   * of anything: the node may have accepted the tx into its mempool before the socket died,
+   * in which case it still lands on-chain. Only `rejected` says the tx can never land.
+   *
+   * Mirrors `broadcastSupplierTx`'s ladder, on `broadcastTxSync` (which THROWS
+   * BroadcastTxError on a non-zero CheckTx code) instead of `broadcastTx`.
+   *
    * @param payload hex string of the signed tx bytes
-   * @returns transactionHash and the full BroadcastTxResponse
+   * @returns transactionHash (locally derived) plus the outcome discriminator `rejected`
    */
   async sendTransaction(payload: string): Promise<SendTransactionResult> {
-    const client = await this.getStargateClient()
-    const txBytes = Buffer.from(payload, 'hex')
+    const localHash = deriveTxHash(payload)
+    const txBytes = Uint8Array.from(Buffer.from(payload, 'hex'))
+
+    // Connection setup is its own failure class: if we cannot reach the node at all, nothing was
+    // transmitted. Reporting that as `neverSent` lets the caller roll back a pre-broadcast anchor
+    // and try again later, instead of stranding a tx that was never actually sent. Everything
+    // after this point may have reached the node, so none of it is safely retryable.
+    let client: StargateClient
+    try {
+      client = await this.getStargateClient()
+    } catch (error) {
+      const err = error as { message?: string }
+      this.logger.error('sendTransaction: RPC unreachable, nothing was broadcast', { message: err.message })
+      return {
+        transactionHash: localHash,
+        success: false,
+        rejected: false,
+        neverSent: true,
+        message: err.message ?? 'RPC unreachable — nothing was broadcast',
+      }
+    }
+
     try {
       const transactionHash = await client.broadcastTxSync(txBytes)
-      return { transactionHash, success: true }
+      return { transactionHash, success: true, rejected: false }
     } catch (error) {
+      // Cosmos SDK unordered dedup: re-broadcasting identical bytes is refused because the tx
+      // is already tracked in the unordered nonce cache. That means it IS (or will be) on-chain.
+      if (isUnorderedDedupRejection(error)) {
+        this.logger.info('sendTransaction: unordered dedup (already broadcast), treating as success', { transactionHash: localHash })
+        return {
+          transactionHash: localHash,
+          code: 0,
+          message: 'already broadcast (unordered dedup)',
+          success: true,
+          rejected: false,
+        }
+      }
 
-      const err = error as { code?: number; message?: string; log?: string }
+      // CheckTx answered with a non-zero code. Deterministic ones are proof the tx can never
+      // land; the codes in INDETERMINATE_CHECKTX_CODES are not (see that constant) and must go
+      // to the verifier instead of being written off as failures.
+      if (error instanceof BroadcastTxError) {
+        // Codespace-scoped: cosmos error codes are namespaced, so code 20/32 only carry the
+        // meanings below in the SDK root codespace. A module error that happens to reuse those
+        // numbers must NOT inherit the indeterminate treatment.
+        const indeterminate = error.codespace === 'sdk' && INDETERMINATE_CHECKTX_CODES.has(error.code)
+        const level = indeterminate ? 'warn' : 'error'
+        this.logger[level](
+          indeterminate
+            ? 'sendTransaction: CheckTx code is indeterminate (tx may still land, not rejected)'
+            : 'sendTransaction: hard CheckTx rejection',
+          { code: error.code, codespace: error.codespace, message: error.message },
+        )
+        return {
+          transactionHash: localHash,
+          success: false,
+          rejected: !indeterminate,
+          code: error.code,
+          codespace: error.codespace,
+          // `.log` is the clean ABCI error; `.message` is the verbose cosmjs wrapper.
+          message: error.log ?? error.message ?? 'broadcast rejected',
+        }
+      }
+
+      // Timeout: the node never answered, but may well have accepted the tx. Outcome UNKNOWN.
+      if (error instanceof TimeoutError) {
+        this.logger.warn('sendTransaction: RPC timeout (tx may still land, not rejected)', { transactionHash: localHash, message: error.message })
+        return {
+          transactionHash: localHash,
+          success: false,
+          rejected: false,
+          isTimeout: true,
+          message: `RPC timeout waiting for broadcast confirmation — tx may still land: ${error.message}`,
+        }
+      }
+
+      // Anything else (socket reset, proxy 5xx, DNS): same unknown-outcome class as a timeout.
+      const err = error as { code?: number; codespace?: string; message?: string; log?: string }
+      this.logger.error('sendTransaction: broadcast failed (outcome unknown, not rejected)', { code: err.code, codespace: err.codespace, message: err.message })
       return {
-        transactionHash: '',
+        transactionHash: localHash,
         success: false,
-        code: err.code,
+        rejected: false,
+        code: typeof err.code === 'number' ? err.code : undefined,
+        codespace: err.codespace,
         message: err.log ?? err.message,
       }
     }
