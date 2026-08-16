@@ -62,6 +62,13 @@ export interface SendTransactionResult {
    * where the tx may still land. Callers must treat undefined as non-rejected.
    */
   rejected?: boolean;
+  /**
+   * True only when we can PROVE no bytes were transmitted — the RPC connection could not be
+   * established, so the broadcast never happened. Distinct from a timeout or a reset, where the
+   * node may have received and accepted the tx. Callers may safely retry (or roll back a
+   * pre-broadcast anchor) on this and only this signal.
+   */
+  neverSent?: boolean;
   /** Chain head sampled immediately before signing — the lowest possible inclusion height anchor. */
   signedAtHeight?: number;
   /** timeoutHeight embedded in the signed tx; inclusion in any block > this height is impossible. */

@@ -1,5 +1,6 @@
 import {
   ApplicationFailure,
+  Context,
   heartbeat,
   log,
   sleep,
@@ -24,6 +25,7 @@ import { extractTransactionStakingSuppliers, extractTransactionUnstakingSupplier
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
+import { deriveTxHash } from '@igniter/pocket'
 import type { VerificationDecision, SupplierPathOutcome } from '@igniter/tx-verify'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
@@ -490,11 +492,66 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     return await dal.transaction.updateTransaction(transactionId, payload)
   },
   /**
-   * Executes a transaction based on the given transaction ID.
+   * Writes the broadcast anchor BEFORE any bytes are sent: the locally derived hash, the height
+   * sampled pre-broadcast, and the timeoutHeight embedded at signing. Returns the hash, or null
+   * when the signed payload cannot be decoded at all (deterministic, and terminal).
    *
-   * @param {number} transactionId - The unique identifier of the transaction to be executed.
-   * @return {Promise<any>} A promise that resolves with the result of the transaction execution or rejects if the transaction is not found or not signed.
+   * Ordering is the point. If the hash were written after broadcasting, any failure in between
+   * (worker crash, activity timeout) would re-enter the workflow with `hash === null` and
+   * broadcast the same bytes a second time. Mirrors the provider's `signSupplierTx`, which
+   * persists hash + expiry before `broadcastSupplierTx` runs.
    */
+  async persistBroadcastAnchor(transactionId: number, executionHeight: number): Promise<string | null> {
+    const transaction = await dal.transaction.getTransaction(transactionId)
+    if (!transaction) {
+      throw new Error('Transaction not found')
+    }
+    if (!transaction.signedPayload) {
+      throw new Error('Transaction is not signed')
+    }
+
+    let hash: string
+    try {
+      hash = deriveTxHash(transaction.signedPayload)
+    } catch (error) {
+      // An unhashable payload is deterministic proof the tx can never be broadcast, let alone
+      // land. Returning null (rather than throwing) hands the workflow a terminal verdict —
+      // throwing would retry the activity, fail the workflow, and let the 10s dispatcher relaunch
+      // it forever on a row that can never succeed.
+      log.error('broadcast anchor: signed payload is not hashable', { transactionId, error })
+      return null
+    }
+
+    const { timeoutHeight } = parseSignerAndSequence(transaction.signedPayload)
+
+    await dal.transaction.updateTransaction(transactionId, { hash, executionHeight, timeoutHeight })
+    log.info('broadcast anchor persisted', { transactionId, hash, executionHeight, timeoutHeight })
+
+    return hash
+  },
+  /**
+   * Diagnostics-only write (code/log), applied only while the row is still pending.
+   *
+   * Best-effort triage: the verifier's terminal write sets `log` unconditionally, so this text
+   * survives only until a verdict is reached. It is here so an operator inspecting a row that is
+   * still in flight can see WHY it is waiting.
+   */
+  async recordBroadcastDiagnostics(transactionId: number, fields: { code?: number; log?: string }): Promise<void> {
+    await dal.transaction.recordPendingDiagnostics(transactionId, fields)
+  },
+  /**
+   * Terminal transition guarded by the same CAS the verifier uses: it only wins while the row is
+   * still `pending`. Without it the broadcaster's late retry could overwrite a verdict the
+   * verifier already reached — the row is visible to the sweep from the moment it is anchored.
+   * Returns true iff THIS call performed the transition.
+   */
+  async claimBroadcastFailure(transactionId: number, fields: { code?: number; log?: string }): Promise<boolean> {
+    const row = await dal.transaction.claimTerminalTransition(transactionId, TransactionStatus.Failure, fields)
+    if (!row) {
+      log.info('broadcast failure CAS lost — transaction already terminal', { transactionId })
+    }
+    return Boolean(row)
+  },
   async executeTransaction(transactionId: number) {
     const transaction = await dal.transaction.getTransaction(transactionId)
     if (!transaction) {
@@ -505,20 +562,50 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       throw new Error('Transaction is not signed')
     }
 
+    // Which attempt this is decides whether a CheckTx rejection can be trusted. On attempt 1 no
+    // bytes have gone out before, so a rejection is about THIS tx. On a retry the previous attempt
+    // may already have put the tx on chain, and the node is then answering about the world that tx
+    // created — an insufficient-funds or sequence error that says "it already landed", not "it
+    // failed". Only the verifier can tell those apart, so retries never terminalize.
+    let attempt = 1
+    try {
+      attempt = Context.current().info.attempt
+    } catch {
+      // Not running inside an activity context (unit tests) — treat as the first attempt.
+    }
+
     const result = await pocketRpcClient.sendTransaction(transaction.signedPayload)
 
-    if (result.transactionHash) {
+    // The hash is derived locally by sendTransaction, so it is present on every outcome.
+    // What separates the three cases is success/rejected — log them apart so an operator can
+    // tell "the node refused this" from "we never heard back" in the logs.
+    if (result.success) {
       log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type })
-    } else {
-      log.warn('transaction broadcast failed', {
+    } else if (result.rejected) {
+      log.warn('transaction broadcast rejected', {
         transactionId,
         type: transaction.type,
+        hash: result.transactionHash,
         code: result.code,
+        message: result.message,
+      })
+    } else if (result.neverSent) {
+      log.warn('transaction not broadcast (RPC unreachable)', {
+        transactionId,
+        type: transaction.type,
+        message: result.message,
+      })
+    } else {
+      log.warn('transaction broadcast outcome unknown (may still land)', {
+        transactionId,
+        type: transaction.type,
+        hash: result.transactionHash,
+        isTimeout: result.isTimeout,
         message: result.message,
       })
     }
 
-    return result
+    return { ...result, attempt }
   },
   /**
    * Retrieves the current block height from the RPC client.
