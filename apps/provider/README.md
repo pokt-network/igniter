@@ -21,6 +21,8 @@ This README covers configuration and usage for node operators. For local develop
 
 For step-by-step deployment instructions (dependencies, configuration, and startup), see the [Docker Compose guide](../../docker-compose/README.md#2-provider-docker-composeappsproviderdocker-composeyaml).
 
+Provider serves an admin portal and a small machine API on the same port. Only the API needs to be public — see [Exposing the Provider API](../../docs/guides/provider/expose-api.md) for the exact path allowlist, a default-deny nginx configuration, and how to keep the portal reachable for yourself.
+
 ---
 
 ## Environment Variables
@@ -127,6 +129,7 @@ Step-by-step tutorials for common Provider workflows.
 | [How to manage your key inventory](../../docs/guides/provider/key-inventory.md) | Import keys, track their lifecycle states, and export when needed |
 | [How to onboard a new delegator](../../docs/guides/provider/onboard-delegator.md) | End-to-end flow from receiving keys to enabling a delegator |
 | [Notifications](../../docs/guides/provider/notifications.md) | Set up Discord, Telegram, or email delivery for supplier and workflow events |
+| [Exposing the Provider API](../../docs/guides/provider/expose-api.md) | Publish only the API paths Middleman and governance need; keep the admin portal private |
 
 ## Reference
 

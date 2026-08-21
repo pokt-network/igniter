@@ -21,7 +21,7 @@ Connect the Provider to the Pocket Network by entering the REST API URL of a Poc
 
 | Field | Description |
 |-------|-------------|
-| **App Identity** | Your provider's public identifier, derived from the `APP_IDENTITY` private key in your environment. Read-only — displayed for reference. Verify that this matches the address you registered in the [governance PR](https://github.com/pokt-network/pocket-network-genesis/pulls). |
+| **App Identity** | Your provider's public identifier, derived from the `APP_IDENTITY` private key in your environment. Read-only — displayed for reference. Verify that this matches the address you registered in the [governance PR](https://github.com/pokt-network/pocket-network-genesis/pulls). Once deployed, the same value is served at `APP_URL/api/identity`, which governance uses to confirm your instance runs the key you registered — see [Exposing the Provider API](./expose-api.md). |
 | **Pocket API URL** | The Cosmos SDK REST API endpoint of a Pocket Network node (e.g., `https://sauron-api.beta.infra.pocket.network`). Typically served on port `1317` for self-hosted nodes. Required. After entering a valid URL, the app fetches chain parameters automatically. |
 | **Pocket RPC URL** | The CometBFT RPC endpoint of a Pocket Network node (e.g., `https://sauron-rpc.beta.infra.pocket.network`). Typically served on port `26657` for self-hosted nodes. Required. Used by workflow services to broadcast and verify transactions. |
 | **Network** | The chain ID detected from the API (e.g., `pocket-beta`). Read-only — auto-populated. Cannot be changed after bootstrap. |
@@ -214,6 +214,7 @@ After bootstrap, continue setting up your Provider:
 - [Manage your key inventory](./key-inventory.md) — Import, track, and export supplier keys
 - [Set up a relay miner with address groups](./relay-miner-setup.md) — Configure relay miners and link them to services
 - [Onboard a new delegator](./onboard-delegator.md) — Enable delegators and configure revenue sharing
+- [Expose the Provider API](./expose-api.md) — Publish only the paths Middleman and governance need, and keep the admin portal off the public internet
 
 ---
 
