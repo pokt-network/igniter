@@ -19,7 +19,7 @@ import { Input } from '@igniter/ui/components/input'
 import { Switch } from '@igniter/ui/components/switch'
 import { Label } from '@igniter/ui/components/label'
 import { LoaderIcon } from '@igniter/ui/assets'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { toast } from "@igniter/ui/components/sonner";
 import { NotificationChannelType } from '@igniter/db/middleman/enums'
 import type { NotificationEventType, NotificationFlags } from '@igniter/db/middleman/schema'
 import { DEFAULT_NOTIFICATION_FLAGS } from '@igniter/db/middleman/schema'
@@ -62,8 +62,6 @@ const CHANNEL_TYPE_LABELS: Record<NotificationChannelType, string> = {
 
 export function ChannelForm({ channel, onClose }: ChannelFormProps) {
   const isEdit = !!channel
-  const { addNotification } = useNotifications()
-
   const [name, setName] = useState(channel?.name ?? '')
   const [type, setType] = useState<NotificationChannelType>(
     (channel?.type as NotificationChannelType) ?? NotificationChannelType.Discord,
@@ -91,6 +89,10 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
   const [step, setStep] = useState<'configure' | 'verify'>('configure')
   const [testState, setTestState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [testError, setTestError] = useState('')
+  // Reported inside the dialog rather than in the bell or a toast: the dialog
+  // stays open on failure, and its overlay covers the top bar — a message
+  // anywhere else would be unreachable until the user gave up and closed it.
+  const [formError, setFormError] = useState('')
 
   // On edit, load the stored (non-secret) config to prefill. Secret fields
   // (webhook URL, bot token, SMTP password) come back blank — they are
@@ -146,25 +148,27 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
 
   function handleNext() {
     if (!name.trim()) {
-      addNotification({ id: 'channel-name-required', type: 'error', showTypeIcon: true, content: 'Please enter a name.' })
+      setFormError('Please enter a name.')
       return
     }
+    setFormError('')
     setStep('verify')
     void runTest()
   }
 
   async function handleSave() {
     setSaving(true)
+    setFormError('')
     try {
       const config = buildConfig()
       const res = isEdit
         ? await UpdateNotificationChannel(channel!.id, { name, enabled, config, notificationFlags: flags })
         : await CreateNotificationChannel({ name, type, enabled, config, notificationFlags: flags })
       if (!res.success) throw new Error(res.error.message)
-      addNotification({ id: 'channel-saved', type: 'success', showTypeIcon: true, content: isEdit ? 'Channel updated.' : 'Channel created.' })
+      toast.success(isEdit ? 'Channel updated.' : 'Channel created.', { id: 'channel-saved' })
       onClose(true)
     } catch (e) {
-      addNotification({ id: 'channel-save-error', type: 'error', showTypeIcon: true, content: e instanceof Error ? e.message : 'Failed to save channel.' })
+      setFormError(e instanceof Error ? e.message : 'Failed to save channel.')
     } finally {
       setSaving(false)
     }
@@ -315,6 +319,8 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
           </div>
         )}
 
+        {formError && <p className="text-sm text-red-500">{formError}</p>}
+
         <DialogFooter>
           {step === 'configure' ? (
             <>
@@ -327,7 +333,16 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
             </>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setStep('configure')} disabled={saving}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Drop a previous failure — it refers to what was submitted,
+                  // not to what the user is about to edit.
+                  setFormError('')
+                  setStep('configure')
+                }}
+                disabled={saving}
+              >
                 Back
               </Button>
               <Button variant="secondary" onClick={() => void runTest()} disabled={saving || testState === 'sending'}>

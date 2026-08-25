@@ -30,7 +30,7 @@ export default function AppSidebar({
   return (
     <Sidebar
       collapsible="icon"
-      className="top-[calc(var(--header-height)+var(--notification-height,0px))] !h-[calc(100svh-var(--header-height)-var(--notification-height,0px))]"
+      className="top-(--header-height) !h-[calc(100svh-var(--header-height))]"
       {...sidebarProps}
     >
       <SidebarHeader></SidebarHeader>

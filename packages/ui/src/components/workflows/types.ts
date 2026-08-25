@@ -35,8 +35,9 @@ export interface WorkflowsActions {
 /**
  * How the workflows table surfaces a failed Terminate.
  *
- * - `toast`: the app shows a notification and the confirm dialog closes (the
- *   provider app's behavior — it wires `useNotifications`).
+ * - `toast`: the app reports the failure out-of-band and the confirm dialog
+ *   closes (the provider app's behavior — it files the message in the
+ *   notification bell via `onTerminateError`). The mode name predates the bell.
  * - `inline`: the shared component renders an inline error inside the dialog and
  *   keeps it open (the middleman app's behavior).
  *

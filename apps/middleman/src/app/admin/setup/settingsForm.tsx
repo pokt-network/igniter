@@ -17,7 +17,7 @@ import { Textarea } from "@igniter/ui/components/textarea";
 import React, {useMemo, useRef, useState} from "react";
 import { UpsertApplicationSettings } from "@/actions/ApplicationSettings";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import {getLogger} from "@igniter/logger";
 
 const log = getLogger(['middleman', 'settings-form'])
@@ -61,9 +61,6 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
   const isUpdate = useMemo(() => defaultValues.id !== 0, [defaultValues]);
 
   const formRef = useRef<HTMLFormElement>(null);
-
-  const { addNotification } = useNotifications();
-
   return (
     <div className="flex flex-col justify-between gap-4">
       <Form {...form}>
@@ -76,11 +73,9 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
               goNext();
             } catch (error) {
               log.error("failed to save settings", { isUpdate, error });
-              addNotification({
+              notify.error('Failed to save settings.', {
                 id: `settings-form-submit-error`,
-                type: 'error',
-                showTypeIcon: true,
-                content: 'Failed to save settings. Please try again.',
+                description: 'Please try again.',
               });
             } finally {
               setIsLoading(false);

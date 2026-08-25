@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { AbortConfirmationDialog } from '@igniter/ui/components/AbortConfirmationDialog'
 import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
 import OwnerAddressStep from '@/app/app/stake/components/OwnerAddressStep'
@@ -26,8 +26,6 @@ export default function ClientImportSuppliersPage() {
   const { connectedIdentity, connectedIdentities, isConnected } =
     useWalletConnection()
   const router = useRouter()
-  const { addNotification } = useNotifications()
-
   const [step, setStep] = useState<ImportSuppliersStep>(
     connectedIdentities && connectedIdentities.length > 1
       ? ImportSuppliersStep.OwnerAddress
@@ -127,12 +125,9 @@ export default function ClientImportSuppliersPage() {
           await router.push('/app')
         } catch (error) {
           log.error('failed to abort import', { error })
-          addNotification({
+          notify.error('Failed to abort the import.', {
             id: `abort-import-error`,
-            type: 'error',
-            showTypeIcon: true,
-            content:
-              'An error occurred while aborting. Please try again or contact support.',
+            description: 'Please try again or contact support.',
           })
           setIsAborting(false)
         } finally {
@@ -142,7 +137,7 @@ export default function ClientImportSuppliersPage() {
         setAbortDialogOpen(false)
       }
     },
-    [selectedProvider, ownerAddress, router, addNotification],
+    [selectedProvider, ownerAddress, router],
   )
 
   if (!isConnected) {

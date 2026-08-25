@@ -1,6 +1,6 @@
 'use client'
 
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { WorkflowDetailClient as SharedWorkflowDetailClient } from '@igniter/ui/components/workflows/WorkflowDetailClient'
 import * as Workflows from '@/actions/Workflows'
 
@@ -16,7 +16,6 @@ export function WorkflowDetailClient({
   workflowId: string
   runId?: string
 }) {
-  const { addNotification } = useNotifications()
   return (
     <SharedWorkflowDetailClient
       workflowId={workflowId}
@@ -25,9 +24,15 @@ export function WorkflowDetailClient({
       feedback={{
         mode: 'toast',
         onTerminateError: (message) =>
-          addNotification({ id: 'terminate-workflow-error', type: 'error', content: message }),
+          notify.error('Failed to terminate workflow.', {
+            id: 'terminate-workflow-error',
+            description: message,
+          }),
         onDownloadError: (message) =>
-          addNotification({ id: 'history-download-error', type: 'error', content: message }),
+          notify.error('Failed to download workflow history.', {
+            id: 'history-download-error',
+            description: message,
+          }),
       }}
     />
   )

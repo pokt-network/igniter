@@ -4,7 +4,7 @@ import "@/app/globals.css";
 import { ThemeProvider } from "@/app/theme";
 import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import {ApplicationSettingsProvider} from "@/app/context/ApplicationSettings";
-import NotificationsProvider from "@igniter/ui/context/Notifications/index";
+import { Toaster } from "@igniter/ui/components/sonner";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -43,11 +43,10 @@ export default function RootLayout({
       >
         <ApplicationSettingsProvider>
           <WalletConnectionProvider>
-            <NotificationsProvider>
-              <div className="flex flex-col items-center justify-center w-full h-dvh">
-                {children}
-              </div>
-            </NotificationsProvider>
+            <div className="flex flex-col items-center justify-center w-full h-dvh">
+              {children}
+            </div>
+            <Toaster />
           </WalletConnectionProvider>
         </ApplicationSettingsProvider>
       </ThemeProvider>

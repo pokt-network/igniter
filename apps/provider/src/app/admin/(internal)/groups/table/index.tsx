@@ -23,7 +23,8 @@ import {
   PencilIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { notify } from "@igniter/ui/lib/sessionMessages";
+import { toast } from "@igniter/ui/components/sonner";
 import { getLogger } from '@igniter/logger';
 
 const log = getLogger(['provider', 'ui', 'table']);
@@ -46,8 +47,6 @@ export default function AddressGroupsTable() {
   const [isDeletingAddressGroup, setIsDeletingAddressGroup] = useState(false)
   const [updateAddressGroup, setUpdateAddressGroup] = useState<AddressGroupWithDetails | null>(null)
   const [addressGroupToDelete, setAddressGroupToDelete] = useState<AddressGroup | null>(null)
-  const { addNotification } = useNotifications()
-
   const isLoading = isLoadingAddressGroups || isDeletingAddressGroup
 
   const content = (
@@ -77,11 +76,16 @@ export default function AddressGroupsTable() {
                 size="icon"
                 onClick={() => {
                   if (row.original.keysCount > 0) {
-                    addNotification({
+                    // A toast, not a bell card: nothing was attempted, so there
+                    // is no outcome to review later — the click was simply
+                    // refused, and the operator needs to see that immediately.
+                    // Overrides the wrapper's persist-until-dismissed, which
+                    // exists for raw server text; this is one short line.
+                    const keys = row.original.keysCount
+                    toast.warning('This address group cannot be deleted.', {
                       id: `ag-has-keys-error`,
-                      type: 'warning',
-                      showTypeIcon: true,
-                      content: 'Address groups with associated keys are protected from deletion. Support for removing these groups will be added in a future version.',
+                      duration: 6000,
+                      description: `It has ${keys} key${keys === 1 ? '' : 's'} attached. Address groups with keys are protected from deletion.`,
                     })
 
                     return
@@ -113,16 +117,32 @@ export default function AddressGroupsTable() {
       setIsDeletingAddressGroup(true)
       const result = await DeleteAddressGroup(addressGroupToDelete.id)
       if (!result.success) {
+        // The trash button guards on keysCount, but that list is polled — a key
+        // attached since the last refetch lands here instead. Same answer as the
+        // guard rather than a filed failure.
+        if (result.error.code === 'CONSTRAINT_VIOLATION') {
+          toast.warning('This address group cannot be deleted.', {
+            id: `ag-has-keys-error`,
+            duration: 6000,
+            description: 'It has keys attached. Address groups with keys are protected from deletion.',
+          })
+          // Refresh before leaving: the guard let this click through on a
+          // keysCount that was already stale, and without a refetch the next
+          // click repeats the whole dialog-then-toast round trip.
+          await fetchAddressGroups()
+          return
+        }
         throw new Error(result.error.message);
       }
       await fetchAddressGroups()
     } catch (error) {
       log.error('Failed to delete addressGroup', { error: error })
-      addNotification({
+      notify.error('Failed to delete the address group.', {
         id: `delete-ag-error`,
-        type: 'error',
-        showTypeIcon: true,
-        content: error instanceof Error ? error.message : 'Failed to delete the address group. This could be due to a network issue or server problem. Please try again or contact support if the problem persists.',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'This could be due to a network issue or server problem. Please try again or contact support if the problem persists.',
       })
     } finally {
       setIsDeletingAddressGroup(false)

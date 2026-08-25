@@ -16,7 +16,7 @@ import OwnerAddressStep from '@/app/app/stake/components/OwnerAddressStep'
 import Loading from '@/app/app/stake/components/Loading'
 import {SupplierStake} from "@/lib/models/Transactions";
 import {releaseSuppliers} from "@/lib/services/provider";
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import OverrideSidebar from '@igniter/ui/components/OverrideSidebar'
 import { getLogger } from '@igniter/logger'
 
@@ -67,7 +67,6 @@ export default function ClientStakePage() {
   );
   const [stakingErrorMessage, setStakingErrorMessage] = useState<string | undefined>(undefined);
   const [supplierProspects, setSupplierProspects] = useState<Array<SupplierStake>>([]);
-  const { addNotification } = useNotifications();
   const router = useRouter();
 
   const errorsMap: Record<keyof StakingProcessStatus, string> = {
@@ -117,11 +116,9 @@ export default function ClientStakePage() {
         await router.push('/app');
       } catch (error) {
         log.error('failed to abort staking process', { error });
-        addNotification({
+        notify.error('Failed to abort the staking process.', {
           id: `abort-stake-error`,
-          type: 'error',
-          showTypeIcon: true,
-          content: 'An error occurred while aborting the staking process. Please try again or contact support if the issue persists.',
+          description: 'Please try again or contact support if the issue persists.',
         });
         setIsAborting(false);
       } finally {

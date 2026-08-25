@@ -19,7 +19,8 @@ import {
   PencilIcon,
   Trash2Icon,
 } from 'lucide-react'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { notify } from "@igniter/ui/lib/sessionMessages";
+import { toast } from "@igniter/ui/components/sonner";
 import { getLogger } from '@igniter/logger';
 
 const log = getLogger(['provider', 'ui', 'table']);
@@ -42,8 +43,6 @@ export default function RelayMinersTable() {
   const [isDeletingRelayMiner, setIsDeletingRelayMiner] = useState(false)
   const [updateRelayMiner, setUpdateRelayMiner] = useState<RelayMiner | null>(null)
   const [relayMinerToDelete, setRelayMinerToDelete] = useState<RelayMiner | null>(null)
-  const { addNotification } = useNotifications()
-
   const isLoading = isLoadingRelayMiners || isDeletingRelayMiner
 
   const content = (
@@ -96,16 +95,29 @@ export default function RelayMinersTable() {
       setIsDeletingRelayMiner(true)
       const result = await DeleteRelayMiner(relayMinerToDelete.id)
       if (!result.success) {
+        // Refused, not failed: the miner is still in use, so nothing was deleted
+        // and there is no outcome to review later. A toast, like the
+        // address-group guard.
+        if (result.error.code === 'CONSTRAINT_VIOLATION') {
+          toast.warning('This relay miner cannot be deleted.', {
+            id: `delete-relay-miner-in-use`,
+            duration: 6000,
+            description:
+              'At least one address group still points to it. Move or delete those groups first.',
+          })
+          return
+        }
         throw new Error(result.error.message);
       }
       await fetchRelayMiners()
     } catch (error) {
       log.error('Failed to delete relay miner', { error: error })
-      addNotification({
+      notify.error('Unable to delete relay miner.', {
         id: `delete-relay-miner-error`,
-        type: 'error',
-        showTypeIcon: true,
-        content: error instanceof Error ? error.message : 'Unable to delete relay miner. Please ensure it\'s not associated with any address groups before trying again.',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again or contact support if the problem persists.',
       })
     } finally {
       setIsDeletingRelayMiner(false)

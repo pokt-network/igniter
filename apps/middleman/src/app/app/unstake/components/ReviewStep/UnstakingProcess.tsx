@@ -16,7 +16,7 @@ import { SignedTransaction, TransactionMessage } from "@/lib/models/Transactions
 import { useWalletConnection } from "@igniter/ui/context/WalletConnection/index";
 import { StageStatus } from "@/app/app/unstake/types";
 import { stageFailed, stageSucceeded } from "@/app/app/unstake/utils";
-import { useNotifications } from "@igniter/ui/context/Notifications/index";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { useQueryClient } from "@tanstack/react-query";
 import { CreateUnstakeTransaction } from '@/actions/Unstake'
 import { getLogger } from '@igniter/logger'
@@ -58,8 +58,6 @@ export function UnstakingProcess({
   const queryClient = useQueryClient();
   const [transaction, setTransaction] = useState<DbTransaction | null>(null);
   const [signedTransaction, setSignedTransaction] = useState<SignedTransaction | null>(null);
-  const { addNotification } = useNotifications();
-
   useEffect(() => {
     (async () => {
       if (!open || currentStep !== UnstakingProcessStep.transactionSignature) {
@@ -214,11 +212,9 @@ export function UnstakingProcess({
       });
 
       if (message) {
-        addNotification({
+        notify.error('Unstaking failed.', {
           id: `unstake-process-${stageName}-error`,
-          type: 'error',
-          showTypeIcon: true,
-          content: message,
+          description: message,
         });
       }
     }, 1000);

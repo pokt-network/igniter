@@ -7,7 +7,8 @@ import { Button } from '@igniter/ui/components/button'
 import { Switch } from '@igniter/ui/components/switch'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { PencilIcon, Trash2Icon, SendIcon } from 'lucide-react'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { toast } from "@igniter/ui/components/sonner";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { ConfirmationDialog } from '@igniter/ui/components/ConfirmationDialog'
 import type { ColumnDef } from '@igniter/ui/components/table'
 import type { CsvColumnDef } from '@igniter/ui/lib/csv'
@@ -59,8 +60,6 @@ export function ChannelList<T extends ChannelListItem>({
   renderEditForm,
 }: ChannelListProps<T>) {
   const queryClient = useQueryClient()
-  const { addNotification } = useNotifications()
-
   const [editChannel, setEditChannel] = useState<T | undefined>()
   const [deleteChannel, setDeleteChannel] = useState<T | undefined>()
   const [testingId, setTestingId] = useState<number | null>(null)
@@ -89,11 +88,19 @@ export function ChannelList<T extends ChannelListItem>({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
-      setDeleteChannel(undefined)
-      addNotification({ id: 'channel-deleted', type: 'success', showTypeIcon: true, content: 'Channel deleted.' })
+      toast.success('Channel deleted.', { id: 'channel-deleted' })
     },
     onError: (err) => {
-      addNotification({ id: 'channel-delete-error', type: 'error', showTypeIcon: true, content: err instanceof Error ? err.message : 'Failed to delete channel.' })
+      notify.error('Failed to delete channel.', {
+        id: 'channel-delete-error',
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
+    // Close either way: the failure is reported in the bell, and a modal left
+    // open would sit over the top bar (its overlay blocks pointer events), so
+    // the user could not reach the message.
+    onSettled: () => {
+      setDeleteChannel(undefined)
     },
   })
 
@@ -105,12 +112,15 @@ export function ChannelList<T extends ChannelListItem>({
         if (!result.success) throw new Error(result.error.message)
         queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
       } catch (err) {
-        addNotification({ id: 'channel-toggle-error', type: 'error', showTypeIcon: true, content: err instanceof Error ? err.message : 'Failed to toggle channel.' })
+        notify.error('Failed to toggle channel.', {
+          id: 'channel-toggle-error',
+          description: err instanceof Error ? err.message : undefined,
+        })
       } finally {
         setTogglingId(null)
       }
     },
-    [actions, queryClient, addNotification],
+    [actions, queryClient],
   )
 
   const handleTest = useCallback(
@@ -119,14 +129,17 @@ export function ChannelList<T extends ChannelListItem>({
       try {
         const result = await actions.test(channel.id)
         if (!result.success) throw new Error(result.error.message)
-        addNotification({ id: `channel-test-${channel.id}`, type: 'success', showTypeIcon: true, content: `Test message sent to "${channel.name}".` })
+        toast.success(`Test message sent to "${channel.name}".`, { id: `channel-test-${channel.id}` })
       } catch (err) {
-        addNotification({ id: `channel-test-error-${channel.id}`, type: 'error', showTypeIcon: true, content: err instanceof Error ? err.message : `Failed to test "${channel.name}".` })
+        notify.error(`Failed to test "${channel.name}".`, {
+          id: `channel-test-error-${channel.id}`,
+          description: err instanceof Error ? err.message : undefined,
+        })
       } finally {
         setTestingId(null)
       }
     },
-    [actions, addNotification],
+    [actions],
   )
 
   const columns: Array<ColumnDef<T> & CsvColumnDef<T>> = [

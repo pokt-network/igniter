@@ -188,7 +188,22 @@ export const notificationEventsTable = pgTable('notification_events', {
 export type NotificationEvent = typeof notificationEventsTable.$inferSelect
 export type InsertNotificationEvent = typeof notificationEventsTable.$inferInsert
 
-// Per-wallet notification preferences. Absent row = defaults (feed enabled).
+/**
+ * Per-wallet notification preferences. Absent row = defaults (feed enabled).
+ *
+ * NOTHING READS THIS TODAY, on purpose. `inAppFeedEnabled` used to gate the
+ * sticky in-app banner: the banner pushed every unviewed event on top of the
+ * page, so opting out mattered. The notification bell that replaced it renders
+ * nothing until it is clicked — a new event only moves a badge — so the opt-out
+ * was dropped along with the banner rather than rewired, and the reader, the
+ * server actions and the settings switch all went with it.
+ *
+ * The table is kept rather than migrated away: rows record a choice delegators
+ * made, and dropping it would throw that away for a feature that may come back.
+ * If it does, gate the two queries in `app/components/NotificationBellFeed.tsx`
+ * and restore the switch — `git show <pre-bell-commit>` has all of it. Until
+ * then, do not wire this up piecemeal: a half-honoured flag is worse than none.
+ */
 export const notificationPreferencesTable = pgTable('notification_preferences', {
   userIdentity: varchar({ length: 255 })
     .primaryKey()

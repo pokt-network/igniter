@@ -12,6 +12,7 @@ import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import {LoaderIcon} from "@igniter/ui/assets";
 import {PencilIcon, Trash2Icon} from "lucide-react";
 import { SetupHelpBar } from "@/components/SetupHelpBar"
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { getLogger } from '@igniter/logger';
 
 const log = getLogger(['provider', 'ui', 'ConfigureServices']);
@@ -103,11 +104,22 @@ export default function ConfigureServices({ goNext, goBack }: Readonly<Configure
       setIsLoading(true);
       const result = await DeleteService(serviceToDelete.serviceId);
       if (!result.success) {
+        // No CONSTRAINT_VIOLATION branch here on purpose: `dal/services.remove`
+        // deletes the address_group_services rows itself before deleting the
+        // service, so the only FK pointing at services never fires. A guard here
+        // would advertise a protection that does not exist.
         throw new Error(result.error.message);
       }
       await fetchServices();
     } catch (error) {
       log.error("Failed to delete service", { error: error })
+      notify.error('Unable to delete service.', {
+        id: `delete-service-error`,
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again or contact support if the problem persists.',
+      });
     } finally {
       setIsLoading(false);
       setServiceToDelete(null);

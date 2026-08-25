@@ -7,7 +7,7 @@ import {ApplicationSettingsProvider} from "@/app/context/ApplicationSettings";
 import {AppTopBar} from "@igniter/ui/components/AppTopBar/index";
 import CurrentUser from "@/components/CurrentUser";
 import QueryClientProvider from "@igniter/ui/context/QueryClientProvider";
-import NotificationsProvider from "@igniter/ui/context/Notifications/index";
+import { Toaster } from "@igniter/ui/components/sonner";
 
 export const metadata: Metadata = {
   title: "Stake Igniter",
@@ -31,14 +31,13 @@ export default function RootLayout({
           <ApplicationSettingsProvider>
             <WalletConnectionProvider>
               <div className="flex flex-col h-dvh overflow-hidden">
-                <NotificationsProvider>
-                  <AppTopBar>
-                    <CurrentUser/>
-                  </AppTopBar>
-                  <div className="flex-1 overflow-y-auto p-6">
-                    {children}
-                  </div>
-                </NotificationsProvider>
+                <AppTopBar>
+                  <CurrentUser/>
+                </AppTopBar>
+                <div className="flex-1 overflow-y-auto p-6">
+                  {children}
+                </div>
+                <Toaster />
               </div>
             </WalletConnectionProvider>
           </ApplicationSettingsProvider>

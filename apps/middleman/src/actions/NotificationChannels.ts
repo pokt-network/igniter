@@ -19,6 +19,8 @@ import {
   TelegramConfigSchema,
   EmailConfigSchema,
 } from '@igniter/notifications'
+import { describeDatabaseFailure } from '@igniter/db/errors'
+import { getLogger } from '@igniter/logger'
 import * as dal from '@/lib/dal/notificationChannels'
 import { blankChannelSecrets, mergeChannelSecrets } from '@/lib/notificationChannelSecrets'
 
@@ -29,10 +31,20 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: { message: string } }
 
+const log = getLogger(['middleman', 'actions', 'notificationChannels'])
+
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   try {
     return { success: true, data: await fn() }
   } catch (e) {
+    // These messages are rendered verbatim — inline in the channel dialog and as
+    // a bell card's description — so a database error's own message, which is the
+    // statement plus its bound parameters, must not be what comes back. Same
+    // mapping the shared wrapper applies in `lib/utils/actions.ts`; this file
+    // predates it and kept its own result shape, which is how it was missed.
+    log.error('notification channel action failed', { error: e, cause: (e as Error)?.cause })
+    const dbFailure = describeDatabaseFailure(e)
+    if (dbFailure) return { success: false, error: { message: dbFailure.message } }
     return { success: false, error: { message: e instanceof Error ? e.message : String(e) } }
   }
 }
@@ -196,6 +208,10 @@ export async function ListUnviewedNotificationEvents() {
   return run(async () => dal.listUnviewedNotificationEvents(await requireAuth()))
 }
 
+export async function CountUnviewedNotificationEvents() {
+  return run(async () => dal.countUnviewedNotificationEvents(await requireAuth()))
+}
+
 export async function MarkNotificationEventsViewed(ids: number[]) {
   return run(async () => {
     const userIdentity = await requireAuth()
@@ -205,21 +221,4 @@ export async function MarkNotificationEventsViewed(ids: number[]) {
 
 export async function MarkAllNotificationEventsViewed() {
   return run(async () => dal.markAllNotificationEventsViewed(await requireAuth()))
-}
-
-export async function GetNotificationPreferences() {
-  return run(async () => {
-    const userIdentity = await requireAuth()
-    const prefs = await dal.getPreferences(userIdentity)
-    // Absent row = defaults: in-app feed enabled.
-    return { inAppFeedEnabled: prefs?.inAppFeedEnabled ?? true }
-  })
-}
-
-export async function SetInAppFeedEnabled(enabled: boolean) {
-  return run(async () => {
-    const userIdentity = await requireAuth()
-    await dal.setInAppFeedEnabled(userIdentity, enabled)
-    return { inAppFeedEnabled: enabled }
-  })
 }
