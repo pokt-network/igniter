@@ -9,12 +9,10 @@ import {
 import {
   notificationChannelsTable,
   notificationEventsTable,
-  notificationPreferencesTable,
   type InsertNotificationChannel,
   type InsertNotificationEvent,
   type NotificationChannel,
   type NotificationEvent,
-  type NotificationPreferences,
 } from '@igniter/db/middleman/schema'
 
 export type { NotificationEventFilters }
@@ -187,6 +185,11 @@ export async function getNotificationEvent(
   return row
 }
 
+// The bell panel shows the newest few unread events; the rest are reached
+// through "View all". Anything larger turns the dropdown into a scroll surface
+// that duplicates the notifications page.
+const BELL_FEED_LIMIT = 6
+
 export async function listUnviewedNotificationEvents(
   userIdentity: string,
 ): Promise<NotificationEvent[]> {
@@ -200,7 +203,22 @@ export async function listUnviewedNotificationEvents(
       ),
     )
     .orderBy(desc(notificationEventsTable.createdAt))
-    .limit(20)
+    .limit(BELL_FEED_LIMIT)
+}
+
+// True unread total for the bell badge. `listUnviewedNotificationEvents` is
+// capped at BELL_FEED_LIMIT for the panel, so its length would under-report.
+export async function countUnviewedNotificationEvents(userIdentity: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ total: count() })
+    .from(notificationEventsTable)
+    .where(
+      and(
+        eq(notificationEventsTable.createdBy, userIdentity),
+        isNull(notificationEventsTable.viewedAt),
+      ),
+    )
+  return row?.total ?? 0
 }
 
 export async function markNotificationEventsViewed(
@@ -229,27 +247,4 @@ export async function markAllNotificationEventsViewed(userIdentity: string): Pro
         isNull(notificationEventsTable.viewedAt),
       ),
     )
-}
-
-// ─── Per-wallet preferences ──────────────────────────────────────────────────
-
-export async function getPreferences(
-  userIdentity: string,
-): Promise<NotificationPreferences | undefined> {
-  const [row] = await getDb()
-    .select()
-    .from(notificationPreferencesTable)
-    .where(eq(notificationPreferencesTable.userIdentity, userIdentity))
-    .limit(1)
-  return row
-}
-
-export async function setInAppFeedEnabled(userIdentity: string, enabled: boolean): Promise<void> {
-  await getDb()
-    .insert(notificationPreferencesTable)
-    .values({ userIdentity, inAppFeedEnabled: enabled })
-    .onConflictDoUpdate({
-      target: notificationPreferencesTable.userIdentity,
-      set: { inAppFeedEnabled: enabled, updatedAt: new Date() },
-    })
 }

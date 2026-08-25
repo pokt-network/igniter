@@ -20,7 +20,7 @@ import {useWalletConnection} from "@igniter/ui/context/WalletConnection/index";
 import {CreateSignedMemo, CreateStakeTransaction} from "@/actions/Stake";
 import {StageStatus} from "@/app/app/stake/types";
 import {stageFailed, stageSucceeded} from "@/app/app/stake/utils";
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import {useQueryClient} from "@tanstack/react-query";
 import {getLogger} from "@igniter/logger";
 
@@ -64,8 +64,6 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
   const [transaction, setTransaction] = useState<DbTransaction | null>(null);
   const [transactionMessages, setTransactionMessages] = useState<TransactionMessage[]>([]);
   const [signedTransaction, setSignedTransaction] = useState<SignedTransaction | null>(null);
-  const { addNotification } = useNotifications();
-
   useEffect(() => {
     (async () => {
       if (!open || currentStep !== StakingProcessStep.requestSuppliers) {
@@ -273,11 +271,9 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
       });
 
       if (message) {
-        addNotification({
+        notify.error('Staking failed.', {
           id: `stake-process-${stageName}-error`,
-          type: 'error',
-          showTypeIcon: true,
-          content: message,
+          description: message,
         });
       }
     }, 1000);

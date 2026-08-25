@@ -1,6 +1,6 @@
 'use client'
 
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { WorkflowsTabs as SharedWorkflowsTabs } from '@igniter/ui/components/workflows/WorkflowsTabs'
 import * as Workflows from '@/actions/Workflows'
 import { PROVIDER_WORKFLOW_TYPES } from './workflowTypes'
@@ -11,7 +11,6 @@ import { PROVIDER_WORKFLOW_TYPES } from './workflowTypes'
  * app's toast notifications. All UI lives in `@igniter/ui/components/workflows`.
  */
 export function WorkflowsTabs() {
-  const { addNotification } = useNotifications()
   return (
     <SharedWorkflowsTabs
       actions={Workflows}
@@ -19,11 +18,9 @@ export function WorkflowsTabs() {
       tableFeedback={{
         mode: 'toast',
         onTerminateError: (message) =>
-          addNotification({
+          notify.error('Failed to terminate workflow.', {
             id: 'terminate-workflow-error',
-            type: 'error',
-            showTypeIcon: true,
-            content: message,
+            description: message,
           }),
       }}
     />

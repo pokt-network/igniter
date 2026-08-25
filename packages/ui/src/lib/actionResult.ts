@@ -17,6 +17,10 @@ export const ActionErrorCode = {
   FORBIDDEN: 'FORBIDDEN',
   NOT_FOUND: 'NOT_FOUND',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
+  // The write was refused because the row is still referenced elsewhere. Its
+  // own code because the client answers it differently from a failure: nothing
+  // happened, so it is worth a toast rather than a filed notification.
+  CONSTRAINT_VIOLATION: 'CONSTRAINT_VIOLATION',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const
 

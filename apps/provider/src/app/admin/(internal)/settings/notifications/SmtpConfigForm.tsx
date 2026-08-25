@@ -23,7 +23,8 @@ import {
   DeleteSmtpConfiguration,
   TestSmtpConfiguration,
 } from '@/actions/SmtpConfiguration'
-import { useNotifications } from '@igniter/ui/context/Notifications/index'
+import { toast } from "@igniter/ui/components/sonner";
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { Switch } from '@igniter/ui/components/switch'
 import { Label } from '@igniter/ui/components/label'
 
@@ -44,7 +45,6 @@ type SmtpFormValues = z.infer<ReturnType<typeof makeSmtpFormSchema>>
 
 export function SmtpConfigForm() {
   const queryClient = useQueryClient()
-  const { addNotification } = useNotifications()
   const [isOpen, setIsOpen] = useState(false)
   const [showTestInput, setShowTestInput] = useState(false)
   const [testEmail, setTestEmail] = useState('')
@@ -96,19 +96,12 @@ export function SmtpConfigForm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smtp-config'] })
       setIsOpen(false)
-      addNotification({
-        id: 'smtp-saved',
-        type: 'success',
-        showTypeIcon: true,
-        content: 'SMTP configuration saved.',
-      })
+      toast.success('SMTP configuration saved.', { id: 'smtp-saved' })
     },
     onError: (err) => {
-      addNotification({
+      notify.error('Failed to save SMTP configuration.', {
         id: 'smtp-save-error',
-        type: 'error',
-        showTypeIcon: true,
-        content: err instanceof Error ? err.message : 'Failed to save SMTP configuration.',
+        description: err instanceof Error ? err.message : undefined,
       })
     },
   })
@@ -124,9 +117,12 @@ export function SmtpConfigForm() {
       if (!result.success) throw new Error(result.error.message)
       queryClient.invalidateQueries({ queryKey: ['smtp-config'] })
       form.reset({ host: '', port: 587, secure: true, username: '', password: '', fromAddress: '', fromName: '' })
-      addNotification({ id: 'smtp-deleted', type: 'success', showTypeIcon: true, content: 'SMTP configuration removed.' })
+      toast.success('SMTP configuration removed.', { id: 'smtp-deleted' })
     } catch (err) {
-      addNotification({ id: 'smtp-delete-error', type: 'error', showTypeIcon: true, content: err instanceof Error ? err.message : 'Failed to delete SMTP configuration.' })
+      notify.error('Failed to delete SMTP configuration.', {
+        id: 'smtp-delete-error',
+        description: err instanceof Error ? err.message : undefined,
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -145,11 +141,14 @@ export function SmtpConfigForm() {
       const values = form.getValues()
       const result = await TestSmtpConfiguration(testEmail, values)
       if (!result.success) throw new Error(result.error.message)
-      addNotification({ id: 'smtp-test-sent', type: 'success', showTypeIcon: true, content: `Test email sent to ${testEmail}.` })
+      toast.success(`Test email sent to ${testEmail}.`, { id: 'smtp-test-sent' })
       setShowTestInput(false)
       setTestEmail('')
     } catch (err) {
-      addNotification({ id: 'smtp-test-error', type: 'error', showTypeIcon: true, content: err instanceof Error ? err.message : 'Failed to send test email.' })
+      notify.error('Failed to send test email.', {
+        id: 'smtp-test-error',
+        description: err instanceof Error ? err.message : undefined,
+      })
     } finally {
       setIsTesting(false)
     }

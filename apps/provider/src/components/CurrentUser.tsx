@@ -8,7 +8,7 @@ import type {SiwpMessage} from "@poktscan/vault-siwp";
 import UserMenu from "@igniter/ui/components/UserMenu";
 import {WalletPicker} from "@igniter/ui/components/WalletPicker/index";
 import {useWalletConnection} from "@igniter/ui/context/WalletConnection/index";
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { toast } from "@igniter/ui/components/sonner";
 import {useApplicationSettings} from "@/app/context/ApplicationSettings";
 import {DropdownMenuItem, DropdownMenuSeparator} from "@igniter/ui/components/dropdown-menu";
 import {Routes} from "@/lib/route-constants";
@@ -18,8 +18,6 @@ export default function CurrentUser() {
   const currentPath = usePathname();
   const { data, status } = useSession();
   const applicationSettings = useApplicationSettings();
-  const { addNotification } = useNotifications();
-
   const {
     getChain,
     switchChain,
@@ -59,11 +57,7 @@ export default function CurrentUser() {
 
       if (result?.error) {
         clearConnectedIdentity()
-        addNotification({
-          id: 'sign-in-not-owner',
-          type: 'error',
-          content: 'Access denied. Only the owner can sign in to this application.',
-        });
+        toast.error('Access denied. Only the owner can sign in to this application.', { id: 'sign-in-not-owner' });
         return;
       }
 
@@ -75,11 +69,7 @@ export default function CurrentUser() {
       if ((error as {message: string})?.message === "The user rejected the request.") {
         clearConnectedIdentity()
       } else {
-        addNotification({
-          id: 'sign-in-error',
-          type: 'error',
-          content: 'Sign-in failed. Please try again or clear your browser cache if the issue persists.',
-        });
+        toast.error('Sign-in failed. Please try again or clear your browser cache if the issue persists.', { id: 'sign-in-error' });
       }
       throw error;
     }

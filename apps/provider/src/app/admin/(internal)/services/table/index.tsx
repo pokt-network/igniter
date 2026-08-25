@@ -10,6 +10,7 @@ import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import {columns} from "./columns";
 import {AddOrUpdateServiceDialog} from "@/components/AddOrUpdateServiceDialog";
 import { useQuery } from '@tanstack/react-query'
+import { notify } from "@igniter/ui/lib/sessionMessages";
 import { getLogger } from '@igniter/logger';
 
 const log = getLogger(['provider', 'ui', 'table']);
@@ -84,11 +85,22 @@ export default function ServicesTable() {
       setIsDeletingService(true);
       const result = await DeleteService(serviceToDelete.serviceId);
       if (!result.success) {
+        // No CONSTRAINT_VIOLATION branch here on purpose: `dal/services.remove`
+        // deletes the address_group_services rows itself before deleting the
+        // service, so the only FK pointing at services never fires. A guard here
+        // would advertise a protection that does not exist.
         throw new Error(result.error.message);
       }
       await refetchServices();
     } catch (error) {
       log.error("Failed to delete service", { error: error })
+      notify.error('Unable to delete service.', {
+        id: `delete-service-error`,
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Please try again or contact support if the problem persists.',
+      });
     } finally {
       setIsDeletingService(false);
       setServiceToDelete(null);

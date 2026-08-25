@@ -10,7 +10,8 @@ import { Trash2Icon, PencilIcon } from "lucide-react";
 import { ConfirmationDialog } from "@igniter/ui/components/ConfirmationDialog";
 import type {Region} from "@igniter/db/provider/schema";
 import {AddOrUpdateRegionDialog} from "@/components/AddOrUpdateRegionDialog";
-import {useNotifications} from "@igniter/ui/context/Notifications/index";
+import { notify } from "@igniter/ui/lib/sessionMessages";
+import { toast } from "@igniter/ui/components/sonner";
 import { getLogger } from '@igniter/logger';
 
 const log = getLogger(['provider', 'ui', 'table']);
@@ -31,8 +32,6 @@ export default function RegionsTable() {
     const [updateRegion, setUpdateRegion] = React.useState<Region>();
     const [regionToDelete, setRegionToDelete] = React.useState<Region>();
     const [isDeletingRegion, setIsDeletingRegion] = React.useState(false);
-    const { addNotification } = useNotifications();
-
     const isLoading = isLoadingRegions || isDeletingRegion
 
     const content = (
@@ -88,16 +87,29 @@ export default function RegionsTable() {
         try {
             const result = await DeleteRegion(regionToDelete.id);
             if (!result.success) {
+                // Refused, not failed: the region is still in use, so nothing was
+                // deleted and there is no outcome to review later. A toast, like
+                // the address-group guard.
+                if (result.error.code === 'CONSTRAINT_VIOLATION') {
+                    toast.warning('This region cannot be deleted.', {
+                        id: `delete-region-in-use`,
+                        duration: 6000,
+                        description:
+                          'It is still assigned to at least one relay miner. Reassign or delete those miners first.',
+                    });
+                    return;
+                }
                 throw new Error(result.error.message);
             }
             await refetchRegions();
         } catch (error) {
             log.error('Error deleting region', { error: error })
-            addNotification({
-                id: `delete-relay-miner-error`,
-                type: 'error',
-                showTypeIcon: true,
-                content: error instanceof Error ? error.message : 'Unable to delete region. Please ensure it\'s not associated with any relay miner before trying again.',
+            notify.error('Unable to delete region.', {
+                id: `delete-region-error`,
+                description:
+                  error instanceof Error
+                    ? error.message
+                    : 'Please try again or contact support if the problem persists.',
             });
         } finally {
             setIsDeletingRegion(false);

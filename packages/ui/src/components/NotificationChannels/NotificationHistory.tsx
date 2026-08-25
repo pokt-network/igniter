@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '../select'
 import { RightArrowIcon } from '../../assets'
+import { FailureReasonPopover } from '../FailureReasonPopover'
 import type { ColumnDef } from '../table'
 import type { CsvColumnDef } from '../../lib/csv'
 
@@ -40,6 +41,24 @@ export interface NotificationHistoryEvent {
   viewedAt: Date | string | null
 }
 
+/** Severity of an event, used to tint its row. Mirrors the notification bell. */
+export type NotificationHistorySeverity = 'error' | 'warning' | 'info' | 'success'
+
+// Severity → column label + token classes. The wording covers both apps'
+// vocabularies: "Attention" rather than "Warning" because that bucket is drift
+// nobody asked for (rev-share changed, funds low) rather than a malfunction, and
+// "Issue" rather than "Failed" because the error bucket is a failed transaction
+// in middleman but a supplier below the minimum stake in provider.
+const SEVERITY_BADGE: Record<
+  NotificationHistorySeverity,
+  { label: string; className: string }
+> = {
+  success: { label: 'Success', className: 'bg-success-bg text-success border-success/40' },
+  warning: { label: 'Attention', className: 'bg-warning-bg text-warning border-warning/40' },
+  error: { label: 'Issue', className: 'bg-error-bg text-error border-error/40' },
+  info: { label: 'Info', className: 'bg-info-bg text-accent border-accent/40' },
+}
+
 /** A selectable value for one of the filter dropdowns. */
 export interface NotificationFilterOption {
   value: string
@@ -51,7 +70,6 @@ export interface NotificationHistoryFilters {
   search?: string
   type?: string
   read?: 'read' | 'unread'
-  channel?: string
 }
 
 export interface NotificationHistoryProps {
@@ -69,18 +87,32 @@ export interface NotificationHistoryProps {
   ) => Promise<{ data: NotificationHistoryEvent[]; total: number; unviewedTotal?: number }>
   /** When set, renders an event-type filter dropdown (each app's own vocabulary). */
   eventTypeOptions?: NotificationFilterOption[]
-  /** When set, renders a channel filter dropdown (e.g. Discord/Telegram/Email). */
-  channelOptions?: NotificationFilterOption[]
   /** Marks every unread event viewed (app-scoped). */
   markAllViewed: () => Promise<void>
   /** Human label for an event type (vocabularies differ per app). */
   labelFor: (type: string) => string
   /** One-line summary from an event's metadata. */
   summaryFor: (type: string, metadata: unknown) => string
+  /**
+   * Severity for an event, used to tint the row. Each app derives it its own way
+   * — provider from a per-type map, middleman from `metadata.outcome` — so it is
+   * injected rather than computed here. Rows stay neutral when omitted.
+   */
+  severityFor?: (type: string, metadata: unknown) => NotificationHistorySeverity
   /** Optional per-channel-type icon for the channel chips. */
   renderChannelIcon?: (type: string) => React.ReactNode
   /** Row click handler (e.g. open a detail drawer / mark viewed). Row action only rendered when set. */
   onOpenEvent?: (event: NotificationHistoryEvent) => void
+  /**
+   * What the row action promises. The default arrow reads as "takes me
+   * somewhere", which is only true for a wrapper that has somewhere to go:
+   * middleman has no detail view, so its rows mark read instead and say so.
+   */
+  itemActionIcon?: React.ReactNode
+  /** Tooltip / accessible name for the row action. */
+  itemActionLabel?: string
+  /** Hide the row action for some events (e.g. one already marked read). */
+  showItemAction?: (event: NotificationHistoryEvent) => boolean
   /** Called after a successful mark-all so the caller can refresh app-specific queries (e.g. a header badge). */
   onMarkAllViewed?: () => void
   /** Show the UUID search box (only apps whose listEvents accepts a search term). */
@@ -110,12 +142,15 @@ function formatDate(date: Date | string) {
 export function NotificationHistory({
   listEvents,
   eventTypeOptions,
-  channelOptions,
   markAllViewed,
   labelFor,
   summaryFor,
+  severityFor,
   renderChannelIcon,
   onOpenEvent,
+  itemActionIcon,
+  itemActionLabel = 'View details',
+  showItemAction,
   onMarkAllViewed,
   enableSearch = false,
   queryKey = 'notification-events',
@@ -127,7 +162,6 @@ export function NotificationHistory({
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [readFilter, setReadFilter] = useState<'' | 'read' | 'unread'>('')
-  const [channelFilter, setChannelFilter] = useState('')
   const [isMarkingAll, setIsMarkingAll] = useState(false)
 
   // Any filter change resets to page 0 so the user isn't stranded on a page
@@ -138,13 +172,12 @@ export function NotificationHistory({
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [queryKey, pageIndex, pageSize, search, typeFilter, readFilter, channelFilter],
+    queryKey: [queryKey, pageIndex, pageSize, search, typeFilter, readFilter],
     queryFn: () =>
       listEvents(pageIndex, pageSize, {
         search: search || undefined,
         type: typeFilter || undefined,
         read: readFilter || undefined,
-        channel: channelFilter || undefined,
       }),
   })
 
@@ -153,12 +186,37 @@ export function NotificationHistory({
     try {
       await markAllViewed()
       queryClient.invalidateQueries({ queryKey: [queryKey] })
-      // The header/topbar feed (both apps) is keyed on unviewed events.
+      // The topbar bell (both apps) reads the unviewed list and its own unread
+      // count query; both must refresh or the badge keeps the stale total.
       queryClient.invalidateQueries({ queryKey: ['unviewed-notification-events'] })
+      queryClient.invalidateQueries({ queryKey: ['unviewed-notification-count'] })
       onMarkAllViewed?.()
     } finally {
       setIsMarkingAll(false)
     }
+  }
+
+  // Rendered only when the app supplies `severityFor`, so a wrapper that doesn't
+  // classify events keeps its old table. Declared out of the literal below and
+  // spread in: filtering the literal afterwards erases its contextual type and
+  // every `cell: ({ row })` silently widens to `any`.
+  const severityColumn: ColumnDef<NotificationHistoryEvent> & CsvColumnDef<NotificationHistoryEvent> = {
+    id: 'severity',
+    // Not "Type": the column beside it is the event's type. This one is how bad
+    // it is.
+    header: 'Severity',
+    cell: ({ row }) => {
+      if (!severityFor) return null
+      const badge = SEVERITY_BADGE[severityFor(row.original.type, row.original.metadata)]
+      if (!badge) return null
+      return (
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${badge.className}`}
+        >
+          {badge.label}
+        </span>
+      )
+    },
   }
 
   const columns: Array<ColumnDef<NotificationHistoryEvent> & CsvColumnDef<NotificationHistoryEvent>> = [
@@ -170,6 +228,7 @@ export function NotificationHistory({
           <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 shrink-0" title="Unread" />
         ) : null,
     },
+    ...(severityFor ? [severityColumn] : []),
     {
       accessorKey: 'type',
       header: 'Event',
@@ -178,11 +237,25 @@ export function NotificationHistory({
     {
       id: 'summary',
       header: 'Summary',
-      cell: ({ row }) => (
-        <span className="text-text-secondary whitespace-pre-wrap">
-          {summaryFor(row.original.type, row.original.metadata)}
-        </span>
-      ),
+      // Summaries run long (a remediation roll-up names every reason it fixed), so
+      // the cell truncates to one line and the full text lives behind the same
+      // expand-and-copy popover the transaction failure-reason column uses.
+      cell: ({ row }) => {
+        const summary = summaryFor(row.original.type, row.original.metadata)
+        if (!summary) return <span className="text-text-tertiary text-xs">—</span>
+        // Every summary gets the affordance, short ones included: a column where
+        // only some cells expand reads as inconsistent, and the popover is also
+        // how the text is copied.
+        return (
+          <FailureReasonPopover
+            friendly={summary}
+            full={summary}
+            tone="neutral"
+            label="Full summary"
+            className="max-w-[28rem]"
+          />
+        )
+      },
     },
     {
       accessorKey: 'channels',
@@ -266,24 +339,6 @@ export function NotificationHistory({
             <SelectItem value="read">Read</SelectItem>
           </SelectContent>
         </Select>
-        {channelOptions && channelOptions.length > 0 && (
-          <Select
-            value={channelFilter || 'all'}
-            onValueChange={(v) => onFilterChange(() => setChannelFilter(v === 'all' ? '' : v))}
-          >
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All channels" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All channels</SelectItem>
-              {channelOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
         {unviewedCount > 0 && (
           <Button
             variant="outline"
@@ -318,16 +373,25 @@ export function NotificationHistory({
         }}
         itemActions={
           onOpenEvent
-            ? (event) => (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="border-0"
-                  onClick={() => onOpenEvent(event)}
-                >
-                  <RightArrowIcon style={{ width: '18px', height: '18px' }} />
-                </Button>
-              )
+            ? (event) =>
+                showItemAction && !showItemAction(event) ? (
+                  // Placeholder, not nothing: the button is what sets an
+                  // actionable row's height, so omitting it outright makes rows
+                  // without one visibly shorter and the list jitters wherever
+                  // the two kinds alternate.
+                  <span aria-hidden className="inline-block h-8" />
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="border-0"
+                    title={itemActionLabel}
+                    aria-label={itemActionLabel}
+                    onClick={() => onOpenEvent(event)}
+                  >
+                    {itemActionIcon ?? <RightArrowIcon style={{ width: '18px', height: '18px' }} />}
+                  </Button>
+                )
             : undefined
         }
       />
