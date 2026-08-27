@@ -172,6 +172,7 @@ function SupplierLink({ address }: { nodeId: number; address: string }) {
             provider: node.provider?.name || '',
             providerFee: t.providerFee,
             typeProviderFee: t.typeProviderFee,
+            amount: t.amount,
           })),
         },
       })

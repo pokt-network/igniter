@@ -4,12 +4,12 @@ import DataTable from '@igniter/ui/components/DataTable/index'
 import LoadNewButton from '@igniter/ui/components/DataTable/LoadNewButton'
 import { columns, filters, sorts } from './columns'
 import { useDetailContext } from '@igniter/ui/components/QuickDetails/Provider'
-import { MessageType } from '@igniter/commons/constants'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {GetUserTransactions, CountUserTransactions} from '@/actions/Transactions'
 import { useEffect } from 'react'
 import {ItemBase} from "@igniter/ui/components/QuickDetails/types";
 import {Operation} from "@/app/detail/TransactionDetail";
+import { resolveTransactionTotalValue, sumOperationsValue } from "@/lib/utils/transactionValue";
 
 export default function TransactionsTable() {
     const queryClient = useQueryClient()
@@ -65,6 +65,7 @@ export default function TransactionsTable() {
                             provider: newTx.provider?.name || '',
                             providerFee: newTx.providerFee,
                             typeProviderFee: newTx.typeProviderFee,
+                            amount: newTx.amount,
                             log: newTx.log,
                             code: newTx.code,
                         }
@@ -99,17 +100,8 @@ export default function TransactionsTable() {
                         status: tx.status,
                         createdAt: new Date(tx.createdAt!),
                         executionHeight: `${tx.executionHeight ?? ''}`,
-                        totalValue: operations.reduce((acc, op) => {
-                            if (op.typeUrl === MessageType.Send) {
-                                return acc + Number(op.value.amount.at(0)?.amount || 0)
-                            }
-
-                            if (op.typeUrl === MessageType.Stake) {
-                                return acc + Number(op.value.stake.amount)
-                            }
-
-                            return acc
-                        }, 0),
+                        totalValue: resolveTransactionTotalValue(tx.amount, () => sumOperationsValue(operations)),
+                        amount: tx.amount,
                         operations,
                         hash: tx.hash,
                         estimatedFee: tx.estimatedFee,

@@ -6,6 +6,21 @@ import {
   NodeWithDetails,
 } from '@igniter/db/middleman/schema'
 import { NodeStatus } from '@igniter/db/middleman/enums'
+import { createNodeQueries } from '@igniter/db/middleman/nodeQueries'
+import type { SumStakeAmountOptions } from '@igniter/db/middleman/nodeQueries'
+
+/**
+ * Total stake (uPOKT) held by the given supplier addresses.
+ *
+ * Thin binder over the shared query in @igniter/db so the app and the Temporal
+ * worker cannot drift; see createNodeQueries for the null-vs-string contract.
+ */
+export async function sumStakeAmountByAddresses(
+  addresses: Array<string>,
+  options: SumStakeAmountOptions,
+): Promise<string | null> {
+  return createNodeQueries(getDb()).sumStakeAmountByAddresses(addresses, options)
+}
 
 export async function getNodesByUser(userIdentity: string) {
   return getDb().query.nodesTable.findMany({
