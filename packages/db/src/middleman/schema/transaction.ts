@@ -43,6 +43,11 @@ export const transactionsTable = pgTable("transactions", {
   unsignedPayload: varchar().notNull(),
   estimatedFee: integer().notNull(),
   consumedFee: integer().notNull(),
+  // Total uPOKT moved by this transaction, when it cannot be recovered from the
+  // payload. MsgUnstakeSupplier carries no amount, so the value is derived from
+  // the suppliers' stake at creation. varchar (not integer) because uPOKT
+  // overflows int4 past ~2,147 POKT; matches nodes.stakeAmount.
+  amount: varchar(),
   providerFee: integer(),
   typeProviderFee: providerFeeEnum(),
   providerId: varchar().references(() => providersTable.identity),

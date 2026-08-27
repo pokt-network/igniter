@@ -29,6 +29,7 @@ export type Transaction = {
     provider: string,
     providerFee?: number | null,
     typeProviderFee?: ProviderFee | null,
+    amount?: string | null,
     log?: string | null,
     code?: number | null,
 };
@@ -161,6 +162,7 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
                                     provider: row.original.provider,
                                     providerFee: row.original.providerFee,
                                     typeProviderFee: row.original.typeProviderFee,
+                                    amount: row.original.amount ?? null,
                                     log: row.original.log,
                                     code: row.original.code,
                                 }

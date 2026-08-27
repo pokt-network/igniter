@@ -134,6 +134,13 @@
       "when": 1783441697452,
       "tag": "0018_fat_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787772204472,
+      "tag": "0019_romantic_stingray",
+      "breakpoints": true
     }
   ]
 }

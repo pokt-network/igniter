@@ -295,6 +295,7 @@ export default function NodeDetail({
     provider: provider?.name || '',
     providerFee: t.transaction.providerFee,
     typeProviderFee: t.transaction.typeProviderFee,
+    amount: t.transaction.amount,
   }));
 
   const summaryRows: Array<SummaryRow> = [

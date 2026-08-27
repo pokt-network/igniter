@@ -15,6 +15,7 @@ import { BaseQuickInfoTooltip } from '@igniter/ui/components/BaseQuickInfoToolti
 import Address from '@igniter/ui/components/Address'
 import { useAddItemToDetail } from '@igniter/ui/components/QuickDetails/Provider'
 import { MessageType } from '@igniter/commons/constants'
+import { resolveTransactionTotalValue } from '@/lib/utils/transactionValue'
 import { failureReasonDisplay } from '@igniter/commons/utils'
 import { GetNode } from '@/actions/Nodes'
 import {
@@ -79,6 +80,26 @@ export interface TransactionDetailBody {
   status: TransactionStatus
   createdAt: Date | string | number;
   operations: Array<Operation>
+  /**
+   * Stored uPOKT total; null on rows created before the column existed.
+   *
+   * Declared required because this body is assembled field-by-field at seven
+   * call sites, and dropping it silently is what kept the drawer rendering 0.00
+   * after the column landed. Be aware the compiler does not actually catch that
+   * today, for two separate reasons:
+   *
+   *  - the six addItem/updateItem sites go through QuickDetails, whose
+   *    ItemBase.body is Record<string, unknown>, and the hooks are used
+   *    unparameterized -- the body is never checked against this type at all;
+   *  - NodeDetail's `const transactions: TransactionDetailBody[]` does name the
+   *    type, but its map is any-typed (types.ts imports a nonexistent
+   *    './db/schema', which widens requireAuth and GetNode to any), so the
+   *    annotation checks nothing either.
+   *
+   * Requiredness is intent, not a guarantee -- if you add a construction site,
+   * you have to remember this field yourself.
+   */
+  amount: string | null
   estimatedFee: number
   consumedFee?: number | null
   provider: string
@@ -299,6 +320,7 @@ export default function TransactionDetail({
   status,
   createdAt,
   operations,
+  amount,
   estimatedFee,
   consumedFee,
   provider,
@@ -341,6 +363,7 @@ export default function TransactionDetail({
                   providerFee: tx.providerFee,
                   typeProviderFee: tx.typeProviderFee,
                   operations: JSON.parse(tx.unsignedPayload).body.messages,
+                  amount: tx.amount,
                   log: tx.log,
                   code: tx.code,
                 }
@@ -434,7 +457,7 @@ export default function TransactionDetail({
     summaryRows.push(...getOperationRows(operations, type, onClickAddress))
   }
 
-  const totalValue = operations.reduce((acc, op) => {
+  const totalValue = resolveTransactionTotalValue(amount, () => operations.reduce((acc, op) => {
     if (type === TransactionType.Stake || type === TransactionType.Upstake) {
       if (op.typeUrl === MessageType.Stake) {
         return acc + Number(op.value.stake.amount)
@@ -448,7 +471,7 @@ export default function TransactionDetail({
     }
 
     return acc
-  }, 0) / 1e6
+  }, 0)) / 1e6
 
   return (
     <div className={'gap-8 flex flex-col'}>
