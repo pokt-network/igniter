@@ -32,7 +32,7 @@ enum StakeActivitySteps {
 }
 
 export default function ClientStakePage() {
-  const {connectedIdentity, connectedIdentities, isConnected} = useWalletConnection()
+  const {connectedIdentity, connectedIdentities, isConnected, activeAddress} = useWalletConnection()
   const searchParams = useSearchParams();
 
   // Read preselection params from URL
@@ -63,7 +63,7 @@ export default function ClientStakePage() {
   const [isAborting, setIsAborting] = useState(false);
   const [ownerAddress, setOwnerAddress] = useState<string>(
     resolvedLinkedAccount ? resolvedLinkedAccount :
-      (connectedIdentities!.length > 1 ? '' : connectedIdentity!)
+      (connectedIdentities!.length > 1 ? (activeAddress ?? '') : connectedIdentity!)
   );
   const [stakingErrorMessage, setStakingErrorMessage] = useState<string | undefined>(undefined);
   const [supplierProspects, setSupplierProspects] = useState<Array<SupplierStake>>([]);
@@ -85,7 +85,7 @@ export default function ClientStakePage() {
 
       setOwnerAddress(
         linkedAccount ? linkedAccount :
-          (connectedIdentities!.length > 1 ? '' : connectedIdentity!)
+          (connectedIdentities!.length > 1 ? (activeAddress ?? '') : connectedIdentity!)
       )
       setStep(
         connectedIdentities!.length > 1 && !linkedAccount ?

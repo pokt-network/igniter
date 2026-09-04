@@ -8,6 +8,8 @@ import {
 } from '@cosmjs/proto-signing'
 import { MsgStakeSupplier, MsgUnstakeSupplier } from '@igniter/pocket/proto/pocket/supplier/tx'
 import { MsgSend } from '@igniter/pocket/proto/cosmos/bank/v1beta1/tx'
+import { MsgBeginRedelegate, MsgDelegate, MsgUndelegate } from '@igniter/pocket/proto/cosmos/staking/v1beta1/tx'
+import { MsgWithdrawDelegatorReward } from '@igniter/pocket/proto/cosmos/distribution/v1beta1/tx'
 import { Coin } from '@igniter/pocket/proto/cosmos/base/v1beta1/coin'
 import { PubKey } from '@igniter/pocket/proto/cosmos/crypto/secp256k1/keys'
 import { TxRaw } from '@igniter/pocket/proto/cosmos/tx/v1beta1/tx'
@@ -49,6 +51,10 @@ export abstract class WalletConnection {
       ["/cosmos.bank.v1beta1.MsgSend", MsgSend as unknown as GeneratedType],
       ["/pocket.supplier.MsgStakeSupplier", MsgStakeSupplier as unknown as GeneratedType],
       ["/pocket.supplier.MsgUnstakeSupplier", MsgUnstakeSupplier as unknown as GeneratedType],
+      ["/cosmos.staking.v1beta1.MsgDelegate", MsgDelegate as unknown as GeneratedType],
+      ["/cosmos.staking.v1beta1.MsgUndelegate", MsgUndelegate as unknown as GeneratedType],
+      ["/cosmos.staking.v1beta1.MsgBeginRedelegate", MsgBeginRedelegate as unknown as GeneratedType],
+      ["/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward", MsgWithdrawDelegatorReward as unknown as GeneratedType],
     ]);
   }
 
@@ -101,6 +107,44 @@ export abstract class WalletConnection {
         return {
           typeUrl: "/pocket.supplier.MsgUnstakeSupplier",
           value: MsgUnstakeSupplier.fromJSON(body)
+        };
+      // Staking / distribution messages carry `amount` as an upokt integer string
+      // (same convention as MsgSend) and are wrapped into a Coin here.
+      case "/cosmos.staking.v1beta1.MsgDelegate":
+        return {
+          typeUrl,
+          value: MsgDelegate.fromPartial({
+            delegatorAddress: body.delegatorAddress,
+            validatorAddress: body.validatorAddress,
+            amount: Coin.fromJSON({ denom: 'upokt', amount: body.amount }),
+          }),
+        };
+      case "/cosmos.staking.v1beta1.MsgUndelegate":
+        return {
+          typeUrl,
+          value: MsgUndelegate.fromPartial({
+            delegatorAddress: body.delegatorAddress,
+            validatorAddress: body.validatorAddress,
+            amount: Coin.fromJSON({ denom: 'upokt', amount: body.amount }),
+          }),
+        };
+      case "/cosmos.staking.v1beta1.MsgBeginRedelegate":
+        return {
+          typeUrl,
+          value: MsgBeginRedelegate.fromPartial({
+            delegatorAddress: body.delegatorAddress,
+            validatorSrcAddress: body.validatorSrcAddress,
+            validatorDstAddress: body.validatorDstAddress,
+            amount: Coin.fromJSON({ denom: 'upokt', amount: body.amount }),
+          }),
+        };
+      case "/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward":
+        return {
+          typeUrl,
+          value: MsgWithdrawDelegatorReward.fromPartial({
+            delegatorAddress: body.delegatorAddress,
+            validatorAddress: body.validatorAddress,
+          }),
         };
       default:
         throw new Error(`Unsupported message type: ${typeUrl}`);

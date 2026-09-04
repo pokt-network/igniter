@@ -23,7 +23,7 @@ import { getLogger } from '@igniter/logger'
 const log = getLogger(['middleman', 'import-suppliers-page'])
 
 export default function ClientImportSuppliersPage() {
-  const { connectedIdentity, connectedIdentities, isConnected } =
+  const { connectedIdentity, connectedIdentities, isConnected, activeAddress } =
     useWalletConnection()
   const router = useRouter()
   const { addNotification } = useNotifications()
@@ -36,7 +36,7 @@ export default function ClientImportSuppliersPage() {
 
   const [ownerAddress, setOwnerAddress] = useState<string>(
     connectedIdentities && connectedIdentities.length > 1
-      ? ''
+      ? activeAddress ?? ''
       : connectedIdentity || '',
   )
 
@@ -65,7 +65,7 @@ export default function ClientImportSuppliersPage() {
   useEffect(() => {
     if (isConnected) {
       setOwnerAddress(
-        connectedIdentities!.length > 1 ? '' : connectedIdentity!,
+        connectedIdentities!.length > 1 ? (activeAddress ?? '') : connectedIdentity!,
       )
       setStep(
         connectedIdentities!.length > 1
@@ -73,7 +73,7 @@ export default function ClientImportSuppliersPage() {
           : ImportSuppliersStep.SelectProvider,
       )
     }
-  }, [isConnected, connectedIdentities, connectedIdentity])
+  }, [isConnected, connectedIdentities, connectedIdentity, activeAddress])
 
   const handleOwnerAddressChange = (address: string) => {
     setOwnerAddress(address)
