@@ -37,6 +37,11 @@ const mainRoutes = [
     icon: NodesDark,
   },
   {
+    title: "Validators",
+    url: "/app/validators",
+    icon: NodesDark,
+  },
+  {
     title: "Notifications",
     url: "/app/notifications",
     icon: ActivityDark,
