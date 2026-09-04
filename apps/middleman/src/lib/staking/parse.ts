@@ -87,3 +87,25 @@ export function parseRewards(raw: any): RewardSummary[] {
     })
     .filter((r) => r.amount !== '0')
 }
+
+/**
+ * Orders validators the way the list should read: the ones a user can actually
+ * delegate to first (bonded, not jailed), then jailed, then unbonding and
+ * unbonded. Within each group, larger stake first.
+ */
+export function sortValidators(validators: ValidatorSummary[]): ValidatorSummary[] {
+  const rank = (v: ValidatorSummary): number => {
+    if (v.jailed) return 1
+    if (v.status === 'bonded') return 0
+    if (v.status === 'unbonding') return 2
+    return 3
+  }
+  return [...validators].sort((a, b) => {
+    const byRank = rank(a) - rank(b)
+    if (byRank !== 0) return byRank
+    const at = BigInt(a.tokens)
+    const bt = BigInt(b.tokens)
+    if (at === bt) return 0
+    return bt > at ? 1 : -1
+  })
+}

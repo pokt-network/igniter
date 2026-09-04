@@ -12,6 +12,7 @@ import ActivityDark from "@/app/assets/icons/dark/activity.svg";
 import NodesDark from "@/app/assets/icons/dark/nodes.svg";
 import SettingsDark from "@/app/assets/icons/dark/settings.svg";
 import ProvidersDark from "@/app/assets/icons/dark/providers.svg";
+import ValidatorsDark from "@/app/assets/icons/dark/validators.svg";
 import AppSidebar from "@igniter/ui/components/AppSidebar"
 export interface AppSidebarProps {}
 
@@ -39,7 +40,7 @@ const mainRoutes = [
   {
     title: "Validators",
     url: "/app/validators",
-    icon: NodesDark,
+    icon: ValidatorsDark,
   },
   {
     title: "Notifications",

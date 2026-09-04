@@ -1,4 +1,4 @@
-import { parseDelegations, parseRewards, parseUnbonding, parseValidators } from './parse'
+import { parseDelegations, parseRewards, parseUnbonding, parseValidators, sortValidators, type ValidatorSummary } from './parse'
 
 describe('parseValidators', () => {
   it('maps REST validator shape to summary', () => {
@@ -81,5 +81,47 @@ describe('parseRewards', () => {
         total: [],
       }),
     ).toEqual([{ validatorAddress: 'v1', amount: '1234' }])
+  })
+})
+
+describe('sortValidators', () => {
+  const v = (
+    operatorAddress: string,
+    status: ValidatorSummary['status'],
+    tokens: string,
+    jailed = false,
+  ): ValidatorSummary => ({
+    operatorAddress,
+    moniker: operatorAddress,
+    website: '',
+    details: '',
+    status,
+    jailed,
+    tokens,
+    commissionRate: 0,
+  })
+
+  it('puts bonded validators first, then jailed, unbonding, unbonded', () => {
+    const out = sortValidators([
+      v('unbonded', 'unbonded', '900'),
+      v('jailed', 'bonded', '800', true),
+      v('bonded', 'bonded', '100'),
+      v('unbonding', 'unbonding', '700'),
+    ])
+    expect(out.map((x) => x.operatorAddress)).toEqual(['bonded', 'jailed', 'unbonding', 'unbonded'])
+  })
+
+  it('orders by stake descending inside a group, without float precision loss', () => {
+    const out = sortValidators([
+      v('small', 'bonded', '1000000000000000001'),
+      v('big', 'bonded', '1000000000000000002'),
+    ])
+    expect(out.map((x) => x.operatorAddress)).toEqual(['big', 'small'])
+  })
+
+  it('does not mutate the input array', () => {
+    const input = [v('a', 'unbonded', '1'), v('b', 'bonded', '2')]
+    sortValidators(input)
+    expect(input.map((x) => x.operatorAddress)).toEqual(['a', 'b'])
   })
 })

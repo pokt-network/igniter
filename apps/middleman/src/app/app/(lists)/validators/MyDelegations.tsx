@@ -8,18 +8,22 @@ import Amount from '@igniter/ui/components/Amount'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import NoData from '@igniter/ui/components/NoData'
 import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index'
+import { useApplicationSettings } from '@/app/context/ApplicationSettings'
 import { amountToPokt } from '@igniter/ui/lib/utils'
-import { GetDelegatorState, GetValidators } from '@/actions/Staking'
+import { GetDelegatorState, GetValidatorApr, GetValidators } from '@/actions/Staking'
 import { formatDuration } from '@/lib/utils/time'
 import {
   buildRedelegateMessage,
   buildUndelegateMessage,
   buildWithdrawRewardMessages,
 } from '@/lib/staking/messages'
+import { explorerAccountUrl, explorerValidatorUrl } from '@/lib/staking/explorer'
 import { StakingActionDialog, type StakingActionDialogProps } from './StakingActionDialog'
 import { toast } from 'sonner'
 
 type PendingAction = Omit<StakingActionDialogProps, 'open' | 'onClose' | 'signer' | 'onSuccess'>
+
+const REWARDS_WINDOW = 30
 
 function sumUpokt(values: string[]): number {
   return amountToPokt(values.reduce((acc, v) => acc + BigInt(v), 0n).toString())
@@ -27,6 +31,7 @@ function sumUpokt(values: string[]): number {
 
 export default function MyDelegations() {
   const { connectedIdentity } = useWalletConnection()
+  const settings = useApplicationSettings()
   const queryClient = useQueryClient()
   const [action, setAction] = useState<PendingAction | null>(null)
   const [redelegateFrom, setRedelegateFrom] = useState<string | null>(null)
@@ -39,17 +44,13 @@ export default function MyDelegations() {
   })
 
   const { data: validators } = useQuery({ queryKey: ['validators'], queryFn: GetValidators })
+  const { data: apr } = useQuery({ queryKey: ['validator-apr'], queryFn: GetValidatorApr, staleTime: 10 * 60_000 })
+
   const monikerOf = useMemo(() => {
     const m = new Map<string, string>()
     validators?.forEach((v) => m.set(v.operatorAddress, v.moniker))
     return (addr: string) => m.get(addr) ?? addr
   }, [validators])
-
-  const rewardsByValidator = useMemo(() => {
-    const m = new Map<string, string>()
-    data?.rewards.forEach((r) => m.set(r.validatorAddress, r.amount))
-    return m
-  }, [data])
 
   if (!connectedIdentity) {
     return <NoData label="Connect a wallet to see your delegations." />
@@ -69,9 +70,10 @@ export default function MyDelegations() {
   }
 
   const totalStaked = sumUpokt(data.delegations.map((d) => d.amount))
-  const totalRewards = sumUpokt(data.rewards.map((r) => r.amount))
   const totalUnbonding = sumUpokt(data.unbonding.map((u) => u.amount))
+  const claimableTotal = sumUpokt(data.rewards.map((r) => r.amount))
   const rewardValidators = data.rewards.map((r) => r.validatorAddress)
+  const myAccountUrl = explorerAccountUrl(settings?.chainId, connectedIdentity)
 
   const onSuccess = (msg: string) => () => {
     toast.success(msg)
@@ -79,26 +81,51 @@ export default function MyDelegations() {
     queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
   }
 
+  const aprOf = (validatorAddress: string): number | undefined =>
+    apr?.byValidator[validatorAddress]?.[REWARDS_WINDOW]?.delegatorAprPct
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Stat label="Delegated" value={totalStaked} />
-        <Stat label="Pending rewards" value={totalRewards} action={
-          <Button
-            size="sm"
-            disabled={rewardValidators.length === 0}
-            onClick={() =>
-              setAction({
-                title: 'Claim all rewards',
-                description: `Withdraw rewards from ${rewardValidators.length} validator(s).`,
-                buildMessages: () => buildWithdrawRewardMessages(connectedIdentity, rewardValidators),
-              })
-            }
-          >
-            Claim all
-          </Button>
-        } />
         <Stat label="Unbonding" value={totalUnbonding} />
+      </div>
+
+      {/* Settlement income credits the wallet directly, so it never shows up here.
+          What the distribution module holds is dust by comparison — still withdrawable,
+          so the claim stays available, just not as a headline number. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-tertiary">
+        <span>
+          Rewards are paid directly to your wallet balance as claims settle.{' '}
+          {myAccountUrl ? (
+            <a className="text-accent underline-offset-4 hover:underline" href={myAccountUrl} target="_blank" rel="noreferrer">
+              View your account in the explorer
+            </a>
+          ) : (
+            'Check your address in the explorer'
+          )}{' '}
+          for the full history.
+        </span>
+        {claimableTotal > 0 && (
+          <span className="flex items-center gap-2">
+            <span className="text-text-secondary">
+              Claimable here: <Amount value={claimableTotal} maxFractionDigits={6} minimumFractionDigits={0} />
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                setAction({
+                  title: 'Claim all rewards',
+                  description: `Withdraw from ${rewardValidators.length} validator(s). These are distribution-module rewards, separate from settlement income already in your balance.`,
+                  buildMessages: () => buildWithdrawRewardMessages(connectedIdentity, rewardValidators),
+                })
+              }
+            >
+              Claim all
+            </Button>
+          </span>
+        )}
       </div>
 
       {data.delegations.length === 0 ? (
@@ -110,43 +137,33 @@ export default function MyDelegations() {
               <tr>
                 <th className="p-3">Validator</th>
                 <th className="p-3">Delegated</th>
-                <th className="p-3">Rewards</th>
+                {apr && <th className="p-3">APR {REWARDS_WINDOW}d</th>}
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {data.delegations.map((d) => {
-                const reward = rewardsByValidator.get(d.validatorAddress)
+                const validatorApr = aprOf(d.validatorAddress)
                 return (
                   <tr key={d.validatorAddress} className="border-t border-border">
                     <td className="p-3">
                       <div className="flex flex-col">
-                        <span className="font-medium">{monikerOf(d.validatorAddress)}</span>
+                        <ValidatorName
+                          moniker={monikerOf(d.validatorAddress)}
+                          url={explorerValidatorUrl(settings?.chainId, d.validatorAddress)}
+                        />
                         <Address address={d.validatorAddress} />
                       </div>
                     </td>
                     <td className="p-3"><Amount value={amountToPokt(d.amount)} /></td>
-                    <td className="p-3"><Amount value={reward ? amountToPokt(reward) : 0} /></td>
+                    {apr && (
+                      <td className="p-3 font-mono">
+                        {validatorApr !== undefined ? `${validatorApr.toFixed(2)}%` : '—'}
+                      </td>
+                    )}
                     <td className="p-3">
                       <div className="flex gap-2 justify-end">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={!reward}
-                          onClick={() =>
-                            setAction({
-                              title: `Claim rewards from ${monikerOf(d.validatorAddress)}`,
-                              buildMessages: () => buildWithdrawRewardMessages(connectedIdentity, [d.validatorAddress]),
-                            })
-                          }
-                        >
-                          Claim
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => setRedelegateFrom(d.validatorAddress)}
-                        >
+                        <Button size="sm" variant="secondary" onClick={() => setRedelegateFrom(d.validatorAddress)}>
                           Redelegate
                         </Button>
                         <Button
@@ -221,7 +238,9 @@ export default function MyDelegations() {
         <RedelegatePicker
           from={redelegateFrom}
           maxUpokt={data.delegations.find((d) => d.validatorAddress === redelegateFrom)?.amount ?? '0'}
-          validators={(validators ?? []).filter((v) => v.operatorAddress !== redelegateFrom && v.status === 'bonded' && !v.jailed)}
+          validators={(validators ?? []).filter(
+            (v) => v.operatorAddress !== redelegateFrom && v.status === 'bonded' && !v.jailed,
+          )}
           monikerOf={monikerOf}
           signer={connectedIdentity}
           onClose={() => setRedelegateFrom(null)}
@@ -232,14 +251,20 @@ export default function MyDelegations() {
   )
 }
 
-function Stat({ label, value, action }: { label: string; value: number; action?: React.ReactNode }) {
+function ValidatorName({ moniker, url }: { moniker: string; url: string | null }) {
+  if (!url) return <span className="font-medium">{moniker}</span>
   return (
-    <div className="rounded-lg border border-border p-4 flex items-center justify-between gap-3">
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-text-secondary">{label}</span>
-        <span className="text-lg"><Amount value={value} /></span>
-      </div>
-      {action}
+    <a className="font-medium hover:underline underline-offset-4" href={url} target="_blank" rel="noreferrer">
+      {moniker}
+    </a>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border p-4 flex flex-col gap-1">
+      <span className="text-xs text-text-secondary">{label}</span>
+      <span className="text-lg"><Amount value={value} /></span>
     </div>
   )
 }

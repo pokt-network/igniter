@@ -7,11 +7,13 @@ import {
   parseRewards,
   parseUnbonding,
   parseValidators,
+  sortValidators,
   type DelegationSummary,
   type RewardSummary,
   type UnbondingEntry,
   type ValidatorSummary,
 } from '@/lib/staking/parse'
+import { parseAprResponse, type AprSnapshot } from '@/lib/staking/apr'
 import { getLogger } from '@igniter/logger'
 
 const log = getLogger(['middleman', 'staking'])
@@ -34,12 +36,42 @@ async function getJson(path: string): Promise<any> {
 export async function GetValidators(): Promise<ValidatorSummary[]> {
   await requireAuth()
   const raw = await getJson('/cosmos/staking/v1beta1/validators?pagination.limit=500')
-  return parseValidators(raw).sort((a, b) => (BigInt(b.tokens) > BigInt(a.tokens) ? 1 : -1))
+  return sortValidators(parseValidators(raw))
+}
+
+const APR_ENDPOINT = 'https://mazarbul.pocket.network/api/v1/validator-apr?window=all'
+const MAINNET_CHAIN_ID = 'pocket'
+
+/**
+ * Validator APR for the trailing 7/30/90 day windows. Mainnet only: the source
+ * covers mainnet, and APR on a test network carries no meaning. Returns null on
+ * any other chain or when the source is unreachable, and the UI drops the column.
+ */
+export async function GetValidatorApr(): Promise<AprSnapshot | null> {
+  await requireAuth()
+  const settings = await getApplicationSettings()
+  if (settings.chainId !== MAINNET_CHAIN_ID) return null
+
+  try {
+    const res = await fetch(APR_ENDPOINT, { next: { revalidate: 600 } })
+    if (!res.ok) {
+      log.warn('validator APR source returned an error', { status: res.status })
+      return null
+    }
+    return parseAprResponse(await res.json())
+  } catch (err) {
+    log.warn('validator APR source unreachable', { error: (err as Error).message })
+    return null
+  }
 }
 
 export interface DelegatorState {
   delegations: DelegationSummary[]
   unbonding: UnbondingEntry[]
+  /**
+   * Distribution-module rewards. On Pocket these are dust next to settlement
+   * income, which credits the wallet directly, but they are still withdrawable.
+   */
   rewards: RewardSummary[]
 }
 
