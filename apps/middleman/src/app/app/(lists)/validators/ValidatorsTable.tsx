@@ -97,7 +97,7 @@ function aprColumn(
 }
 
 export default function ValidatorsTable() {
-  const { connectedIdentity, getBalance } = useWalletConnection()
+  const { activeAddress, getBalance } = useWalletConnection()
   const settings = useApplicationSettings()
   const queryClient = useQueryClient()
   const [target, setTarget] = useState<ValidatorSummary | null>(null)
@@ -118,9 +118,9 @@ export default function ValidatorsTable() {
   })
 
   const { data: balance } = useQuery({
-    queryKey: ['balance', connectedIdentity],
-    queryFn: () => getBalance(connectedIdentity!),
-    enabled: Boolean(connectedIdentity) && Boolean(target),
+    queryKey: ['balance', activeAddress],
+    queryFn: () => getBalance(activeAddress!),
+    enabled: Boolean(activeAddress) && Boolean(target),
   })
 
   const columns = useMemo(
@@ -132,8 +132,8 @@ export default function ValidatorsTable() {
   const median = apr?.networkMedianPct[aprWindow]
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['delegator-state', connectedIdentity] })
-    queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
+    queryClient.invalidateQueries({ queryKey: ['delegator-state', activeAddress] })
+    queryClient.invalidateQueries({ queryKey: ['balance', activeAddress] })
     queryClient.invalidateQueries({ queryKey: ['validators'] })
   }
 
@@ -170,12 +170,12 @@ export default function ValidatorsTable() {
           ) : undefined
         }
         itemActions={(v) => (
-          <Button size="sm" disabled={!connectedIdentity || v.jailed || v.status !== 'bonded'} onClick={() => setTarget(v)}>
+          <Button size="sm" disabled={!activeAddress || v.jailed || v.status !== 'bonded'} onClick={() => setTarget(v)}>
             Delegate
           </Button>
         )}
       />
-      {target && connectedIdentity && (
+      {target && activeAddress && (
         <StakingActionDialog
           open
           // Refresh on close as well as on confirmation: the REST node can still
@@ -187,12 +187,12 @@ export default function ValidatorsTable() {
           }}
           title={`Delegate to ${target.moniker}`}
           description={<Address address={target.operatorAddress} full />}
-          signer={connectedIdentity}
+          signer={activeAddress}
           amount={{
             label: 'Amount (POKT)',
             maxUpokt: balance !== undefined ? Math.floor(balance * 1e6).toString() : undefined,
           }}
-          buildMessages={(upokt) => [buildDelegateMessage(connectedIdentity, target.operatorAddress, upokt!)]}
+          buildMessages={(upokt) => [buildDelegateMessage(activeAddress, target.operatorAddress, upokt!)]}
           onSuccess={() => {
             toast.success('Delegation confirmed')
             refresh()

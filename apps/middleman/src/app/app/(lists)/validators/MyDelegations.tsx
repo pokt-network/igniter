@@ -30,16 +30,16 @@ function sumUpokt(values: string[]): number {
 }
 
 export default function MyDelegations() {
-  const { connectedIdentity } = useWalletConnection()
+  const { activeAddress } = useWalletConnection()
   const settings = useApplicationSettings()
   const queryClient = useQueryClient()
   const [action, setAction] = useState<PendingAction | null>(null)
   const [redelegateFrom, setRedelegateFrom] = useState<string | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['delegator-state', connectedIdentity],
-    queryFn: () => GetDelegatorState(connectedIdentity!),
-    enabled: Boolean(connectedIdentity),
+    queryKey: ['delegator-state', activeAddress],
+    queryFn: () => GetDelegatorState(activeAddress!),
+    enabled: Boolean(activeAddress),
     refetchInterval: 30_000,
   })
 
@@ -52,7 +52,7 @@ export default function MyDelegations() {
     return (addr: string) => m.get(addr) ?? addr
   }, [validators])
 
-  if (!connectedIdentity) {
+  if (!activeAddress) {
     return <NoData label="Connect a wallet to see your delegations." />
   }
 
@@ -73,14 +73,14 @@ export default function MyDelegations() {
   const totalUnbonding = sumUpokt(data.unbonding.map((u) => u.amount))
   const claimableTotal = sumUpokt(data.rewards.map((r) => r.amount))
   const rewardValidators = data.rewards.map((r) => r.validatorAddress)
-  const myAccountUrl = explorerAccountUrl(settings?.chainId, connectedIdentity)
+  const myAccountUrl = explorerAccountUrl(settings?.chainId, activeAddress)
 
   // Refresh on close as well as on confirmation: the REST node can still be a
   // block behind at the moment inclusion is confirmed, so the first refetch may
   // read pre-transaction state.
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['delegator-state', connectedIdentity] })
-    queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
+    queryClient.invalidateQueries({ queryKey: ['delegator-state', activeAddress] })
+    queryClient.invalidateQueries({ queryKey: ['balance', activeAddress] })
   }
 
   const onSuccess = (msg: string) => () => {
@@ -125,7 +125,7 @@ export default function MyDelegations() {
                 setAction({
                   title: 'Claim all rewards',
                   description: `Withdraw from ${rewardValidators.length} validator(s). These are distribution-module rewards, separate from settlement income already in your balance.`,
-                  buildMessages: () => buildWithdrawRewardMessages(connectedIdentity, rewardValidators),
+                  buildMessages: () => buildWithdrawRewardMessages(activeAddress, rewardValidators),
                 })
               }
             >
@@ -181,7 +181,7 @@ export default function MyDelegations() {
                               title: `Undelegate from ${monikerOf(d.validatorAddress)}`,
                               description: 'Tokens enter the unbonding period and stop earning rewards until released.',
                               amount: { label: 'Amount (POKT)', maxUpokt: d.amount },
-                              buildMessages: (upokt) => [buildUndelegateMessage(connectedIdentity, d.validatorAddress, upokt!)],
+                              buildMessages: (upokt) => [buildUndelegateMessage(activeAddress, d.validatorAddress, upokt!)],
                             })
                           }
                         >
@@ -238,7 +238,7 @@ export default function MyDelegations() {
             setAction(null)
             refresh()
           }}
-          signer={connectedIdentity}
+          signer={activeAddress}
           onSuccess={onSuccess('Transaction confirmed')}
           {...action}
         />
@@ -252,7 +252,7 @@ export default function MyDelegations() {
             (v) => v.operatorAddress !== redelegateFrom && v.status === 'bonded' && !v.jailed,
           )}
           monikerOf={monikerOf}
-          signer={connectedIdentity}
+          signer={activeAddress}
           onClose={() => {
             setRedelegateFrom(null)
             refresh()
