@@ -131,6 +131,12 @@ export default function ValidatorsTable() {
 
   const median = apr?.networkMedianPct[aprWindow]
 
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['delegator-state', connectedIdentity] })
+    queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
+    queryClient.invalidateQueries({ queryKey: ['validators'] })
+  }
+
   return (
     <>
       <DataTable
@@ -172,7 +178,13 @@ export default function ValidatorsTable() {
       {target && connectedIdentity && (
         <StakingActionDialog
           open
-          onClose={() => setTarget(null)}
+          // Refresh on close as well as on confirmation: the REST node can still
+          // be a block behind at the moment inclusion is confirmed, so the first
+          // refetch may read pre-transaction state.
+          onClose={() => {
+            setTarget(null)
+            refresh()
+          }}
           title={`Delegate to ${target.moniker}`}
           description={<Address address={target.operatorAddress} full />}
           signer={connectedIdentity}
@@ -183,9 +195,7 @@ export default function ValidatorsTable() {
           buildMessages={(upokt) => [buildDelegateMessage(connectedIdentity, target.operatorAddress, upokt!)]}
           onSuccess={() => {
             toast.success('Delegation confirmed')
-            queryClient.invalidateQueries({ queryKey: ['delegator-state', connectedIdentity] })
-            queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
-            queryClient.invalidateQueries({ queryKey: ['validators'] })
+            refresh()
           }}
         />
       )}

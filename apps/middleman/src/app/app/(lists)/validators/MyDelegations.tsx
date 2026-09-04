@@ -75,10 +75,17 @@ export default function MyDelegations() {
   const rewardValidators = data.rewards.map((r) => r.validatorAddress)
   const myAccountUrl = explorerAccountUrl(settings?.chainId, connectedIdentity)
 
-  const onSuccess = (msg: string) => () => {
-    toast.success(msg)
+  // Refresh on close as well as on confirmation: the REST node can still be a
+  // block behind at the moment inclusion is confirmed, so the first refetch may
+  // read pre-transaction state.
+  const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['delegator-state', connectedIdentity] })
     queryClient.invalidateQueries({ queryKey: ['balance', connectedIdentity] })
+  }
+
+  const onSuccess = (msg: string) => () => {
+    toast.success(msg)
+    refresh()
   }
 
   const aprOf = (validatorAddress: string): number | undefined =>
@@ -227,7 +234,10 @@ export default function MyDelegations() {
       {action && (
         <StakingActionDialog
           open
-          onClose={() => setAction(null)}
+          onClose={() => {
+            setAction(null)
+            refresh()
+          }}
           signer={connectedIdentity}
           onSuccess={onSuccess('Transaction confirmed')}
           {...action}
@@ -243,7 +253,10 @@ export default function MyDelegations() {
           )}
           monikerOf={monikerOf}
           signer={connectedIdentity}
-          onClose={() => setRedelegateFrom(null)}
+          onClose={() => {
+            setRedelegateFrom(null)
+            refresh()
+          }}
           onSuccess={onSuccess('Redelegation confirmed')}
         />
       )}
