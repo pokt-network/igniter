@@ -5,6 +5,7 @@ import { useWalletConnection } from '@igniter/ui/context/WalletConnection/index'
 import type { TransactionMessage } from '@igniter/ui/models'
 import { BroadcastSignedTx, GetTxInclusion } from '@/actions/Staking'
 import { assertDelegatorIsSigner } from '@/lib/staking/messages'
+import { humanizeChainError } from '@/lib/staking/errors'
 
 export type StageStatus = 'idle' | 'running' | 'success' | 'failure'
 
@@ -39,7 +40,14 @@ export function useStakingTx() {
         const signed = await signTransaction(messages, signer, undefined)
         signedPayload = signed.signedPayload
       } catch (err) {
-        setState({ ...IDLE, sign: 'failure', error: (err as Error).message || 'Signature rejected' })
+        // Gas simulation runs inside the wallet's sign step, so a chain-level
+        // rejection (redelegation still maturing, insufficient funds) surfaces
+        // here rather than at broadcast.
+        setState({
+          ...IDLE,
+          sign: 'failure',
+          error: humanizeChainError((err as Error).message || 'Signature rejected'),
+        })
         return false
       }
 
@@ -48,7 +56,7 @@ export function useStakingTx() {
       try {
         hash = (await BroadcastSignedTx(signedPayload)).hash
       } catch (err) {
-        setState({ ...IDLE, sign: 'success', broadcast: 'failure', error: (err as Error).message })
+        setState({ ...IDLE, sign: 'success', broadcast: 'failure', error: humanizeChainError((err as Error).message) })
         return false
       }
 
@@ -72,7 +80,9 @@ export function useStakingTx() {
             broadcast: 'success',
             confirm: 'failure',
             hash,
-            error: inclusion.rawLog || `Transaction failed with code ${inclusion.code}`,
+            error: inclusion.rawLog
+              ? humanizeChainError(inclusion.rawLog)
+              : `Transaction failed with code ${inclusion.code}`,
           })
           return false
         }
