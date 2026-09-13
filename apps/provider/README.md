@@ -21,6 +21,8 @@ This README covers configuration and usage for node operators. For local develop
 
 For step-by-step deployment instructions (dependencies, configuration, and startup), see the [Docker Compose guide](../../docker-compose/README.md#2-provider-docker-composeappsproviderdocker-composeyaml).
 
+Provider serves an admin portal and a small machine API on the same port. Only the API needs to be public — see [Exposing the Provider API](../../docs/guides/provider/expose-api.md) for the exact path allowlist, a default-deny nginx configuration, and how to keep the portal reachable for yourself.
+
 ---
 
 ## Environment Variables
@@ -72,9 +74,13 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 | `BLOCKCHAIN_PROTOCOL`  | Required | Protocol version (`shannon`)                                                                                                         | `shannon`                                              |
 | `OWNER_IDENTITY`       | Required | POKT bech32 wallet address of the Provider owner — must be a valid `pokt1...` address. Used to restrict pre-bootstrap login via SIWP | `pokt1abc123...`                                       |
 | `OWNER_EMAIL`          | Required | Email address for the owner account                                                                                                  | `operator@example.com`                                 |
-| `APP_IDENTITY`         | Required | Hex-encoded private key used by the Provider to sign governance responses sent to the Middleman                                      | *(your private key hex)*                               |
+| `APP_IDENTITY`         | Required | Hex-encoded private key that establishes the Provider's identity. Its public key is what you register in the governance registry and what `/api/identity` serves. **Use a dedicated key that holds no funds** — see the note below | `openssl rand -hex 32`                                 |
 | `MINIMUM_STAKE_BUFFER` | Optional | Buffer subtracted from minimum on-chain stake to allow nodes to operate after slashes, in uPOKT                                      | `500000000`                                            |
 | `DELEGATORS_CDN_URL`   | Optional | CDN URL template for fetching delegator configuration JSON. `{chainId}` is replaced at runtime                                       | `https://raw.githubusercontent.com/.../middleman.json` |
+
+> **`APP_IDENTITY` must be a dedicated key that holds no funds.** Generate a fresh one with `openssl rand -hex 32`; never reuse the private key of a wallet you hold POKT in, and never send funds to the address it derives.
+>
+> Three reasons. It is stored as **plaintext** in the container environment — unlike supplier keys, which are encrypted at rest with `ENCRYPTION_KEY`, so anyone who reads the environment or the `.env` file holds the key outright. Its public key is **published in the governance registry**, so the address derived from it is public and permanently linked to your instance. And it is a real secp256k1 private key: the Provider only derives a public key from it today and never signs with it, but `signPayload()` in `@igniter/commons` signs as `sha256(utf8(payload))` — the same construction Cosmos uses for amino-JSON transactions — so if the Provider ever gains a signing path, a funded key becomes a drainable one.
 
 ### Application
 
@@ -127,6 +133,7 @@ Step-by-step tutorials for common Provider workflows.
 | [How to manage your key inventory](../../docs/guides/provider/key-inventory.md) | Import keys, track their lifecycle states, and export when needed |
 | [How to onboard a new delegator](../../docs/guides/provider/onboard-delegator.md) | End-to-end flow from receiving keys to enabling a delegator |
 | [Notifications](../../docs/guides/provider/notifications.md) | Set up Discord, Telegram, or email delivery for supplier and workflow events |
+| [Exposing the Provider API](../../docs/guides/provider/expose-api.md) | Publish only the API paths Middleman and governance need; keep the admin portal private |
 
 ## Reference
 

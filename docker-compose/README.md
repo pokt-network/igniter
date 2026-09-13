@@ -31,26 +31,34 @@ If deploying beyond local testing, you **must** also:
 
 The **Middleman** application needs to reach the **Provider** API over the network. However, the Provider also serves an admin web interface that **must not** be publicly accessible.
 
-When deploying, you should place a **reverse proxy** (nginx, Caddy, Traefik, etc.) in front of the Provider and only forward the following paths:
+When deploying, place a **reverse proxy** (nginx, Caddy, Traefik, etc.) in front of the Provider and forward only the paths below:
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET`  | `/api/identity` | Governance attestation — echoes the public key derived from `APP_IDENTITY` |
+| `POST` | `/api/status` | Get provider configuration and status |
 | `POST` | `/api/suppliers` | Get supplier stake configurations |
 | `POST` | `/api/suppliers/stake` | Mark suppliers as staked |
 | `POST` | `/api/suppliers/unstaking` | Mark suppliers as unstaking |
 | `POST` | `/api/suppliers/release` | Release suppliers from staking |
+| `POST` | `/api/suppliers/address-groups` | Resolve staked addresses back to their address groups |
 | `POST` | `/api/import-suppliers/request` | Initiate supplier import (returns nonce) |
 | `POST` | `/api/import-suppliers/submit` | Submit import with owner signature |
 | `POST` | `/api/import-suppliers/status` | Check import request status |
-| `POST` | `/api/status` | Get provider configuration and status |
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/bootstrap` | Bootstrap status |
 
-All other routes (`/`, `/admin/*`, `/api/auth/*`, `/_next/*`, and any server action paths) **must be blocked** from public access. These serve the admin UI and session management, which should only be reachable from a private network, VPN, or localhost.
+Every other route **must be blocked** from public access — including three that are easy to forward by accident because they also live under `/api/`:
+
+- `/api/rpc/*` — an unauthenticated pass-through proxy to your Pocket API node, used only by the admin UI. Publicly exposed, anyone can relay arbitrary requests through your node.
+- `/api/health` — runs a database query per request; it is a container liveness probe for the internal network.
+- `/api/bootstrap` — bootstrap status; nothing outside the instance calls it.
+
+Along with `/`, `/admin/*`, `/api/auth/*`, `/_next/*`, and any server action paths. Allowlist individual paths, never the `/api/` prefix.
 
 These API endpoints are authenticated using cryptographic signatures (`X-Middleman-Identity` and `X-Middleman-Signature` headers) — they do not rely on browser sessions or cookies.
 
 > **Summary:** Middleman = public-facing (expose everything). Provider = internal admin tool (expose **only** the API paths listed above).
+
+For a complete default-deny nginx configuration, how to keep the admin portal reachable for yourself, and commands to verify the result, see the [Exposing the Provider API guide](../docs/guides/provider/expose-api.md).
 
 ---
 
