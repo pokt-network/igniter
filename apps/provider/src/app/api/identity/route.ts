@@ -13,8 +13,15 @@ export const dynamic = 'force-dynamic'
  * Returns the compressed secp256k1 public key derived from the `APP_IDENTITY`
  * private key in the environment — the same value published as `identity` in the
  * governance registry. Governance CI fetches `<registry url>/api/identity` and
- * compares it against the identity declared in the pull request, which proves the
- * operator deployed an Igniter instance configured with the key they registered.
+ * compares it against the identity declared in the pull request.
+ *
+ * What this catches is misconfiguration: a registry entry whose `url` points at an
+ * instance running a different key, or at nothing at all. It is deliberately not
+ * proof of possession — the response echoes a public key that is already published,
+ * so a static file or a proxy to someone else's instance would satisfy it equally
+ * well. A signed challenge would be needed for that, and is left until Provider
+ * signs its responses generally; this endpoint's contract does not have to change
+ * to add one.
  *
  * The key is derived per request rather than read from `application_settings`, so
  * the response cannot go stale after an `APP_IDENTITY` rotation and does not depend

@@ -58,5 +58,8 @@ describe('GET /api/identity', () => {
     const response = await GET()
 
     expect(response.status).toBe(500)
+    // The body is asserted, not just the status: the handler must never surface
+    // the underlying error, which can carry key material.
+    expect(await response.json()).toEqual({ error: 'Identity unavailable' })
   })
 })

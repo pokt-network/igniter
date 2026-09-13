@@ -21,7 +21,7 @@ Connect the Provider to the Pocket Network by entering the REST API URL of a Poc
 
 | Field | Description |
 |-------|-------------|
-| **App Identity** | Your provider's public identifier, derived from the `APP_IDENTITY` private key in your environment. Read-only — displayed for reference. Verify that this matches the address you registered in the [governance PR](https://github.com/pokt-network/pocket-network-genesis/pulls). Once deployed, the same value is served at `APP_URL/api/identity`, which governance uses to confirm your instance runs the key you registered — see [Exposing the Provider API](./expose-api.md). |
+| **App Identity** | Your provider's public identifier, seeded from the `APP_IDENTITY` private key in your environment when the instance is bootstrapped. Read-only — displayed for reference. Verify that this matches the identity you registered in the [governance registry](https://github.com/pokt-network/igniter-governance). Separately, `/api/identity` on the **public URL you registered there** serves the key the running instance currently holds; that is what governance reads, to catch a registry entry pointing at an instance running a different key — see [Exposing the Provider API](./expose-api.md). The two can diverge after a key rotation (see below). |
 | **Pocket API URL** | The Cosmos SDK REST API endpoint of a Pocket Network node (e.g., `https://sauron-api.beta.infra.pocket.network`). Typically served on port `1317` for self-hosted nodes. Required. After entering a valid URL, the app fetches chain parameters automatically. |
 | **Pocket RPC URL** | The CometBFT RPC endpoint of a Pocket Network node (e.g., `https://sauron-rpc.beta.infra.pocket.network`). Typically served on port `26657` for self-hosted nodes. Required. Used by workflow services to broadcast and verify transactions. |
 | **Network** | The chain ID detected from the API (e.g., `pocket-beta`). Read-only — auto-populated. Cannot be changed after bootstrap. |
@@ -33,6 +33,10 @@ Connect the Provider to the Pocket Network by entering the REST API URL of a Poc
 > A list of public API endpoints is maintained at [pocket-network-resources](https://github.com/pokt-network/pocket-network-resources).
 
 > The Network (chain ID) is locked after this step. If you need to change networks, you must redeploy with a fresh database.
+
+> **`APP_IDENTITY` must be a dedicated key that holds no funds.** It is stored as plaintext in your environment and its public key is published in the governance registry, so the address it derives is public and permanently tied to your instance. Generate a fresh one with `openssl rand -hex 32` — never reuse the private key of a wallet holding POKT, and never send funds to the address it derives.
+
+> **After an `APP_IDENTITY` rotation, this field and `/api/identity` can disagree.** The wizard reads `appIdentity` from `application_settings`, where a stored value takes precedence over the environment, and that row is written once during bootstrap. `/api/identity` always derives from the environment, so it is the one that reflects the key the running instance actually holds — and the one governance reads.
 
 <!-- SCREENSHOT: Capture Step 1 with both API and RPC URLs filled in and chain parameters auto-populated. -->
 <!-- ![Screenshot: Blockchain settings step](../screenshots/bootstrap-step1.png) -->

@@ -184,6 +184,8 @@ Your entry in [igniter-governance](https://github.com/pokt-network/igniter-gover
 - `/api/identity` derives the key from the `APP_IDENTITY` environment variable on every request. It does not read the database and does not require bootstrap to have completed, so it answers correctly on a freshly deployed instance and stays correct after a key rotation.
 - If it returns `500 {"error":"Identity unavailable"}`, `APP_IDENTITY` is missing or malformed in the environment of the running container.
 
+> **What this check does and does not establish.** It catches misconfiguration — a registry entry whose `url` points at an instance running a different key, or at nothing at all. It is not proof of possession: the response echoes a public key that is already published in the registry, so a static file or a proxy to another operator's instance would satisfy it equally well. Impersonation is handled separately, by the registry refusing duplicate identities.
+
 ---
 
 ## Verify the configuration
