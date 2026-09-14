@@ -106,6 +106,7 @@ export default function RegionsTable() {
             log.error('Error deleting region', { error: error })
             notify.error('Unable to delete region.', {
                 id: `delete-region-error`,
+                toast: true,
                 description:
                   error instanceof Error
                     ? error.message

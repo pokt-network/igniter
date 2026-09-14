@@ -20,6 +20,7 @@ export function WorkflowsTabs() {
         onTerminateError: (message) =>
           notify.error('Failed to terminate workflow.', {
             id: 'terminate-workflow-error',
+            toast: true,
             description: message,
           }),
       }}

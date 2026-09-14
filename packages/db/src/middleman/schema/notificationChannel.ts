@@ -201,7 +201,7 @@ export type InsertNotificationEvent = typeof notificationEventsTable.$inferInser
  * The table is kept rather than migrated away: rows record a choice delegators
  * made, and dropping it would throw that away for a feature that may come back.
  * If it does, gate the two queries in `app/components/NotificationBellFeed.tsx`
- * and restore the switch — `git show <pre-bell-commit>` has all of it. Until
+ * and restore the switch — `git show fa45761` (v0.16.0) has all of it. Until
  * then, do not wire this up piecemeal: a half-honoured flag is worse than none.
  */
 export const notificationPreferencesTable = pgTable('notification_preferences', {

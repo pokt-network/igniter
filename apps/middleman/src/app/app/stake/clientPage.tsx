@@ -118,6 +118,7 @@ export default function ClientStakePage() {
         log.error('failed to abort staking process', { error });
         notify.error('Failed to abort the staking process.', {
           id: `abort-stake-error`,
+          toast: true,
           description: 'Please try again or contact support if the issue persists.',
         });
         setIsAborting(false);

@@ -240,6 +240,13 @@ export function NotificationBell({
 
   return (
     <>
+      {/* The badge is the only thing on the page that changes without the user
+          doing anything; a live region is what tells a screen reader. Kept
+          outside the button: a button's children are presentational to ARIA,
+          so a role="status" inside it would be dropped. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {totalUnread > 0 ? `${totalUnread} unread notifications` : ''}
+      </span>
       <Button
         variant="ghost"
         size="icon"

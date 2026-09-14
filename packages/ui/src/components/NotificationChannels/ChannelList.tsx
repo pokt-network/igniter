@@ -93,6 +93,7 @@ export function ChannelList<T extends ChannelListItem>({
     onError: (err) => {
       notify.error('Failed to delete channel.', {
         id: 'channel-delete-error',
+        toast: true,
         description: err instanceof Error ? err.message : undefined,
       })
     },
@@ -114,6 +115,7 @@ export function ChannelList<T extends ChannelListItem>({
       } catch (err) {
         notify.error('Failed to toggle channel.', {
           id: 'channel-toggle-error',
+          toast: true,
           description: err instanceof Error ? err.message : undefined,
         })
       } finally {
@@ -133,6 +135,7 @@ export function ChannelList<T extends ChannelListItem>({
       } catch (err) {
         notify.error(`Failed to test "${channel.name}".`, {
           id: `channel-test-error-${channel.id}`,
+          toast: true,
           description: err instanceof Error ? err.message : undefined,
         })
       } finally {

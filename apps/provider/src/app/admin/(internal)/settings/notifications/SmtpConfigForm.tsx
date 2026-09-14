@@ -101,6 +101,7 @@ export function SmtpConfigForm() {
     onError: (err) => {
       notify.error('Failed to save SMTP configuration.', {
         id: 'smtp-save-error',
+        toast: true,
         description: err instanceof Error ? err.message : undefined,
       })
     },
@@ -121,6 +122,7 @@ export function SmtpConfigForm() {
     } catch (err) {
       notify.error('Failed to delete SMTP configuration.', {
         id: 'smtp-delete-error',
+        toast: true,
         description: err instanceof Error ? err.message : undefined,
       })
     } finally {
@@ -147,6 +149,7 @@ export function SmtpConfigForm() {
     } catch (err) {
       notify.error('Failed to send test email.', {
         id: 'smtp-test-error',
+        toast: true,
         description: err instanceof Error ? err.message : undefined,
       })
     } finally {

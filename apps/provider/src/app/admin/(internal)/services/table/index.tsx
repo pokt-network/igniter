@@ -96,6 +96,7 @@ export default function ServicesTable() {
       log.error("Failed to delete service", { error: error })
       notify.error('Unable to delete service.', {
         id: `delete-service-error`,
+        toast: true,
         description:
           error instanceof Error
             ? error.message

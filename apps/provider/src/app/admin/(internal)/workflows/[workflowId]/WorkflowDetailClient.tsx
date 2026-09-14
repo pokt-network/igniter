@@ -26,11 +26,13 @@ export function WorkflowDetailClient({
         onTerminateError: (message) =>
           notify.error('Failed to terminate workflow.', {
             id: 'terminate-workflow-error',
+            toast: true,
             description: message,
           }),
         onDownloadError: (message) =>
           notify.error('Failed to download workflow history.', {
             id: 'history-download-error',
+            toast: true,
             description: message,
           }),
       }}

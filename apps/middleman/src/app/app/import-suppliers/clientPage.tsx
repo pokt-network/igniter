@@ -127,6 +127,7 @@ export default function ClientImportSuppliersPage() {
           log.error('failed to abort import', { error })
           notify.error('Failed to abort the import.', {
             id: `abort-import-error`,
+            toast: true,
             description: 'Please try again or contact support.',
           })
           setIsAborting(false)

@@ -139,6 +139,7 @@ export default function AddressGroupsTable() {
       log.error('Failed to delete addressGroup', { error: error })
       notify.error('Failed to delete the address group.', {
         id: `delete-ag-error`,
+        toast: true,
         description:
           error instanceof Error
             ? error.message

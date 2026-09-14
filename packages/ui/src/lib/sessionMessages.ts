@@ -74,6 +74,14 @@ export interface PushOptions {
    */
   id?: string
   description?: string
+  /**
+   * Also raise a short toast where the click happened. The bell never opens by
+   * itself (product decision: it only lights up), so for an action whose
+   * success already toasts — a channel test, a delete, an SMTP save — the
+   * failure would otherwise be a badge bump the user has to go looking for.
+   * The toast carries only the title; the description stays on the card.
+   */
+  toast?: boolean
 }
 
 export const sessionMessages = {
@@ -107,6 +115,16 @@ export const sessionMessages = {
     // Same failure, seen once with no bell and again with one: clear the pinned
     // stand-in so the card does not sit next to a duplicate of itself.
     if (fallbackIds.delete(id)) toast.dismiss(id)
+
+    if (options.toast) {
+      // Own id: sonner defers `dismiss` a frame, so sharing the card's id with
+      // the fallback toast dismissed just above could take this one out too.
+      toast[severity](title, {
+        id: `${id}-toast`,
+        description: 'Details in notifications.',
+        duration: 5000,
+      })
+    }
 
     const message: SessionMessage = {
       id,

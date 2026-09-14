@@ -75,6 +75,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
               log.error("failed to save settings", { isUpdate, error });
               notify.error('Failed to save settings.', {
                 id: `settings-form-submit-error`,
+                toast: true,
                 description: 'Please try again.',
               });
             } finally {

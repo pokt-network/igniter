@@ -114,6 +114,7 @@ export default function RelayMinersTable() {
       log.error('Failed to delete relay miner', { error: error })
       notify.error('Unable to delete relay miner.', {
         id: `delete-relay-miner-error`,
+        toast: true,
         description:
           error instanceof Error
             ? error.message
