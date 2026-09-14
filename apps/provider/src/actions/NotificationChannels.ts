@@ -11,6 +11,7 @@ import {
   listNotificationEvents,
   getNotificationEvent,
   listUnviewedNotificationEvents,
+  countUnviewedNotificationEvents,
   markNotificationEventsViewed,
   markAllNotificationEventsViewed,
   type NotificationEventFilters,
@@ -282,6 +283,10 @@ export async function GetNotificationEvent(uuid: string) {
 
 export async function ListUnviewedNotificationEvents() {
   return withRequireOwner(async () => listUnviewedNotificationEvents())
+}
+
+export async function CountUnviewedNotificationEvents() {
+  return withRequireOwner(async () => countUnviewedNotificationEvents())
 }
 
 export async function MarkNotificationEventsViewed(ids: number[]) {

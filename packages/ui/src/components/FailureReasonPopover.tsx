@@ -14,21 +14,39 @@ export type FailureReasonPopoverProps = {
   code?: number | null
   /** Extra classes for the trigger (e.g. truncate width). */
   className?: string
+  /**
+   * `error` (default) is the transaction-failure cell: red trigger, red payload
+   * block. `neutral` is the same mechanics for ordinary long text — a
+   * notification summary — where nothing has gone wrong.
+   */
+  tone?: 'error' | 'neutral'
+  /** Heading on the copyable block inside the popover. */
+  label?: string
 }
 
 /**
- * Failure-reason table cell: shows the short friendly reason and, when there is
- * more to show (a full raw log and/or a code), an expand affordance that opens a
- * popover with the full copyable error — no navigation to the detail panel needed.
- * Generic on purpose (no @igniter/commons dependency): the caller maps the reason.
+ * Truncating table cell with an expand affordance: shows a short line and, when
+ * there is more to reveal (full text and/or a code), opens a popover holding the
+ * complete copyable value — no navigation to a detail panel needed. Built for the
+ * transaction failure-reason column (`tone="error"`, the default) and reused for
+ * notification summaries (`tone="neutral"`). Generic on purpose (no
+ * @igniter/commons dependency): the caller maps the short text.
  */
-export function FailureReasonPopover({ friendly, full, code, className }: FailureReasonPopoverProps) {
+export function FailureReasonPopover({
+  friendly,
+  full,
+  code,
+  className,
+  tone = 'error',
+  label = 'Full message',
+}: FailureReasonPopoverProps) {
   const expandable = Boolean(full) || code != null
+  const textClass = tone === 'error' ? 'text-red-400' : 'text-text-secondary'
 
   // Nothing beyond the friendly text to reveal — render plain, no popover.
   if (!expandable) {
     return (
-      <span className={cn('block max-w-[16rem] truncate text-red-400', className)} title={friendly}>
+      <span className={cn('block max-w-[16rem] truncate', textClass, className)} title={friendly}>
         {friendly}
       </span>
     )
@@ -44,9 +62,10 @@ export function FailureReasonPopover({ friendly, full, code, className }: Failur
           type="button"
           // Keep the click on the cell (don't trigger any row-level open).
           onClick={(e) => e.stopPropagation()}
-          title="Click to view the full error"
+          title={tone === 'error' ? 'Click to view the full error' : 'Click to view the full text'}
           className={cn(
-            'flex max-w-[16rem] items-center gap-1 text-left text-red-400 hover:underline',
+            'flex max-w-[16rem] items-center gap-1 text-left hover:underline',
+            textClass,
             className,
           )}
         >
@@ -60,11 +79,16 @@ export function FailureReasonPopover({ friendly, full, code, className }: Failur
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex w-[380px] max-w-[90vw] flex-col gap-2 p-3">
-        {showHeadline && <p className="text-sm text-red-400">{friendly}</p>}
+        {showHeadline && <p className={cn('text-sm', textClass)}>{friendly}</p>}
         {full ? (
-          <PayloadBlock label="Full message" text={full} variant="error" defaultExpanded />
+          <PayloadBlock
+            label={label}
+            text={full}
+            variant={tone === 'error' ? 'error' : 'default'}
+            defaultExpanded
+          />
         ) : (
-          !showHeadline && <p className="text-sm text-red-400">{friendly}</p>
+          !showHeadline && <p className={cn('text-sm', textClass)}>{friendly}</p>
         )}
         {code != null && <p className="font-mono text-xs text-text-tertiary">Code: {code}</p>}
       </PopoverContent>
