@@ -1,5 +1,6 @@
 import { resolveTransactionTotalValue, sumOperationsValue } from './transactionValue';
 import { MessageType } from '@igniter/commons/constants';
+import { TransactionType } from '@igniter/db/middleman/enums';
 import type { Operation } from '@/app/detail/TransactionDetail';
 
 const stakeOp = (amount: string) => ({
@@ -19,29 +20,29 @@ const unstakeOp = () => ({
 
 describe('resolveTransactionTotalValue', () => {
   it('prefers the stored amount over the payload', () => {
-    expect(resolveTransactionTotalValue('9300000000000', () => 42)).toBe(9300000000000);
+    expect(resolveTransactionTotalValue('9300000000000', TransactionType.Stake, () => 42)).toBe(9300000000000);
   });
 
   it('keeps full precision for amounts that overflow int4', () => {
     // 9.3M POKT in uPOKT — the case from the original report
-    expect(resolveTransactionTotalValue('9300000000000', () => 0)).toBe(9_300_000_000_000);
+    expect(resolveTransactionTotalValue('9300000000000', TransactionType.Stake, () => 0)).toBe(9_300_000_000_000);
   });
 
   it('falls back to the payload when the amount is null (legacy rows)', () => {
-    expect(resolveTransactionTotalValue(null, () => 42)).toBe(42);
-    expect(resolveTransactionTotalValue(undefined, () => 42)).toBe(42);
-    expect(resolveTransactionTotalValue('', () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue(null, TransactionType.Stake, () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue(undefined, TransactionType.Stake, () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue('', TransactionType.Stake, () => 42)).toBe(42);
   });
 
   it('falls back when the stored amount is not a number', () => {
-    expect(resolveTransactionTotalValue('not-a-number', () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue('not-a-number', TransactionType.Stake, () => 42)).toBe(42);
   });
 
   it('treats a stored zero as unset, matching the writers', () => {
     // The shared query returns null instead of a zero total and the workflow
     // self-heal treats '0' as still-unhealed; the reader must not disagree.
-    expect(resolveTransactionTotalValue('0', () => 42)).toBe(42);
-    expect(resolveTransactionTotalValue('000', () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue('0', TransactionType.Stake, () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue('000', TransactionType.Stake, () => 42)).toBe(42);
   });
 
   // Number() accepts far more than uPOKT ever is, and a stored amount is
@@ -57,17 +58,17 @@ describe('resolveTransactionTotalValue', () => {
     ['fractional', '1.5'],
     ['digits with trailing junk', '123abc'],
   ])('falls back for a %s amount', (_label, stored) => {
-    expect(resolveTransactionTotalValue(stored, () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue(stored, TransactionType.Stake, () => 42)).toBe(42);
   });
 
   it('tolerates surrounding whitespace on an otherwise valid amount', () => {
-    expect(resolveTransactionTotalValue(' 9300000000000 ', () => 42)).toBe(9_300_000_000_000);
+    expect(resolveTransactionTotalValue(' 9300000000000 ', TransactionType.Stake, () => 42)).toBe(9_300_000_000_000);
   });
 
   it('falls back above MAX_SAFE_INTEGER rather than returning a rounded value', () => {
     // Number('9007199254740993') silently yields ...992. Total supply is far
     // below this, so falling back is the honest answer if it ever appears.
-    expect(resolveTransactionTotalValue('9007199254740993', () => 42)).toBe(42);
+    expect(resolveTransactionTotalValue('9007199254740993', TransactionType.Stake, () => 42)).toBe(42);
   });
 
   it('does not invoke the payload fallback when a stored amount is present', () => {
@@ -75,9 +76,41 @@ describe('resolveTransactionTotalValue', () => {
     // else pins that it stays lazy.
     const fallback = jest.fn(() => 42);
 
-    expect(resolveTransactionTotalValue('9300000000000', fallback)).toBe(9_300_000_000_000);
+    expect(resolveTransactionTotalValue('9300000000000', TransactionType.Stake, fallback)).toBe(9_300_000_000_000);
     expect(fallback).not.toHaveBeenCalled();
   });
+
+  // An Unstake's payload always sums to zero, so for it the fallback is not a
+  // value but the absence of one. Returning 0 there reproduces the exact
+  // symptom this column was added to fix; null lets the readers show "—".
+  describe('for an Unstake with no usable stored amount', () => {
+    it.each([
+      ['null (legacy row)', null],
+      ['undefined', undefined],
+      ['empty', ''],
+      ['zero', '0'],
+      ['non-numeric', 'not-a-number'],
+      ['above MAX_SAFE_INTEGER', '9007199254740993'],
+      ['negative', '-5'],
+      ['hexadecimal', '0x10'],
+    ])('returns null rather than the payload sum for a %s amount', (_label, stored) => {
+      const fallback = jest.fn(() => 0);
+
+      expect(resolveTransactionTotalValue(stored, TransactionType.Unstake, fallback)).toBeNull();
+      expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('still returns the stored amount when there is one', () => {
+      expect(resolveTransactionTotalValue('9300000000000', TransactionType.Unstake, () => 0)).toBe(9_300_000_000_000);
+    });
+  });
+
+  it.each([TransactionType.Stake, TransactionType.Upstake, TransactionType.OperationalFunds])(
+    'never returns null for a %s, whose payload carries the amount',
+    (type) => {
+      expect(resolveTransactionTotalValue(null, type, () => 0)).toBe(0);
+    },
+  );
 });
 
 describe('sumOperationsValue', () => {

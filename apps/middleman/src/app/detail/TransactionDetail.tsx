@@ -457,7 +457,7 @@ export default function TransactionDetail({
     summaryRows.push(...getOperationRows(operations, type, onClickAddress))
   }
 
-  const totalValue = resolveTransactionTotalValue(amount, () => operations.reduce((acc, op) => {
+  const totalValueUpokt = resolveTransactionTotalValue(amount, type, () => operations.reduce((acc, op) => {
     if (type === TransactionType.Stake || type === TransactionType.Upstake) {
       if (op.typeUrl === MessageType.Stake) {
         return acc + Number(op.value.stake.amount)
@@ -471,7 +471,9 @@ export default function TransactionDetail({
     }
 
     return acc
-  }, 0)) / 1e6
+  }, 0))
+  // null only for an Unstake with no recorded amount: shown as unknown, not 0.
+  const totalValue = totalValueUpokt === null ? null : totalValueUpokt / 1e6
 
   return (
     <div className={'gap-8 flex flex-col'}>
@@ -506,7 +508,9 @@ export default function TransactionDetail({
           </span>
           <div className="flex flex-row items-center gap-2">
             <p className="font-mono !text-[20px] text-white">
-              <Amount value={totalValue} maxFractionDigits={0} minimumFractionDigits={0} />
+              {totalValue === null
+                ? <span className="text-text-tertiary" title="Amount not recorded">—</span>
+                : <Amount value={totalValue} maxFractionDigits={0} minimumFractionDigits={0} />}
             </p>
           </div>
         </div>

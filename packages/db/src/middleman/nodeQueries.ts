@@ -38,8 +38,9 @@ export function createNodeQueries(db: Db) {
      * Returns a decimal string, or null — never a partial or zero total.
      * A stored amount is authoritative once written: readers stop falling back
      * to the payload, and the workflow only revisits rows its `storedIsUsable`
-     * check rejects. A wrong number is invisible; null degrades to the payload
-     * sum, which is a visible unknown. So null is returned when:
+     * check rejects. A wrong number is invisible; null is rendered by the
+     * readers as an unknown ("—"), never as a zero total, since an unstake's
+     * payload carries no amount to fall back to. So null is returned when:
      *
      *  - no addresses were given;
      *  - any address has no matching node row, which would silently yield a

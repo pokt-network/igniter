@@ -57,7 +57,9 @@ describe('sumStakeAmountByAddresses (middleman)', () => {
 
   it('returns null for a zero total', async () => {
     // Imported suppliers carry stakeAmount '0' until SupplierStatus syncs them.
-    // Storing that zero would render 0.00 forever and block every later heal.
+    // Storing that zero would record a bogus value. Both the readers and the
+    // worker's recovery check treat a stored '0' as unset, so it must not be
+    // written in the first place: return null and let the recovery fill it.
     where.mockResolvedValue([{ total: '0', matched: 1 }])
 
     await expect(sumStakeAmountByAddresses(['pokt1a'], { createdBy: 'pokt1owner' })).resolves.toBeNull()

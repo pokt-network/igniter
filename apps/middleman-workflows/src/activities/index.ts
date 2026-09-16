@@ -644,11 +644,12 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       // fails and is swallowed, so new unstakes can arrive here unset too.
       //
       // Note this does NOT recover historical rows: the only caller is
-      // applyVerificationDecision's terminal apply-success path, which runs
-      // once per transaction, so anything that already reached Success or
-      // Failure before deploy is never revisited and keeps rendering 0.00.
-      // Recovering those needs a one-time SQL backfill, deliberately not
-      // shipped here.
+      // applyVerificationDecision's apply-success path, which runs while the
+      // transaction is still pending (it can re-run on an activity retry, since
+      // effects precede the CAS) and never after the row goes terminal. So
+      // anything that already reached Success or Failure before deploy is
+      // never revisited and keeps rendering as an unknown ("—"). Recovering
+      // those needs a one-time SQL backfill, deliberately not shipped here.
       //
       // Isolated in its own try/catch: it runs ahead of the state transition
       // below, and the outer catch swallows into `return []`, so a throw from
@@ -663,8 +664,11 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       // stake -- updateManyNodeAndLinkToTransaction sets only `status` -- but
       // upsertSupplierStatus runs on its own schedule and can zero stakeAmount
       // before this activity is reached. The shared query returns null rather
-      // than 0 in that case, which leaves the row eligible for a later heal
-      // instead of stamping an unrecoverable zero.
+      // than 0 in that case, and the row is left as it was. A retry before the
+      // CAS gets another try; once the row goes terminal it is never revisited
+      // (see above), so a null that survives to that point is final. The
+      // readers render it as an unknown ("—"), which is the honest outcome,
+      // rather than a 0.00 indistinguishable from the bug this column fixes.
       //
       // Recover anything the reader will not display, not merely null. A
       // stored value is truthy-but-useless in several shapes: '0' and '000'

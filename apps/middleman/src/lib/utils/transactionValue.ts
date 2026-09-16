@@ -1,8 +1,9 @@
 import { MessageType } from '@igniter/commons/constants'
+import { TransactionType } from '@igniter/db/middleman/enums'
 import type { Operation } from '@/app/detail/TransactionDetail'
 
 /**
- * "Total POKT" for a transaction, in uPOKT.
+ * "Total POKT" for a transaction, in uPOKT, or null when it is unknown.
  *
  * Prefers the stored `transactions.amount`, falling back to summing the
  * unsigned payload (`transactions.unsignedPayload`; `signedPayload` is a
@@ -10,11 +11,17 @@ import type { Operation } from '@/app/detail/TransactionDetail'
  * an unstake's value can only come from the suppliers' stake at the time it was
  * created, so it cannot be recomputed from the payload afterwards. Rows created
  * before that column existed still have a null amount and fall back.
+ *
+ * For an Unstake the fallback is not a fallback: its payload always sums to
+ * zero, so without a usable stored amount the value is simply unknown. That
+ * case returns null so the caller can render it as such, instead of a 0.00
+ * that looks exactly like the bug the stored column fixes.
  */
 export function resolveTransactionTotalValue(
   amount: string | null | undefined,
+  type: TransactionType,
   sumFromOperations: () => number,
-): number {
+): number | null {
   // Digits only. uPOKT is an unsigned integer, and Number() is far too
   // permissive for a value that, once accepted, is treated as authoritative and
   // suppresses the payload fallback for good: it turns '  ' into 0, '0x10' into
@@ -29,6 +36,10 @@ export function resolveTransactionTotalValue(
     if (Number.isSafeInteger(parsed)) {
       return parsed
     }
+  }
+
+  if (type === TransactionType.Unstake) {
+    return null
   }
 
   return sumFromOperations()

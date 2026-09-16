@@ -100,7 +100,7 @@ export default function TransactionsTable() {
                         status: tx.status,
                         createdAt: new Date(tx.createdAt!),
                         executionHeight: `${tx.executionHeight ?? ''}`,
-                        totalValue: resolveTransactionTotalValue(tx.amount, () => sumOperationsValue(operations)),
+                        totalValue: resolveTransactionTotalValue(tx.amount, tx.type, () => sumOperationsValue(operations)),
                         amount: tx.amount,
                         operations,
                         hash: tx.hash,
