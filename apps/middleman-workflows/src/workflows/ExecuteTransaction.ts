@@ -1,10 +1,18 @@
 import {
+  ActivityFailure,
   ApplicationFailure,
   log,
   patched,
   proxyActivities,
+  TimeoutFailure,
 } from '@temporalio/workflow'
-import { delegatorActivities } from "@/activities";
+// Type-only: the workflow bundle must never pull the activities module in at runtime (it
+// imports drizzle, pg and node:* — see lib/broadcastOutcome.ts). The other delegator workflows
+// rely on TypeScript eliding this same import (GovernanceSync already spells `import type`);
+// it is explicit here because this file also needs a runtime value from the activity side,
+// sourced separately.
+import type { delegatorActivities } from "@/activities";
+import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome';
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
@@ -44,8 +52,8 @@ type TransactionRow = Awaited<ReturnType<Activities['getTransaction']>>
  * those runs finish on `legacyFlow` exactly as they would have pre-upgrade, and every new run
  * takes `anchoredFlow`.
  *
- * REMOVAL. An ExecuteTransaction run lives seconds (3 broadcast attempts × 30s at worst), so no
- * pre-upgrade history can still be open a few minutes after deploy. A later release should
+ * REMOVAL. An ExecuteTransaction run lives minutes at worst (5 broadcast attempts × 30s plus
+ * backoff), so no pre-upgrade history can still be open a while after deploy. A later release should
  * therefore delete `legacyFlow`, the `getTxTimeoutHeight` activity it is the last caller of, and
  * this marker — the standard sequence being `deprecatePatch()` first if you want to be strict.
  */
@@ -64,6 +72,27 @@ export async function ExecuteTransaction(args: TransactionArgs) {
     startToCloseTimeout: "30s",
     retry: {
       maximumAttempts: 3,
+    },
+  });
+
+  // The broadcast gets its own retry policy. Retries are how an unknown outcome gets re-sent:
+  // `executeTransaction` throws a retryable failure when the node was unreachable or answered
+  // nothing definitive, so each attempt re-broadcasts the same bytes (safe — see the activity).
+  // The default 1s base would burn every attempt inside a single node hiccup; this backoff waits
+  // 65s between attempts in total, so with the 30s per-attempt timeout the worst case is about
+  // 3.5 minutes before the workflow gives up and hands the row to the verifier. That worst case
+  // also holds the dispatcher run (ExecutePendingTransactions awaits its children under a SKIP
+  // overlap policy) — acceptable, since it only occurs while the node is unreachable, when no
+  // other transaction could be broadcast either. Scoped to this one activity on purpose: the
+  // others either read, write idempotently, or fail deterministically, and a deterministic
+  // failure should not wait out a minute of backoff before the run fails.
+  const broadcast = proxyActivities<Pick<Activities, 'executeTransaction'>>({
+    startToCloseTimeout: "30s",
+    retry: {
+      initialInterval: "5s",
+      backoffCoefficient: 2,
+      maximumInterval: "30s",
+      maximumAttempts: 5,
     },
   });
 
@@ -87,12 +116,17 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   //
   // Since the anchor is written BEFORE broadcasting, a hash no longer proves the bytes reached a
   // node — only that we committed to sending them. A run that died between the anchor and a
-  // successful broadcast therefore returns here without re-sending, and the verifier settles it
-  // (Failure once coverage passes timeoutHeight, since the tx never landed). That is a correct
-  // verdict reached slowly; re-broadcasting instead would resolve it faster and is safe under the
-  // current classification (an in-mempool repeat answers code 19 → dedup-success, a landed one
-  // answers code 32 → indeterminate), but it is a behavioural change worth making deliberately
-  // rather than as a side effect of this fix.
+  // successful broadcast therefore returns here without re-sending, and the verifier settles it.
+  // How fast depends on the wallet: a Keplr-signed tx embeds a timeoutHeight, so the verifier
+  // fails it once coverage passes that height; a Soothe-signed tx carries none, and can only be
+  // failed once the signer's sequence is consumed by some other tx. Re-broadcasting here would
+  // resolve both faster and is safe under the current classification (an in-mempool repeat
+  // answers code 19 → dedup-success, a landed one answers code 32 → indeterminate), but it is a
+  // behavioural change worth making deliberately rather than as a side effect of this fix. The
+  // window this leaves is a crash in the few seconds between the anchor write and the broadcast;
+  // an outage shorter than executeTransaction's retry window no longer opens it, because the
+  // activity retries in place; a longer one still leaves a Soothe-signed row waiting on the
+  // sequence rule, which is what the pending-without-timeout alert follow-up is for.
   if (transaction.hash) {
     log.debug('ExecuteTransaction: anchored already, handing off to verifier', { transactionId, hash: transaction.hash });
     return { ...transaction };
@@ -104,20 +138,22 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   // three commands, same order), so a pre-upgrade history replays cleanly up to this point.
   // Everything below changed shape and must be inside the gate.
   return patched(PATCH_COMMAND_SEQUENCE_V2)
-    ? anchoredFlow(activities, transaction, txHeight, transactionId)
-    : legacyFlow(activities, transaction, txHeight, transactionId);
+    ? anchoredFlow(activities, broadcast, transaction, txHeight, transactionId)
+    : legacyFlow(activities, broadcast, transaction, txHeight, transactionId);
 }
+
+type BroadcastActivity = Pick<ProxiedActivities, 'executeTransaction'>
 
 /** Post-#339 flow. See the patch marker above for why the pre-#339 one is still in this file. */
 async function anchoredFlow(
   activities: ProxiedActivities,
+  { executeTransaction }: BroadcastActivity,
   transaction: TransactionRow,
   txHeight: number,
   transactionId: number,
 ) {
   const {
     updateTransaction,
-    executeTransaction,
     persistBroadcastAnchor,
     claimBroadcastFailure,
     recordBroadcastDiagnostics,
@@ -164,14 +200,40 @@ async function anchoredFlow(
     return { ...transaction, status: TransactionStatus.Failure };
   }
 
-  const result = await executeTransaction(transaction.id);
-
-  // NOTE ON `result.neverSent`: it is reported (and logged by the activity) but deliberately not
-  // acted on. Clearing the anchor to allow a re-broadcast would be destructive — it hides a tx
-  // that may be in a mempool from the verifier, which is #339 itself — and it is unnecessary:
-  // an unknown outcome keeps the anchor, so the verifier settles the row either way. The flag
-  // earns its place as a diagnostic that separates "we never reached the node" from "we reached
-  // it and heard nothing back".
+  // The activity only RETURNS an answer a re-send cannot improve on: success, a CheckTx
+  // rejection, or sdk code 32 (sequence already consumed — handled by the tail branch below).
+  // Anything else (node unreachable, connection dropped mid-request, mempool full) makes it throw
+  // a retryable failure so Temporal re-broadcasts the same bytes; see the activity for why that
+  // is safe. Landing here in the catch means every attempt ended that way — including the last
+  // attempt timing out at startToCloseTimeout, which is the archetypal "node accepted the
+  // connection and never answered" case. The anchor is already persisted and the row is still
+  // `pending`, so it sits in listPendingWithHash's queue and the verifier settles it against the
+  // chain. The anchor is never rolled back: clearing a hash for a tx that might be in a mempool
+  // would hide it from the verifier, which is #339 itself.
+  let result: Awaited<ReturnType<typeof executeTransaction>>;
+  try {
+    result = await executeTransaction(transaction.id);
+  } catch (error) {
+    const unknown = broadcastOutcomeUnknown(error);
+    if (!unknown) throw error;
+    log.warn('ExecuteTransaction: broadcast outcome unknown after every attempt, handing to verifier', {
+      transactionId,
+      hash,
+      executionHeight: txHeight,
+      neverSent: unknown.neverSent,
+      code: unknown.code,
+      message: unknown.message,
+    });
+    // Record the transport error for triage — without this the reason is lost, and a later
+    // verdict would read only the verifier's generic "validity bound covered" text.
+    await recordBroadcastDiagnostics(transactionId, {
+      code: unknown.code,
+      log: unknown.neverSent
+        ? `node unreachable on every broadcast attempt (awaiting verification)${unknown.message ? `: ${unknown.message}` : ''}`
+        : unknown.message || 'broadcast outcome unknown (awaiting verification)',
+    });
+    return { ...transaction, hash, executionHeight: txHeight };
+  }
 
   // Only a deterministic CheckTx rejection ON THE FIRST ATTEMPT is proof of failure. A retry
   // re-broadcasts identical bytes, and if the earlier attempt already landed the tx, the node
@@ -222,15 +284,15 @@ async function anchoredFlow(
     return { ...transaction, hash, executionHeight: txHeight };
   }
 
-  // Outcome unknown. The anchor is already persisted and the row is still `pending`, so it sits
-  // in listPendingWithHash's queue and the verifier settles it against the chain. Record the
-  // transport error for triage — without this the reason is lost, and a later verdict would
-  // read only the verifier's generic "validity bound covered" text.
-  log.warn('ExecuteTransaction: broadcast outcome unknown, handing to verifier', {
+  // The one indeterminate answer the activity RETURNS rather than retries: sdk code 32, sequence
+  // already consumed (the tx landed on an earlier attempt, or the signer used a stale sequence).
+  // A re-send cannot change it, so it comes here: keep the anchor, record the reason, and let the
+  // verifier settle it by hash or by the sequence rule. Any other returned shape with neither
+  // flag gets the same treatment.
+  log.warn('ExecuteTransaction: broadcast answer indeterminate, handing to verifier', {
     transactionId,
     hash,
     executionHeight: txHeight,
-    isTimeout: result.isTimeout,
     code: result.code,
     message: result.message,
   });
@@ -248,20 +310,29 @@ async function anchoredFlow(
  * runs already recorded. Delete it (with `getTxTimeoutHeight`) once no pre-upgrade run can exist.
  *
  * Note these runs are not stuck with the old bug: activities are never version-pinned, so this
- * path calls the fixed `sendTransaction`, which now always returns a locally derived hash. The
- * `!result.transactionHash` branch below therefore no longer fires on a transport failure — the
- * row gets its hash and the verifier settles it, which is the substance of the #339 fix.
+ * path calls the fixed `executeTransaction`. A definitive answer comes back with a locally derived
+ * hash, so the `!result.transactionHash` branch below no longer fires. An unknown outcome makes
+ * the activity throw (after its retries), and this flow MUST catch that and anchor the row rather
+ * than let the run fail: an earlier attempt may already have put the bytes on chain (the upgrade
+ * itself kills in-flight activities, which is exactly how a run gets here), and a failed run is
+ * relaunched by the child's retry policy as a fresh run with no hash — one that would re-send as
+ * activity attempt 1 and could trust a CheckTx rejection (e.g. code 5 once the stake drained the
+ * balance below the fee) as proof of failure, releasing the provider's keys while the stake is
+ * on-chain. Anchoring in the catch is replay-safe: no pre-upgrade history holds a command after a
+ * failed executeTransaction, so the new commands extend the history rather than contradict it.
  */
 async function legacyFlow(
   activities: ProxiedActivities,
+  { executeTransaction }: BroadcastActivity,
   transaction: TransactionRow,
   txHeight: number,
   transactionId: number,
 ) {
   const {
     updateTransaction,
-    executeTransaction,
     getTxTimeoutHeight,
+    persistBroadcastAnchor,
+    recordBroadcastDiagnostics,
     notifyProviderOfFailedStakes,
     notifyUserOfFailedTransaction,
   } = activities;
@@ -279,7 +350,32 @@ async function legacyFlow(
     return { ...transaction, status: TransactionStatus.Failure };
   }
 
-  const result = await executeTransaction(transaction.id);
+  let result: Awaited<ReturnType<typeof executeTransaction>>;
+  try {
+    result = await executeTransaction(transaction.id);
+  } catch (error) {
+    // See the docblock: the bytes may be on chain from an earlier attempt, so this row must get
+    // its hash now, in THIS run, and go to the verifier — never to a fresh run that would re-send
+    // as attempt 1. persistBroadcastAnchor derives the hash from the signed bytes, so it does not
+    // depend on the failure carrying one (a timed-out last attempt does not).
+    const unknown = broadcastOutcomeUnknown(error);
+    if (!unknown) throw error;
+    const hash = await persistBroadcastAnchor(transactionId, txHeight);
+    if (!hash) throw error;
+    log.warn('ExecuteTransaction (legacy): broadcast outcome unknown after every attempt, anchored for the verifier', {
+      transactionId,
+      hash,
+      executionHeight: txHeight,
+      neverSent: unknown.neverSent,
+      code: unknown.code,
+      message: unknown.message,
+    });
+    await recordBroadcastDiagnostics(transactionId, {
+      code: unknown.code,
+      log: unknown.message || 'broadcast outcome unknown (awaiting verification)',
+    });
+    return { ...transaction, hash, executionHeight: txHeight };
+  }
   if (!result) {
     throw new ApplicationFailure("Transaction execution failed", "fatal_error", true);
   }
@@ -306,4 +402,39 @@ async function legacyFlow(
   });
 
   return { ...transaction, hash: result.transactionHash, executionHeight: txHeight };
+}
+
+/**
+ * Recognises "the broadcast ended without an answer" once the retry policy is spent. Temporal
+ * wraps the LAST attempt's failure in an ActivityFailure: either the activity's own retryable
+ * ApplicationFailure, or a TimeoutFailure when that attempt hit startToCloseTimeout (a node
+ * that took the connection and never replied — the tx may well be in its mempool). Both are
+ * the unknown class. Returns the detail carried, or null for any other error (which must
+ * propagate: a deterministic activity failure has to fail the run loudly).
+ */
+function broadcastOutcomeUnknown(error: unknown): BroadcastOutcomeUnknownDetail | null {
+  if (!(error instanceof ActivityFailure)) return null;
+  const cause = error.cause;
+  if (cause instanceof TimeoutFailure) {
+    // When the last attempt timed out, the server hangs the previous attempt's failure off the
+    // TimeoutFailure; keep that answer's code/neverSent for the diagnostics when it is ours.
+    const previous = typedBroadcastDetail(cause.cause);
+    return previous
+      ? { ...previous, message: `broadcast attempt timed out; last answer: ${previous.message ?? 'none'}` }
+      : { message: `broadcast attempt timed out: ${cause.message}`, neverSent: false };
+  }
+  return typedBroadcastDetail(cause);
+}
+
+/** The detail carried by the activity's own retryable failure, or null for any other error. */
+function typedBroadcastDetail(cause: unknown): BroadcastOutcomeUnknownDetail | null {
+  if (!(cause instanceof ApplicationFailure) || cause.type !== BROADCAST_OUTCOME_UNKNOWN) return null;
+  const detail = cause.details?.[0] as Partial<BroadcastOutcomeUnknownDetail> | undefined;
+  return {
+    hash: detail?.hash,
+    code: detail?.code,
+    codespace: detail?.codespace,
+    message: detail?.message ?? cause.message,
+    neverSent: detail?.neverSent === true,
+  };
 }

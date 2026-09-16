@@ -55,18 +55,18 @@ export interface SendTransactionResult {
   code?: number;
   message?: string;
   codespace?: string;
-  isTimeout?: boolean;
   /**
    * True when the tx was definitively rejected by CheckTx / BroadcastTxError and can NEVER land
-   * on-chain (hard reject). False/undefined for dedup-success, TimeoutError, or any other case
-   * where the tx may still land. Callers must treat undefined as non-rejected.
+   * on-chain (hard reject). False/undefined for dedup-success, a transport error, or any other
+   * case where the tx may still land. Callers must treat undefined as non-rejected.
    */
   rejected?: boolean;
   /**
    * True only when we can PROVE no bytes were transmitted — the RPC connection could not be
    * established, so the broadcast never happened. Distinct from a timeout or a reset, where the
-   * node may have received and accepted the tx. Callers may safely retry (or roll back a
-   * pre-broadcast anchor) on this and only this signal.
+   * node may have received and accepted the tx. Callers may safely retry with the SAME bytes on
+   * this signal (the middleman worker retries in place; the pre-broadcast anchor is never rolled
+   * back, since a later retry may reach the node).
    */
   neverSent?: boolean;
   /** Chain head sampled immediately before signing — the lowest possible inclusion height anchor. */

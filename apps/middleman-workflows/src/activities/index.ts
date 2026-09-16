@@ -35,6 +35,7 @@ import { verifyStakeGoalState } from './verifyStakeGoalStateHelper'
 import { parseSignerAndSequence } from './parseSignerAndSequence'
 import { dispatchUserNotification } from '@/lib/notifications/dispatch'
 import { txTypeToUserEventType } from './txEventType'
+import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 
 export type Height = number
@@ -555,11 +556,13 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
   async executeTransaction(transactionId: number) {
     const transaction = await dal.transaction.getTransaction(transactionId)
     if (!transaction) {
-      throw new Error('Transaction not found')
+      // Deterministic: retrying cannot make the row appear. Non-retryable so the run fails at
+      // once instead of waiting out the broadcast retry policy's backoff.
+      throw ApplicationFailure.nonRetryable('Transaction not found', 'transaction_not_found')
     }
 
     if (!transaction.signedPayload) {
-      throw new Error('Transaction is not signed')
+      throw ApplicationFailure.nonRetryable('Transaction is not signed', 'transaction_not_signed')
     }
 
     // Which attempt this is decides whether a CheckTx rejection can be trusted. On attempt 1 no
@@ -567,45 +570,95 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     // may already have put the tx on chain, and the node is then answering about the world that tx
     // created — an insufficient-funds or sequence error that says "it already landed", not "it
     // failed". Only the verifier can tell those apart, so retries never terminalize.
-    let attempt = 1
+    //
+    // `null` = no activity context (unit tests, or a future caller outside Temporal). Attempt 1 is
+    // the only value that lets a rejection become a Failure, so an UNKNOWN attempt must never read
+    // as the first one; null falls on the safe side, "leave it for the verifier".
+    let attempt: number | null = null
     try {
       attempt = Context.current().info.attempt
     } catch {
-      // Not running inside an activity context (unit tests) — treat as the first attempt.
+      // Not running inside an activity context.
     }
 
     const result = await pocketRpcClient.sendTransaction(transaction.signedPayload)
 
     // The hash is derived locally by sendTransaction, so it is present on every outcome.
-    // What separates the three cases is success/rejected — log them apart so an operator can
-    // tell "the node refused this" from "we never heard back" in the logs.
     if (result.success) {
-      log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type })
-    } else if (result.rejected) {
+      log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type, attempt })
+      return { ...result, attempt }
+    }
+
+    if (result.rejected) {
       log.warn('transaction broadcast rejected', {
         transactionId,
         type: transaction.type,
         hash: result.transactionHash,
+        attempt,
         code: result.code,
         message: result.message,
       })
-    } else if (result.neverSent) {
-      log.warn('transaction not broadcast (RPC unreachable)', {
-        transactionId,
-        type: transaction.type,
-        message: result.message,
-      })
-    } else {
-      log.warn('transaction broadcast outcome unknown (may still land)', {
+      return { ...result, attempt }
+    }
+
+    // sdk code 32 (account sequence mismatch) is indeterminate but a re-send from here cannot
+    // change it. Usually the sequence is already consumed (too low): this tx landed on an earlier
+    // attempt, or the signer used a stale one — the verifier settles both (found by hash →
+    // success; sequence consumed by another tx → failure). More rarely it is too high, because an
+    // earlier tx from the same signer is not yet included; that one has to land first, and the
+    // verifier owns this row either way. Same handling as before this change: hand it over now
+    // instead of spending the whole retry budget re-sending bytes the chain has already judged.
+    if (result.code === 32 && result.codespace === 'sdk') {
+      log.warn('transaction broadcast answered sequence mismatch, deferring to the verifier', {
         transactionId,
         type: transaction.type,
         hash: result.transactionHash,
-        isTimeout: result.isTimeout,
+        attempt,
         message: result.message,
       })
+      return { ...result, attempt }
     }
 
-    return { ...result, attempt }
+    // No answer either way: the node was unreachable (`neverSent`), the connection dropped
+    // mid-request, or CheckTx refused the bytes for a reason that clears on its own (code 20,
+    // mempool full). Returning here would freeze the row: the workflow hands an anchored tx to
+    // the verifier and never re-sends, and a tx signed through Soothe carries no timeoutHeight,
+    // so the verifier can only fail it once the signer's sequence is consumed by some OTHER tx —
+    // which for an idle delegator is never. Throwing a retryable failure makes Temporal re-run
+    // this activity, i.e. re-broadcast the same bytes, which is safe under sendTransaction's
+    // classification: a repeat of a tx already in the mempool is refused as an unordered dedup
+    // (→ success) and one that already landed answers code 32 (→ deferred above). Once the retry
+    // policy is exhausted, both flows catch the ActivityFailure: the anchored flow records the
+    // last error on the already-anchored row, the legacy flow anchors the row then, and both
+    // leave it to the verifier.
+    log.warn(
+      result.neverSent
+        ? 'transaction not broadcast (node unreachable); will retry if attempts remain'
+        : 'transaction broadcast outcome unknown (may still land); will retry with the same bytes if attempts remain',
+      {
+        transactionId,
+        type: transaction.type,
+        hash: result.transactionHash,
+        attempt,
+        code: result.code,
+        codespace: result.codespace,
+        message: result.message,
+      },
+    )
+    throw ApplicationFailure.create({
+      type: BROADCAST_OUTCOME_UNKNOWN,
+      message: result.message ?? 'broadcast outcome unknown',
+      nonRetryable: false,
+      details: [
+        {
+          hash: result.transactionHash,
+          code: result.code,
+          codespace: result.codespace,
+          message: result.message,
+          neverSent: result.neverSent === true,
+        } satisfies BroadcastOutcomeUnknownDetail,
+      ],
+    })
   },
   /**
    * Retrieves the current block height from the RPC client.

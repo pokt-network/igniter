@@ -39,7 +39,7 @@ jest.mock('@igniter/logger', () => {
   return { getLogger: () => mk() }
 })
 
-import { PocketBlockchain } from './index'
+import { PocketBlockchain, isNeverSentTransportError } from './index'
 import { BroadcastTxError, TimeoutError } from '@cosmjs/stargate'
 import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
@@ -122,16 +122,81 @@ describe('PocketBlockchain.sendTransaction', () => {
     expect(mockBroadcastTxSync).not.toHaveBeenCalled()
   })
 
-  it('TimeoutError: rejected=false and the locally derived hash is returned', async () => {
-    mockBroadcastTxSync.mockRejectedValue(new TimeoutError('timeout waiting for commit', 'DEADBEEF'.repeat(8)))
+  // The connection was never established, so no bytes reached the node. This is the one
+  // transport failure that is provably safe to retry with the same bytes, and it is what a node
+  // outage looks like in production: the worker connects once at boot, so `getStargateClient`
+  // never fails afterwards and the error surfaces from `broadcastTxSync` itself.
+  describe('connection never established → neverSent', () => {
+    it.each([
+      ['axios shape: code on the error', Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:26657'), { code: 'ECONNREFUSED' })],
+      ['undici shape: TypeError("fetch failed") with the errno on .cause',
+        Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) })],
+      ['undici shape: AggregateError cause (several addresses tried)',
+        Object.assign(new TypeError('fetch failed'), {
+          // No `code` on the aggregate itself: the classifier has to look into `errors[0]`.
+          cause: new AggregateError([Object.assign(new Error('connect ECONNREFUSED ::1'), { code: 'ECONNREFUSED' })]),
+        })],
+      ['DNS failure', Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('getaddrinfo ENOTFOUND validator'), { code: 'ENOTFOUND' }) })],
+      ['DNS temporary failure', Object.assign(new Error('getaddrinfo EAI_AGAIN validator'), { code: 'EAI_AGAIN' })],
+    ])('%s', async (_label, thrown) => {
+      mockBroadcastTxSync.mockRejectedValue(thrown)
 
-    const bc = await createInstance()
-    const result = await bc.sendTransaction(SIGNED_PAYLOAD)
+      const bc = await createInstance()
+      const result = await bc.sendTransaction(SIGNED_PAYLOAD)
 
-    expect(result.success).toBe(false)
-    expect(result.rejected).toBe(false)
-    expect(result.isTimeout).toBe(true)
-    expect(result.transactionHash).toBe(EXPECTED_LOCAL_HASH)
+      expect(result.neverSent).toBe(true)
+      expect(result.rejected).toBe(false)
+      expect(result.success).toBe(false)
+      expect(result.transactionHash).toBe(EXPECTED_LOCAL_HASH)
+    })
+
+    it('a cosmjs TimeoutError is NOT never-sent (and broadcastTxSync cannot raise one anyway)', async () => {
+      // Pinned so nobody re-adds a timeout branch by analogy: if a polling broadcast ever threw
+      // this, the tx was submitted, so it must stay in the unknown class.
+      mockBroadcastTxSync.mockRejectedValue(new TimeoutError('timeout waiting for commit', 'DEADBEEF'.repeat(8)))
+
+      const bc = await createInstance()
+      const result = await bc.sendTransaction(SIGNED_PAYLOAD)
+
+      expect(result.neverSent).toBeUndefined()
+      expect(result.rejected).toBe(false)
+      expect(result.success).toBe(false)
+      expect(result.transactionHash).toBe(EXPECTED_LOCAL_HASH)
+      // The old dedicated branch set `isTimeout` and rewrote the message; the generic unknown
+      // branch passes the error's own text through and adds no flag.
+      expect(result).not.toHaveProperty('isTimeout')
+      expect(result.message).toBe('timeout waiting for commit')
+    })
+
+    describe('isNeverSentTransportError walks a bounded cause chain', () => {
+      const chain = (depth: number, leaf: Error): Error =>
+        depth === 0 ? leaf : Object.assign(new Error(`wrapper ${depth}`), { cause: chain(depth - 1, leaf) })
+      const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+
+      it('finds a code up to four wrappers deep', () => {
+        expect(isNeverSentTransportError(chain(4, refused))).toBe(true)
+      })
+
+      it('gives up past the depth cap rather than walking forever', () => {
+        expect(isNeverSentTransportError(chain(5, refused))).toBe(false)
+      })
+
+      it('terminates on a self-referencing cause', () => {
+        const loop = new Error('loop') as Error & { cause?: unknown }
+        loop.cause = loop
+        expect(isNeverSentTransportError(loop)).toBe(false)
+      })
+
+      it('terminates on a cyclic AggregateError (the errors[0] descent shares the depth budget)', () => {
+        const agg = new AggregateError([]) as AggregateError & { errors: unknown[] }
+        agg.errors = [agg]
+        expect(isNeverSentTransportError(agg)).toBe(false)
+
+        const root = new Error('root') as Error & { cause?: unknown }
+        root.cause = new AggregateError([root])
+        expect(isNeverSentTransportError(root)).toBe(false)
+      })
+    })
   })
 
   it('transport failure (socket reset): rejected=false and the hash still comes back', async () => {

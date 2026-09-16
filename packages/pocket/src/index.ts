@@ -245,6 +245,39 @@ export default function getQueryClient(cometClient: Comet38Client, height?: numb
 }
 
 /**
+ * Transport errors that PROVE no bytes reached the node: the TCP connection was refused or
+ * unroutable, or the host never resolved. They are the one broadcast failure class that is safe
+ * to retry with the same bytes, so `sendTransaction` reports them as `neverSent`.
+ *
+ * Shape varies by transport. cosmjs's HTTP client uses the global `fetch` on Node >= 20 (it
+ * falls back to axios on Node 18's experimental fetch), where undici surfaces a socket failure
+ * as `TypeError('fetch failed')` with the errno error on `.cause` (sometimes an `AggregateError`
+ * when several addresses were tried); under axios `.code` sits on the error itself. The chain
+ * is walked either way; the worker image is node:22, so the live path is fetch.
+ *
+ * ECONNRESET, EPIPE and "socket hang up" are deliberately excluded: the request may have been
+ * written before the connection dropped, so the node may hold the tx. Those stay unknown.
+ */
+const NEVER_SENT_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH'])
+
+export function isNeverSentTransportError(error: unknown, depth = 0): boolean {
+  let current: unknown = error
+  // Bounded walk: `depth` counts objects along the current path, and the `errors[0]` descent
+  // below continues from depth + 1 rather than restarting at 0, so a cyclic AggregateError
+  // cannot recurse without bound any more than a cyclic `cause` can. Worst case is a small
+  // binary tree of visits (< 32 objects), never an unbounded one.
+  for (; depth < 5 && current !== null && typeof current === 'object'; depth++) {
+    const { code, errors, cause } = current as { code?: unknown; errors?: unknown; cause?: unknown }
+    if (typeof code === 'string' && NEVER_SENT_ERROR_CODES.has(code)) return true
+    // AggregateError from a multi-address connect: every member failed the same way, so the
+    // first one is representative.
+    if (Array.isArray(errors) && errors.length > 0 && isNeverSentTransportError(errors[0], depth + 1)) return true
+    current = cause
+  }
+  return false
+}
+
+/**
  * A class that provides a wrapper around the StargateClient and Comet38Client for interacting with the blockchain.
  * It provides methods to connect, disconnect, get the balance, get the height, send a transaction, and retrieve transaction details.
  * It also provides methods to get the supplier address for a given address.
@@ -377,9 +410,10 @@ export class PocketBlockchain {
     const txBytes = Uint8Array.from(Buffer.from(payload, 'hex'))
 
     // Connection setup is its own failure class: if we cannot reach the node at all, nothing was
-    // transmitted. Reporting that as `neverSent` lets the caller roll back a pre-broadcast anchor
-    // and try again later, instead of stranding a tx that was never actually sent. Everything
-    // after this point may have reached the node, so none of it is safely retryable.
+    // transmitted. Reporting that as `neverSent` tells the caller a retry with the same bytes is
+    // safe (the middleman worker retries in place and never rolls its anchor back), instead of
+    // stranding a tx that was never actually sent. After boot the client is cached, so in
+    // practice a refused connection surfaces from the broadcast below and is classified there.
     let client: StargateClient
     try {
       client = await this.getStargateClient()
@@ -438,19 +472,25 @@ export class PocketBlockchain {
         }
       }
 
-      // Timeout: the node never answered, but may well have accepted the tx. Outcome UNKNOWN.
-      if (error instanceof TimeoutError) {
-        this.logger.warn('sendTransaction: RPC timeout (tx may still land, not rejected)', { transactionHash: localHash, message: error.message })
+      // The connection was never established (refused / unroutable / DNS): nothing reached the
+      // node. Same class as the connect failure above, reported the same way so the caller can
+      // retry with the same bytes. Note `broadcastTxSync` cannot throw cosmjs's TimeoutError —
+      // only the polling `broadcastTx` does — so there is no timeout branch here; a request that
+      // hung and was cut off lands in the unknown class below.
+      if (isNeverSentTransportError(error)) {
+        const err = error as { message?: string }
+        this.logger.error('sendTransaction: node unreachable, nothing was broadcast', { transactionHash: localHash, message: err.message })
         return {
           transactionHash: localHash,
           success: false,
           rejected: false,
-          isTimeout: true,
-          message: `RPC timeout waiting for broadcast confirmation — tx may still land: ${error.message}`,
+          neverSent: true,
+          message: err.message ?? 'node unreachable — nothing was broadcast',
         }
       }
 
-      // Anything else (socket reset, proxy 5xx, DNS): same unknown-outcome class as a timeout.
+      // Anything else (socket reset mid-request, proxy 5xx, malformed answer): the bytes may have
+      // reached the node, so the outcome is UNKNOWN — not rejected, not retry-safe on its own.
       const err = error as { code?: number; codespace?: string; message?: string; log?: string }
       this.logger.error('sendTransaction: broadcast failed (outcome unknown, not rejected)', { code: err.code, codespace: err.codespace, message: err.message })
       return {
