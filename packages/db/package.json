@@ -38,6 +38,11 @@
       "require": "./dist/src/middleman/schema/index.js",
       "types": "./dist/src/middleman/schema/index.d.ts"
     },
+    "./middleman/nodeQueries": {
+      "import": "./dist/src/middleman/nodeQueries.js",
+      "require": "./dist/src/middleman/nodeQueries.js",
+      "types": "./dist/src/middleman/nodeQueries.d.ts"
+    },
     "./watchdogStore": {
       "import": "./dist/src/watchdogStore.js",
       "require": "./dist/src/watchdogStore.js",

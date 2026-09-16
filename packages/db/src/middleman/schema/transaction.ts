@@ -43,6 +43,15 @@ export const transactionsTable = pgTable("transactions", {
   unsignedPayload: varchar().notNull(),
   estimatedFee: integer().notNull(),
   consumedFee: integer().notNull(),
+  // The uPOKT this transaction was created to move, for types whose payload
+  // does not carry it. MsgUnstakeSupplier has no amount, so an unstake records
+  // the suppliers' total stake at creation. Written once (at creation, or by
+  // the worker's recovery path) and never adjusted afterwards: an unstake that
+  // fails on-chain keeps the stake it intended to release, the same way a
+  // failed Stake row keeps its payload amount. Null means unknown, and readers
+  // render it as such rather than as 0. varchar (not integer) because uPOKT
+  // overflows int4 past ~2,147 POKT; matches nodes.stakeAmount.
+  amount: varchar(),
   providerFee: integer(),
   typeProviderFee: providerFeeEnum(),
   providerId: varchar().references(() => providersTable.identity),
