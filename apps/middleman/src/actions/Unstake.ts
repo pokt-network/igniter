@@ -10,6 +10,8 @@ import { requireAuth } from '@/lib/utils/actions'
 import { InsertTransaction } from '@igniter/db/middleman/schema'
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
+import { sumStakeAmountByAddresses } from '@/lib/dal/nodes'
+import { extractTransactionUnstakingSuppliers } from '@igniter/commons/transactions/extractSuppliers'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
 
@@ -92,6 +94,31 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
       estimatedFee: request.transaction.estimatedFee,
     })
 
+    // MsgUnstakeSupplier carries no amount, so "Total POKT" cannot be recovered
+    // from the payload later. Derive it now, while the suppliers are still
+    // Staked and their stakeAmount is intact. Derived server-side rather than
+    // taken from the client: the payload is authoritative about which suppliers
+    // are being unstaked, and their stake is already in our own database.
+    const unstakingSuppliers = extractTransactionUnstakingSuppliers({
+      unsignedPayload: request.transaction.unsignedPayload,
+    })
+
+    // Isolated so a display-only field can never abort the unstake. The user has
+    // already signed by this point and the dialog is past its cancellable phase,
+    // so a throw here would discard a signed transaction over a cosmetic query.
+    // Scoped to the caller as well: the payload is client-supplied, and an
+    // unscoped sum would let a crafted one total up another account's suppliers.
+    let amount: string | null = null
+
+    try {
+      amount = await sumStakeAmountByAddresses(
+        unstakingSuppliers.map((supplier) => supplier.operatorAddress),
+        { createdBy: userIdentity },
+      )
+    } catch (error) {
+      log.warn('could not derive unstake amount; storing null', { error })
+    }
+
     const created = await insert({
       type: TransactionType.Unstake,
       status: TransactionStatus.Pending,
@@ -100,12 +127,15 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
       unsignedPayload: request.transaction.unsignedPayload,
       estimatedFee: request.transaction.estimatedFee,
       consumedFee: 0,
+      amount,
       createdBy: userIdentity,
     })
 
     log.info('unstake transaction created', {
       transactionId: created.id,
       ownerAddress: request.transaction.address,
+      supplierCount: unstakingSuppliers.length,
+      amount,
     })
 
     return created

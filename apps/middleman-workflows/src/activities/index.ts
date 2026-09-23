@@ -776,6 +776,68 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
       const addresses = newlyUnstakingNodes.map(node => node.operatorAddress)
 
+      // Recover the amount for unstakes that reach here without one.
+      // MsgUnstakeSupplier carries no amount, so it can only come from the
+      // suppliers' own stake. This is a standing recovery path, not just a
+      // migration step: creation-time derivation yields null whenever a
+      // supplier's stakeAmount is not yet synced, or when the query there
+      // fails and is swallowed, so new unstakes can arrive here unset too.
+      //
+      // Note this does NOT recover historical rows: the only caller is
+      // applyVerificationDecision's apply-success path, which runs while the
+      // transaction is still pending (it can re-run on an activity retry, since
+      // effects precede the CAS) and never after the row goes terminal. So
+      // anything that already reached Success or Failure before deploy is
+      // never revisited and keeps rendering as an unknown ("—"). Recovering
+      // those needs a one-time SQL backfill, deliberately not shipped here.
+      //
+      // Isolated in its own try/catch: it runs ahead of the state transition
+      // below, and the outer catch swallows into `return []`, so a throw from
+      // this cosmetic backfill would otherwise leave the suppliers stuck in
+      // Staked while the chain has them unstaking. The catch covers throws, not
+      // latency: this is a blocking round-trip ahead of the transition inside a
+      // 120s startToCloseTimeout, so a pathological address count could still
+      // delay it. Bounded in practice by the server-action body limit on the
+      // creating request.
+      //
+      // Best-effort, not guaranteed. Nothing in THIS function destroys the
+      // stake -- updateManyNodeAndLinkToTransaction sets only `status` -- but
+      // upsertSupplierStatus runs on its own schedule and can zero stakeAmount
+      // before this activity is reached. The shared query returns null rather
+      // than 0 in that case, and the row is left as it was. A retry before the
+      // CAS gets another try; once the row goes terminal it is never revisited
+      // (see above), so a null that survives to that point is final. The
+      // readers render it as an unknown ("—"), which is the honest outcome,
+      // rather than a 0.00 indistinguishable from the bug this column fixes.
+      //
+      // Recover anything the reader will not display, not merely null. A
+      // stored value is truthy-but-useless in several shapes: '0' and '000'
+      // (zero is "not yet synced"), and any non-digit string. Checking only
+      // `!transaction.amount` would skip the rows most in need of recovery,
+      // and checking only for zero would leave a non-digit value falling back
+      // forever while never being revisited here. Tracks the reader's rule in
+      // apps/middleman/src/lib/utils/transactionValue.ts, minus its
+      // Number.isSafeInteger bound -- a total above 2^53-1 uPOKT is far beyond
+      // total supply, so it is left unrecovered rather than special-cased.
+      // Kept as a separate expression rather than a shared import: that module
+      // is bundled into the browser and must not pull in drizzle.
+      const storedAmount = transaction.amount?.trim()
+      const storedIsUsable = !!storedAmount && /^\d+$/.test(storedAmount) && Number(storedAmount) > 0
+
+      if (!storedIsUsable) {
+        try {
+          const amount = await dal.node.sumStakeAmountByAddresses(addresses, {
+            createdBy: transaction.createdBy,
+          })
+
+          if (amount !== null) {
+            await dal.transaction.updateTransaction(transaction.id, { amount })
+          }
+        } catch (error) {
+          log.warn('could not backfill unstake amount', { transactionId, error })
+        }
+      }
+
       await dal.node.updateManyNodeAndLinkToTransaction(
         addresses,
         { status: NodeStatus.Unstaking },
