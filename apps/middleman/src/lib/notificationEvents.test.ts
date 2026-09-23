@@ -1,4 +1,10 @@
-import { EVENT_LABELS, SUPPLIER_TYPES, describeEvent } from './notificationEvents'
+import {
+  EVENT_LABELS,
+  SUPPLIER_TYPES,
+  bellCardContent,
+  describeEvent,
+  eventSeverity,
+} from './notificationEvents'
 
 describe('EVENT_LABELS', () => {
   it('has a label for all 7 event types', () => {
@@ -93,5 +99,71 @@ describe('describeEvent', () => {
     expect(describeEvent('stake', { outcome: 42, address: { a: 1 } })).toBe(
       'Your stake transaction succeeded.',
     )
+  })
+})
+
+describe('eventSeverity', () => {
+  it('maps a failed outcome to error regardless of type', () => {
+    expect(eventSeverity('stake', { outcome: 'failure' })).toBe('error')
+    expect(eventSeverity('import_result', { outcome: 'failed' })).toBe('error')
+    expect(eventSeverity('service_change', { outcome: 'failure' })).toBe('error')
+  })
+
+  it('maps a successful outcome to success even for supplier-change types', () => {
+    expect(eventSeverity('stake', { outcome: 'success' })).toBe('success')
+    expect(eventSeverity('revshare_change', { outcome: 'success' })).toBe('success')
+  })
+
+  it('treats an outcome-less supplier change as warning (drift nobody asked for)', () => {
+    expect(eventSeverity('service_change', {})).toBe('warning')
+    expect(eventSeverity('revshare_change', { detail: 'Rev share changed.' })).toBe('warning')
+  })
+
+  it('treats an outcome-less non-supplier event as success', () => {
+    expect(eventSeverity('unstake', {})).toBe('success')
+  })
+
+  it('ignores a non-string outcome', () => {
+    expect(eventSeverity('service_change', { outcome: 42 })).toBe('warning')
+  })
+})
+
+describe('bellCardContent', () => {
+  it('labels a supplier event carrying outcome:success as a completed stake', () => {
+    const card = bellCardContent('service_change', { outcome: 'success', address: 'pokt1abc' })
+    expect(card.title).toBe('Stake Completed')
+    expect(card.severity).toBe('success')
+  })
+
+  it('uses the event label for a supplier config drift and flags it warning', () => {
+    const card = bellCardContent('revshare_change', { detail: 'Rev share changed.' })
+    expect(card.title).toBe(EVENT_LABELS['revshare_change'])
+    expect(card.severity).toBe('warning')
+    expect(card.description).toBe('Rev share changed.')
+  })
+
+  it('falls back to a generic title for an unknown event type', () => {
+    expect(bellCardContent('nope', {}).title).toBe('Notification')
+  })
+
+  it('deep-links a supplier event to its batch in Recent Changes', () => {
+    expect(bellCardContent('service_change', { batchId: 'batch-1' }).href).toBe(
+      '/app/suppliers?highlightBatch=batch-1',
+    )
+  })
+
+  it('falls back to the plain suppliers list when the batch id is missing', () => {
+    expect(bellCardContent('service_change', {}).href).toBe('/app/suppliers')
+    expect(bellCardContent('service_change', { batchId: 7 }).href).toBe('/app/suppliers')
+  })
+
+  it('gives non-supplier events no deep-link', () => {
+    expect(bellCardContent('stake', { outcome: 'success' }).href).toBeUndefined()
+    expect(bellCardContent('import_result', { outcome: 'failed', error: 'boom' }).href).toBeUndefined()
+  })
+
+  it('carries the same description the history table renders', () => {
+    const meta = { outcome: 'failure' }
+    expect(bellCardContent('stake', meta).description).toBe(describeEvent('stake', meta))
   })
 })

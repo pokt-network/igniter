@@ -160,13 +160,28 @@ export async function getNotificationEvent(uuid: string): Promise<NotificationEv
   return event ?? null
 }
 
+// The bell panel shows the newest few unread events; the rest are reached
+// through "View all". Anything larger turns the dropdown into a scroll surface
+// that duplicates the notifications page.
+const BELL_FEED_LIMIT = 6
+
 export async function listUnviewedNotificationEvents(): Promise<NotificationEvent[]> {
   return getDb()
     .select()
     .from(notificationEventsTable)
     .where(isNull(notificationEventsTable.viewedAt))
     .orderBy(desc(notificationEventsTable.createdAt))
-    .limit(20)
+    .limit(BELL_FEED_LIMIT)
+}
+
+// True unread total. `listUnviewedNotificationEvents` is capped at BELL_FEED_LIMIT
+// for the panel, so the bell badge needs its own count or it would under-report.
+export async function countUnviewedNotificationEvents(): Promise<number> {
+  const [row] = await getDb()
+    .select({ total: count() })
+    .from(notificationEventsTable)
+    .where(isNull(notificationEventsTable.viewedAt))
+  return row?.total ?? 0
 }
 
 export async function markNotificationEventsViewed(ids: number[]): Promise<void> {

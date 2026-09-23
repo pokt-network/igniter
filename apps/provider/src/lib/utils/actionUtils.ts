@@ -10,6 +10,7 @@ import {
   success,
   error,
 } from '@igniter/ui/lib/actionResult'
+import { describeDatabaseFailure } from '@igniter/db/errors'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
 
@@ -78,12 +79,22 @@ export async function withAuth<T>(
       const result = await action(authResult.data)
       return success(result)
     } catch (err) {
-      log.error('server action failed', { error: err })
+      // `cause` carries the driver's own error — the SQLSTATE and its detail
+      // line — which the wrapper's message does not include.
+      log.error('server action failed', { error: err, cause: (err as Error)?.cause })
 
       if (err instanceof Error) {
         // Check for known error types
         if (err.message === 'Unauthorized' || err.message === 'Not logged in') {
           return error('UNAUTHORIZED', err.message)
+        }
+        // Database errors before the generic pass-through: their message is the
+        // statement and its bound parameters (drizzle's DrizzleQueryError), or a
+        // connection detail, so forwarding it would ship the schema, the values,
+        // or the host to the browser.
+        const dbFailure = describeDatabaseFailure(err)
+        if (dbFailure) {
+          return error(dbFailure.code, dbFailure.message)
         }
         if (err.message.includes('validation') || err.message.includes('Invalid')) {
           return error('VALIDATION_ERROR', err.message)

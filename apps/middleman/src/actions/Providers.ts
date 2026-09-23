@@ -4,6 +4,7 @@ import {countProviders, list, listAll, upsertProviders, applyGovernanceSync, get
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser, requireAuth } from '@/lib/utils/actions'
+import { describeDatabaseFailure } from '@igniter/db/errors'
 import {ProviderStatus, UserRole} from "@igniter/db/middleman/enums";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { getLogger } from '@igniter/logger'
@@ -26,6 +27,20 @@ const updateProvidersSchema = z.object({
 
 const GOVERNANCE_SYNC_SCHEDULE_ID = 'GovernanceSync-scheduled'
 
+// These two actions answer the browser with their own `{ success, error }` shape
+// instead of throwing to the action wrapper, so the wrapper's database-error
+// mapping never sees them. Apply the same mapping here: a drizzle failure would
+// otherwise send "Failed query: <sql> params: <values>" to the client. When
+// `fallback` is given it replaces the raw message for non-database errors too,
+// for callers whose failures come from infrastructure (Temporal) rather than
+// from something the user can act on.
+function clientSafeMessage(error: unknown, fallback?: string): string {
+  const dbFailure = describeDatabaseFailure(error)
+  if (dbFailure) return dbFailure.message
+  if (fallback) return fallback
+  return error instanceof Error ? error.message : 'Unknown error occurred'
+}
+
 export async function TriggerGovernanceSync(): Promise<{ success: boolean, error?: string }> {
   return runWithRequestContext(async () => {
     try {
@@ -38,9 +53,11 @@ export async function TriggerGovernanceSync(): Promise<{ success: boolean, error
       return { success: true }
     } catch (error) {
       log.error('governance sync trigger failed', { error })
+      // A gRPC failure here names the Temporal host and port; the full error is
+      // in the log above, the browser only needs to know the trigger did not run.
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: clientSafeMessage(error, 'Could not trigger the governance sync. Check the workflow service.'),
       }
     }
   })
@@ -111,10 +128,7 @@ export async function SyncProvidersFromGovernance(): Promise<{ success: boolean;
       return { success: true, data: providers }
     } catch (error) {
       log.error('governance sync failed', { error })
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      }
+      return { success: false, error: clientSafeMessage(error) }
     }
   })
 }
