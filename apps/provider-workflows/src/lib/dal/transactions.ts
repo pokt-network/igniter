@@ -34,7 +34,7 @@ export default class Transactions {
 
   /**
    * Dispatcher queue: IDs for ALL pending rows (with OR without hash) — the child's
-   * guard decides sign-vs-broadcast. Project at the DB boundary so decrypted
+   * guard decides sign-vs-broadcast. Project at the DB boundary so sensitive
    * transaction params (including signerPrivateKey) never enter the dispatcher's history.
    */
   async listPending(): Promise<{ id: number }[]> {
