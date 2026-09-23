@@ -10,6 +10,8 @@ import {MsgStakeSupplier, MsgUnstakeSupplier} from "@igniter/pocket/proto/pocket
 import { AuthInfo, TxBody, TxRaw } from '@igniter/pocket/proto/cosmos/tx/v1beta1/tx'
 import {PubKey} from "@igniter/pocket/proto/cosmos/crypto/secp256k1/keys";
 import {MsgSend} from "@igniter/pocket/proto/cosmos/bank/v1beta1/tx";
+import {MsgBeginRedelegate, MsgDelegate, MsgUndelegate} from "@igniter/pocket/proto/cosmos/staking/v1beta1/tx";
+import {MsgWithdrawDelegatorReward} from "@igniter/pocket/proto/cosmos/distribution/v1beta1/tx";
 import { WalletConnection, WalletSettings } from './WalletConnection'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
@@ -261,6 +263,14 @@ export class KeplrWalletConnection extends WalletConnection {
         return MsgStakeSupplier.decode(message.value)
       case '/pocket.supplier.MsgUnstakeSupplier':
         return MsgUnstakeSupplier.decode(message.value)
+      case '/cosmos.staking.v1beta1.MsgDelegate':
+        return MsgDelegate.decode(message.value)
+      case '/cosmos.staking.v1beta1.MsgUndelegate':
+        return MsgUndelegate.decode(message.value)
+      case '/cosmos.staking.v1beta1.MsgBeginRedelegate':
+        return MsgBeginRedelegate.decode(message.value)
+      case '/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward':
+        return MsgWithdrawDelegatorReward.decode(message.value)
       default:
         throw new Error(`Unknown message type: ${message.typeUrl}`)
     }

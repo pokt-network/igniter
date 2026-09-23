@@ -21,7 +21,10 @@ export default function CurrentUser() {
   const {
     getChain,
     switchChain,
-    clearConnectedIdentity
+    clearConnectedIdentity,
+    activeAddress,
+    setActiveAddress,
+    connectedIdentities,
   } = useWalletConnection();
 
   const authenticateUser = async (
@@ -84,7 +87,12 @@ export default function CurrentUser() {
 
   if (status === "authenticated") {
     return (
-      <UserMenu user={data.user}>
+      <UserMenu
+        user={data.user}
+        activeAddress={activeAddress}
+        addresses={connectedIdentities}
+        onSelectAddress={setActiveAddress}
+      >
         {!isLanding && (
           <a href={Routes.root}>
             <DropdownMenuItem className="max-h-[38px]">
