@@ -81,6 +81,25 @@ export default class Transaction {
   }
 
   /**
+   * Diagnostics-only write (code/log) that applies ONLY while the row is still pending.
+   * The status predicate is the point: an anchored row is visible to the verifier from the
+   * moment it is written, so an unguarded update from the broadcaster could overwrite the
+   * code/log of a verdict the verifier already reached.
+   */
+  async recordPendingDiagnostics(
+    transactionId: number,
+    fields: { code?: number; log?: string },
+  ): Promise<void> {
+    await this.dbClient.db
+      .update(transactionsTable)
+      .set(fields)
+      .where(and(
+        eq(transactionsTable.id, transactionId),
+        eq(transactionsTable.status, TransactionStatus.Pending),
+      ));
+  }
+
+  /**
    * Pending-path counter/coverage update (no status change). Drizzle skips
    * `undefined` set fields, so passing `undefined` leaves a column untouched.
    */
