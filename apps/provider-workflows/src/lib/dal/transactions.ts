@@ -33,13 +33,13 @@ export default class Transactions {
   }
 
   /**
-   * Dispatcher queue: ALL pending rows (with OR without hash) — the child's
-   * guard decides sign-vs-broadcast.
+   * Dispatcher queue: IDs for ALL pending rows (with OR without hash) — the child's
+   * guard decides sign-vs-broadcast. Project at the DB boundary so decrypted
+   * transaction params (including signerPrivateKey) never enter the dispatcher's history.
    */
-  async listPending(): Promise<number[]> {
-    const rows = await this.dbClient.db.select({ id: transactionsTable.id }).from(transactionsTable)
+  async listPending(): Promise<{ id: number }[]> {
+    return this.dbClient.db.select({ id: transactionsTable.id }).from(transactionsTable)
       .where(eq(transactionsTable.status, TransactionStatus.Pending))
-    return rows.map(({ id }) => id)
   }
 
   /**

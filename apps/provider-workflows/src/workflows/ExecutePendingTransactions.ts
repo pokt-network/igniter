@@ -12,8 +12,8 @@ export async function ExecutePendingTransactions() {
     retry: { maximumAttempts: 3 },
   })
 
-  const transactionIds = await listPending()
-  if (transactionIds.length === 0) {
+  const txs = await listPending()
+  if (txs.length === 0) {
     log.debug('ExecutePendingTransactions: no pending transactions')
     return
   }
@@ -21,12 +21,12 @@ export async function ExecutePendingTransactions() {
   const limit = pLimit(MAX_CONCURRENT)
 
   const results = await Promise.allSettled(
-    transactionIds.map((transactionId) =>
+    txs.map((t) =>
       limit(() => {
-        const workflowId = `ExecuteTransaction-${transactionId}`
+        const workflowId = `ExecuteTransaction-${t.id}`
         return executeChild('ExecuteTransaction', {
           workflowId,
-          args: [{ transactionId }],
+          args: [{ transactionId: t.id }],
           workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE_FAILED_ONLY,
           parentClosePolicy: ParentClosePolicy.ABANDON,
           retry: { maximumAttempts: 5 },
