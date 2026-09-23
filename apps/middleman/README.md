@@ -81,9 +81,13 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | `BLOCKCHAIN_PROTOCOL` | Required | Protocol version (`shannon`) | `shannon` |
 | `OWNER_IDENTITY` | Required | POKT bech32 wallet address of the Middleman owner — must be a valid `pokt1...` address. Used to restrict pre-bootstrap login via SIWP | `pokt1abc123...` |
 | `OWNER_EMAIL` | Required | Email address for the owner account | `delegator@example.com` |
-| `APP_IDENTITY` | Required | Hex-encoded private key used by Middleman for governance signing | *(your private key hex)* |
+| `APP_IDENTITY` | Required | Hex-encoded private key used by Middleman for governance signing. **Use a dedicated key that holds no funds** — see the note below | `openssl rand -hex 32` |
 | `MINIMUM_STAKE_BUFFER` | Optional | Buffer subtracted from minimum on-chain stake to allow nodes to operate after slashes, in uPOKT | `500000000` |
 | `PROVIDERS_CDN_URL` | Optional | CDN URL template for fetching the list of available providers. Used by bootstrap-seed and the `GovernanceSync` Temporal workflow (in middleman-workflows). `{chainId}` is replaced at runtime with `CHAIN_ID` | `https://raw.githubusercontent.com/pokt-network/igniter-governance/refs/heads/main/{chainId}/provider.json` |
+
+> **`APP_IDENTITY` must be a dedicated key that holds no funds.** Generate a fresh one with `openssl rand -hex 32`; never reuse the private key of a wallet you hold POKT in, and never send funds to the address it derives.
+>
+> Three reasons. It is stored as **plaintext** in the container environment, so anyone who can read the environment or the `.env` file holds the key outright. Its public key is **published in the governance registry**, so the address derived from it is public and permanently linked to your instance. And it signs payloads as `sha256(utf8(payload))` — the same construction Cosmos uses for amino-JSON transactions — so any future endpoint that signs caller-supplied data would turn a funded key into a drainable one. No such endpoint exists today, which is exactly why the key should be worthless before one is ever added.
 
 > **Note:** `PROVIDERS_CDN_URL` must be set in both the middleman app (for bootstrap) and middleman-workflows (for the scheduled GovernanceSync workflow). In local Tilt development, both are automatically overridden to use the local `governance-nginx` service.
 

@@ -14,7 +14,7 @@ import Sidebar from "@/app/components/Sidebar";
 import { Toaster } from "@igniter/ui/components/sonner";
 import QueryClientProvider from '@igniter/ui/context/QueryClientProvider';
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins';
-import NotificationsProvider from '@igniter/ui/context/Notifications/index';
+import NotificationBellFeed from "@/app/components/NotificationBellFeed";
 import QuickDetailProvider from "@/app/detail/QuickDetailProviderBridge";
 import { ThemeToggle } from "@igniter/ui/theme-toggle";
 
@@ -59,24 +59,23 @@ export default function RootLayout({
                   <CurrencyContextProvider>
                     <SidebarProvider className="flex flex-col h-dvh overflow-hidden">
                       <QuickDetailProvider>
-                        <NotificationsProvider>
-                          <AppTopBar leading={<SidebarTriggerGate />}>
-                            <CurrentUser />
-                            <ThemeToggle />
-                          </AppTopBar>
-                          <div className="flex flex-1 min-h-0">
-                            <Sidebar />
-                            <SidebarInset className={'transition-none !min-h-0'}>
-                              <div className={"w-full h-full flex overflow-x-hidden"}>
-                                <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-full transition-none">
-                                  <RegisterPlugins />
-                                  {children}
-                                  <Toaster />
-                                </div>
+                        <AppTopBar leading={<SidebarTriggerGate />}>
+                          <CurrentUser />
+                          <ThemeToggle />
+                          <NotificationBellFeed />
+                        </AppTopBar>
+                        <div className="flex flex-1 min-h-0">
+                          <Sidebar />
+                          <SidebarInset className={'transition-none !min-h-0'}>
+                            <div className={"w-full h-full flex overflow-x-hidden"}>
+                              <div className="flex flex-col gap-6 flex-1 overflow-y-auto scrollbar-hidden w-full transition-none">
+                                <RegisterPlugins />
+                                {children}
+                                <Toaster />
                               </div>
-                            </SidebarInset>
-                          </div>
-                        </NotificationsProvider>
+                            </div>
+                          </SidebarInset>
+                        </div>
                       </QuickDetailProvider>
                     </SidebarProvider>
                   </CurrencyContextProvider>

@@ -13,19 +13,20 @@ import {
   MarkNotificationEventsViewed,
   MarkAllNotificationEventsViewed,
 } from '@/actions/NotificationChannels'
+import { notify } from '@igniter/ui/lib/sessionMessages'
 import type { ProviderQuickDetailItem } from '@/app/admin/details/types'
 import type { NotificationEvent, NotificationEventMetadata } from '@igniter/db/provider/schema'
-import { NOTIFICATION_EVENT_TYPES, NotificationChannelType } from '@igniter/db/provider/enums'
-import { NOTIFICATION_EVENT_LABELS, REMEDIATION_REASON_LABELS } from '@/lib/constants'
+import { NOTIFICATION_EVENT_TYPES } from '@igniter/db/provider/enums'
+import {
+  NOTIFICATION_EVENT_LABELS,
+  NOTIFICATION_EVENT_SEVERITY,
+  REMEDIATION_REASON_LABELS,
+} from '@/lib/constants'
 
-// Event-type + channel dropdown options for the history filters.
+// Event-type dropdown options for the history filter.
 const EVENT_TYPE_OPTIONS = NOTIFICATION_EVENT_TYPES.map((t) => ({
   value: t,
   label: NOTIFICATION_EVENT_LABELS[t as keyof typeof NOTIFICATION_EVENT_LABELS] ?? t,
-}))
-const CHANNEL_OPTIONS = Object.values(NotificationChannelType).map((t) => ({
-  value: t,
-  label: t.charAt(0).toUpperCase() + t.slice(1),
 }))
 
 function metadataSummary(type: string, metadata: NotificationEventMetadata | null | undefined): string {
@@ -65,11 +66,21 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
   const queryClient = useQueryClient()
   const addItem = useAddItemToDetail<ProviderQuickDetailItem>()
   const uuidParam = searchParams.get('uuid')
+  // Guards against re-opening the drawer on a re-render while `?uuid=` is still
+  // on the URL. Re-armed as soon as the param clears (below), so a second
+  // deep-link raised on this same mounted page opens again — the bell's "View
+  // details" is clicked from here as often as from anywhere else, and a
+  // mount-lifetime latch would swallow every click after the first.
   const deepLinkOpened = useRef(false)
 
   const invalidateViewed = () => {
     queryClient.invalidateQueries({ queryKey: ['unviewed-notification-events'] })
+    queryClient.invalidateQueries({ queryKey: ['unviewed-notification-count'] })
     queryClient.invalidateQueries({ queryKey: ['notification-events'] })
+    // The deep-link row too: it caches `viewedAt`, and a second visit to the same
+    // ?uuid= within its cache lifetime would otherwise replay off the stale copy —
+    // opening a duplicate drawer entry and re-stamping an event already marked.
+    queryClient.invalidateQueries({ queryKey: ['notification-event-deeplink'] })
   }
 
   // Deep-link: open the drawer when navigating with ?uuid= (e.g. from an email).
@@ -84,24 +95,43 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
   })
 
   useEffect(() => {
-    if (deepLinkEvent && !deepLinkOpened.current) {
-      deepLinkOpened.current = true
-      addItem({ type: 'notification', body: deepLinkEvent })
-      if (!deepLinkEvent.viewedAt) {
-        MarkNotificationEventsViewed([deepLinkEvent.id]).then(invalidateViewed)
-      }
-      const params = new URLSearchParams(searchParams.toString())
-      params.delete('uuid')
-      router.replace(`?${params.toString()}`, { scroll: false })
+    if (!uuidParam) {
+      deepLinkOpened.current = false
+      return
     }
-  }, [deepLinkEvent])
+    if (!deepLinkEvent || deepLinkOpened.current) return
+    deepLinkOpened.current = true
+    addItem({ type: 'notification', body: deepLinkEvent })
+    if (!deepLinkEvent.viewedAt) {
+      MarkNotificationEventsViewed([deepLinkEvent.id]).then(invalidateViewed)
+    }
+    // Strip the param so the URL is not a stale deep-link, and so the guard
+    // above re-arms for the next one.
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('uuid')
+    const query = params.toString()
+    router.replace(query ? `?${query}` : '?', { scroll: false })
+  }, [uuidParam, deepLinkEvent])
 
   const openEvent = (event: NotificationHistoryEvent) => {
     // At runtime the row IS the full provider NotificationEvent (listEvents
     // returns them); the shared table only exposes the common subset.
     addItem({ type: 'notification', body: event as unknown as NotificationEvent })
     if (!event.viewedAt) {
-      MarkNotificationEventsViewed([event.id]).then(invalidateViewed)
+      void MarkNotificationEventsViewed([event.id])
+        .then((result) => {
+          if (!result.success) throw new Error(result.error.message)
+          invalidateViewed()
+        })
+        .catch((err) => {
+          // Same rule as the bell's ✕: a mark-read that did not persist has to
+          // say so, or the row comes back unread and the click looks broken.
+          notify.error('Could not mark this notification as read.', {
+            id: `mark-read-error-${event.id}`,
+            description: err instanceof Error ? err.message : undefined,
+          })
+          invalidateViewed()
+        })
     }
   }
 
@@ -109,7 +139,6 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
     <NotificationHistory
       enableSearch
       eventTypeOptions={EVENT_TYPE_OPTIONS}
-      channelOptions={CHANNEL_OPTIONS}
       onMarkAllViewed={onMarkAllViewed}
       onOpenEvent={openEvent}
       renderChannelIcon={(type) => <NotificationChannelIcon type={type} className="h-3 w-3 shrink-0" />}
@@ -117,13 +146,19 @@ export function NotificationEventsSection({ onMarkAllViewed }: NotificationEvent
         NOTIFICATION_EVENT_LABELS[type as keyof typeof NOTIFICATION_EVENT_LABELS] ?? type
       }
       summaryFor={(type, metadata) => metadataSummary(type, metadata as NotificationEventMetadata)}
+      severityFor={(type) =>
+        NOTIFICATION_EVENT_SEVERITY[type as keyof typeof NOTIFICATION_EVENT_SEVERITY] ?? 'info'
+      }
       listEvents={async (page, pageSize, filters) => {
         const result = await ListNotificationEvents(page, pageSize, filters)
         if (!result.success) throw new Error(result.error.message)
         return result.data
       }}
       markAllViewed={async () => {
-        await MarkAllNotificationEventsViewed()
+        const result = await MarkAllNotificationEventsViewed()
+        // Throws into `NotificationHistory`'s handler so the table reports it
+        // rather than silently leaving every row unread.
+        if (!result.success) throw new Error(result.error.message)
       }}
     />
   )

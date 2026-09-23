@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
+    "./errors": {
+      "import": "./dist/src/errors.js",
+      "require": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts"
+    },
     "./connection": {
       "import": "./dist/src/connection.js",
       "require": "./dist/src/connection.js",
