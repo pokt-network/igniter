@@ -1,0 +1,40 @@
+name: PR Title
+
+# Split out of ci.yml so a rename re-runs it. CI only listens to the default
+# pull_request types (opened, synchronize, reopened), so a title edited after
+# the PR was opened — which is exactly what prepare-release does to the release
+# PR when the release:* label lands — left the first, failing result stuck to
+# the head SHA with nothing to supersede it. `edited` fires on that rename;
+# keeping this job out of CI means it does not drag the four image builds along.
+on:
+  pull_request:
+    branches: ["*"]
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-title-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            refactor
+            chore
+            docs
+            test
+            ci
+            perf
+            style
+            build
+            revert
