@@ -3,6 +3,8 @@ import type {InsertNode, InsertTransactionsToNodesRelation} from "@igniter/db/mi
 import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
+import { createNodeQueries } from '@igniter/db/middleman/nodeQueries'
+import type { NodeQueries, SumStakeAmountOptions } from '@igniter/db/middleman/nodeQueries'
 import {Node as NodeModel, Provider as ProviderModel} from '@igniter/db/middleman/schema'
 import {
   and,
@@ -20,6 +22,7 @@ export type NodesMinMax = { total: number, minId: number, maxId: number }
 
 export default class Node {
   logger: Logger
+  private queries: NodeQueries
 
   dbClient: DBClient<typeof schema>
 
@@ -32,6 +35,7 @@ export default class Node {
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
     this.dbClient = dbClient
+    this.queries = createNodeQueries(dbClient.db)
   }
 
   /**
@@ -202,6 +206,19 @@ export default class Node {
 
       return insertedNodes;
     });
+  }
+
+  /**
+   * Total stake (uPOKT) held by the given supplier addresses.
+   *
+   * Thin binder over the shared query in @igniter/db so the worker and the app
+   * cannot drift; see createNodeQueries for the null-vs-string contract.
+   */
+  async sumStakeAmountByAddresses(
+    addresses: Array<string>,
+    options: SumStakeAmountOptions,
+  ): Promise<string | null> {
+    return this.queries.sumStakeAmountByAddresses(addresses, options)
   }
 
   /**

@@ -22,13 +22,16 @@ export type Transaction = {
     operations: Array<Operation>;
     executionHeight: string;
     createdAt: Date;
-    totalValue: number;
+    // null: an Unstake whose amount was never recorded. Rendered as an unknown,
+    // never as 0.00 (see resolveTransactionTotalValue).
+    totalValue: number | null;
     hash: string | null,
     estimatedFee: number,
     consumedFee?: number,
     provider: string,
     providerFee?: number | null,
     typeProviderFee?: ProviderFee | null,
+    amount?: string | null,
     log?: string | null,
     code?: number | null,
 };
@@ -122,18 +125,30 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
     {
         accessorKey: "totalValue",
         header: "Total POKT",
+        // Explicit: tanstack's default `basic` compare is not a total order once
+        // null is in the column (it returns -1 for BOTH (null, 0) and (0, null)),
+        // so unknown amounts could interleave with zero ones. Unknown is treated as
+        // the smallest value: last under the default descending Amount sort, first
+        // if the user flips it to ascending.
+        sortingFn: (a, b) => {
+            const av = a.getValue<number | null>("totalValue") ?? -1;
+            const bv = b.getValue<number | null>("totalValue") ?? -1;
+            return av === bv ? 0 : av > bv ? 1 : -1;
+        },
         meta: {
             headerAlign: 'right'
         },
         cell: ({ row }) => {
-            const totalValue = row.getValue("totalValue") as number;
+            const totalValue = row.getValue("totalValue") as number | null;
             return (
                 <div className="flex items-baseline gap-3 font-mono justify-end">
-                    <Amount value={amountToPokt(totalValue)} />
+                    {totalValue === null
+                        ? <span className="text-text-tertiary" title="Amount not recorded">—</span>
+                        : <Amount value={amountToPokt(totalValue)} />}
                 </div>
             );
         },
-        csvFormatterFn: item => amountToPokt(item.totalValue.toString()).toString(),
+        csvFormatterFn: item => item.totalValue === null ? '' : amountToPokt(item.totalValue.toString()).toString(),
     },
     {
         id: "actions",
@@ -161,6 +176,7 @@ export const columns: (ColumnDef<Transaction> & CsvColumnDef<Transaction>)[] = [
                                     provider: row.original.provider,
                                     providerFee: row.original.providerFee,
                                     typeProviderFee: row.original.typeProviderFee,
+                                    amount: row.original.amount ?? null,
                                     log: row.original.log,
                                     code: row.original.code,
                                 }
