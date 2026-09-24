@@ -1,5 +1,6 @@
 import {
   ApplicationFailure,
+  Context,
   heartbeat,
   log,
   sleep,
@@ -24,6 +25,7 @@ import { extractTransactionStakingSuppliers, extractTransactionUnstakingSupplier
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
+import { deriveTxHash } from '@igniter/pocket'
 import type { VerificationDecision, SupplierPathOutcome } from '@igniter/tx-verify'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 import { STAKE_TYPE_URL, UNSTAKE_TYPE_URL } from '@/lib/constants'
@@ -33,6 +35,7 @@ import { verifyStakeGoalState } from './verifyStakeGoalStateHelper'
 import { parseSignerAndSequence } from './parseSignerAndSequence'
 import { dispatchUserNotification } from '@/lib/notifications/dispatch'
 import { txTypeToUserEventType } from './txEventType'
+import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 
 export type Height = number
@@ -490,35 +493,172 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     return await dal.transaction.updateTransaction(transactionId, payload)
   },
   /**
-   * Executes a transaction based on the given transaction ID.
+   * Writes the broadcast anchor BEFORE any bytes are sent: the locally derived hash, the height
+   * sampled pre-broadcast, and the timeoutHeight embedded at signing. Returns the hash, or null
+   * when the signed payload cannot be decoded at all (deterministic, and terminal).
    *
-   * @param {number} transactionId - The unique identifier of the transaction to be executed.
-   * @return {Promise<any>} A promise that resolves with the result of the transaction execution or rejects if the transaction is not found or not signed.
+   * Ordering is the point. If the hash were written after broadcasting, any failure in between
+   * (worker crash, activity timeout) would re-enter the workflow with `hash === null` and
+   * broadcast the same bytes a second time. Mirrors the provider's `signSupplierTx`, which
+   * persists hash + expiry before `broadcastSupplierTx` runs.
    */
-  async executeTransaction(transactionId: number) {
+  async persistBroadcastAnchor(transactionId: number, executionHeight: number): Promise<string | null> {
     const transaction = await dal.transaction.getTransaction(transactionId)
     if (!transaction) {
       throw new Error('Transaction not found')
     }
-
     if (!transaction.signedPayload) {
       throw new Error('Transaction is not signed')
     }
 
+    let hash: string
+    try {
+      hash = deriveTxHash(transaction.signedPayload)
+    } catch (error) {
+      // An unhashable payload is deterministic proof the tx can never be broadcast, let alone
+      // land. Returning null (rather than throwing) hands the workflow a terminal verdict —
+      // throwing would retry the activity, fail the workflow, and let the 10s dispatcher relaunch
+      // it forever on a row that can never succeed.
+      log.error('broadcast anchor: signed payload is not hashable', { transactionId, error })
+      return null
+    }
+
+    const { timeoutHeight } = parseSignerAndSequence(transaction.signedPayload)
+
+    await dal.transaction.updateTransaction(transactionId, { hash, executionHeight, timeoutHeight })
+    log.info('broadcast anchor persisted', { transactionId, hash, executionHeight, timeoutHeight })
+
+    return hash
+  },
+  /**
+   * Diagnostics-only write (code/log), applied only while the row is still pending.
+   *
+   * Best-effort triage: the verifier's terminal write sets `log` unconditionally, so this text
+   * survives only until a verdict is reached. It is here so an operator inspecting a row that is
+   * still in flight can see WHY it is waiting.
+   */
+  async recordBroadcastDiagnostics(transactionId: number, fields: { code?: number; log?: string }): Promise<void> {
+    await dal.transaction.recordPendingDiagnostics(transactionId, fields)
+  },
+  /**
+   * Terminal transition guarded by the same CAS the verifier uses: it only wins while the row is
+   * still `pending`. Without it the broadcaster's late retry could overwrite a verdict the
+   * verifier already reached — the row is visible to the sweep from the moment it is anchored.
+   * Returns true iff THIS call performed the transition.
+   */
+  async claimBroadcastFailure(transactionId: number, fields: { code?: number; log?: string }): Promise<boolean> {
+    const row = await dal.transaction.claimTerminalTransition(transactionId, TransactionStatus.Failure, fields)
+    if (!row) {
+      log.info('broadcast failure CAS lost — transaction already terminal', { transactionId })
+    }
+    return Boolean(row)
+  },
+  async executeTransaction(transactionId: number) {
+    const transaction = await dal.transaction.getTransaction(transactionId)
+    if (!transaction) {
+      // Deterministic: retrying cannot make the row appear. Non-retryable so the run fails at
+      // once instead of waiting out the broadcast retry policy's backoff.
+      throw ApplicationFailure.nonRetryable('Transaction not found', 'transaction_not_found')
+    }
+
+    if (!transaction.signedPayload) {
+      throw ApplicationFailure.nonRetryable('Transaction is not signed', 'transaction_not_signed')
+    }
+
+    // Which attempt this is decides whether a CheckTx rejection can be trusted. On attempt 1 no
+    // bytes have gone out before, so a rejection is about THIS tx. On a retry the previous attempt
+    // may already have put the tx on chain, and the node is then answering about the world that tx
+    // created — an insufficient-funds or sequence error that says "it already landed", not "it
+    // failed". Only the verifier can tell those apart, so retries never terminalize.
+    //
+    // `null` = no activity context (unit tests, or a future caller outside Temporal). Attempt 1 is
+    // the only value that lets a rejection become a Failure, so an UNKNOWN attempt must never read
+    // as the first one; null falls on the safe side, "leave it for the verifier".
+    let attempt: number | null = null
+    try {
+      attempt = Context.current().info.attempt
+    } catch {
+      // Not running inside an activity context.
+    }
+
     const result = await pocketRpcClient.sendTransaction(transaction.signedPayload)
 
-    if (result.transactionHash) {
-      log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type })
-    } else {
-      log.warn('transaction broadcast failed', {
+    // The hash is derived locally by sendTransaction, so it is present on every outcome.
+    if (result.success) {
+      log.info('transaction broadcast', { transactionId, hash: result.transactionHash, type: transaction.type, attempt })
+      return { ...result, attempt }
+    }
+
+    if (result.rejected) {
+      log.warn('transaction broadcast rejected', {
         transactionId,
         type: transaction.type,
+        hash: result.transactionHash,
+        attempt,
         code: result.code,
         message: result.message,
       })
+      return { ...result, attempt }
     }
 
-    return result
+    // sdk code 32 (account sequence mismatch) is indeterminate but a re-send from here cannot
+    // change it. Usually the sequence is already consumed (too low): this tx landed on an earlier
+    // attempt, or the signer used a stale one — the verifier settles both (found by hash →
+    // success; sequence consumed by another tx → failure). More rarely it is too high, because an
+    // earlier tx from the same signer is not yet included; that one has to land first, and the
+    // verifier owns this row either way. Same handling as before this change: hand it over now
+    // instead of spending the whole retry budget re-sending bytes the chain has already judged.
+    if (result.code === 32 && result.codespace === 'sdk') {
+      log.warn('transaction broadcast answered sequence mismatch, deferring to the verifier', {
+        transactionId,
+        type: transaction.type,
+        hash: result.transactionHash,
+        attempt,
+        message: result.message,
+      })
+      return { ...result, attempt }
+    }
+
+    // No answer either way: the node was unreachable (`neverSent`), the connection dropped
+    // mid-request, or CheckTx refused the bytes for a reason that clears on its own (code 20,
+    // mempool full). Returning here would freeze the row: the workflow hands an anchored tx to
+    // the verifier and never re-sends, and a tx signed through Soothe carries no timeoutHeight,
+    // so the verifier can only fail it once the signer's sequence is consumed by some OTHER tx —
+    // which for an idle delegator is never. Throwing a retryable failure makes Temporal re-run
+    // this activity, i.e. re-broadcast the same bytes, which is safe under sendTransaction's
+    // classification: a repeat of a tx already in the mempool is refused as an unordered dedup
+    // (→ success) and one that already landed answers code 32 (→ deferred above). Once the retry
+    // policy is exhausted, both flows catch the ActivityFailure: the anchored flow records the
+    // last error on the already-anchored row, the legacy flow anchors the row then, and both
+    // leave it to the verifier.
+    log.warn(
+      result.neverSent
+        ? 'transaction not broadcast (node unreachable); will retry if attempts remain'
+        : 'transaction broadcast outcome unknown (may still land); will retry with the same bytes if attempts remain',
+      {
+        transactionId,
+        type: transaction.type,
+        hash: result.transactionHash,
+        attempt,
+        code: result.code,
+        codespace: result.codespace,
+        message: result.message,
+      },
+    )
+    throw ApplicationFailure.create({
+      type: BROADCAST_OUTCOME_UNKNOWN,
+      message: result.message ?? 'broadcast outcome unknown',
+      nonRetryable: false,
+      details: [
+        {
+          hash: result.transactionHash,
+          code: result.code,
+          codespace: result.codespace,
+          message: result.message,
+          neverSent: result.neverSent === true,
+        } satisfies BroadcastOutcomeUnknownDetail,
+      ],
+    })
   },
   /**
    * Retrieves the current block height from the RPC client.
@@ -635,6 +775,68 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       const newlyUnstakingNodes = extractTransactionUnstakingSuppliers(transaction)
 
       const addresses = newlyUnstakingNodes.map(node => node.operatorAddress)
+
+      // Recover the amount for unstakes that reach here without one.
+      // MsgUnstakeSupplier carries no amount, so it can only come from the
+      // suppliers' own stake. This is a standing recovery path, not just a
+      // migration step: creation-time derivation yields null whenever a
+      // supplier's stakeAmount is not yet synced, or when the query there
+      // fails and is swallowed, so new unstakes can arrive here unset too.
+      //
+      // Note this does NOT recover historical rows: the only caller is
+      // applyVerificationDecision's apply-success path, which runs while the
+      // transaction is still pending (it can re-run on an activity retry, since
+      // effects precede the CAS) and never after the row goes terminal. So
+      // anything that already reached Success or Failure before deploy is
+      // never revisited and keeps rendering as an unknown ("—"). Recovering
+      // those needs a one-time SQL backfill, deliberately not shipped here.
+      //
+      // Isolated in its own try/catch: it runs ahead of the state transition
+      // below, and the outer catch swallows into `return []`, so a throw from
+      // this cosmetic backfill would otherwise leave the suppliers stuck in
+      // Staked while the chain has them unstaking. The catch covers throws, not
+      // latency: this is a blocking round-trip ahead of the transition inside a
+      // 120s startToCloseTimeout, so a pathological address count could still
+      // delay it. Bounded in practice by the server-action body limit on the
+      // creating request.
+      //
+      // Best-effort, not guaranteed. Nothing in THIS function destroys the
+      // stake -- updateManyNodeAndLinkToTransaction sets only `status` -- but
+      // upsertSupplierStatus runs on its own schedule and can zero stakeAmount
+      // before this activity is reached. The shared query returns null rather
+      // than 0 in that case, and the row is left as it was. A retry before the
+      // CAS gets another try; once the row goes terminal it is never revisited
+      // (see above), so a null that survives to that point is final. The
+      // readers render it as an unknown ("—"), which is the honest outcome,
+      // rather than a 0.00 indistinguishable from the bug this column fixes.
+      //
+      // Recover anything the reader will not display, not merely null. A
+      // stored value is truthy-but-useless in several shapes: '0' and '000'
+      // (zero is "not yet synced"), and any non-digit string. Checking only
+      // `!transaction.amount` would skip the rows most in need of recovery,
+      // and checking only for zero would leave a non-digit value falling back
+      // forever while never being revisited here. Tracks the reader's rule in
+      // apps/middleman/src/lib/utils/transactionValue.ts, minus its
+      // Number.isSafeInteger bound -- a total above 2^53-1 uPOKT is far beyond
+      // total supply, so it is left unrecovered rather than special-cased.
+      // Kept as a separate expression rather than a shared import: that module
+      // is bundled into the browser and must not pull in drizzle.
+      const storedAmount = transaction.amount?.trim()
+      const storedIsUsable = !!storedAmount && /^\d+$/.test(storedAmount) && Number(storedAmount) > 0
+
+      if (!storedIsUsable) {
+        try {
+          const amount = await dal.node.sumStakeAmountByAddresses(addresses, {
+            createdBy: transaction.createdBy,
+          })
+
+          if (amount !== null) {
+            await dal.transaction.updateTransaction(transaction.id, { amount })
+          }
+        } catch (error) {
+          log.warn('could not backfill unstake amount', { transactionId, error })
+        }
+      }
 
       await dal.node.updateManyNodeAndLinkToTransaction(
         addresses,

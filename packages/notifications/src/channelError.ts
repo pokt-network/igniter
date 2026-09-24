@@ -27,6 +27,17 @@ const CHANNEL_LABEL: Record<string, string> = {
   email: 'Email',
 }
 
+/**
+ * Deliberately does NOT carry the original error as `cause`.
+ *
+ * A delivery failure is answered with a category, and the caller renders that
+ * message verbatim (a channel Test button's toast). Attaching the raw socket
+ * error would also make it indistinguishable, by shape, from a database
+ * connection failure at the server-action boundary — see the socket-shape note
+ * in `@igniter/db/errors` — and channel tests would start reporting themselves
+ * as database errors. If a `cause` is ever needed for debugging, tighten that
+ * check in the same change.
+ */
 export class ChannelDeliveryError extends Error {
   readonly channel: string
   readonly category: ChannelErrorCategory
