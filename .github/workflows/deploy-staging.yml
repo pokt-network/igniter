@@ -98,6 +98,11 @@ jobs:
       - name: Create or update release branch
         run: |
           git fetch origin
+          # The merge below is a fast-forward while release is strictly behind
+          # staging, and a real merge commit once they diverge — which needs an
+          # identity the runner does not have. Same identity deploy-production tags with.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if git ls-remote --heads origin release | grep -q release; then
             # Release branch exists — merge staging into it
