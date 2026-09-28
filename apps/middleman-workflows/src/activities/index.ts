@@ -1531,24 +1531,36 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
   },
 
   /**
-   * Extracts tx validity evidence (timeoutHeight, sequence) from the signed payload.
+   * Extracts tx validity evidence (timeoutHeight, sequence, timeoutTimestamp) from the signed payload.
    * Used to drive the hash-absent path in decideVerification toward expired/sequence-consumed
    * verdicts without waiting for the full expiration window.
+   *
+   * Unordered txs carry sequence 0 and never consume it, so sequence evidence would read
+   * "consumed" for any signer that ever sent an ordered tx — landed or not (tx 459). Their only
+   * bound is chain time vs timeoutTimestamp: return that, with the chain time the hash scan
+   * covered (passed in from verifyTxHash, never wall-clock), and no sequence evidence.
    */
-  async checkTxValidityEvidence(transactionId: number): Promise<{
+  async checkTxValidityEvidence(transactionId: number, chainTimeAtCoverage?: Date | null): Promise<{
     txTimeoutHeight: number | null
     sequence: { consumed: boolean; observedAtHeight: number } | null
+    txTimeoutTimestamp: Date | null
+    chainTimeAtCoverage: Date | null
   }> {
+    const none = { txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }
     const txn = await dal.transaction.getTransaction(transactionId)
-    if (!txn) return { txTimeoutHeight: null, sequence: null }
+    if (!txn) return none
 
-    if (!txn.signedPayload) return { txTimeoutHeight: null, sequence: null }
+    if (!txn.signedPayload) return none
 
     const parsed = parseSignerAndSequence(txn.signedPayload)
 
-    if (parsed.timeoutHeight) return { txTimeoutHeight: parsed.timeoutHeight, sequence: null }
+    if (parsed.unordered) {
+      return { ...none, txTimeoutTimestamp: parsed.timeoutTimestamp, chainTimeAtCoverage: chainTimeAtCoverage ?? null }
+    }
 
-    if (parsed.sequence == null) return { txTimeoutHeight: null, sequence: null }
+    if (parsed.timeoutHeight) return { ...none, txTimeoutHeight: parsed.timeoutHeight }
+
+    if (parsed.sequence == null) return none
 
     let signer: string | null = null
     try {
@@ -1556,13 +1568,13 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       signer = body.messages[0]?.value?.signer ?? null
     } catch { /* ignore */ }
 
-    if (!signer) return { txTimeoutHeight: null, sequence: null }
+    if (!signer) return none
 
     try {
       const sequenceEvidence = await pocketRpcClient.isSequenceConsumed(signer, parsed.sequence)
-      return { txTimeoutHeight: null, sequence: sequenceEvidence }
+      return { ...none, sequence: sequenceEvidence }
     } catch {
-      return { txTimeoutHeight: null, sequence: null }
+      return none
     }
   },
 

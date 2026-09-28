@@ -14,11 +14,18 @@ import { TxRaw, AuthInfo, TxBody } from '@igniter/pocket/proto/cosmos/tx/v1beta1
  * `decideVerification` can use to declare a tx absent, so no middleman transaction could ever
  * reach a failure verdict; they stayed pending forever.
  *
+ * `unordered` and `timeoutTimestamp` matter because an unordered tx is signed with sequence 0
+ * and never consumes it: its sequence says nothing about whether it landed, and the only bound
+ * on it is chain time passing `timeoutTimestamp`. Reading an unordered tx as ordered made the
+ * "sequence consumed" rule fail landed txs before they reached a block (tx 459, v0.17.0).
+ *
  * Returns null values on parse failure (activity caller treats as no evidence → pending).
  */
 export function parseSignerAndSequence(signedPayload: string): {
   sequence: number | null
   timeoutHeight: number | null
+  unordered: boolean
+  timeoutTimestamp: Date | null
 } {
   try {
     const txBytes = Buffer.from(signedPayload, 'hex')
@@ -30,8 +37,10 @@ export function parseSignerAndSequence(signedPayload: string): {
     return {
       sequence: sequence !== null ? Number(sequence) : null,
       timeoutHeight: timeoutHeight ? Number(timeoutHeight) : null,
+      unordered: body.unordered,
+      timeoutTimestamp: body.timeoutTimestamp ?? null,
     }
   } catch {
-    return { sequence: null, timeoutHeight: null }
+    return { sequence: null, timeoutHeight: null, unordered: false, timeoutTimestamp: null }
   }
 }

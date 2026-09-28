@@ -51,9 +51,12 @@ export async function VerifyPendingTransactions() {
         const supplier = (hash.status === 'confirmed' && hash.data?.success) ? null : await verifySupplierEffect(t.id)
         // Gather validity evidence when the hash is absent (to detect expired/sequence-consumed txs faster).
         const needEvidence = hash.status === 'absent' || (hash.status === 'confirmed' && !hash.data?.success)
+        // For absent: the chain block time at coverage bounds unordered txs (timeout_timestamp),
+        // so the decision uses chain time, never wall-clock.
+        const chainTimeAtCoverage = hash.status === 'absent' ? hash.coveredBlockTime ?? null : null
         const evidence = needEvidence
-          ? await checkTxValidityEvidence(t.id)
-          : { txTimeoutHeight: null, sequence: null }
+          ? await checkTxValidityEvidence(t.id, chainTimeAtCoverage)
+          : { txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }
         const decision = decideVerification({
           hash,
           supplier,
@@ -61,8 +64,10 @@ export async function VerifyPendingTransactions() {
           expirationWindow: TX_EXPIRATION_BLOCKS,
           txTimeoutHeight: evidence.txTimeoutHeight,
           sequence: evidence.sequence,
-          txTimeoutTimestamp: null,
-          chainTimeAtCoverage: null,
+          // `?? null`: a history recorded before these fields existed replays an evidence
+          // result without them, which must decide exactly as it did then.
+          txTimeoutTimestamp: evidence.txTimeoutTimestamp ?? null,
+          chainTimeAtCoverage: evidence.chainTimeAtCoverage ?? null,
         })
         await applyVerificationDecision(t.id, decision)
       }),
