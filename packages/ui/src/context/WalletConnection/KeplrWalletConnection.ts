@@ -160,7 +160,8 @@ export class KeplrWalletConnection extends WalletConnection {
     // Embed timeoutHeight so the verifier can anchor failure verdicts without waiting
     // for the full sequence-consumed check. PocketWalletConnection hands signing to
     // the external wallet and cannot control this field — those txs rely on the
-    // sequence rule in checkTxValidityEvidence (see: parseSignerAndSequence activity).
+    // sequence rule in checkTxValidityEvidence if ordered, or on their timeout_timestamp if
+    // unordered (see: parseSignerAndSequence activity).
     const currentHeight = await this._getBlockHeight();
     const bodyBytes = this._txRegistry.encodeTxBody({ messages: msgs, memo, timeoutHeight: BigInt(currentHeight + TX_EXPIRATION_BLOCKS) });
 

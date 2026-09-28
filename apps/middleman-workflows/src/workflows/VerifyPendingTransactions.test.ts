@@ -52,8 +52,12 @@ function signedPayloadHex(body: { unordered: boolean; timeoutTimestamp?: Date },
 
 const roundTrip = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
 
-/** One sweep over tx 459 with the hash absent at `coveredBlockTime`; returns the applied decision. */
-async function sweep(signedPayload: string, coveredBlockTime: Date): Promise<{ decision: VerificationDecision; isSequenceConsumed: jest.Mock }> {
+/**
+ * One sweep over tx 459 with the hash absent at `coveredBlockTime` (undefined = the scan was caught
+ * up to the head and fetched no block); returns the applied decision. `evidence` replaces the real
+ * checkTxValidityEvidence, to stand in for a worker running another build.
+ */
+async function sweep(signedPayload: string, coveredBlockTime: Date | undefined, evidence?: unknown): Promise<{ decision: VerificationDecision; isSequenceConsumed: jest.Mock }> {
   // The signer's account is at sequence 9 (ordered txs 0–8): ANY tx sequence below it reads consumed.
   const isSequenceConsumed = jest.fn().mockResolvedValue({ consumed: true, observedAtHeight: EXECUTION_HEIGHT })
   const dal = {
@@ -73,7 +77,7 @@ async function sweep(signedPayload: string, coveredBlockTime: Date): Promise<{ d
     listPendingWithHash: async () => [{ id: TX_ID, executionHeight: EXECUTION_HEIGHT }],
     verifyTxHash: async () => ({ status: 'absent', coveredUpToHeight: EXECUTION_HEIGHT, coveredBlockTime }),
     verifySupplierEffect: async () => ({ status: 'absent', absentOperators: OPERATORS }),
-    checkTxValidityEvidence: real.checkTxValidityEvidence,
+    checkTxValidityEvidence: evidence === undefined ? real.checkTxValidityEvidence : async () => evidence,
     applyVerificationDecision: async (_id: number, d: VerificationDecision) => { decision = d },
   }
   mockActivities = Object.fromEntries(Object.entries(stubs).map(([name, fn]) => [
@@ -106,6 +110,22 @@ describe('VerifyPendingTransactions — unordered txs (tx 459)', () => {
 
     expect(decision).toEqual({ tx: 'failure', effects: 'apply-failure', failedOperators: OPERATORS, incUnavailable: false })
   })
+
+  it('stays pending when the scan was caught up and read no block time, even long after the timeout', async () => {
+    const { decision, isSequenceConsumed } = await sweep(unordered, undefined)
+
+    expect(decision.tx).toBe('pending')
+    expect(isSequenceConsumed).not.toHaveBeenCalled()
+  })
+
+  it('stays pending when a worker on the pre-unordered build answers the evidence (rolling deploy)', async () => {
+    // Exactly what the old build returned for tx 459: no timestamp key, sequence "consumed".
+    const oldBuildEvidence = { txTimeoutHeight: null, sequence: { consumed: true, observedAtHeight: EXECUTION_HEIGHT } }
+
+    const { decision } = await sweep(unordered, CHAIN_TIME_AT_FIRST_SWEEP, oldBuildEvidence)
+
+    expect(decision.tx).toBe('pending')
+  })
 })
 
 describe('VerifyPendingTransactions — ordered txs keep the sequence bound', () => {
@@ -116,5 +136,14 @@ describe('VerifyPendingTransactions — ordered txs keep the sequence bound', ()
 
     expect(isSequenceConsumed).toHaveBeenCalledWith(SIGNER, 0)
     expect(decision).toEqual({ tx: 'failure', effects: 'apply-failure', failedOperators: OPERATORS, incUnavailable: false })
+  })
+
+  it('an ordered tx that also embeds a timeout_timestamp keeps the sequence bound (it is not treated as unordered)', async () => {
+    const ordered = signedPayloadHex({ unordered: false, timeoutTimestamp: TIMEOUT_TIMESTAMP }, 0)
+
+    const { decision, isSequenceConsumed } = await sweep(ordered, CHAIN_TIME_AT_FIRST_SWEEP)
+
+    expect(isSequenceConsumed).toHaveBeenCalledWith(SIGNER, 0)
+    expect(decision.tx).toBe('failure')
   })
 })

@@ -1555,6 +1555,9 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const parsed = parseSignerAndSequence(txn.signedPayload)
 
     if (parsed.unordered) {
+      // The chain rejects this shape, so it should never be broadcast; without a timestamp there is
+      // no bound at all and the tx would stay pending forever — make that visible.
+      if (!parsed.timeoutTimestamp) log.warn('checkTxValidityEvidence: unordered tx without timeout_timestamp, no failure bound', { transactionId })
       return { ...none, txTimeoutTimestamp: parsed.timeoutTimestamp, chainTimeAtCoverage: chainTimeAtCoverage ?? null }
     }
 

@@ -57,15 +57,18 @@ export async function VerifyPendingTransactions() {
         const evidence = needEvidence
           ? await checkTxValidityEvidence(t.id, chainTimeAtCoverage)
           : { txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }
+        // An evidence result without the `txTimeoutTimestamp` key comes from a worker on the
+        // pre-unordered build (rolling deploy: old and new pods poll the same queue). That build
+        // returns sequence evidence for unordered txs too — the tx 459 false failure — and gives
+        // no way to tell the two apart, so drop the sequence bound: the tx waits one more sweep.
+        const preUnorderedEvidence = !('txTimeoutTimestamp' in evidence)
         const decision = decideVerification({
           hash,
           supplier,
           executionHeight: t.executionHeight!,
           expirationWindow: TX_EXPIRATION_BLOCKS,
           txTimeoutHeight: evidence.txTimeoutHeight,
-          sequence: evidence.sequence,
-          // `?? null`: a history recorded before these fields existed replays an evidence
-          // result without them, which must decide exactly as it did then.
+          sequence: preUnorderedEvidence ? null : evidence.sequence,
           txTimeoutTimestamp: evidence.txTimeoutTimestamp ?? null,
           chainTimeAtCoverage: evidence.chainTimeAtCoverage ?? null,
         })
