@@ -51,18 +51,26 @@ export async function VerifyPendingTransactions() {
         const supplier = (hash.status === 'confirmed' && hash.data?.success) ? null : await verifySupplierEffect(t.id)
         // Gather validity evidence when the hash is absent (to detect expired/sequence-consumed txs faster).
         const needEvidence = hash.status === 'absent' || (hash.status === 'confirmed' && !hash.data?.success)
+        // For absent: the chain block time at coverage bounds unordered txs (timeout_timestamp),
+        // so the decision uses chain time, never wall-clock.
+        const chainTimeAtCoverage = hash.status === 'absent' ? hash.coveredBlockTime ?? null : null
         const evidence = needEvidence
-          ? await checkTxValidityEvidence(t.id)
-          : { txTimeoutHeight: null, sequence: null }
+          ? await checkTxValidityEvidence(t.id, chainTimeAtCoverage)
+          : { txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }
+        // An evidence result without the `txTimeoutTimestamp` key comes from a worker on the
+        // pre-unordered build (rolling deploy: old and new pods poll the same queue). That build
+        // returns sequence evidence for unordered txs too — the tx 459 false failure — and gives
+        // no way to tell the two apart, so drop the sequence bound: the tx waits one more sweep.
+        const preUnorderedEvidence = !('txTimeoutTimestamp' in evidence)
         const decision = decideVerification({
           hash,
           supplier,
           executionHeight: t.executionHeight!,
           expirationWindow: TX_EXPIRATION_BLOCKS,
           txTimeoutHeight: evidence.txTimeoutHeight,
-          sequence: evidence.sequence,
-          txTimeoutTimestamp: null,
-          chainTimeAtCoverage: null,
+          sequence: preUnorderedEvidence ? null : evidence.sequence,
+          txTimeoutTimestamp: evidence.txTimeoutTimestamp ?? null,
+          chainTimeAtCoverage: evidence.chainTimeAtCoverage ?? null,
         })
         await applyVerificationDecision(t.id, decision)
       }),

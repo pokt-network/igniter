@@ -118,15 +118,16 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   // node — only that we committed to sending them. A run that died between the anchor and a
   // successful broadcast therefore returns here without re-sending, and the verifier settles it.
   // How fast depends on the wallet: a Keplr-signed tx embeds a timeoutHeight, so the verifier
-  // fails it once coverage passes that height; a Soothe-signed tx carries none, and can only be
-  // failed once the signer's sequence is consumed by some other tx. Re-broadcasting here would
+  // fails it once coverage passes that height; a Soothe-signed tx carries none: if ordered it can
+  // only be failed once the signer's sequence is consumed by some other tx, if unordered (seen from
+  // Soothe since 2026-09) once chain time passes its timeout_timestamp. Re-broadcasting here would
   // resolve both faster and is safe under the current classification (an in-mempool repeat
   // answers code 19 → dedup-success, a landed one answers code 32 → indeterminate), but it is a
   // behavioural change worth making deliberately rather than as a side effect of this fix. The
   // window this leaves is a crash in the few seconds between the anchor write and the broadcast;
   // an outage shorter than executeTransaction's retry window no longer opens it, because the
-  // activity retries in place; a longer one still leaves a Soothe-signed row waiting on the
-  // sequence rule, which is what the pending-without-timeout alert follow-up is for.
+  // activity retries in place; a longer one still leaves an ordered Soothe-signed row waiting on
+  // the sequence rule, which is what the pending-without-timeout alert follow-up is for.
   if (transaction.hash) {
     log.debug('ExecuteTransaction: anchored already, handing off to verifier', { transactionId, hash: transaction.hash });
     return { ...transaction };
