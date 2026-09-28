@@ -30,7 +30,7 @@ export const transactionsTable = pgTable("transactions", {
   verificationHeight: integer(),
   verificationTimestamp: timestamp(),
   lastCoveredHeight: integer(),
-  // inclusion in any block > timeoutHeight is impossible (Cosmos ante); null = no embedded bound (failure needs sequence evidence)
+  // inclusion in any block > timeoutHeight is impossible (Cosmos ante); null = no embedded height bound (ordered: failure needs sequence evidence; unordered: chain time past timeout_timestamp)
   timeoutHeight: integer(),
   unavailableChecks: integer().notNull().default(0),
   lastVerificationAt: timestamp(),
