@@ -56,6 +56,9 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
     queryKey: ['providerBreakdown', settlementHeight],
     queryFn: () => GetProviderBreakdown(currentTime),
     placeholderData: keepPreviousData,
+    // While hidden the status poll stops, so currentTime goes stale; the next poll after the tab
+    // returns brings a new settlement height, which refetches with a fresh timestamp.
+    refetchOnWindowFocus: false,
     enabled: providerCount > 1,
   })
 
