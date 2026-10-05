@@ -70,7 +70,7 @@ export default function Summary({
   initialData
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentHeight, currentTime, firstHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const [data, setData] = useState<SummaryData | null>(initialData)
   const [error, setError] = useState(initialError)
   const [isLoading, setIsLoading] = useState(false)
@@ -112,11 +112,11 @@ export default function Summary({
 
     if (!addresses.length) return
 
-    if (currentHeight !== firstHeight) {
+    if (settlementHeight !== firstSettlementHeight) {
       fetchBatched()
     }
     // eslint-disable-next-line
-  }, [currentHeight])
+  }, [settlementHeight])
 
   if (isLoading && !lastValueRef.current) {
     return <SummaryLoader />

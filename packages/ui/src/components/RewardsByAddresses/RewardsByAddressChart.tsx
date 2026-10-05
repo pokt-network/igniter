@@ -50,7 +50,7 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentHeight, currentTime, firstHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   type RewardsData = DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument>
@@ -110,18 +110,18 @@ export default function RewardsByAddressChart({
 
     if (!addresses.length) return
 
-    // Refetch on new session or when selectedTime changes
+    // Refetch on new settlement or when selectedTime changes
     const timeChanged = lastSelectedTimeRef.current !== selectedTime
     lastSelectedTimeRef.current = selectedTime
 
     if (
       timeChanged ||
-      currentHeight !== firstHeight
+      settlementHeight !== firstSettlementHeight
     ) {
       fetchBatched()
     }
     // eslint-disable-next-line
-  }, [currentHeight, selectedTime])
+  }, [settlementHeight, selectedTime])
 
   const {groupAll: groupAllAddresses} = useGroupAll()
 

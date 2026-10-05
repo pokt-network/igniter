@@ -24,6 +24,11 @@ export const statusQuery = graphql(`
       targetHeight
       lastProcessedHeight
     }
+    lastSettlement: eventClaimSettleds(orderBy: BLOCK_ID_DESC, first: 1) {
+      nodes {
+        blockId
+      }
+    }
   }
 `)
 
