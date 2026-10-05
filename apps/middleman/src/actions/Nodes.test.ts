@@ -33,10 +33,10 @@ beforeEach(() => {
 
 describe('GetProviderBreakdown rewards window', () => {
   it('ends the windows at the timestamp the client passes', async () => {
-    // Status timestamps arrive without the trailing Z.
+    // The cached latest block predates it; status timestamps arrive without the trailing Z.
+    getLatestBlock.mockResolvedValue({ height: '99', timestamp: '2026-10-05T21:14:09.000Z' })
     await GetProviderBreakdown('2026-10-05T21:15:09.045')
 
-    expect(getLatestBlock).not.toHaveBeenCalled()
     expect(query).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({
         currentDate: '2026-10-05T21:15:09.045Z',
@@ -57,10 +57,25 @@ describe('GetProviderBreakdown rewards window', () => {
     }))
   })
 
-  it('falls back to the latest block when the timestamp is not a date', async () => {
-    await GetProviderBreakdown('not-a-date')
+  it('accepts a timestamp a few minutes after the cached latest block', async () => {
+    await GetProviderBreakdown('2026-10-05T20:04:59Z')
 
-    expect(getLatestBlock).toHaveBeenCalled()
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({
+      variables: expect.objectContaining({ currentDate: '2026-10-05T20:04:59.000Z' }),
+    }))
+  })
+
+  it.each([
+    ['not a date', 'not-a-date'],
+    ['a bare number Date would parse', '1'],
+    ['a date without a time', '2026-10-05'],
+    ['a timezone offset', '2026-10-05T20:00:00+02:00'],
+    ['more than 5 minutes after the latest block', '2026-10-05T20:05:01Z'],
+    ['far in the future', '9999-12-31T23:59:59Z'],
+    ['a non-string', 12345],
+  ])('falls back to the latest block for %s', async (_, timestamp) => {
+    await GetProviderBreakdown(timestamp as string)
+
     expect(query).toHaveBeenCalledWith(expect.objectContaining({
       variables: expect.objectContaining({ currentDate: '2026-10-05T20:00:00.000Z' }),
     }))

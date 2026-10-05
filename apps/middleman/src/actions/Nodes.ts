@@ -71,9 +71,15 @@ export interface ProviderBreakdownData {
   rewards48h: number
 }
 
-// Parses an indexer block timestamp, which may come without the trailing Z.
-function parseBlockTimestamp(timestamp: string | undefined): Date | null {
-  if (!timestamp) return null
+const BLOCK_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$/
+// How far past the (cached) latest block a client timestamp may be: the cache lags by up to
+// its 20 s revalidation plus the blocks produced meanwhile.
+const MAX_BLOCK_TIMESTAMP_LEAD_MS = 5 * 60 * 1000
+
+// Parses an indexer block timestamp, which may come without the trailing Z. The value comes
+// from the client, so anything that is not that exact shape is rejected.
+function parseBlockTimestamp(timestamp: unknown): Date | null {
+  if (typeof timestamp !== 'string' || !BLOCK_TIMESTAMP_PATTERN.test(timestamp)) return null
   const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z')
   return Number.isNaN(date.getTime()) ? null : date
 }
@@ -81,7 +87,8 @@ function parseBlockTimestamp(timestamp: string | undefined): Date | null {
 /**
  * @param blockTimestamp - Timestamp of the block the client read its settlement height from.
  * The rewards windows end there, so a refetch triggered by a new settlement always includes it;
- * the cached latest block could predate it. Falls back to the latest block when absent or invalid.
+ * the cached latest block could predate it. Falls back to the latest block when absent, malformed,
+ * or more than a few minutes after the latest block.
  */
 export async function GetProviderBreakdown(blockTimestamp?: string): Promise<ProviderBreakdownData[]> {
   const [userNodes, ownerAddresses, applicationSettings] = await Promise.all([
@@ -118,9 +125,12 @@ export async function GetProviderBreakdown(blockTimestamp?: string): Promise<Pro
   const providerEntries = Array.from(providerGroups.entries())
   const client = getServerApolloClient(graphqlUrl)
 
+  const latestBlockDate = new Date((await getLatestBlock(graphqlUrl)).timestamp)
+  const clientBlockDate = parseBlockTimestamp(blockTimestamp)
   const blockDate =
-    parseBlockTimestamp(blockTimestamp) ??
-    new Date((await getLatestBlock(graphqlUrl)).timestamp)
+    clientBlockDate && clientBlockDate.getTime() - latestBlockDate.getTime() <= MAX_BLOCK_TIMESTAMP_LEAD_MS
+      ? clientBlockDate
+      : latestBlockDate
   const currentDate = blockDate.toISOString()
   const last24Hours = new Date(blockDate.getTime() - 24 * 60 * 60 * 1000).toISOString()
   const last48Hours = new Date(blockDate.getTime() - 48 * 60 * 60 * 1000).toISOString()
