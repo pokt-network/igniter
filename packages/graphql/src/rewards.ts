@@ -70,3 +70,18 @@ export const rewardsWindowsDocument = graphql(`
     )
   }
 `)
+
+export const suppliersSummaryDocument = graphql(`
+  query suppliersSummary($filter: SupplierFilter!) {
+    suppliers(
+      filter: $filter
+    ) {
+      totalCount
+      aggregates {
+        sum {
+          stakeAmount
+        }
+      }
+    }
+  }
+`)

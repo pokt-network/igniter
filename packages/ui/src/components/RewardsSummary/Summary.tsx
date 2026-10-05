@@ -10,38 +10,37 @@ import NoData from '../NoData'
 import { amountToPokt, toCurrencyFormat } from '../../lib/utils'
 import { DocumentNodeData } from '../../lib/graphql/types'
 import { useHeightContext } from '../../context/Height/height'
-import { summaryDocument } from '@igniter/graphql/rewards'
+import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
 import SummaryLoader from './Loader'
 
 type SummaryData = DocumentNodeData<typeof summaryDocument>
+type SuppliersData = DocumentNodeData<typeof suppliersSummaryDocument>
+type RewardsData = DocumentNodeData<typeof rewardsWindowsDocument>
 
-function aggregateSummaryResults(results: SummaryData[]): SummaryData {
-  return results.reduce((acc, d) => {
-    if (!acc) return d
-    return {
-      ...d,
-      suppliers: {
-        ...d.suppliers,
-        totalCount:
-          (acc.suppliers?.totalCount ?? 0) +
-          (d.suppliers?.totalCount ?? 0),
-        aggregates: {
-          ...d.suppliers?.aggregates,
-          sum: {
-            stakeAmount:
-              Number(acc.suppliers?.aggregates?.sum?.stakeAmount ?? 0) +
-              Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0),
-          },
+// Suppliers and stake change on any stake or unstake, so they refresh on a timer; rewards only
+// change when claims settle, so they refresh on a new settlement height.
+const SUPPLIERS_REFRESH_MS = 60 * 1000
+
+function aggregateSuppliersResults(results: SuppliersData[]): Pick<SummaryData, 'suppliers'> {
+  return {
+    suppliers: {
+      totalCount: results.reduce((sum, d) => sum + (d.suppliers?.totalCount ?? 0), 0),
+      aggregates: {
+        sum: {
+          stakeAmount: results.reduce((sum, d) => sum + Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0), 0),
         },
       },
-      last24h:
-        Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-      last48h:
-        Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
-    }
-  }) as SummaryData
+    },
+  }
+}
+
+function aggregateRewardsResults(results: RewardsData[]): Pick<SummaryData, 'last24h' | 'last48h'> {
+  return {
+    last24h: results.reduce((sum, d) => sum + Number(d.last24h ?? 0), 0),
+    last48h: results.reduce((sum, d) => sum + Number(d.last48h ?? 0), 0),
+  }
 }
 
 function Value({value, tooltip}: {value: string, tooltip?: string}) {
@@ -77,25 +76,50 @@ export default function Summary({
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
 
-  const fetchBatched = useCallback(async () => {
+  const fetchBatched = useCallback(async (part: 'rewards' | 'suppliers') => {
     if (!addresses.length) return
 
     setIsLoading(true)
     try {
       const batches = batchArray(supplierAddresses)
-      const results = await Promise.all(
-        batches.map((batch) =>
-          client.query({
-            query: summaryDocument,
-            variables: summaryVariables(isOwners, addresses, batch, currentTime),
-            fetchPolicy: 'network-only',
-          }),
-        ),
-      )
+      let update: Partial<SummaryData>
 
-      const aggregated = aggregateSummaryResults(results.map((r) => r.data))
-      lastValueRef.current = aggregated
-      setData(aggregated)
+      if (part === 'rewards') {
+        const results = await Promise.all(
+          batches.map((batch) => {
+            const v = summaryVariables(isOwners, addresses, batch, currentTime)
+            return client.query({
+              query: rewardsWindowsDocument,
+              variables: {
+                addresses: v.addresses,
+                supplierAddresses: v.supplierAddresses,
+                currentDate: v.currentDate,
+                last24Hours: v.last24Hours,
+                last48Hours: v.last48Hours,
+              },
+              fetchPolicy: 'network-only',
+            })
+          }),
+        )
+        update = aggregateRewardsResults(results.map((r) => r.data))
+      } else {
+        const results = await Promise.all(
+          batches.map((batch) =>
+            client.query({
+              query: suppliersSummaryDocument,
+              variables: { filter: summaryVariables(isOwners, addresses, batch, currentTime).filter },
+              fetchPolicy: 'network-only',
+            }),
+          ),
+        )
+        update = aggregateSuppliersResults(results.map((r) => r.data))
+      }
+
+      setData((prev) => {
+        const next = { ...prev, ...update } as SummaryData
+        lastValueRef.current = next
+        return next
+      })
       setError(false)
     } catch {
       setError(true)
@@ -103,6 +127,11 @@ export default function Summary({
       setIsLoading(false)
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
+
+  const fetchAll = useCallback(() => {
+    fetchBatched('suppliers')
+    fetchBatched('rewards')
+  }, [fetchBatched])
 
   useEffect(() => {
     if (firstRenderRef.current) {
@@ -113,10 +142,26 @@ export default function Summary({
     if (!addresses.length) return
 
     if (settlementHeight !== firstSettlementHeight) {
-      fetchBatched()
+      fetchBatched('rewards')
     }
     // eslint-disable-next-line
   }, [settlementHeight])
+
+  // The interval reads the latest fetchBatched through a ref, so a new block does not reset it.
+  const fetchBatchedRef = useRef(fetchBatched)
+  fetchBatchedRef.current = fetchBatched
+
+  useEffect(() => {
+    if (!addresses.length) return
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchBatchedRef.current('suppliers')
+      }
+    }, SUPPLIERS_REFRESH_MS)
+
+    return () => clearInterval(interval)
+  }, [addresses.length])
 
   if (isLoading && !lastValueRef.current) {
     return <SummaryLoader />
@@ -124,7 +169,7 @@ export default function Summary({
     return (
       <div className={"bg-[color:--main-background] pt-3 pb-1 gap-1 rounded-lg border border-[color:--divider] base-shadow"}>
         <ErrorRetry
-          onRetry={fetchBatched}
+          onRetry={fetchAll}
           errorMessage={'Oops. There was an error loading the summary data.'}
         />
       </div>

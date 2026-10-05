@@ -4,7 +4,7 @@ import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
 import { Download } from 'lucide-react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import React, { useCallback, useMemo, useState } from 'react'
-import { GetProviderBreakdown, type ProviderBreakdownData } from '@/actions/Nodes'
+import { GetProviderRewards, GetProviderStakes, type ProviderBreakdownData } from '@/actions/Nodes'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
@@ -50,17 +50,38 @@ const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
   const { settlementHeight, currentTime } = useHeightContext()
+  // Suppliers and stake come from our database and change on any stake or unstake, so they
+  // poll every 60 s (React Query pauses the interval while the tab is hidden).
+  const stakes = useQuery({
+    queryKey: ['providerStakes'],
+    queryFn: GetProviderStakes,
+    refetchInterval: 60000,
+    enabled: providerCount > 1,
+  })
   // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer.
   // currentTime comes from the same status response as settlementHeight, so the window includes it.
-  const { data: providers, isLoading, isError, refetch } = useQuery({
-    queryKey: ['providerBreakdown', settlementHeight],
-    queryFn: () => GetProviderBreakdown(currentTime),
+  const rewards = useQuery({
+    queryKey: ['providerRewards', settlementHeight],
+    queryFn: () => GetProviderRewards(currentTime),
     placeholderData: keepPreviousData,
     // While hidden the status poll stops, so currentTime goes stale; the next poll after the tab
     // returns brings a new settlement height, which refetches with a fresh timestamp.
     refetchOnWindowFocus: false,
     enabled: providerCount > 1,
   })
+
+  const providers = useMemo<ProviderBreakdownData[] | undefined>(() => {
+    if (!stakes.data || !rewards.data) return undefined
+    const rewardsByIdentity = new Map(rewards.data.map((r) => [r.identity, r]))
+    return stakes.data.map((p) => ({
+      ...p,
+      rewards24h: rewardsByIdentity.get(p.identity)?.rewards24h ?? 0,
+      rewards48h: rewardsByIdentity.get(p.identity)?.rewards48h ?? 0,
+    }))
+  }, [stakes.data, rewards.data])
+  const isLoading = stakes.isLoading || rewards.isLoading
+  const isError = stakes.isError || rewards.isError
+  const refetch = () => Promise.all([stakes.refetch(), rewards.refetch()])
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')
   const [sortKey, setSortKey] = useState<SortKey>('suppliers')
