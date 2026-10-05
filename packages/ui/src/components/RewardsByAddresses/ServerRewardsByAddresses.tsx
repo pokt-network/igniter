@@ -40,7 +40,7 @@ export default async function ServerRewardsByAddresses({
   if (addresses.length) {
     try {
       const cookiesAwaited = await cookies()
-      const timeSelected = getValidTime(
+      timeSelected = getValidTime(
         cookiesAwaited.get(timeSelectedCookieKey)?.value || ''
       )
       chartType = cookiesAwaited?.get(chartTypeCookieKey)?.value === 'bar' ? 'bar' : 'line'
