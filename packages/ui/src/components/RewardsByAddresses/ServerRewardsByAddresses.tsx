@@ -15,6 +15,7 @@ import { getServerApolloClient } from '../../lib/graphql/server'
 import { getValidTime, Time } from '../../lib/dates'
 import { SelectedTimeProvider } from './TimeSelector'
 import { batchArray } from '../../lib/batch'
+import { mergeRewardBatches } from '../../lib/rewards'
 
 interface RewardsByAddressesProps {
   addresses: Array<string>
@@ -70,13 +71,13 @@ export default async function ServerRewardsByAddresses({
         ),
       )
 
-      // Aggregate: concatenate the rewards JSON arrays from each batch
+      // Aggregate: merge the rewards JSON arrays from each batch, summing per (address, date)
       data = results.reduce(
         (acc, { data: d }) => {
           if (!acc) return d
           const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
           const dRewards = Array.isArray(d.rewards) ? d.rewards : []
-          return { ...d, rewards: [...accRewards, ...dRewards] }
+          return { ...d, rewards: mergeRewardBatches([...accRewards, ...dRewards]) }
         },
         null as typeof results[0]['data'] | null,
       )

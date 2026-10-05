@@ -24,6 +24,7 @@ import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rew
 import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
+import { mergeRewardBatches } from '../../lib/rewards'
 
 export interface RewardItem extends LineBarItem {
   totalAmount: number
@@ -88,7 +89,7 @@ export default function RewardsByAddressChart({
           if (!acc) return d
           const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
           const dRewards = Array.isArray(d.rewards) ? d.rewards : []
-          return { ...d, rewards: [...accRewards, ...dRewards] }
+          return { ...d, rewards: mergeRewardBatches([...accRewards, ...dRewards]) }
         },
         null as RewardsData | null,
       )
