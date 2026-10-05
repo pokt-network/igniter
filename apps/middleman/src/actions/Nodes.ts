@@ -68,15 +68,16 @@ export interface ProviderStakeData {
   stakedPokt: number
 }
 
+// null: the provider's rewards could not be fetched (shown as N/A, never as 0)
 export interface ProviderRewardsData {
   identity: string
-  rewards24h: number
-  rewards48h: number
+  rewards24h: number | null
+  rewards48h: number | null
 }
 
 export interface ProviderBreakdownData extends ProviderStakeData {
-  rewards24h: number
-  rewards48h: number
+  rewards24h: number | null
+  rewards48h: number | null
 }
 
 // Groups the staked nodes by provider, skipping nodes without a provider and providers
@@ -208,8 +209,8 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
 
     return {
       identity,
-      rewards24h: amountToPokt(data?.last24h ?? 0),
-      rewards48h: amountToPokt(data?.last48h ?? 0),
+      rewards24h: data ? amountToPokt(data.last24h) : null,
+      rewards48h: data ? amountToPokt(data.last48h) : null,
     }
   })
 }

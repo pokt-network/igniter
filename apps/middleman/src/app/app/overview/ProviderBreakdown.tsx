@@ -3,7 +3,7 @@
 import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
 import { Download } from 'lucide-react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GetProviderRewards, GetProviderStakes, type ProviderBreakdownData } from '@/actions/Nodes'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
@@ -22,11 +22,13 @@ function buildPieData(
   providers: ProviderBreakdownData[],
   metric: keyof Pick<ProviderBreakdownData, 'suppliers' | 'stakedPokt' | 'rewards24h' | 'rewards48h'>,
 ): PieChartItem[] {
-  const total = providers.reduce((sum, p) => sum + p[metric], 0)
-  return providers.map((p) => ({
+  // Providers whose rewards could not be fetched (null) are left out rather than drawn as 0
+  const known = providers.filter((p) => p[metric] != null)
+  const total = known.reduce((sum, p) => sum + (p[metric] ?? 0), 0)
+  return known.map((p) => ({
     id: p.name,
-    value: p[metric],
-    percent: total > 0 ? (p[metric] / total) * 100 : 0,
+    value: p[metric] ?? 0,
+    percent: total > 0 ? ((p[metric] ?? 0) / total) * 100 : 0,
   }))
 }
 
@@ -34,7 +36,7 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
   const header = 'Provider,Suppliers,Staked POKT,24h Rewards,48h Rewards'
   const rows = providers.map(
     (p) =>
-      `"${p.name}",${p.suppliers},${p.stakedPokt.toFixed(2)},${p.rewards24h.toFixed(2)},${p.rewards48h.toFixed(2)}`,
+      `"${p.name}",${p.suppliers},${p.stakedPokt.toFixed(2)},${p.rewards24h?.toFixed(2) ?? 'N/A'},${p.rewards48h?.toFixed(2) ?? 'N/A'}`,
   )
   const csv = [header, ...rows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -49,7 +51,7 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
-  const { settlementHeight, currentTime } = useHeightContext()
+  const { currentHeight, firstHeight, settlementHeight, currentTime } = useHeightContext()
   // Suppliers and stake come from our database and change on any stake or unstake, so they
   // poll every 60 s (React Query pauses the interval while the tab is hidden).
   const stakes = useQuery({
@@ -70,17 +72,37 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
     enabled: providerCount > 1,
   })
 
+  // Last rewards that loaded, kept on screen when a later fetch fails (an errored query for a new
+  // settlement height has no data of its own).
+  const lastRewardsRef = useRef(rewards.data)
+  if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
+  const rewardsData = rewards.data ?? lastRewardsRef.current
+  // Some provider's batch failed on the server (its rewards came back null)
+  const rewardsIncomplete = rewardsData?.some((r) => r.rewards24h == null || r.rewards48h == null) ?? false
+
+  // While the rewards are in error or incomplete, retry on every new block instead of waiting for
+  // the next settlement.
+  useEffect(() => {
+    if (!(rewards.isError || rewardsIncomplete) || rewards.isFetching || currentHeight === firstHeight) return
+    rewards.refetch()
+    // eslint-disable-next-line
+  }, [currentHeight])
+
+  // Rewards missing for a provider (not loaded, failed, or absent) stay null and show as N/A.
   const providers = useMemo<ProviderBreakdownData[] | undefined>(() => {
-    if (!stakes.data || !rewards.data) return undefined
-    const rewardsByIdentity = new Map(rewards.data.map((r) => [r.identity, r]))
+    if (!stakes.data) return undefined
+    const rewardsByIdentity = new Map((rewardsData ?? []).map((r) => [r.identity, r]))
     return stakes.data.map((p) => ({
       ...p,
-      rewards24h: rewardsByIdentity.get(p.identity)?.rewards24h ?? 0,
-      rewards48h: rewardsByIdentity.get(p.identity)?.rewards48h ?? 0,
+      rewards24h: rewardsByIdentity.get(p.identity)?.rewards24h ?? null,
+      rewards48h: rewardsByIdentity.get(p.identity)?.rewards48h ?? null,
     }))
-  }, [stakes.data, rewards.data])
-  const isLoading = stakes.isLoading || rewards.isLoading
-  const isError = stakes.isError || rewards.isError
+  }, [stakes.data, rewardsData])
+  const isLoading = stakes.isLoading || (rewards.isLoading && !rewardsData)
+  // Only a breakdown with nothing to show is replaced by the error card; otherwise the table
+  // stays, with an inline mark and N/A for what is missing.
+  const isError = stakes.isError && !stakes.data
+  const hasPartialError = stakes.isError || rewards.isError || rewardsIncomplete
   const refetch = () => Promise.all([stakes.refetch(), rewards.refetch()])
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')
@@ -95,7 +117,11 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
-      return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
+      // Missing rewards (null) sort as the lowest value
+      const aNum = (aVal as number | null) ?? -Infinity
+      const bNum = (bVal as number | null) ?? -Infinity
+      if (aNum === bNum) return 0
+      return sortDir === 'asc' ? (aNum < bNum ? -1 : 1) : (aNum < bNum ? 1 : -1)
     })
   }, [providers, sortKey, sortDir])
 
@@ -182,6 +208,13 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
         </Button>
       </div>
 
+      {hasPartialError && (
+        <p className="text-xs text-muted-foreground">
+          Some data could not be refreshed; showing the last data loaded, and N/A where there is none.
+          <button type="button" onClick={() => refetch()} className="ml-2 underline">Retry</button>
+        </p>
+      )}
+
       <div className="flex flex-col xl:flex-row gap-4">
         {/* Table card */}
         <div className={`${cardClasses} flex-1 min-w-0 overflow-x-auto`}>
@@ -222,10 +255,10 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
                     {toCurrencyFormat(p.stakedPokt, 0)}
                   </td>
                   <td className={`${CELL_CLASSES} text-right font-mono`}>
-                    {toCurrencyFormat(p.rewards24h, 2)}
+                    {p.rewards24h != null ? toCurrencyFormat(p.rewards24h, 2) : 'N/A'}
                   </td>
                   <td className={`${CELL_CLASSES} text-right font-mono`}>
-                    {toCurrencyFormat(p.rewards48h, 2)}
+                    {p.rewards48h != null ? toCurrencyFormat(p.rewards48h, 2) : 'N/A'}
                   </td>
                 </tr>
               ))}

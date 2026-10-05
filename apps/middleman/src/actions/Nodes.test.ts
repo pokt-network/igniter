@@ -107,6 +107,24 @@ describe('GetProviderRewards window', () => {
   })
 })
 
+describe('GetProviderRewards per-provider failures', () => {
+  it('returns null, not 0, for a provider whose batch failed', async () => {
+    nodes = [
+      { address: 'pokt1a', providerId: 'p1', provider: { name: 'One' }, status: 'staked', stakeAmount: '1000000' },
+      { address: 'pokt1b', providerId: 'p2', provider: { name: 'Two' }, status: 'staked', stakeAmount: '1000000' },
+    ]
+    query.mockImplementation(async ({ variables }: { variables: { supplierAddresses: string[] } }) => {
+      if (variables.supplierAddresses.includes('pokt1b')) throw new Error('indexer timeout')
+      return { data: { last24h: '1000000', last48h: '2000000' } }
+    })
+
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
+      { identity: 'p1', rewards24h: 1, rewards48h: 2 },
+      { identity: 'p2', rewards24h: null, rewards48h: null },
+    ])
+  })
+})
+
 describe('GetProviderStakes', () => {
   it('counts staked suppliers and stake per provider from the database only', async () => {
     nodes = [
