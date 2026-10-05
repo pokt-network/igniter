@@ -2,7 +2,7 @@ import { graphql } from './gql'
 
 export const rewardsByAddressAndTimeGroupByDateDocument = graphql(`
   query getRewardsByAddressesAndTimeGroupByAddressAndDate($addresses: [String!]!, $supplierAddresses: [String!]!, $startDate: Datetime!, $endDate: Datetime!, $truncInterval: String!) {
-    rewards: getRewardsBySuppliersAndTimeGroupByAddressAndDate(
+    rewards: legacyRewardsBySuppliersAndTimeGroupByAddressAndDate(
       addresses: $addresses,
       supplierAddresses: $supplierAddresses,
       startDate: $startDate, 
@@ -31,14 +31,14 @@ export const summaryDocument = graphql(`
         }
       }
     }
-    last24h: getRewardsOfAddressesBySuppliersAndTime(
+    last24h: legacyRewardsOfAddressesBySuppliersAndTime(
       addresses: $addresses,
       supplierAddresses: $supplierAddresses,
       startDate: $last24Hours,
       endDate: $currentDate,
     )
 
-    last48h: getRewardsOfAddressesBySuppliersAndTime(
+    last48h: legacyRewardsOfAddressesBySuppliersAndTime(
       addresses: $addresses,
       supplierAddresses: $supplierAddresses,
       startDate: $last48Hours,
