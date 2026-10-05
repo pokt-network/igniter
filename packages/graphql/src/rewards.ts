@@ -46,3 +46,27 @@ export const summaryDocument = graphql(`
     )
   }
 `)
+
+export const rewardsWindowsDocument = graphql(`
+  query rewardsWindows(
+    $supplierAddresses: [String!]!
+    $addresses: [String!]!,
+    $currentDate: Datetime!,
+    $last24Hours: Datetime!,
+    $last48Hours: Datetime!
+  ) {
+    last24h: legacyRewardsOfAddressesBySuppliersAndTime(
+      addresses: $addresses,
+      supplierAddresses: $supplierAddresses,
+      startDate: $last24Hours,
+      endDate: $currentDate,
+    )
+
+    last48h: legacyRewardsOfAddressesBySuppliersAndTime(
+      addresses: $addresses,
+      supplierAddresses: $supplierAddresses,
+      startDate: $last48Hours,
+      endDate: $currentDate,
+    )
+  }
+`)

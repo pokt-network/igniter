@@ -2,13 +2,14 @@
 
 import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
 import { Download } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import React, { useCallback, useMemo, useState } from 'react'
 import { GetProviderBreakdown, type ProviderBreakdownData } from '@/actions/Nodes'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { Button } from '@igniter/ui/components/button'
+import { useHeightContext } from '@igniter/ui/context/Height/height'
 
 type SortKey = 'name' | 'suppliers' | 'stakedPokt' | 'rewards24h' | 'rewards48h'
 type SortDir = 'asc' | 'desc'
@@ -48,10 +49,12 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
+  const { settlementHeight } = useHeightContext()
+  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer
   const { data: providers, isLoading, isError, refetch } = useQuery({
-    queryKey: ['providerBreakdown'],
+    queryKey: ['providerBreakdown', settlementHeight],
     queryFn: GetProviderBreakdown,
-    refetchInterval: 60000,
+    placeholderData: keepPreviousData,
     enabled: providerCount > 1,
   })
 

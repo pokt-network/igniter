@@ -6,7 +6,7 @@ import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesB
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
-import { summaryDocument, StakeStatus } from '@igniter/graphql'
+import { rewardsWindowsDocument } from '@igniter/graphql'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
@@ -125,13 +125,8 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
       const batchResults = await Promise.all(
         batches.map((batch) =>
           client.query({
-            query: summaryDocument,
+            query: rewardsWindowsDocument,
             variables: {
-              filter: {
-                stakeStatus: { equalTo: StakeStatus.Staked },
-                id: { in: batch },
-                ownerId: { in: ownerAddresses },
-              },
               currentDate,
               last24Hours,
               last48Hours,
