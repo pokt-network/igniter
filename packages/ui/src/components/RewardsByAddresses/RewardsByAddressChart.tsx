@@ -51,37 +51,44 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
+  const { currentHeight, firstHeight, currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   type RewardsData = DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument>
   const [rawData, setRawData] = useState<RewardsData | null>(initialData)
+  // The time selection rawData belongs to: after a failed fetch for a new selection, the data
+  // on hand is for another range and must not be shown under it.
+  const [rawDataTime, setRawDataTime] = useState(selectedTime)
   const [error, setError] = useState(initialError)
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastSelectedTimeRef = useRef(selectedTime)
+  // Fetches running, and the id of the latest one: only the latest may write its result.
+  const inFlightRef = useRef(0)
+  const seqRef = useRef(0)
 
   const fetchBatched = useCallback(async () => {
     if (!addresses.length) return
 
+    const seq = ++seqRef.current
+    inFlightRef.current++
     setIsLoading(true)
     try {
       const batches = batchArray(supplierAddresses)
+      const batchVariables = batches.map((batch) => rewardsByAddressAndTimeGroupByDateVariables(
+        addresses,
+        batch,
+        currentTime,
+        selectedTime,
+      ))
       const results = await Promise.all(
-        batches.map((batch) => {
-          const vars = rewardsByAddressAndTimeGroupByDateVariables(
-            addresses,
-            batch,
-            currentTime,
-            selectedTime,
-          )
-          lastVariables.current = vars
-          return client.query({
+        batchVariables.map((vars) =>
+          client.query({
             query: rewardsByAddressAndTimeGroupByDateDocument,
             variables: vars,
             fetchPolicy: 'network-only',
-          })
-        }),
+          }),
+        ),
       )
 
       const aggregated = results.reduce(
@@ -94,11 +101,17 @@ export default function RewardsByAddressChart({
         null as RewardsData | null,
       )
 
+      if (seq !== seqRef.current) return
+
+      lastVariables.current = batchVariables[0] ?? lastVariables.current
       setRawData(aggregated)
+      setRawDataTime(selectedTime)
       setError(false)
     } catch {
+      if (seq !== seqRef.current) return
       setError(true)
     } finally {
+      inFlightRef.current--
       setIsLoading(false)
     }
   }, [client, addresses, supplierAddresses, currentTime, selectedTime])
@@ -123,6 +136,18 @@ export default function RewardsByAddressChart({
     }
     // eslint-disable-next-line
   }, [settlementHeight, selectedTime])
+
+  // While in error, retry on every new block instead of waiting for the next settlement.
+  useEffect(() => {
+    if (!error || !addresses.length || currentHeight === firstHeight || inFlightRef.current > 0) return
+    fetchBatched()
+    // eslint-disable-next-line
+  }, [currentHeight])
+
+  // Data for the selected range is on hand: keep showing it while refetching or after a failed
+  // refresh, with an inline error mark, instead of the loader or the error card.
+  const hasCurrentData = rawData != null && rawDataTime === selectedTime
+  const showLoader = isLoading && !hasCurrentData
 
   const {groupAll: groupAllAddresses} = useGroupAll()
 
@@ -256,17 +281,24 @@ export default function RewardsByAddressChart({
 
   let content: React.ReactNode
 
+  const errorMark = error && (
+    <p className={'w-full text-xs text-text-tertiary'}>
+      Could not refresh the rewards; showing the last data loaded.
+      <button type="button" onClick={fetchBatched} className="ml-2 underline">Retry</button>
+    </p>
+  )
+
   if (!addresses.length) {
     content = (
       <div className={'mt-[-10px] flex w-full items-center justify-center'}>
         <NoData label={noDataMessage} />
       </div>
     )
-  } else if (isLoading) {
+  } else if (showLoader) {
     content = (
       <ContentLoader chartType={chartType} hideSelector={groupAllAddresses} />
     )
-  } else if (error) {
+  } else if (error && !hasCurrentData) {
     content = (
       <div className={'mt-[-10px] flex w-full grow'}>
         <ErrorRetry
@@ -278,6 +310,7 @@ export default function RewardsByAddressChart({
     if (data.length === 0 && addressesWithRewards.every(i => i.value === 0)) {
       content = (
         <>
+          {errorMark}
           <div className={'mt-[-10px] flex w-full items-center justify-center'}>
             <NoData label={'No data available for the selected time.'} />
           </div>
@@ -286,6 +319,7 @@ export default function RewardsByAddressChart({
     } else {
       content = (
         <>
+          {errorMark}
           <div className={'flex flex-col xl:flex-row w-full grow items-center gap-4'}>
             <div
               className={
@@ -347,8 +381,8 @@ export default function RewardsByAddressChart({
     <div
       className={
         clsx(
-          !isLoading && 'flex flex-col items-center px-4 pt-2 pb-4 h-full gap-4',
-          isLoading && 'flex flex-col xl:flex-row items-center px-4 pt-2 pb-4 h-[calc(100%-44px)] gap-4'
+          !showLoader && 'flex flex-col items-center px-4 pt-2 pb-4 h-full gap-4',
+          showLoader && 'flex flex-col xl:flex-row items-center px-4 pt-2 pb-4 h-[calc(100%-44px)] gap-4'
         )
       }
     >
