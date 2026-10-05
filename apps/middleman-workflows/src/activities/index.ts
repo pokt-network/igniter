@@ -37,6 +37,7 @@ import { dispatchUserNotification } from '@/lib/notifications/dispatch'
 import { txTypeToUserEventType } from './txEventType'
 import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
+import { postGraphql } from '@/lib/graphql'
 
 export type Height = number
 
@@ -1094,21 +1095,13 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         }
       }
     `
-    const [latestBlockResponse, paramResponse] = await Promise.all([
-      fetch(indexerApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: latestBlockQuery }),
-      }),
-      fetch(indexerApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: paramQuery }),
-      }),
+    const [latestBlockResult, paramResult] = await Promise.all([
+      postGraphql<{ blocks: { nodes: Array<{ id: string; timestamp: string }> } }>(indexerApiUrl, latestBlockQuery)
+        .catch((e) => { log.error('Failed to fetch latest block', { error: e }); return null }),
+      postGraphql<{ param: { value: string } | null }>(indexerApiUrl, paramQuery),
     ])
 
-    const latestBlockResult = await latestBlockResponse.json() as { data: { blocks: { nodes: Array<{ id: string; timestamp: string }> } } }
-    const latestBlockTimestamp = latestBlockResult.data?.blocks?.nodes?.[0]?.timestamp
+    const latestBlockTimestamp = latestBlockResult?.blocks?.nodes?.[0]?.timestamp
 
     const latestBlock = latestBlockTimestamp ? new Date(latestBlockTimestamp) : new Date()
     const Y = latestBlock.getUTCFullYear()
@@ -1117,9 +1110,8 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const endTs = new Date(Date.UTC(Y, M, D, 23, 59, 59, 999))
     const startTs = new Date(Date.UTC(Y, M, D - 6, 0, 0, 0, 0))
 
-    const paramResult = await paramResponse.json() as { data: { param: { value: string } | null } }
-    const supplierAllocation = paramResult.data?.param?.value
-      ? (JSON.parse(paramResult.data.param.value) as { supplier: number }).supplier
+    const supplierAllocation = paramResult.param?.value
+      ? (JSON.parse(paramResult.param.value) as { supplier: number }).supplier
       : -1
 
     if (supplierAllocation === -1) {
@@ -1156,12 +1148,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
       allDomains.length > 0
-        ? fetch(indexerApiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: supplierStatsQuery, variables: { domains: allDomains } }),
-          })
-            .then((r) => r.json() as Promise<{ data: { data: { suppliers_count: number; total_staked_tokens: number } } }>)
+        ? postGraphql<{ data: { suppliers_count: number; total_staked_tokens: number } }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
         : Promise.resolve(null),
 
@@ -1177,16 +1164,12 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
             }
 
             try {
-              const response = await fetch(indexerApiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  query: rewardsQuery,
-                  variables: { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },
-                }),
-              })
-              const result = await response.json() as { data: { data: { services: RewardBySupplier[]; suppliers_count: number } } }
-              const rawRewards: Array<RewardBySupplier> = result.data?.data?.services ?? []
+              const result = await postGraphql<{ data: { services: RewardBySupplier[]; suppliers_count: number } }>(
+                indexerApiUrl,
+                rewardsQuery,
+                { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },
+              )
+              const rawRewards: Array<RewardBySupplier> = result.data?.services ?? []
 
               const configuredServiceIds = new Set(ag.addressGroupServices.map((s) => s.serviceId))
               const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id) || true)
@@ -1205,7 +1188,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       ),
     ])
 
-    const supplierStats = supplierStatsResult?.data?.data ?? null
+    const supplierStats = supplierStatsResult?.data ?? null
     const suppliersCount = supplierStats?.suppliers_count ?? 0
 
     for (const entry of rewardsByGroupId) {
