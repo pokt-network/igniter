@@ -43,10 +43,11 @@ function aggregateRewardsResults(results: RewardsData[]): Pick<SummaryData, 'las
   }
 }
 
-function Value({value, tooltip}: {value: string, tooltip?: string}) {
+function Value({value, tooltip, onRetry}: {value: string, tooltip?: string, onRetry?: () => void}) {
   return (
     <p className={'mt-1 sm:text-lg font-medium'} title={tooltip}>
       {value}{tooltip && <span className="inline-block ml-1 text-xs text-text-tertiary cursor-help" title={tooltip}>&#9432;</span>}
+      {onRetry && <button type="button" onClick={onRetry} className="ml-2 text-xs underline text-text-tertiary">Retry</button>}
     </p>
   )
 }
@@ -69,15 +70,25 @@ export default function Summary({
   initialData
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
+  const { currentHeight, firstHeight, currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const [data, setData] = useState<SummaryData | null>(initialData)
   const [error, setError] = useState(initialError)
+  // Tracked apart from `error`: the suppliers refresh can succeed and hide the error card while
+  // the rewards are still missing, and those would otherwise wait for the next settlement.
+  const [rewardsError, setRewardsError] = useState(initialError || initialData?.last24h == null)
+  // Rewards fetches running, and the id of the latest one: only the latest may write its result,
+  // so a slow retry cannot overwrite a newer settlement-triggered fetch.
+  const rewardsInFlightRef = useRef(0)
+  const rewardsSeqRef = useRef(0)
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
 
   const fetchBatched = useCallback(async (part: 'rewards' | 'suppliers') => {
     if (!addresses.length) return
+    const seq = part === 'rewards' ? ++rewardsSeqRef.current : 0
+    const isStale = () => part === 'rewards' && seq !== rewardsSeqRef.current
+    if (part === 'rewards') rewardsInFlightRef.current++
 
     setIsLoading(true)
     try {
@@ -115,16 +126,22 @@ export default function Summary({
         update = aggregateSuppliersResults(results.map((r) => r.data))
       }
 
+      if (isStale()) return
+
       setData((prev) => {
         const next = { ...prev, ...update } as SummaryData
         lastValueRef.current = next
         return next
       })
       setError(false)
+      if (part === 'rewards') setRewardsError(false)
     } catch {
+      if (isStale()) return
       setError(true)
+      if (part === 'rewards') setRewardsError(true)
     } finally {
       setIsLoading(false)
+      if (part === 'rewards') rewardsInFlightRef.current--
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
 
@@ -146,6 +163,14 @@ export default function Summary({
     }
     // eslint-disable-next-line
   }, [settlementHeight])
+
+  // While the rewards are in error, retry them on every new block instead of waiting for a settlement.
+  useEffect(() => {
+    // Skips while a rewards fetch is running; a settlement-triggered fetch is never skipped.
+    if (!rewardsError || !addresses.length || currentHeight === firstHeight || rewardsInFlightRef.current > 0) return
+    fetchBatched('rewards')
+    // eslint-disable-next-line
+  }, [currentHeight])
 
   // The interval reads the latest fetchBatched through a ref, so a new block does not reset it.
   const fetchBatchedRef = useRef(fetchBatched)
@@ -219,6 +244,7 @@ export default function Summary({
                     : 'N/A'
                 }
                 tooltip={data?.last24h == null ? 'Indexer data unavailable' : undefined}
+                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
             4: (
@@ -229,6 +255,7 @@ export default function Summary({
                     : 'N/A'
                 }
                 tooltip={data?.last48h == null ? 'Indexer data unavailable' : undefined}
+                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
           }
