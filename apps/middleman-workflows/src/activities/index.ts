@@ -39,6 +39,7 @@ import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
 import { supplierRewardAmount, supplierRewardShare } from './supplierRewardShare'
+import { configuredServiceRewards } from './configuredServiceRewards'
 
 export type Height = number
 
@@ -1169,8 +1170,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
               )
               const rawRewards: Array<RewardBySupplier> = result.data?.services ?? []
 
-              const configuredServiceIds = new Set(ag.addressGroupServices.map((s) => s.serviceId))
-              const filteredRewards = rawRewards.filter((r) => configuredServiceIds.has(r.service_id) || true)
+              const filteredRewards = configuredServiceRewards(rawRewards, ag.addressGroupServices.map((s) => s.serviceId))
 
               const adjustedRewards = filteredRewards.map((entry) => ({
                 ...entry,
