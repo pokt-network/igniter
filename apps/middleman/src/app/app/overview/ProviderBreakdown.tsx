@@ -77,8 +77,14 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   const lastRewardsRef = useRef(rewards.data)
   if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
   const rewardsData = rewards.data ?? lastRewardsRef.current
-  // Some provider's batch failed on the server (its rewards came back null)
-  const rewardsIncomplete = rewardsData?.some((r) => r.rewards24h == null || r.rewards48h == null) ?? false
+  // Some provider's batch failed on the server (its rewards came back null), or a provider in the
+  // stakes poll is not in the last rewards response
+  const rewardsIncomplete = useMemo(() => {
+    if (!rewardsData) return false
+    const rewardIdentities = new Set(rewardsData.map((r) => r.identity))
+    return rewardsData.some((r) => r.rewards24h == null || r.rewards48h == null) ||
+      (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
+  }, [rewardsData, stakes.data])
 
   // While the rewards are in error or incomplete, retry on every new block instead of waiting for
   // the next settlement.

@@ -112,7 +112,8 @@ export default function RewardsByAddressChart({
       setError(true)
     } finally {
       inFlightRef.current--
-      setIsLoading(false)
+      // A superseded fetch must not end the loading state of the newer one
+      if (seq === seqRef.current) setIsLoading(false)
     }
   }, [client, addresses, supplierAddresses, currentTime, selectedTime])
 
