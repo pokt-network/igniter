@@ -49,11 +49,12 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
-  const { settlementHeight } = useHeightContext()
-  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer
+  const { settlementHeight, currentTime } = useHeightContext()
+  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer.
+  // currentTime comes from the same status response as settlementHeight, so the window includes it.
   const { data: providers, isLoading, isError, refetch } = useQuery({
     queryKey: ['providerBreakdown', settlementHeight],
-    queryFn: GetProviderBreakdown,
+    queryFn: () => GetProviderBreakdown(currentTime),
     placeholderData: keepPreviousData,
     enabled: providerCount > 1,
   })

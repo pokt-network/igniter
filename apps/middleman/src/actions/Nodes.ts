@@ -71,7 +71,19 @@ export interface ProviderBreakdownData {
   rewards48h: number
 }
 
-export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
+// Parses an indexer block timestamp, which may come without the trailing Z.
+function parseBlockTimestamp(timestamp: string | undefined): Date | null {
+  if (!timestamp) return null
+  const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z')
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * @param blockTimestamp - Timestamp of the block the client read its settlement height from.
+ * The rewards windows end there, so a refetch triggered by a new settlement always includes it;
+ * the cached latest block could predate it. Falls back to the latest block when absent or invalid.
+ */
+export async function GetProviderBreakdown(blockTimestamp?: string): Promise<ProviderBreakdownData[]> {
   const [userNodes, ownerAddresses, applicationSettings] = await Promise.all([
     GetUserNodes(),
     GetOwnerAddresses(),
@@ -104,14 +116,11 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
   }
 
   const providerEntries = Array.from(providerGroups.entries())
-  const latestBlock = await getLatestBlock(graphqlUrl)
   const client = getServerApolloClient(graphqlUrl)
 
-  const blockDate = new Date(
-    latestBlock.timestamp.endsWith('Z')
-      ? latestBlock.timestamp
-      : latestBlock.timestamp + 'Z',
-  )
+  const blockDate =
+    parseBlockTimestamp(blockTimestamp) ??
+    new Date((await getLatestBlock(graphqlUrl)).timestamp)
   const currentDate = blockDate.toISOString()
   const last24Hours = new Date(blockDate.getTime() - 24 * 60 * 60 * 1000).toISOString()
   const last48Hours = new Date(blockDate.getTime() - 48 * 60 * 60 * 1000).toISOString()

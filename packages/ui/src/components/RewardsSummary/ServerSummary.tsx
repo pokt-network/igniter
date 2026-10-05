@@ -1,6 +1,6 @@
 import { summaryVariables } from './operations'
 import Summary from './Summary'
-import { getLatestBlock } from '../../api/blocks'
+import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { summaryDocument } from '@igniter/graphql/rewards'
 import { batchArray } from '../../lib/batch'
@@ -28,7 +28,8 @@ export default async function ServerSummary({
 
   if (addresses.length && graphQlUrl) {
     try {
-      const latestBlock = await getLatestBlock(graphQlUrl)
+      // Same cached status as the height context, so the window ends at or after its settlement height
+      const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)
 

@@ -10,7 +10,7 @@ import RewardsByAddressChart from './RewardsByAddressChart'
 import CardActions from './CardActions'
 import { GroupAllProvider } from './GroupAllSwitch'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
-import { getLatestBlock } from '../../api/blocks'
+import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { getValidTime, Time } from '../../lib/dates'
 import { SelectedTimeProvider } from './TimeSelector'
@@ -45,7 +45,8 @@ export default async function ServerRewardsByAddresses({
       )
       chartType = cookiesAwaited?.get(chartTypeCookieKey)?.value === 'bar' ? 'bar' : 'line'
 
-      const latestBlock = await getLatestBlock(graphQlUrl)
+      // Same cached status as the height context, so the window ends at or after its settlement height
+      const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)
 
