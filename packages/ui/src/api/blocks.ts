@@ -1,5 +1,5 @@
 import { cache } from 'react'
-import { latestBlockDocument, numBlocksPerSessionDocument, statusQuery } from '@igniter/graphql/block'
+import { latestBlockDocument, statusQuery } from '@igniter/graphql/block'
 import { getServerApolloClient } from '../lib/graphql/server'
 import { unstable_cache } from 'next/cache'
 
@@ -55,19 +55,5 @@ export const getStatusQuery = cache(
     },
     ['latest_block'],
     { revalidate: 20}
-  )
-)
-
-export const getNumBlocksPerSession = cache(
-  unstable_cache(
-    async (graphQlUrl: string): Promise<number> => {
-      const {data} = await getServerApolloClient(graphQlUrl).query({
-        query: numBlocksPerSessionDocument
-      })
-
-      return Number(data?.params?.nodes?.at(0)?.value || 0)
-    },
-    ['blocks_per_session'],
-    { revalidate: 60}
   )
 )

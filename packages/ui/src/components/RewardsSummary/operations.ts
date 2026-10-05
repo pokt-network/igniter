@@ -1,6 +1,6 @@
 import { StakeStatus, summaryDocument, SupplierFilter } from '@igniter/graphql'
 import { addHoursToUtc, getDateFromIsoString } from '../BaseLineBarChart/utils'
-import { ExtractVariables } from '../../hooks/useFetchOnNewBlock'
+import { ExtractVariables } from '../../lib/graphql/types'
 
 export function summaryVariables(
   filterForOwners: boolean,
