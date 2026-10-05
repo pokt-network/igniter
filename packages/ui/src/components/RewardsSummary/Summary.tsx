@@ -80,6 +80,7 @@ export default function Summary({
   // so a slow retry cannot overwrite a newer settlement-triggered fetch.
   const rewardsInFlightRef = useRef(0)
   const rewardsSeqRef = useRef(0)
+  const suppliersInFlightRef = useRef(0)
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
@@ -88,7 +89,8 @@ export default function Summary({
     if (!addresses.length) return
     const seq = part === 'rewards' ? ++rewardsSeqRef.current : 0
     const isStale = () => part === 'rewards' && seq !== rewardsSeqRef.current
-    if (part === 'rewards') rewardsInFlightRef.current++
+    const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
+    inFlightRef.current++
 
     setIsLoading(true)
     try {
@@ -141,7 +143,7 @@ export default function Summary({
       if (part === 'rewards') setRewardsError(true)
     } finally {
       setIsLoading(false)
-      if (part === 'rewards') rewardsInFlightRef.current--
+      inFlightRef.current--
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
 
@@ -164,11 +166,13 @@ export default function Summary({
     // eslint-disable-next-line
   }, [settlementHeight])
 
-  // While the rewards are in error, retry them on every new block instead of waiting for a settlement.
+  // While the rewards are in error or the suppliers are missing (a failed first load), retry them
+  // on every new block instead of waiting for a settlement or the suppliers timer. Each part is
+  // skipped while a fetch of it is running; a settlement-triggered fetch is never skipped.
   useEffect(() => {
-    // Skips while a rewards fetch is running; a settlement-triggered fetch is never skipped.
-    if (!rewardsError || !addresses.length || currentHeight === firstHeight || rewardsInFlightRef.current > 0) return
-    fetchBatched('rewards')
+    if (!addresses.length || currentHeight === firstHeight) return
+    if (rewardsError && rewardsInFlightRef.current === 0) fetchBatched('rewards')
+    if (data?.suppliers == null && suppliersInFlightRef.current === 0) fetchBatched('suppliers')
     // eslint-disable-next-line
   }, [currentHeight])
 
@@ -218,22 +222,23 @@ export default function Summary({
             1: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    data?.suppliers?.totalCount || 0,
-                  )
+                  data?.suppliers != null
+                    ? toCurrencyFormat(data.suppliers.totalCount || 0)
+                    : 'N/A'
                 }
+                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
+                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
               />
             ),
             2: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    amountToPokt(
-                      data?.suppliers?.aggregates?.sum?.stakeAmount
-                    ),
-                    2,
-                  )
+                  data?.suppliers != null
+                    ? toCurrencyFormat(amountToPokt(data.suppliers.aggregates?.sum?.stakeAmount), 2)
+                    : 'N/A'
                 }
+                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
+                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
               />
             ),
             3: (
