@@ -58,6 +58,7 @@ export default function HeightContextProvider({
       fetchPolicy: 'network-only',
       nextFetchPolicy: 'network-only',
       pollInterval: 15 * 1000,
+      skipPollAttempt: () => document.hidden,
       skip: skipQueries
     }
   )
