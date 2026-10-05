@@ -38,6 +38,7 @@ import { txTypeToUserEventType } from './txEventType'
 import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
+import { supplierRewardAmount, supplierRewardShare } from './supplierRewardShare'
 
 export type Height = number
 
@@ -1089,8 +1090,11 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       }
     `
     const paramQuery = `
-      query GetSupplierAllocation {
-        param(id: "tokenomics-mint_allocation_percentages") {
+      query GetSupplierRewardShare {
+        claimDistribution: param(id: "tokenomics-mint_equals_burn_claim_distribution") {
+          value
+        }
+        mintRatio: param(id: "tokenomics-mint_ratio") {
           value
         }
       }
@@ -1098,7 +1102,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const [latestBlockResult, paramResult] = await Promise.all([
       postGraphql<{ blocks: { nodes: Array<{ id: string; timestamp: string }> } }>(indexerApiUrl, latestBlockQuery)
         .catch((e) => { log.error('Failed to fetch latest block', { error: e }); return null }),
-      postGraphql<{ param: { value: string } | null }>(indexerApiUrl, paramQuery),
+      postGraphql<{ claimDistribution: { value: string } | null; mintRatio: { value: string } | null }>(indexerApiUrl, paramQuery),
     ])
 
     const latestBlockTimestamp = latestBlockResult?.blocks?.nodes?.[0]?.timestamp
@@ -1110,13 +1114,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     const endTs = new Date(Date.UTC(Y, M, D, 23, 59, 59, 999))
     const startTs = new Date(Date.UTC(Y, M, D - 6, 0, 0, 0, 0))
 
-    const supplierAllocation = paramResult.param?.value
-      ? (JSON.parse(paramResult.param.value) as { supplier: number }).supplier
-      : -1
-
-    if (supplierAllocation === -1) {
-      throw new Error('Failed to fetch supplier allocation percentage from indexer')
-    }
+    const supplierShare = supplierRewardShare(paramResult.claimDistribution?.value, paramResult.mintRatio?.value)
 
     const rewardsQuery = `
       query RewardsByDomains($domains: [String!]!, $startTs: Datetime!, $endTs: Datetime!) {
@@ -1176,7 +1174,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
               const adjustedRewards = filteredRewards.map((entry) => ({
                 ...entry,
-                amount: Math.floor(entry.gross_rewards * supplierAllocation).toString(),
+                amount: supplierRewardAmount(entry.gross_rewards, supplierShare),
               }))
 
               return { id: ag.id, rewards: adjustedRewards }
