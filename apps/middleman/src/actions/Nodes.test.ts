@@ -136,11 +136,20 @@ describe('GetProviderRewards with the range shape', () => {
     gaps: [],
   }
 
-  it('reads data, and gives null when nothing is covered', async () => {
-    query.mockResolvedValue({ data: { last24h: { range, data: null }, last48h: { range, data: 2000000 } } })
+  it('reads data, and keeps the 48h window coverage', async () => {
+    query.mockResolvedValue({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: 2000000 } } })
 
     await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'provider-1', rewards24h: null, rewards48h: 2, coverage48h: range },
+      { identity: 'provider-1', rewards24h: 1, rewards48h: 2, coverage48h: range },
+    ])
+  })
+
+  it('gives null, not 0, when nothing in the window is covered', async () => {
+    const notCovered = { ...range, covered_from: null, covered_to: null }
+    query.mockResolvedValue({ data: { last24h: { range: notCovered, data: null }, last48h: { range: notCovered, data: null } } })
+
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
+      { identity: 'provider-1', rewards24h: null, rewards48h: null, coverage48h: notCovered },
     ])
   })
 
@@ -148,10 +157,12 @@ describe('GetProviderRewards with the range shape', () => {
     nodes = Array.from({ length: 201 }, (_, i) => (
       { address: `pokt1s${i}`, providerId: 'p1', provider: { name: 'One' }, status: 'staked', stakeAmount: '1' }
     ))
-    query.mockResolvedValue({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: '3000000' } } })
+    query
+      .mockResolvedValueOnce({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: '3000000' } } })
+      .mockResolvedValueOnce({ data: { last24h: { range, data: 5000000 }, last48h: { range, data: '7000000' } } })
 
     await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'p1', rewards24h: 2, rewards48h: 6, coverage48h: range },
+      { identity: 'p1', rewards24h: 6, rewards48h: 10, coverage48h: range },
     ])
     expect(query).toHaveBeenCalledTimes(2)
   })

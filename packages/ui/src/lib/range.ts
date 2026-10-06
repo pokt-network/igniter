@@ -81,6 +81,7 @@ function formatUtc(date: string): string {
 }
 
 export const NO_COVERAGE_NOTE = 'No indexed data for this range'
+const MAX_LISTED_GAPS = 3
 
 /**
  * A short note when the data covers less than the requested window: "Data since <date>", plus
@@ -97,8 +98,14 @@ export function coverageNote(range: CoverageRange | null): string | null {
   ) {
     parts.push(`Data since ${formatUtc(range.covered_from)}`)
   }
-  if (range.gaps?.length) {
-    parts.push(`gaps: ${range.gaps.map((g) => `${formatUtc(g.from)} – ${formatUtc(g.to)}`).join(', ')}`)
+  // A gap that ends where the data starts is already said by "Data since"
+  const gaps = (range.gaps ?? []).filter(
+    (g) => range.covered_from == null || new Date(g.to) > new Date(range.covered_from),
+  )
+  if (gaps.length) {
+    const listed = gaps.slice(0, MAX_LISTED_GAPS).map((g) => `${formatUtc(g.from)} – ${formatUtc(g.to)}`)
+    if (gaps.length > MAX_LISTED_GAPS) listed.push(`${gaps.length - MAX_LISTED_GAPS} more`)
+    parts.push(`gaps: ${listed.join(', ')}`)
   }
   return parts.length ? parts.join('; ') : null
 }

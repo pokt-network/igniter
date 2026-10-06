@@ -81,6 +81,14 @@ describe('sumRewardTotals and mergeRewardRows', () => {
     })
   })
 
+  it('reads a mix of both shapes, as while the indexer release rolls out', () => {
+    expect(sumRewardTotals(['5000000', { range: partialRange, data: '3000000' }])).toEqual({
+      data: 8000000,
+      range: partialRange,
+    })
+    expect(sumRewardTotals([null, { range: notCovered, data: null }])).toEqual({ data: null, range: notCovered })
+  })
+
   it('merges old-shape rows exactly as before', () => {
     expect(mergeRewardRows([[{ address: 'pokt1a', date_truncated: 'd', total_amount: '2' }], null])).toEqual([
       { address: 'pokt1a', date_truncated: 'd', total_amount: '2' },
@@ -100,6 +108,16 @@ describe('coverageNote', () => {
 
   it('says nothing is covered when covered_from and covered_to are null', () => {
     expect(coverageNote(notCovered)).toBe('No indexed data for this range')
+  })
+
+  it('leaves out a gap that ends where the data starts, and caps the list', () => {
+    const leading = { from: '2026-08-30T00:00:00+00:00', to: partialRange.covered_from }
+    expect(coverageNote({ ...partialRange, gaps: [leading] })).toBe('Data since Sep 01, 2026, 12:00 UTC')
+    const gap = (h: number) => ({ from: `2026-09-01T${h}:00:00+00:00`, to: `2026-09-01T${h}:30:00+00:00` })
+    expect(coverageNote({ ...fullRange, gaps: [gap(13), gap(14), gap(15), gap(16), gap(17)] })).toBe(
+      'gaps: Sep 01, 2026, 13:00 UTC – Sep 01, 2026, 13:30 UTC, Sep 01, 2026, 14:00 UTC – Sep 01, 2026, 14:30 UTC, ' +
+        'Sep 01, 2026, 15:00 UTC – Sep 01, 2026, 15:30 UTC, 2 more',
+    )
   })
 
   it('prints midnight as 00:00', () => {
