@@ -9,6 +9,7 @@ import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { coverageNote, isUncovered } from '@igniter/ui/lib/range'
+import { createBlockRetryBudget } from '@igniter/ui/lib/blockRetry'
 import { Button } from '@igniter/ui/components/button'
 import { useHeightContext } from '@igniter/ui/context/Height/height'
 
@@ -76,7 +77,9 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   // Last rewards that loaded, kept on screen when a later fetch fails (an errored query for a new
   // settlement height has no data of its own).
   const lastRewardsRef = useRef(rewards.data)
-  if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
+  useEffect(() => {
+    if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
+  }, [rewards.data, rewards.isPlaceholderData])
   const rewardsData = rewards.data ?? lastRewardsRef.current
   // Some provider's batch failed on the server (its rewards came back null), or a provider in the
   // stakes poll is not in the last rewards response
@@ -92,9 +95,11 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   }, [rewardsData, stakes.data])
 
   // While the rewards are in error or incomplete, retry on every new block instead of waiting for
-  // the next settlement.
+  // the next settlement, up to MAX_BLOCK_RETRIES in a row (a new settlement height refetches anyway).
+  const retryRef = useRef(createBlockRetryBudget())
   useEffect(() => {
     if (!(rewards.isError || rewardsIncomplete) || rewards.isFetching || currentHeight === firstHeight) return
+    if (!retryRef.current.take(settlementHeight)) return
     rewards.refetch()
     // eslint-disable-next-line
   }, [currentHeight])

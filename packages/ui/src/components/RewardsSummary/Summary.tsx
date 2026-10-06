@@ -13,6 +13,7 @@ import { useHeightContext } from '../../context/Height/height'
 import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
+import { createBlockRetryBudget } from '../../lib/blockRetry'
 import { coverageNote, Ranged } from '../../lib/range'
 import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
 import SummaryLoader from './Loader'
@@ -85,20 +86,26 @@ export default function Summary({
   // Tracked apart from `error`: the suppliers refresh can succeed and hide the error card while
   // the rewards are still missing, and those would otherwise wait for the next settlement.
   const [rewardsError, setRewardsError] = useState(initialError || initialData?.last24h == null)
-  // Rewards fetches running, and the id of the latest one: only the latest may write its result,
-  // so a slow retry cannot overwrite a newer settlement-triggered fetch.
+  // Fetches running per part, and the id of the latest one: only the latest may write its result,
+  // so a slow retry cannot overwrite a newer fetch (settlement-triggered, or the suppliers timer).
   const rewardsInFlightRef = useRef(0)
   const rewardsSeqRef = useRef(0)
   const suppliersInFlightRef = useRef(0)
+  const suppliersSeqRef = useRef(0)
+  // Per-block retries of each part, capped until the next settlement height (see blockRetry.ts)
+  const rewardsRetryRef = useRef(createBlockRetryBudget())
+  const suppliersRetryRef = useRef(createBlockRetryBudget())
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
 
   const fetchBatched = useCallback(async (part: 'rewards' | 'suppliers') => {
     if (!addresses.length) return
-    const seq = part === 'rewards' ? ++rewardsSeqRef.current : 0
-    const isStale = () => part === 'rewards' && seq !== rewardsSeqRef.current
+    const seqRef = part === 'rewards' ? rewardsSeqRef : suppliersSeqRef
+    const seq = ++seqRef.current
+    const isStale = () => seq !== seqRef.current
     const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
+    const retryRef = part === 'rewards' ? rewardsRetryRef : suppliersRetryRef
     inFlightRef.current++
 
     setIsLoading(true)
@@ -146,6 +153,7 @@ export default function Summary({
       })
       setError(false)
       if (part === 'rewards') setRewardsError(false)
+      retryRef.current.reset()
     } catch {
       if (isStale()) return
       setError(true)
@@ -176,12 +184,17 @@ export default function Summary({
   }, [settlementHeight])
 
   // While the rewards are in error or the suppliers are missing (a failed first load), retry them
-  // on every new block instead of waiting for a settlement or the suppliers timer. Each part is
-  // skipped while a fetch of it is running; a settlement-triggered fetch is never skipped.
+  // on every new block instead of waiting for a settlement or the suppliers timer, up to
+  // MAX_BLOCK_RETRIES in a row. Each part is skipped while a fetch of it is running; a
+  // settlement-triggered fetch is never skipped.
   useEffect(() => {
     if (!addresses.length || currentHeight === firstHeight) return
-    if (rewardsError && rewardsInFlightRef.current === 0) fetchBatched('rewards')
-    if (data?.suppliers == null && suppliersInFlightRef.current === 0) fetchBatched('suppliers')
+    if (rewardsError && rewardsInFlightRef.current === 0 && rewardsRetryRef.current.take(settlementHeight)) {
+      fetchBatched('rewards')
+    }
+    if (data?.suppliers == null && suppliersInFlightRef.current === 0 && suppliersRetryRef.current.take(settlementHeight)) {
+      fetchBatched('suppliers')
+    }
     // eslint-disable-next-line
   }, [currentHeight])
 
