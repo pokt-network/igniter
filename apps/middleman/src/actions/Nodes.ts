@@ -10,7 +10,7 @@ import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
-import { unwrapRange } from '@igniter/ui/lib/range'
+import { type CoverageRange, unwrapRange } from '@igniter/ui/lib/range'
 import { sumRewardTotals } from '@igniter/ui/lib/rewards'
 
 export async function GetAllNodes() {
@@ -75,6 +75,9 @@ export interface ProviderRewardsData {
   identity: string
   rewards24h: number | null
   rewards48h: number | null
+  // The indexer's coverage of the 48h window, in its new result shape only (see range.ts). When
+  // present, a null reward means nothing in the window is covered, not a failed fetch.
+  coverage48h: CoverageRange | null
 }
 
 export interface ProviderBreakdownData extends ProviderStakeData {
@@ -195,11 +198,10 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
         ),
       )
 
-      // Either indexer shape (see range.ts); null when nothing in the window is covered
-      return {
-        last24h: unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last24h))).data,
-        last48h: unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last48h))).data,
-      }
+      // Either indexer shape (see range.ts); data is null when nothing in the window is covered
+      const total24h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last24h)))
+      const total48h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last48h)))
+      return { last24h: total24h.data, last48h: total48h.data, coverage48h: total48h.range }
     }),
   )
 
@@ -211,6 +213,7 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
       identity,
       rewards24h: data?.last24h != null ? amountToPokt(data.last24h) : null,
       rewards48h: data?.last48h != null ? amountToPokt(data.last48h) : null,
+      coverage48h: data?.coverage48h ?? null,
     }
   })
 }

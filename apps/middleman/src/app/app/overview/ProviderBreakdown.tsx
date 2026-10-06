@@ -8,6 +8,7 @@ import { GetProviderRewards, GetProviderStakes, type ProviderBreakdownData } fro
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
+import { coverageNote } from '@igniter/ui/lib/range'
 import { Button } from '@igniter/ui/components/button'
 import { useHeightContext } from '@igniter/ui/context/Height/height'
 
@@ -82,7 +83,8 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   const rewardsIncomplete = useMemo(() => {
     if (!rewardsData) return false
     const rewardIdentities = new Set(rewardsData.map((r) => r.identity))
-    return rewardsData.some((r) => r.rewards24h == null || r.rewards48h == null) ||
+    // With the indexer's coverage at hand, a null reward is a window with nothing covered, not a failure
+    return rewardsData.some((r) => r.coverage48h == null && (r.rewards24h == null || r.rewards48h == null)) ||
       (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
   }, [rewardsData, stakes.data])
 
@@ -109,6 +111,12 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   // stays, with an inline mark and N/A for what is missing.
   const isError = stakes.isError && !stakes.data
   const hasPartialError = stakes.isError || rewards.isError || rewardsIncomplete
+  // The indexer covers only part of the 48h window (new result shape only; every provider asks
+  // for the same window)
+  const rangeNote = useMemo(
+    () => coverageNote(rewardsData?.find((r) => r.coverage48h)?.coverage48h ?? null),
+    [rewardsData],
+  )
   const refetch = () => Promise.all([stakes.refetch(), rewards.refetch()])
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')
@@ -220,6 +228,7 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
           <button type="button" onClick={() => refetch()} className="ml-2 underline">Retry</button>
         </p>
       )}
+      {rangeNote && <p className="text-xs text-muted-foreground">{rangeNote}</p>}
 
       <div className="flex flex-col xl:flex-row gap-4">
         {/* Table card */}

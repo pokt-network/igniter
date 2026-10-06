@@ -119,8 +119,8 @@ describe('GetProviderRewards per-provider failures', () => {
     })
 
     await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'p1', rewards24h: 1, rewards48h: 2 },
-      { identity: 'p2', rewards24h: null, rewards48h: null },
+      { identity: 'p1', rewards24h: 1, rewards48h: 2, coverage48h: null },
+      { identity: 'p2', rewards24h: null, rewards48h: null, coverage48h: null },
     ])
   })
 })
@@ -140,7 +140,7 @@ describe('GetProviderRewards with the range shape', () => {
     query.mockResolvedValue({ data: { last24h: { range, data: null }, last48h: { range, data: 2000000 } } })
 
     await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'provider-1', rewards24h: null, rewards48h: 2 },
+      { identity: 'provider-1', rewards24h: null, rewards48h: 2, coverage48h: range },
     ])
   })
 
@@ -151,7 +151,7 @@ describe('GetProviderRewards with the range shape', () => {
     query.mockResolvedValue({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: '3000000' } } })
 
     await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'p1', rewards24h: 2, rewards48h: 6 },
+      { identity: 'p1', rewards24h: 2, rewards48h: 6, coverage48h: range },
     ])
     expect(query).toHaveBeenCalledTimes(2)
   })

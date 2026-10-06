@@ -284,7 +284,7 @@ export default function RewardsByAddressChart({
   let content: React.ReactNode
 
   // The indexer covers only part of the selected range (new shape only)
-  const rangeNote = coverageNote(unwrapRange(rawData?.rewards).range)
+  const rangeNote = useMemo(() => coverageNote(unwrapRange(rawData?.rewards).range), [rawData])
   const rangeMark = rangeNote && (
     <p className={'w-full text-xs text-text-tertiary'}>{rangeNote}</p>
   )
@@ -319,6 +319,7 @@ export default function RewardsByAddressChart({
       content = (
         <>
           {errorMark}
+          {rangeMark}
           <div className={'mt-[-10px] flex w-full items-center justify-center'}>
             <NoData label={'No data available for the selected time.'} />
           </div>
