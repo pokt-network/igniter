@@ -124,7 +124,8 @@ describe('coverageNote', () => {
 
   it('never decides "not covered" from data alone: a covered window with no rows has no note', () => {
     expect(coverageNote(unwrapRange({ range: coveredNoRows, data: null }).range)).toBeNull()
-    expect(coverageNote(mergeRewardRows([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }]).range)).toBeNull()
+    expect(coverageNote(unwrapRange(mergeRewardRows([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }])).range))
+      .toBeNull()
   })
 
   it('clips the gaps to the window and reads open-ended edges', () => {
