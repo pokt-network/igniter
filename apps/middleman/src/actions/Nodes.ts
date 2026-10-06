@@ -76,7 +76,7 @@ export interface ProviderRewardsData {
   rewards24h: number | null
   rewards48h: number | null
   // The indexer's coverage of each window, in its new result shape only (see range.ts). When
-  // present, a null reward means nothing in that window is covered, not a failed fetch.
+  // present, a null reward is the indexer's answer for that window, not a failed fetch.
   coverage24h: CoverageRange | null
   coverage48h: CoverageRange | null
 }
@@ -199,7 +199,7 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
         ),
       )
 
-      // Either indexer shape (see range.ts); data is null when nothing in the window is covered
+      // Either indexer shape (see range.ts); a total is null only when nothing in the window is covered
       const total24h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last24h)))
       const total48h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last48h)))
       return {

@@ -152,7 +152,7 @@ export default function RewardsByAddressChart({
   const {groupAll: groupAllAddresses} = useGroupAll()
 
   const processedData: Record<string, Array<RewardItem>> = useMemo(() => {
-    // Either indexer shape (see range.ts); data null means nothing in the range is covered
+    // Either indexer shape (see range.ts); data null is no rows, covered or not (the range says which)
     const rewards = unwrapRange<Array<{date_truncated: string, total_amount: string | number, address: string}>>(rawData?.rewards)
     const rawPoints = rewards.data || []
 

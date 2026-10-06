@@ -16,7 +16,8 @@ const gapRange = {
   covered_to: '2026-09-02T08:20:00+00:00',
   gaps: [{ from: '2026-09-01T23:30:00+00:00', to: '2026-09-02T00:00:00+00:00' }],
 }
-const beforeCoverage = { ...partialRange, requested_to: '2026-08-31T12:00:00+00:00', covered_to: '2026-08-31T12:00:00+00:00' }
+// A series function's answer for a covered window with no rows: data null, covered bounds set
+const coveredNoRows = { ...partialRange, requested_from: partialRange.covered_from }
 const fullRange = { ...partialRange, requested_from: '2026-09-01T12:00:00+00:00' }
 // The indexer's current wording: nothing covered gives covered_from / covered_to null
 const notCovered = { ...partialRange, covered_from: null, covered_to: null }
@@ -28,7 +29,7 @@ describe('unwrapRange', () => {
   })
 
   it('keeps data null as null, never 0', () => {
-    expect(unwrapRange({ range: beforeCoverage, data: null })).toEqual({ data: null, range: beforeCoverage })
+    expect(unwrapRange({ range: coveredNoRows, data: null })).toEqual({ data: null, range: coveredNoRows })
     expect(unwrapRange({ range: notCovered, data: null })).toEqual({ data: null, range: notCovered })
   })
 
@@ -55,9 +56,9 @@ describe('sumRewardTotals and mergeRewardRows', () => {
   })
 
   it('gives data null when no batch has data, and skips the batches without it', () => {
-    expect(sumRewardTotals([{ range: beforeCoverage, data: null }, { range: beforeCoverage, data: null }])).toEqual({
+    expect(sumRewardTotals([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }])).toEqual({
       data: null,
-      range: beforeCoverage,
+      range: coveredNoRows,
     })
     expect(sumRewardTotals([{ range: notCovered, data: null }, { range: notCovered, data: null }])).toEqual({
       data: null,
@@ -121,11 +122,28 @@ describe('coverageNote', () => {
     expect(coverageNote(notCovered)).toBe('No indexed data for this range')
   })
 
+  it('never decides "not covered" from data alone: a covered window with no rows has no note', () => {
+    expect(coverageNote(unwrapRange({ range: coveredNoRows, data: null }).range)).toBeNull()
+    expect(coverageNote(mergeRewardRows([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }]).range)).toBeNull()
+  })
+
+  it('clips the gaps to the window and reads open-ended edges', () => {
+    const range = { ...fullRange, end_inclusive: true }
+    expect(coverageNote({ ...range, gaps: [{ from: '2026-09-01T12:30:00+00:00', to: '2026-09-02T00:00:00+00:00' }] }))
+      .toBe('gaps: Sep 01, 2026, 12:30 UTC – Sep 01, 2026, 13:00 UTC')
+    expect(coverageNote({ ...range, gaps: [{ from: '2026-09-01T12:30:00+00:00', to: null }] }))
+      .toBe('gaps: Sep 01, 2026, 12:30 UTC – Sep 01, 2026, 13:00 UTC')
+    expect(coverageNote({ ...range, gaps: [{ from: null, to: '2026-09-01T12:15:00+00:00' }] }))
+      .toBe('gaps: Sep 01, 2026, 12:00 UTC – Sep 01, 2026, 12:15 UTC')
+    expect(coverageNote({ ...range, gaps: [{ from: '2026-09-01T14:00:00+00:00', to: '2026-09-01T15:00:00+00:00' }] }))
+      .toBeNull()
+  })
+
   it('leaves out a gap that ends where the data starts, and caps the list', () => {
     const leading = { from: '2026-08-30T00:00:00+00:00', to: partialRange.covered_from }
     expect(coverageNote({ ...partialRange, gaps: [leading] })).toBe('Data since Sep 01, 2026, 12:00 UTC')
     const gap = (h: number) => ({ from: `2026-09-01T${h}:00:00+00:00`, to: `2026-09-01T${h}:30:00+00:00` })
-    expect(coverageNote({ ...fullRange, gaps: [gap(13), gap(14), gap(15), gap(16), gap(17)] })).toBe(
+    expect(coverageNote({ ...fullRange, requested_to: '2026-09-02T00:00:00+00:00', gaps: [gap(13), gap(14), gap(15), gap(16), gap(17)] })).toBe(
       'gaps: Sep 01, 2026, 13:00 UTC – Sep 01, 2026, 13:30 UTC, Sep 01, 2026, 14:00 UTC – Sep 01, 2026, 14:30 UTC, ' +
         'Sep 01, 2026, 15:00 UTC – Sep 01, 2026, 15:30 UTC, 2 more',
     )

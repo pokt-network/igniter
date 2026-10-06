@@ -1,13 +1,15 @@
 /**
  * The indexer's legacy_ reward functions are moving from the bare value to
  * `{ range, data }`, where `range` says which part of the requested window the money tables
- * cover. Outside coverage the old shape raised an error; the new one answers with `data: null`
- * (nothing covered: no data, never 0) or with what is covered. Both shapes are read here, so
- * the site works before and after that indexer release.
+ * cover. Outside coverage the old shape raised an error; the new one answers with what is
+ * covered. "Nothing covered" is said only by covered_from / covered_to null, never by data alone:
+ * the series functions also answer data null for a covered window with no rows. Both shapes are
+ * read here, so the site works before and after that indexer release.
  */
+// Half-open [from, to); a null edge is open-ended
 export interface CoverageGap {
-  from: string
-  to: string
+  from: string | null
+  to: string | null
 }
 
 export interface CoverageRange {
@@ -17,6 +19,9 @@ export interface CoverageRange {
   covered_from: string | null
   covered_to: string | null
   gaps: Array<CoverageGap>
+  // true for the legacy_ functions (their end is inclusive), false for the catalog ones; only the
+  // note reads the range, and at its minute resolution an inclusive end changes nothing
+  end_inclusive?: boolean
 }
 
 export interface Ranged<T> {
@@ -72,7 +77,8 @@ export function combineBatches<T>(values: Array<unknown>, combine: (values: Arra
   }
 }
 
-function formatUtc(date: string): string {
+function formatUtc(date: string | null): string {
+  if (date == null) return '…'
   return parseTime(date).toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -83,6 +89,17 @@ function formatUtc(date: string): string {
     hourCycle: 'h23',
     timeZone: 'UTC',
   }) + ' UTC'
+}
+
+// Clips a gap to the window after the data starts (what lies before is already said by "Data
+// since"); null when nothing of it is left.
+function clipGap(gap: CoverageGap, range: CoverageRange): CoverageGap | null {
+  const start = range.covered_from ?? range.requested_from
+  const end = range.requested_to
+  const from = gap.from == null || (start != null && parseTime(start) > parseTime(gap.from)) ? start : gap.from
+  const to = gap.to == null || (end != null && parseTime(end) < parseTime(gap.to)) ? end : gap.to
+  if (from != null && to != null && parseTime(from) >= parseTime(to)) return null
+  return { from, to }
 }
 
 export const NO_COVERAGE_NOTE = 'No indexed data for this range'
@@ -103,10 +120,7 @@ export function coverageNote(range: CoverageRange | null): string | null {
   ) {
     parts.push(`Data since ${formatUtc(range.covered_from)}`)
   }
-  // A gap that ends where the data starts is already said by "Data since"
-  const gaps = (range.gaps ?? []).filter(
-    (g) => range.covered_from == null || parseTime(g.to) > parseTime(range.covered_from),
-  )
+  const gaps = (range.gaps ?? []).map((g) => clipGap(g, range)).filter((g): g is CoverageGap => g != null)
   if (gaps.length) {
     const listed = gaps.slice(0, MAX_LISTED_GAPS).map((g) => `${formatUtc(g.from)} – ${formatUtc(g.to)}`)
     if (gaps.length > MAX_LISTED_GAPS) listed.push(`${gaps.length - MAX_LISTED_GAPS} more`)
