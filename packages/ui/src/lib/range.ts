@@ -44,9 +44,17 @@ export function isUncovered(range: CoverageRange | null): boolean {
   return range != null && range.covered_from == null && range.covered_to == null
 }
 
-// Postgres prints timestamptz with 0 to 6 fractional digits; ECMAScript only specifies exactly 3
+// Postgres prints timestamptz with 0 to 6 fractional digits, and as text with a space and a bare
+// +00 offset; ECMAScript only specifies the ISO form with exactly 3. A time that still does not
+// parse is an Invalid Date: every comparison with it is false, so that bound counts as unknown
+// (no "Data since", no clipping) and formatUtc prints it as sent.
 export function parseTime(time: string): Date {
-  return new Date(time.replace(/\.(\d+)/, (_, fraction: string) => '.' + fraction.padEnd(3, '0').slice(0, 3)))
+  return new Date(
+    time
+      .replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T')
+      .replace(/(T[\d:.]+[+-]\d{2})$/, '$1:00')
+      .replace(/\.(\d+)/, (_, fraction: string) => '.' + fraction.padEnd(3, '0').slice(0, 3)),
+  )
 }
 
 // Every batch asks for the same window, so their ranges match; merged conservatively anyway.
@@ -81,20 +89,16 @@ export function combineBatches<T>(values: Array<unknown>, combine: (values: Arra
   }
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 function formatUtc(date: string | null): string {
   if (date == null) return '…'
   const time = parseTime(date)
   if (Number.isNaN(time.getTime())) return date
-  return time.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    // not hour12: false, which some engines print as 24:00 at midnight
-    hourCycle: 'h23',
-    timeZone: 'UTC',
-  }) + ' UTC'
+  // Built from the UTC parts, not toLocaleString, so the server and the browser print the same text
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${MONTHS[time.getUTCMonth()]} ${pad(time.getUTCDate())}, ${time.getUTCFullYear()}, ` +
+    `${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())} UTC`
 }
 
 // Clips a gap to the covered part of the window (what lies before it is already said by "Data

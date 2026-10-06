@@ -199,6 +199,15 @@ describe('isUncovered', () => {
   })
 })
 
+describe('formatting', () => {
+  it('prints a fixed UTC text, the same on the server and in the browser', () => {
+    expect(coverageNote({ ...fullRange, requested_from: '2026-01-01T00:00:00Z', covered_from: '2026-01-05T07:09:00Z' }))
+      .toBe('Data since Jan 05, 2026, 07:09 UTC')
+    expect(coverageNote({ ...fullRange, requested_from: '2026-12-01T00:00:00Z', covered_from: '2026-12-31T23:59:59.999Z' }))
+      .toBe('Data since Dec 31, 2026, 23:59 UTC')
+  })
+})
+
 describe('parseTime', () => {
   it('reads 0 to 6 fractional digits as milliseconds', () => {
     const base = Date.UTC(2026, 8, 1, 12, 0, 3)
@@ -208,6 +217,23 @@ describe('parseTime', () => {
     expect(parseTime('2026-09-01T12:00:03.123+00:00').getTime()).toBe(base + 123)
     expect(parseTime('2026-09-01T12:00:03.123456+00:00').getTime()).toBe(base + 123)
     expect(parseTime('2026-09-01T12:00:03.5Z').getTime()).toBe(base + 500)
+  })
+
+  it('reads the Postgres text form', () => {
+    expect(parseTime('2026-10-04 12:00:00+00').getTime()).toBe(Date.UTC(2026, 9, 4, 12))
+    expect(parseTime('2026-10-04 12:00:00.25+00').getTime()).toBe(Date.UTC(2026, 9, 4, 12, 0, 0, 250))
+    expect(parseTime('2026-10-05').getTime()).toBe(Date.UTC(2026, 9, 5))
+    expect(coverageNote({ ...fullRange, requested_from: '2026-10-04 00:00:00+00', covered_from: '2026-10-04 12:00:00+00' }))
+      .toBe('Data since Oct 04, 2026, 12:00 UTC')
+  })
+
+  it('treats a time that does not parse as unknown: no "Data since", no clipping, printed as sent', () => {
+    expect(coverageNote({ ...fullRange, covered_from: 'garbage' })).toBeNull()
+    expect(coverageNote({ ...fullRange, requested_from: 'garbage', covered_from: '2026-09-01T12:00:00Z' })).toBeNull()
+    expect(coverageNote({ ...fullRange, gaps: [{ from: 'garbage', to: '2026-09-01T12:30:00Z' }] }))
+      .toBe('gaps: garbage – Sep 01, 2026, 12:30 UTC')
+    expect(coverageNote({ ...fullRange, covered_to: 'garbage', gaps: [{ from: '2026-09-01T12:30:00Z', to: '2026-09-02T00:00:00Z' }] }))
+      .toBe('gaps: Sep 01, 2026, 12:30 UTC – Sep 02, 2026, 00:00 UTC')
   })
 
   it('never makes coverageNote throw on a bad time', () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApolloClient } from '@apollo/client'
 import ErrorRetry from '../ErrorRetry'
 import FourCard from '../FourCards/FourCard'
@@ -201,6 +201,9 @@ export default function Summary({
     return () => clearInterval(interval)
   }, [addresses.length])
 
+  const reward24h = useMemo(() => rewardValue(data?.last24h ?? null), [data?.last24h])
+  const reward48h = useMemo(() => rewardValue(data?.last48h ?? null), [data?.last48h])
+
   if (isLoading && !lastValueRef.current) {
     return <SummaryLoader />
   } else if (error && !lastValueRef.current) {
@@ -252,13 +255,13 @@ export default function Summary({
             ),
             3: (
               <Value
-                {...rewardValue(data?.last24h ?? null)}
+                {...reward24h}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
             4: (
               <Value
-                {...rewardValue(data?.last48h ?? null)}
+                {...reward48h}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
