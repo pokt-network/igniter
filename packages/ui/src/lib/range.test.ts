@@ -1,0 +1,102 @@
+import { coverageNote, unwrapRange } from './range'
+import { mergeRewardRows, sumRewardTotals } from './rewards'
+
+// Shapes from the indexer's range contract (pocketdex RESULT.md, "Contract as implemented")
+const partialRange = {
+  requested_from: '2026-08-31T00:00:00+00:00',
+  requested_to: '2026-09-01T13:00:00+00:00',
+  covered_from: '2026-09-01T12:00:00+00:00',
+  covered_to: '2026-09-01T13:00:00+00:00',
+  gaps: [],
+}
+const gapRange = {
+  requested_from: '2026-08-31T00:00:00+00:00',
+  requested_to: '2026-09-03T00:00:00+00:00',
+  covered_from: '2026-09-01T12:00:00+00:00',
+  covered_to: '2026-09-02T08:20:00+00:00',
+  gaps: [{ from: '2026-09-01T23:30:00+00:00', to: '2026-09-02T00:00:00+00:00' }],
+}
+const beforeCoverage = { ...partialRange, requested_to: '2026-08-31T12:00:00+00:00', covered_to: '2026-08-31T12:00:00+00:00' }
+const fullRange = { ...partialRange, requested_from: '2026-09-01T12:00:00+00:00' }
+
+
+describe('unwrapRange', () => {
+  it('reads the new shape', () => {
+    expect(unwrapRange({ range: partialRange, data: 201156529 })).toEqual({ data: 201156529, range: partialRange })
+  })
+
+  it('keeps data null as null, never 0', () => {
+    expect(unwrapRange({ range: beforeCoverage, data: null })).toEqual({ data: null, range: beforeCoverage })
+  })
+
+  it('passes the old shape through with no range', () => {
+    expect(unwrapRange('5955402106')).toEqual({ data: '5955402106', range: null })
+    expect(unwrapRange(0)).toEqual({ data: 0, range: null })
+    expect(unwrapRange(null)).toEqual({ data: null, range: null })
+    const old = [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 1 }]
+    expect(unwrapRange(old)).toEqual({ data: old, range: null })
+  })
+})
+
+describe('sumRewardTotals and mergeRewardRows', () => {
+  it('sums old-shape numeric strings exactly as before', () => {
+    expect(sumRewardTotals(['1000000', '2000000'])).toBe(3000000)
+    expect(sumRewardTotals(['1000000', null])).toBe(1000000)
+  })
+
+  it('sums new-shape data and keeps the range', () => {
+    expect(sumRewardTotals([{ range: partialRange, data: 100 }, { range: partialRange, data: '25' }])).toEqual({
+      data: 125,
+      range: partialRange,
+    })
+  })
+
+  it('gives data null when no batch has data, and skips the batches without it', () => {
+    expect(sumRewardTotals([{ range: beforeCoverage, data: null }, { range: beforeCoverage, data: null }])).toEqual({
+      data: null,
+      range: beforeCoverage,
+    })
+    expect(sumRewardTotals([{ range: partialRange, data: null }, { range: partialRange, data: 0 }])).toEqual({
+      data: 0,
+      range: partialRange,
+    })
+  })
+
+  it('merges new-shape rows per (address, date) and the gaps of every batch', () => {
+    const a = { range: gapRange, data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 100 }] }
+    const b = {
+      range: { ...gapRange, covered_from: '2026-09-01T13:00:00+00:00' },
+      data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 30 }],
+    }
+    expect(mergeRewardRows([a, b])).toEqual({
+      data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 130 }],
+      range: { ...gapRange, covered_from: '2026-09-01T13:00:00+00:00' },
+    })
+  })
+
+  it('merges old-shape rows exactly as before', () => {
+    expect(mergeRewardRows([[{ address: 'pokt1a', date_truncated: 'd', total_amount: '2' }], null])).toEqual([
+      { address: 'pokt1a', date_truncated: 'd', total_amount: '2' },
+    ])
+  })
+})
+
+describe('coverageNote', () => {
+  it('says nothing for the old shape or a fully covered window', () => {
+    expect(coverageNote(null)).toBeNull()
+    expect(coverageNote(fullRange)).toBeNull()
+  })
+
+  it('names the coverage start when it is after the requested start', () => {
+    expect(coverageNote(partialRange)).toBe('Data since Sep 01, 2026, 12:00 UTC')
+  })
+
+  it('lists the gaps', () => {
+    expect(coverageNote(gapRange)).toBe(
+      'Data since Sep 01, 2026, 12:00 UTC; gaps: Sep 01, 2026, 23:30 UTC – Sep 02, 2026, 00:00 UTC',
+    )
+    expect(coverageNote({ ...gapRange, requested_from: gapRange.covered_from })).toBe(
+      'gaps: Sep 01, 2026, 23:30 UTC – Sep 02, 2026, 00:00 UTC',
+    )
+  })
+})

@@ -4,6 +4,7 @@ import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { summaryDocument } from '@igniter/graphql/rewards'
 import { batchArray } from '../../lib/batch'
+import { sumRewardTotals } from '../../lib/rewards'
 
 interface ServerSummaryProps {
   addresses: Array<string>
@@ -67,10 +68,8 @@ export default async function ServerSummary({
                 },
               },
             },
-            last24h:
-              Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-            last48h:
-              Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
+            last24h: sumRewardTotals([acc.last24h, d.last24h]),
+            last48h: sumRewardTotals([acc.last48h, d.last48h]),
           }
         },
         null as typeof results[0]['data'] | null,

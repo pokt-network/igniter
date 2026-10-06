@@ -10,6 +10,8 @@ import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
+import { unwrapRange } from '@igniter/ui/lib/range'
+import { sumRewardTotals } from '@igniter/ui/lib/rewards'
 
 export async function GetAllNodes() {
   await requireAdmin()
@@ -193,13 +195,11 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
         ),
       )
 
-      return batchResults.reduce(
-        (acc, { data: d }) => ({
-          last24h: Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-          last48h: Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
-        }),
-        { last24h: 0, last48h: 0 } as { last24h: number; last48h: number },
-      )
+      // Either indexer shape (see range.ts); null when nothing in the window is covered
+      return {
+        last24h: unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last24h))).data,
+        last48h: unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last48h))).data,
+      }
     }),
   )
 
@@ -209,8 +209,8 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
 
     return {
       identity,
-      rewards24h: data ? amountToPokt(data.last24h) : null,
-      rewards48h: data ? amountToPokt(data.last48h) : null,
+      rewards24h: data?.last24h != null ? amountToPokt(data.last24h) : null,
+      rewards48h: data?.last48h != null ? amountToPokt(data.last48h) : null,
     }
   })
 }

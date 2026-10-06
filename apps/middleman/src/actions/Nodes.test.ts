@@ -125,6 +125,38 @@ describe('GetProviderRewards per-provider failures', () => {
   })
 })
 
+// The indexer's { range, data } shape (pocketdex range contract): data null means nothing in the
+// window is covered, which is no data, not 0.
+describe('GetProviderRewards with the range shape', () => {
+  const range = {
+    requested_from: '2026-10-03T21:15:09.000Z',
+    requested_to: '2026-10-05T21:15:09.000Z',
+    covered_from: '2026-10-04T12:00:00+00:00',
+    covered_to: '2026-10-05T21:15:09+00:00',
+    gaps: [],
+  }
+
+  it('reads data, and gives null when nothing is covered', async () => {
+    query.mockResolvedValue({ data: { last24h: { range, data: null }, last48h: { range, data: 2000000 } } })
+
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
+      { identity: 'provider-1', rewards24h: null, rewards48h: 2 },
+    ])
+  })
+
+  it('sums the data of every batch', async () => {
+    nodes = Array.from({ length: 201 }, (_, i) => (
+      { address: `pokt1s${i}`, providerId: 'p1', provider: { name: 'One' }, status: 'staked', stakeAmount: '1' }
+    ))
+    query.mockResolvedValue({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: '3000000' } } })
+
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
+      { identity: 'p1', rewards24h: 2, rewards48h: 6 },
+    ])
+    expect(query).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('GetProviderStakes', () => {
   it('counts staked suppliers and stake per provider from the database only', async () => {
     nodes = [

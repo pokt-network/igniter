@@ -13,6 +13,8 @@ import { useHeightContext } from '../../context/Height/height'
 import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
+import { coverageNote, Ranged, unwrapRange } from '../../lib/range'
+import { sumRewardTotals } from '../../lib/rewards'
 import SummaryLoader from './Loader'
 
 type SummaryData = DocumentNodeData<typeof summaryDocument>
@@ -38,18 +40,29 @@ function aggregateSuppliersResults(results: SuppliersData[]): Pick<SummaryData, 
 
 function aggregateRewardsResults(results: RewardsData[]): Pick<SummaryData, 'last24h' | 'last48h'> {
   return {
-    last24h: results.reduce((sum, d) => sum + Number(d.last24h ?? 0), 0),
-    last48h: results.reduce((sum, d) => sum + Number(d.last48h ?? 0), 0),
+    last24h: sumRewardTotals(results.map((d) => d.last24h)),
+    last48h: sumRewardTotals(results.map((d) => d.last48h)),
   }
 }
 
-function Value({value, tooltip, onRetry}: {value: string, tooltip?: string, onRetry?: () => void}) {
+function Value({value, tooltip, note, onRetry}: {value: string, tooltip?: string, note?: string | null, onRetry?: () => void}) {
   return (
     <p className={'mt-1 sm:text-lg font-medium'} title={tooltip}>
       {value}{tooltip && <span className="inline-block ml-1 text-xs text-text-tertiary cursor-help" title={tooltip}>&#9432;</span>}
       {onRetry && <button type="button" onClick={onRetry} className="ml-2 text-xs underline text-text-tertiary">Retry</button>}
+      {note && <span className="block text-xs font-normal text-text-tertiary">{note}</span>}
     </p>
   )
+}
+
+// A rewards total in either indexer shape (see range.ts). A missing total (failed fetch) and a
+// window with nothing covered both show N/A, never 0; a partly covered window adds a note.
+function rewardValue(total: Ranged<string | number>) {
+  return {
+    value: total.data != null ? toCurrencyFormat(amountToPokt(total.data), 2) : 'N/A',
+    tooltip: total.data != null ? undefined : total.range ? 'No indexed data for this range' : 'Indexer data unavailable',
+    note: total.data != null ? coverageNote(total.range) : null,
+  }
 }
 
 interface SummaryProps {
@@ -243,23 +256,13 @@ export default function Summary({
             ),
             3: (
               <Value
-                value={
-                  data?.last24h != null
-                    ? toCurrencyFormat(amountToPokt(data.last24h), 2)
-                    : 'N/A'
-                }
-                tooltip={data?.last24h == null ? 'Indexer data unavailable' : undefined}
+                {...rewardValue(unwrapRange<string | number>(data?.last24h))}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
             4: (
               <Value
-                value={
-                  data?.last48h != null
-                    ? toCurrencyFormat(amountToPokt(data.last48h), 2)
-                    : 'N/A'
-                }
-                tooltip={data?.last48h == null ? 'Indexer data unavailable' : undefined}
+                {...rewardValue(unwrapRange<string | number>(data?.last48h))}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),

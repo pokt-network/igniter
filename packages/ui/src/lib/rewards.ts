@@ -1,3 +1,5 @@
+import { combineBatches } from './range'
+
 export type RewardByAddressAndDate = {
   address: string
   date_truncated: string
@@ -23,4 +25,16 @@ export function mergeRewardBatches(rows: Array<RewardByAddressAndDate>): Array<R
   }
 
   return Array.from(merged.values())
+}
+
+/** The reward totals of several supplier batches, in either indexer shape (see range.ts), summed. */
+export function sumRewardTotals(values: Array<unknown>) {
+  return combineBatches(values, (totals) => totals.reduce((sum: number, v) => sum + Number(v ?? 0), 0))
+}
+
+/** The reward rows of several supplier batches, in either indexer shape (see range.ts), merged. */
+export function mergeRewardRows(values: Array<unknown>) {
+  return combineBatches(values, (batches) =>
+    mergeRewardBatches(batches.flatMap((rows) => (Array.isArray(rows) ? rows : []))),
+  )
 }

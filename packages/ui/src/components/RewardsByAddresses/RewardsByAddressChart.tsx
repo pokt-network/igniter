@@ -24,7 +24,8 @@ import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rew
 import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
-import { mergeRewardBatches } from '../../lib/rewards'
+import { mergeRewardRows } from '../../lib/rewards'
+import { coverageNote, unwrapRange } from '../../lib/range'
 
 export interface RewardItem extends LineBarItem {
   totalAmount: number
@@ -94,9 +95,7 @@ export default function RewardsByAddressChart({
       const aggregated = results.reduce(
         (acc, { data: d }) => {
           if (!acc) return d
-          const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
-          const dRewards = Array.isArray(d.rewards) ? d.rewards : []
-          return { ...d, rewards: mergeRewardBatches([...accRewards, ...dRewards]) }
+          return { ...d, rewards: mergeRewardRows([acc.rewards, d.rewards]) }
         },
         null as RewardsData | null,
       )
@@ -153,9 +152,11 @@ export default function RewardsByAddressChart({
   const {groupAll: groupAllAddresses} = useGroupAll()
 
   const processedData: Record<string, Array<RewardItem>> = useMemo(() => {
-    const rawPoints: Array<{date_truncated: string, total_amount: string | number, address: string}> = rawData?.rewards || []
+    // Either indexer shape (see range.ts); data null means nothing in the range is covered
+    const rewards = unwrapRange<Array<{date_truncated: string, total_amount: string | number, address: string}>>(rawData?.rewards)
+    const rawPoints = rewards.data || []
 
-    if (!addresses.length || !rawData?.rewards) return {}
+    if (!addresses.length || !rewards.data) return {}
 
     if (groupAllAddresses) {
       const amountByDate = rawPoints.reduce((acc, item) => ({
@@ -282,6 +283,12 @@ export default function RewardsByAddressChart({
 
   let content: React.ReactNode
 
+  // The indexer covers only part of the selected range (new shape only)
+  const rangeNote = coverageNote(unwrapRange(rawData?.rewards).range)
+  const rangeMark = rangeNote && (
+    <p className={'w-full text-xs text-text-tertiary'}>{rangeNote}</p>
+  )
+
   const errorMark = error && (
     <p className={'w-full text-xs text-text-tertiary'}>
       Could not refresh the rewards; showing the last data loaded.
@@ -321,6 +328,7 @@ export default function RewardsByAddressChart({
       content = (
         <>
           {errorMark}
+          {rangeMark}
           <div className={'flex flex-col xl:flex-row w-full grow items-center gap-4'}>
             <div
               className={
