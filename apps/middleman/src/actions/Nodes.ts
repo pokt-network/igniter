@@ -10,8 +10,8 @@ import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
-import { type CoverageRange, unwrapRange } from '@igniter/ui/lib/range'
-import { sumRewardTotals } from '@igniter/ui/lib/rewards'
+import { type CoverageRange, mergeRanges } from '@igniter/ui/lib/range'
+import { combineRewardsWindows } from '@igniter/ui/lib/rewards'
 
 export async function GetAllNodes() {
   await requireAdmin()
@@ -75,8 +75,13 @@ export interface ProviderRewardsData {
   identity: string
   rewards24h: number | null
   rewards48h: number | null
-  // The indexer's coverage of each window, in its new result shape only (see range.ts). When
-  // present, a null reward is the indexer's answer for that window, not a failed fetch.
+}
+
+export interface ProviderRewards {
+  providers: ProviderRewardsData[]
+  // The indexer's coverage of each window, the same for every provider; null with its old result
+  // shape (see range.ts). An uncovered window (isUncovered) makes a null reward "no data", not a
+  // failed fetch.
   coverage24h: CoverageRange | null
   coverage48h: CoverageRange | null
 }
@@ -150,7 +155,7 @@ function parseBlockTimestamp(timestamp: unknown): Date | null {
  * the cached latest block could predate it. Falls back to the latest block when absent, malformed,
  * or outside the accepted range around the server clock.
  */
-export async function GetProviderRewards(blockTimestamp?: string): Promise<ProviderRewardsData[]> {
+export async function GetProviderRewards(blockTimestamp?: string): Promise<ProviderRewards> {
   const [userNodes, ownerAddresses, applicationSettings] = await Promise.all([
     GetUserNodes(),
     GetOwnerAddresses(),
@@ -199,28 +204,23 @@ export async function GetProviderRewards(blockTimestamp?: string): Promise<Provi
         ),
       )
 
-      // Either indexer shape (see range.ts); a total is null only when nothing in the window is covered
-      const total24h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last24h)))
-      const total48h = unwrapRange<number>(sumRewardTotals(batchResults.map(({ data: d }) => d.last48h)))
-      return {
-        last24h: total24h.data,
-        last48h: total48h.data,
-        coverage24h: total24h.range,
-        coverage48h: total48h.range,
-      }
+      // Either indexer shape, normalised once (see range.ts)
+      return combineRewardsWindows(batchResults.map(({ data: d }) => d))
     }),
   )
 
-  return providerEntries.map(([identity], index) => {
-    const result = results[index]
-    const data = result?.status === 'fulfilled' ? result.value : null
+  const windows = results.map((result) => (result.status === 'fulfilled' ? result.value : null))
 
-    return {
-      identity,
-      rewards24h: data?.last24h != null ? amountToPokt(data.last24h) : null,
-      rewards48h: data?.last48h != null ? amountToPokt(data.last48h) : null,
-      coverage24h: data?.coverage24h ?? null,
-      coverage48h: data?.coverage48h ?? null,
-    }
-  })
+  return {
+    providers: providerEntries.map(([identity], index) => {
+      const data = windows[index]
+      return {
+        identity,
+        rewards24h: data?.last24h.data != null ? amountToPokt(data.last24h.data) : null,
+        rewards48h: data?.last48h.data != null ? amountToPokt(data.last48h.data) : null,
+      }
+    }),
+    coverage24h: mergeRanges(windows.map((w) => w?.last24h.range ?? null)),
+    coverage48h: mergeRanges(windows.map((w) => w?.last48h.range ?? null)),
+  }
 }

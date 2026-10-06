@@ -18,14 +18,14 @@ import ItemsSelector from './ItemsSelector'
 import { clsx } from 'clsx'
 import { useGroupAll } from './GroupAllSwitch'
 import { amountToPokt, getShortAddress, toCompactFormat, toCurrencyFormat } from '../../lib/utils'
-import { DocumentNodeData, ExtractVariables } from '../../lib/graphql/types'
+import { ExtractVariables } from '../../lib/graphql/types'
 import { ContentLoader } from './Loader'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
 import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
-import { mergeRewardRows } from '../../lib/rewards'
-import { coverageNote, NO_COVERAGE_NOTE, unwrapRange } from '../../lib/range'
+import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
+import { coverageNote, isUncovered, NO_COVERAGE_NOTE, Ranged } from '../../lib/range'
 
 export interface RewardItem extends LineBarItem {
   totalAmount: number
@@ -36,7 +36,7 @@ interface RewardsByAddressChartProps {
   addresses: Array<string>
   supplierAddresses: Array<string>
   noDataMessage?: string
-  initialData: DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument> | null
+  initialData: Ranged<Array<RewardByAddressAndDate>> | null
   initialVariables: ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument> | null
 }
 
@@ -55,8 +55,8 @@ export default function RewardsByAddressChart({
   const { currentHeight, firstHeight, currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
-  type RewardsData = DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument>
-  const [rawData, setRawData] = useState<RewardsData | null>(initialData)
+  // The rows of the selected range, normalised once (see range.ts)
+  const [rawData, setRawData] = useState<Ranged<Array<RewardByAddressAndDate>> | null>(initialData)
   // The time selection rawData belongs to: after a failed fetch for a new selection, the data
   // on hand is for another range and must not be shown under it.
   const [rawDataTime, setRawDataTime] = useState(selectedTime)
@@ -92,13 +92,7 @@ export default function RewardsByAddressChart({
         ),
       )
 
-      const aggregated = results.reduce(
-        (acc, { data: d }) => {
-          if (!acc) return d
-          return { ...d, rewards: mergeRewardRows([acc.rewards, d.rewards]) }
-        },
-        null as RewardsData | null,
-      )
+      const aggregated = combineRewardRows(results.map((r) => r.data))
 
       if (seq !== seqRef.current) return
 
@@ -152,11 +146,10 @@ export default function RewardsByAddressChart({
   const {groupAll: groupAllAddresses} = useGroupAll()
 
   const processedData: Record<string, Array<RewardItem>> = useMemo(() => {
-    // Either indexer shape (see range.ts); data null is no rows, covered or not (the range says which)
-    const rewards = unwrapRange<Array<{date_truncated: string, total_amount: string | number, address: string}>>(rawData?.rewards)
-    const rawPoints = rewards.data || []
+    // data null is no rows, covered or not (the range says which)
+    const rawPoints = rawData?.data || []
 
-    if (!addresses.length || !rewards.data) return {}
+    if (!addresses.length || !rawData?.data) return {}
 
     if (groupAllAddresses) {
       const amountByDate = rawPoints.reduce((acc, item) => ({
@@ -284,7 +277,8 @@ export default function RewardsByAddressChart({
   let content: React.ReactNode
 
   // The indexer covers only part of the selected range (new shape only)
-  const rangeNote = useMemo(() => coverageNote(unwrapRange(rawData?.rewards).range), [rawData])
+  const rangeNote = useMemo(() => coverageNote(rawData?.range ?? null), [rawData])
+  const uncovered = isUncovered(rawData?.range ?? null)
   const rangeMark = rangeNote && (
     <p className={'w-full text-xs text-text-tertiary'}>{rangeNote}</p>
   )
@@ -319,9 +313,9 @@ export default function RewardsByAddressChart({
       content = (
         <>
           {errorMark}
-          {rangeNote !== NO_COVERAGE_NOTE && rangeMark}
+          {!uncovered && rangeMark}
           <div className={'mt-[-10px] flex w-full items-center justify-center'}>
-            <NoData label={rangeNote === NO_COVERAGE_NOTE ? NO_COVERAGE_NOTE : 'No data available for the selected time.'} />
+            <NoData label={uncovered ? NO_COVERAGE_NOTE : 'No data available for the selected time.'} />
           </div>
         </>
       )

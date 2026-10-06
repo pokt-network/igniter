@@ -1,10 +1,10 @@
 import { summaryVariables } from './operations'
-import Summary from './Summary'
+import Summary, { type SummaryData } from './Summary'
 import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { summaryDocument } from '@igniter/graphql/rewards'
 import { batchArray } from '../../lib/batch'
-import { sumRewardTotals } from '../../lib/rewards'
+import { combineRewardsWindows } from '../../lib/rewards'
 
 interface ServerSummaryProps {
   addresses: Array<string>
@@ -25,7 +25,7 @@ export default async function ServerSummary({
   dbSuppliersCount,
   dbStakedTokens,
 }: ServerSummaryProps) {
-  let data, error = false
+  let data: SummaryData | null = null, error = false
 
   if (addresses.length && graphQlUrl) {
     try {
@@ -49,7 +49,7 @@ export default async function ServerSummary({
       )
 
       // Aggregate results across batches
-      data = results.reduce(
+      const aggregated = results.reduce(
         (acc, { data: d }) => {
           if (!acc) return d
           return {
@@ -68,12 +68,12 @@ export default async function ServerSummary({
                 },
               },
             },
-            last24h: sumRewardTotals([acc.last24h, d.last24h]),
-            last48h: sumRewardTotals([acc.last48h, d.last48h]),
           }
         },
         null as typeof results[0]['data'] | null,
       )
+      // The rewards totals, normalised once (see range.ts), are what crosses to the client
+      if (aggregated) data = { ...aggregated, ...combineRewardsWindows(results.map((r) => r.data)) }
     } catch {
       error = true
     }

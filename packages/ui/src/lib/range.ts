@@ -39,13 +39,18 @@ export function unwrapRange<T>(value: unknown): Ranged<T> {
   return { data: value as T | null, range: null }
 }
 
-// Postgres prints timestamptz with up to 6 fractional digits; ECMAScript only specifies 3
-function parseTime(time: string): Date {
-  return new Date(time.replace(/(\.\d{3})\d+/, '$1'))
+/** Nothing in the requested window is covered: said only by null covered bounds, never by data. */
+export function isUncovered(range: CoverageRange | null): boolean {
+  return range != null && range.covered_from == null && range.covered_to == null
+}
+
+// Postgres prints timestamptz with 0 to 6 fractional digits; ECMAScript only specifies exactly 3
+export function parseTime(time: string): Date {
+  return new Date(time.replace(/\.(\d+)/, (_, fraction: string) => '.' + fraction.padEnd(3, '0').slice(0, 3)))
 }
 
 // Every batch asks for the same window, so their ranges match; merged conservatively anyway.
-function mergeRanges(ranges: Array<CoverageRange | null>): CoverageRange | null {
+export function mergeRanges(ranges: Array<CoverageRange | null>): CoverageRange | null {
   const present = ranges.filter((r): r is CoverageRange => r != null)
   if (!present.length) return null
   const latest = (a: string | null, b: string | null) => (a == null || (b != null && parseTime(b) > parseTime(a)) ? b : a)
@@ -63,12 +68,11 @@ function mergeRanges(ranges: Array<CoverageRange | null>): CoverageRange | null 
 }
 
 /**
- * Combines one field across supplier batches (see batch.ts). Old shape: `combine` over the bare
- * values, as before. New shape: `combine` over the batches with data, `data: null` when none
- * has any, and the ranges merged.
+ * Combines one field across supplier batches (see batch.ts), in either shape, into one Ranged:
+ * `combine` over the batches with data, `data: null` when none has any, and the ranges merged
+ * (`range: null` for the old shape).
  */
-export function combineBatches<T>(values: Array<unknown>, combine: (values: Array<unknown>) => T): T | Ranged<T> {
-  if (!values.some(isRanged)) return combine(values)
+export function combineBatches<T>(values: Array<unknown>, combine: (values: Array<unknown>) => T): Ranged<T> {
   const parts = values.map((v) => unwrapRange<unknown>(v))
   const withData = parts.filter((p) => p.data != null).map((p) => p.data)
   return {
@@ -79,7 +83,9 @@ export function combineBatches<T>(values: Array<unknown>, combine: (values: Arra
 
 function formatUtc(date: string | null): string {
   if (date == null) return '…'
-  return parseTime(date).toLocaleString('en-US', {
+  const time = parseTime(date)
+  if (Number.isNaN(time.getTime())) return date
+  return time.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: '2-digit',
@@ -91,11 +97,11 @@ function formatUtc(date: string | null): string {
   }) + ' UTC'
 }
 
-// Clips a gap to the window after the data starts (what lies before is already said by "Data
+// Clips a gap to the covered part of the window (what lies before it is already said by "Data
 // since"); null when nothing of it is left.
 function clipGap(gap: CoverageGap, range: CoverageRange): CoverageGap | null {
   const start = range.covered_from ?? range.requested_from
-  const end = range.requested_to
+  const end = range.covered_to ?? range.requested_to
   const from = gap.from == null || (start != null && parseTime(start) > parseTime(gap.from)) ? start : gap.from
   const to = gap.to == null || (end != null && parseTime(end) < parseTime(gap.to)) ? end : gap.to
   if (from != null && to != null && parseTime(from) >= parseTime(to)) return null
@@ -112,7 +118,7 @@ const MAX_LISTED_GAPS = 3
  */
 export function coverageNote(range: CoverageRange | null): string | null {
   if (!range) return null
-  if (range.covered_from == null && range.covered_to == null) return NO_COVERAGE_NOTE
+  if (isUncovered(range)) return NO_COVERAGE_NOTE
   const parts: Array<string> = []
   if (
     range.covered_from &&

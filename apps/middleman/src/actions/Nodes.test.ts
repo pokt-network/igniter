@@ -118,10 +118,14 @@ describe('GetProviderRewards per-provider failures', () => {
       return { data: { last24h: '1000000', last48h: '2000000' } }
     })
 
-    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'p1', rewards24h: 1, rewards48h: 2, coverage24h: null, coverage48h: null },
-      { identity: 'p2', rewards24h: null, rewards48h: null, coverage24h: null, coverage48h: null },
-    ])
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual({
+      providers: [
+        { identity: 'p1', rewards24h: 1, rewards48h: 2 },
+        { identity: 'p2', rewards24h: null, rewards48h: null },
+      ],
+      coverage24h: null,
+      coverage48h: null,
+    })
   })
 })
 
@@ -139,18 +143,22 @@ describe('GetProviderRewards with the range shape', () => {
   it('reads data, and keeps the 48h window coverage', async () => {
     query.mockResolvedValue({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: 2000000 } } })
 
-    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'provider-1', rewards24h: 1, rewards48h: 2, coverage24h: range, coverage48h: range },
-    ])
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual({
+      providers: [{ identity: 'provider-1', rewards24h: 1, rewards48h: 2 }],
+      coverage24h: range,
+      coverage48h: range,
+    })
   })
 
   it('gives null, not 0, when nothing in the window is covered', async () => {
     const notCovered = { ...range, covered_from: null, covered_to: null }
     query.mockResolvedValue({ data: { last24h: { range: notCovered, data: null }, last48h: { range: notCovered, data: null } } })
 
-    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'provider-1', rewards24h: null, rewards48h: null, coverage24h: notCovered, coverage48h: notCovered },
-    ])
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual({
+      providers: [{ identity: 'provider-1', rewards24h: null, rewards48h: null }],
+      coverage24h: notCovered,
+      coverage48h: notCovered,
+    })
   })
 
   it('sums the data of every batch', async () => {
@@ -161,9 +169,11 @@ describe('GetProviderRewards with the range shape', () => {
       .mockResolvedValueOnce({ data: { last24h: { range, data: 1000000 }, last48h: { range, data: '3000000' } } })
       .mockResolvedValueOnce({ data: { last24h: { range, data: 5000000 }, last48h: { range, data: '7000000' } } })
 
-    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual([
-      { identity: 'p1', rewards24h: 6, rewards48h: 10, coverage24h: range, coverage48h: range },
-    ])
+    await expect(GetProviderRewards('2026-10-05T21:15:09')).resolves.toEqual({
+      providers: [{ identity: 'p1', rewards24h: 6, rewards48h: 10 }],
+      coverage24h: range,
+      coverage48h: range,
+    })
     expect(query).toHaveBeenCalledTimes(2)
   })
 })

@@ -15,7 +15,8 @@ import { getServerApolloClient } from '../../lib/graphql/server'
 import { getValidTime, Time } from '../../lib/dates'
 import { SelectedTimeProvider } from './TimeSelector'
 import { batchArray } from '../../lib/batch'
-import { mergeRewardRows } from '../../lib/rewards'
+import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
+import { Ranged } from '../../lib/range'
 
 interface RewardsByAddressesProps {
   addresses: Array<string>
@@ -31,7 +32,7 @@ export default async function ServerRewardsByAddresses({
   noDataMessage,
 }: RewardsByAddressesProps) {
   let
-    data,
+    data: Ranged<Array<RewardByAddressAndDate>> | null = null,
     variables,
     error = false,
     chartType: 'line' | 'bar' = 'line',
@@ -72,14 +73,9 @@ export default async function ServerRewardsByAddresses({
         ),
       )
 
-      // Aggregate: merge the rewards JSON of each batch (either indexer shape), summing per (address, date)
-      data = results.reduce(
-        (acc, { data: d }) => {
-          if (!acc) return d
-          return { ...d, rewards: mergeRewardRows([acc.rewards, d.rewards]) }
-        },
-        null as typeof results[0]['data'] | null,
-      )
+      // Merge the rows of every batch, summing per (address, date), normalised once (see range.ts):
+      // that is what crosses to the client
+      data = combineRewardRows(results.map((r) => r.data))
     } catch {
       error = true
     }

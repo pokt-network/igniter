@@ -13,13 +13,15 @@ import { useHeightContext } from '../../context/Height/height'
 import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
-import { coverageNote, Ranged, unwrapRange } from '../../lib/range'
-import { sumRewardTotals } from '../../lib/rewards'
+import { coverageNote, Ranged } from '../../lib/range'
+import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
 import SummaryLoader from './Loader'
 
-type SummaryData = DocumentNodeData<typeof summaryDocument>
+// The rewards totals normalised once (see range.ts); null: they could not be fetched
+export type SummaryData = Omit<DocumentNodeData<typeof summaryDocument>, 'last24h' | 'last48h'> & {
+  [K in keyof RewardsWindows]: RewardsWindows[K] | null
+}
 type SuppliersData = DocumentNodeData<typeof suppliersSummaryDocument>
-type RewardsData = DocumentNodeData<typeof rewardsWindowsDocument>
 
 // Suppliers and stake change on any stake or unstake, so they refresh on a timer; rewards only
 // change when claims settle, so they refresh on a new settlement height.
@@ -38,13 +40,6 @@ function aggregateSuppliersResults(results: SuppliersData[]): Pick<SummaryData, 
   }
 }
 
-function aggregateRewardsResults(results: RewardsData[]): Pick<SummaryData, 'last24h' | 'last48h'> {
-  return {
-    last24h: sumRewardTotals(results.map((d) => d.last24h)),
-    last48h: sumRewardTotals(results.map((d) => d.last48h)),
-  }
-}
-
 function Value({value, tooltip, note, onRetry}: {value: string, tooltip?: string, note?: string | null, onRetry?: () => void}) {
   return (
     <p className={'mt-1 sm:text-lg font-medium'} title={tooltip}>
@@ -55,14 +50,14 @@ function Value({value, tooltip, note, onRetry}: {value: string, tooltip?: string
   )
 }
 
-// A rewards total in either indexer shape (see range.ts). A missing total (failed fetch) and a
-// window with nothing covered both show N/A, never 0; the indexer's range, when it sends one,
-// adds a note on what is covered.
-function rewardValue(total: Ranged<string | number>) {
+// A rewards total (see range.ts). A missing total (failed fetch) and a window with nothing
+// covered both show N/A, never 0; the indexer's range, when it sends one, adds a note on what is
+// covered.
+function rewardValue(total: Ranged<number> | null) {
   return {
-    value: total.data != null ? toCurrencyFormat(amountToPokt(total.data), 2) : 'N/A',
-    tooltip: total.data == null && !total.range ? 'Indexer data unavailable' : undefined,
-    note: coverageNote(total.range),
+    value: total?.data != null ? toCurrencyFormat(amountToPokt(total.data), 2) : 'N/A',
+    tooltip: total?.data == null && !total?.range ? 'Indexer data unavailable' : undefined,
+    note: coverageNote(total?.range ?? null),
   }
 }
 
@@ -71,7 +66,7 @@ interface SummaryProps {
   addresses: Array<string>
   supplierAddresses: Array<string>
   noDataMessage?: string
-  initialData: DocumentNodeData<typeof summaryDocument> | null
+  initialData: SummaryData | null
   initialError: boolean
 }
 
@@ -128,7 +123,7 @@ export default function Summary({
             })
           }),
         )
-        update = aggregateRewardsResults(results.map((r) => r.data))
+        update = combineRewardsWindows(results.map((r) => r.data))
       } else {
         const results = await Promise.all(
           batches.map((batch) =>
@@ -257,13 +252,13 @@ export default function Summary({
             ),
             3: (
               <Value
-                {...rewardValue(unwrapRange<string | number>(data?.last24h))}
+                {...rewardValue(data?.last24h ?? null)}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
             4: (
               <Value
-                {...rewardValue(unwrapRange<string | number>(data?.last48h))}
+                {...rewardValue(data?.last48h ?? null)}
                 onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),

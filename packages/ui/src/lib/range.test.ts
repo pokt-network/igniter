@@ -1,5 +1,5 @@
-import { coverageNote, unwrapRange } from './range'
-import { mergeRewardRows, sumRewardTotals } from './rewards'
+import { coverageNote, isUncovered, parseTime, unwrapRange } from './range'
+import { combineRewardRows, combineRewardsWindows, mergeRewardRows, sumRewardTotals } from './rewards'
 
 // Shapes from the indexer's range contract (pocketdex RESULT.md, "Contract as implemented")
 const partialRange = {
@@ -44,8 +44,9 @@ describe('unwrapRange', () => {
 
 describe('sumRewardTotals and mergeRewardRows', () => {
   it('sums old-shape numeric strings exactly as before', () => {
-    expect(sumRewardTotals(['1000000', '2000000'])).toBe(3000000)
-    expect(sumRewardTotals(['1000000', null])).toBe(1000000)
+    expect(sumRewardTotals(['1000000', '2000000'])).toEqual({ data: 3000000, range: null })
+    expect(sumRewardTotals(['1000000', null])).toEqual({ data: 1000000, range: null })
+    expect(sumRewardTotals(['0'])).toEqual({ data: 0, range: null })
   })
 
   it('sums new-shape data and keeps the range', () => {
@@ -102,9 +103,13 @@ describe('sumRewardTotals and mergeRewardRows', () => {
   })
 
   it('merges old-shape rows exactly as before', () => {
-    expect(mergeRewardRows([[{ address: 'pokt1a', date_truncated: 'd', total_amount: '2' }], null])).toEqual([
-      { address: 'pokt1a', date_truncated: 'd', total_amount: '2' },
-    ])
+    expect(mergeRewardRows([[{ address: 'pokt1a', date_truncated: 'd', total_amount: '2' }], null])).toEqual({
+      data: [{ address: 'pokt1a', date_truncated: 'd', total_amount: '2' }],
+      range: null,
+    })
+    // the old empty answer (null) stays no rows in every batch count
+    expect(mergeRewardRows([null])).toEqual({ data: null, range: null })
+    expect(mergeRewardRows([null, null])).toEqual({ data: null, range: null })
   })
 })
 
@@ -124,8 +129,10 @@ describe('coverageNote', () => {
 
   it('never decides "not covered" from data alone: a covered window with no rows has no note', () => {
     expect(coverageNote(unwrapRange({ range: coveredNoRows, data: null }).range)).toBeNull()
-    expect(coverageNote(unwrapRange(mergeRewardRows([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }])).range))
-      .toBeNull()
+    const merged = mergeRewardRows([{ range: coveredNoRows, data: null }, { range: coveredNoRows, data: null }])
+    expect(merged).toEqual({ data: null, range: coveredNoRows })
+    expect(isUncovered(merged.range)).toBe(false)
+    expect(coverageNote(merged.range)).toBeNull()
   })
 
   it('clips the gaps to the window and reads open-ended edges', () => {
@@ -144,7 +151,7 @@ describe('coverageNote', () => {
     const leading = { from: '2026-08-30T00:00:00+00:00', to: partialRange.covered_from }
     expect(coverageNote({ ...partialRange, gaps: [leading] })).toBe('Data since Sep 01, 2026, 12:00 UTC')
     const gap = (h: number) => ({ from: `2026-09-01T${h}:00:00+00:00`, to: `2026-09-01T${h}:30:00+00:00` })
-    expect(coverageNote({ ...fullRange, requested_to: '2026-09-02T00:00:00+00:00', gaps: [gap(13), gap(14), gap(15), gap(16), gap(17)] })).toBe(
+    expect(coverageNote({ ...fullRange, requested_to: '2026-09-02T00:00:00+00:00', covered_to: '2026-09-02T00:00:00+00:00', gaps: [gap(13), gap(14), gap(15), gap(16), gap(17)] })).toBe(
       'gaps: Sep 01, 2026, 13:00 UTC – Sep 01, 2026, 13:30 UTC, Sep 01, 2026, 14:00 UTC – Sep 01, 2026, 14:30 UTC, ' +
         'Sep 01, 2026, 15:00 UTC – Sep 01, 2026, 15:30 UTC, 2 more',
     )
@@ -167,5 +174,43 @@ describe('coverageNote', () => {
     expect(coverageNote({ ...gapRange, requested_from: gapRange.covered_from })).toBe(
       'gaps: Sep 01, 2026, 23:30 UTC – Sep 02, 2026, 00:00 UTC',
     )
+  })
+})
+
+describe('combineRewardsWindows and combineRewardRows', () => {
+  it('normalise every batch result of a document to Ranged', () => {
+    expect(combineRewardsWindows([{ last24h: '1', last48h: '2' }, { last24h: '3', last48h: '4' }])).toEqual({
+      last24h: { data: 4, range: null },
+      last48h: { data: 6, range: null },
+    })
+    expect(combineRewardsWindows([{ last24h: { range: notCovered, data: null }, last48h: { range: partialRange, data: 7 } }]))
+      .toEqual({ last24h: { data: null, range: notCovered }, last48h: { data: 7, range: partialRange } })
+    const row = { address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 5 }
+    expect(combineRewardRows([{ rewards: { range: gapRange, data: [row] } }])).toEqual({ data: [row], range: gapRange })
+  })
+})
+
+describe('isUncovered', () => {
+  it('is true only for null covered bounds, never for data', () => {
+    expect(isUncovered(notCovered)).toBe(true)
+    expect(isUncovered(coveredNoRows)).toBe(false)
+    expect(isUncovered(partialRange)).toBe(false)
+    expect(isUncovered(null)).toBe(false)
+  })
+})
+
+describe('parseTime', () => {
+  it('reads 0 to 6 fractional digits as milliseconds', () => {
+    const base = Date.UTC(2026, 8, 1, 12, 0, 3)
+    expect(parseTime('2026-09-01T12:00:03+00:00').getTime()).toBe(base)
+    expect(parseTime('2026-09-01T12:00:03.5+00:00').getTime()).toBe(base + 500)
+    expect(parseTime('2026-09-01T12:00:03.12+00:00').getTime()).toBe(base + 120)
+    expect(parseTime('2026-09-01T12:00:03.123+00:00').getTime()).toBe(base + 123)
+    expect(parseTime('2026-09-01T12:00:03.123456+00:00').getTime()).toBe(base + 123)
+    expect(parseTime('2026-09-01T12:00:03.5Z').getTime()).toBe(base + 500)
+  })
+
+  it('never makes coverageNote throw on a bad time', () => {
+    expect(coverageNote({ ...fullRange, gaps: [{ from: 'not a time', to: null }] })).toEqual(expect.any(String))
   })
 })
