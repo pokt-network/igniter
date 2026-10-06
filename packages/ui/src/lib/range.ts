@@ -112,6 +112,50 @@ function clipGap(gap: CoverageGap, range: CoverageRange): CoverageGap | null {
   return { from, to }
 }
 
+const BUCKET_MS = { hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000 }
+
+/**
+ * Sets `key` to null on the chart buckets the indexer did not cover: wholly before covered_from,
+ * after covered_to, or wholly inside a gap (gaps merged; a null gap edge is open-ended). The line
+ * then breaks there instead of drawing 0. Unchanged with the old shape (no range); a bound that
+ * does not parse masks nothing.
+ */
+export function maskUncoveredBuckets<T extends { point: string }>(
+  items: Array<T>,
+  range: CoverageRange | null,
+  unit: keyof typeof BUCKET_MS,
+  key: keyof T,
+): Array<T> {
+  if (!range) return items
+  const from = range.covered_from == null ? NaN : parseTime(range.covered_from).getTime()
+  const to = range.covered_to == null ? NaN : parseTime(range.covered_to).getTime()
+  // legacy_ ranges end inclusive unless the indexer says otherwise
+  const endInclusive = range.end_inclusive ?? true
+  const gaps = (range.gaps ?? [])
+    .map((g) => [
+      g.from == null ? -Infinity : parseTime(g.from).getTime(),
+      g.to == null ? Infinity : parseTime(g.to).getTime(),
+    ])
+    .filter(([f, t]) => !Number.isNaN(f) && !Number.isNaN(t) && f! < t!)
+    .sort((a, b) => a[0]! - b[0]!)
+    .reduce((merged: Array<[number, number]>, [f, t]) => {
+      const last = merged[merged.length - 1]
+      if (last && f! <= last[1]) last[1] = Math.max(last[1], t!)
+      else merged.push([f!, t!])
+      return merged
+    }, [])
+  return items.map((item) => {
+    const start = parseTime(item.point).getTime()
+    const end = start + BUCKET_MS[unit]
+    const uncovered =
+      isUncovered(range) ||
+      end <= from ||
+      (endInclusive ? start > to : start >= to) ||
+      gaps.some(([f, t]) => f <= start && end <= t)
+    return uncovered ? { ...item, [key]: null } : item
+  })
+}
+
 export const NO_COVERAGE_NOTE = 'No indexed data for this range'
 const MAX_LISTED_GAPS = 3
 

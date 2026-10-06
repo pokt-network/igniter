@@ -1,4 +1,4 @@
-import { coverageNote, isUncovered, parseTime, unwrapRange } from './range'
+import { coverageNote, isUncovered, maskUncoveredBuckets, parseTime, unwrapRange } from './range'
 import { combineRewardRows, combineRewardsWindows, mergeRewardRows, sumRewardTotals } from './rewards'
 
 // Shapes from the indexer's range contract (pocketdex RESULT.md, "Contract as implemented")
@@ -238,5 +238,55 @@ describe('parseTime', () => {
 
   it('never makes coverageNote throw on a bad time', () => {
     expect(coverageNote({ ...fullRange, gaps: [{ from: 'not a time', to: null }] })).toEqual(expect.any(String))
+  })
+})
+
+describe('maskUncoveredBuckets', () => {
+  const hours = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => ({
+      point: `2026-09-01T${String(from + i).padStart(2, '0')}:00:00.000Z`,
+      totalAmount: 0 as number | null,
+    }))
+  const amounts = (items: Array<{ totalAmount: number | null }>) => items.map((i) => i.totalAmount)
+
+  it('leaves the old shape unchanged', () => {
+    const items = hours(8, 10)
+    expect(maskUncoveredBuckets(items, null, 'hour', 'totalAmount')).toBe(items)
+  })
+
+  it('nulls the buckets before covered_from, after covered_to and wholly inside merged gaps', () => {
+    const range = {
+      requested_from: '2026-09-01T08:00:00+00:00',
+      requested_to: '2026-09-01T20:00:00+00:00',
+      covered_from: '2026-09-01T10:30:00+00:00',
+      covered_to: '2026-09-01T18:00:00+00:00',
+      gaps: [
+        { from: '2026-09-01T12:00:00+00:00', to: '2026-09-01T13:00:00+00:00' },
+        { from: '2026-09-01T13:00:00+00:00', to: '2026-09-01T14:30:00+00:00' },
+      ],
+    }
+    // 08 09 before; 10 holds covered_from; 12 13 inside the merged gap; 14 partly covered; 18 is the
+    // inclusive end; 19 20 after
+    expect(amounts(maskUncoveredBuckets(hours(8, 20), range, 'hour', 'totalAmount'))).toEqual([
+      null, null, 0, 0, null, null, 0, 0, 0, 0, 0, null, null,
+    ])
+    // a half-open end leaves the bucket at covered_to out
+    expect(amounts(maskUncoveredBuckets(hours(17, 18), { ...range, end_inclusive: false }, 'hour', 'totalAmount')))
+      .toEqual([0, null])
+  })
+
+  it('reads open-ended gaps, masks everything when nothing is covered, and nothing for a bad bound', () => {
+    const range = { ...partialRange, covered_from: '2026-09-01T00:00:00Z', covered_to: '2026-09-01T23:00:00Z' }
+    expect(amounts(maskUncoveredBuckets(hours(8, 10), { ...range, gaps: [{ from: '2026-09-01T09:00:00Z', to: null }] }, 'hour', 'totalAmount')))
+      .toEqual([0, null, null])
+    expect(amounts(maskUncoveredBuckets(hours(8, 10), notCovered, 'hour', 'totalAmount'))).toEqual([null, null, null])
+    expect(amounts(maskUncoveredBuckets(hours(8, 10), { ...range, covered_from: 'garbage' }, 'hour', 'totalAmount')))
+      .toEqual([0, 0, 0])
+  })
+
+  it('masks whole days', () => {
+    const days = ['2026-08-31', '2026-09-01', '2026-09-02'].map((d) => ({ point: `${d}T00:00:00.000Z`, totalAmount: 5 as number | null }))
+    const range = { ...partialRange, covered_from: '2026-09-01T12:00:00Z', covered_to: '2026-09-02T08:00:00Z' }
+    expect(amounts(maskUncoveredBuckets(days, range, 'day', 'totalAmount'))).toEqual([null, 5, 5])
   })
 })

@@ -25,10 +25,11 @@ import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
 import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
-import { coverageNote, isUncovered, NO_COVERAGE_NOTE, Ranged } from '../../lib/range'
+import { coverageNote, isUncovered, maskUncoveredBuckets, NO_COVERAGE_NOTE, Ranged } from '../../lib/range'
 
 export interface RewardItem extends LineBarItem {
-  totalAmount: number
+  // null: a bucket the indexer did not cover (see range.ts), drawn as a break, never as 0
+  totalAmount: number | null
 }
 
 interface RewardsByAddressChartProps {
@@ -151,6 +152,9 @@ export default function RewardsByAddressChart({
 
     if (!addresses.length || !rawData?.data) return {}
 
+    const unit = lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day'
+    const range = rawData.range
+
     if (groupAllAddresses) {
       const amountByDate = rawPoints.reduce((acc, item) => ({
         ...acc,
@@ -165,15 +169,15 @@ export default function RewardsByAddressChart({
       }))
 
       return {
-        'all': fillChartData({
+        'all': maskUncoveredBuckets(fillChartData({
           data: dataNotFilled,
           startDate: lastVariables?.current?.startDate,
           endDate: lastVariables?.current?.endDate,
-          unitToFormatDate: lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day',
+          unitToFormatDate: unit,
           defaultProps: {
             totalAmount: 0,
           }
-        })
+        }), range, unit, 'totalAmount')
       } as Record<string, Array<RewardItem>>
     }
 
@@ -192,16 +196,16 @@ export default function RewardsByAddressChart({
 
     return addresses.reduce((acc, address) => ({
       ...acc,
-      [address]: fillChartData({
+      [address]: maskUncoveredBuckets(fillChartData({
         data: dataByAddress[address] || [],
         startDate: lastVariables?.current?.startDate,
         endDate: lastVariables?.current?.endDate,
-        unitToFormatDate: lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day',
+        unitToFormatDate: unit,
         defaultProps: {
           id: address,
           totalAmount: 0,
         }
-      })
+      }), range, unit, 'totalAmount')
     }), {})
   }, [rawData, addresses, groupAllAddresses])
 
@@ -210,7 +214,7 @@ export default function RewardsByAddressChart({
       id: address,
       label: getShortAddress(address, 6),
       value: items.reduce((acc, item) => {
-        return acc + amountToPokt(item.totalAmount)
+        return acc + amountToPokt(item.totalAmount ?? 0)
       }, 0)
     })), ['value'], ['desc'])
   }, [processedData])
@@ -342,7 +346,7 @@ export default function RewardsByAddressChart({
                 chartType={chartType}
                 unitToFormatDate={lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day'}
                 getTooltipLabel={(item) => {
-                  const value = `${toCurrencyFormat(amountToPokt(item.totalAmount))} POKT`
+                  const value = `${toCurrencyFormat(amountToPokt(item.totalAmount ?? 0))} POKT`
 
                   if (groupAllAddresses) {
                     return value
