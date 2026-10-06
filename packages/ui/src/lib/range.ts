@@ -44,6 +44,14 @@ export function isUncovered(range: CoverageRange | null): boolean {
   return range != null && range.covered_from == null && range.covered_to == null
 }
 
+/**
+ * The one definition of a failed reward total (worth a retry): no value, unless the indexer says
+ * nothing in the window is covered. A missing total (failed fetch) is failed too.
+ */
+export function isFailedTotal(total: Ranged<unknown> | null | undefined): boolean {
+  return total?.data == null && !isUncovered(total?.range ?? null)
+}
+
 // Postgres prints timestamptz with 0 to 6 fractional digits, and as text with a space and a bare
 // +00 offset; ECMAScript only specifies the ISO form with exactly 3. A time that still does not
 // parse is an Invalid Date: every comparison with it is false, so that bound counts as unknown

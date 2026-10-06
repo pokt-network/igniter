@@ -14,7 +14,7 @@ import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } fro
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
 import useBlockRetry from '../../hooks/useBlockRetry'
-import { coverageNote, Ranged } from '../../lib/range'
+import { coverageNote, isFailedTotal, Ranged } from '../../lib/range'
 import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
 import SummaryLoader from './Loader'
 
@@ -92,7 +92,10 @@ export default function Summary({
   const rewardsSeqRef = useRef(0)
   const suppliersInFlightRef = useRef(0)
   const suppliersSeqRef = useRef(0)
-  const [isLoading, setIsLoading] = useState(false)
+  // Per part, so one part's fetch never ends the other's loading state
+  const [rewardsLoading, setRewardsLoading] = useState(false)
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const isLoading = rewardsLoading || suppliersLoading
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
 
@@ -104,7 +107,8 @@ export default function Summary({
     const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
     inFlightRef.current++
 
-    setIsLoading(true)
+    const setPartLoading = part === 'rewards' ? setRewardsLoading : setSuppliersLoading
+    setPartLoading(true)
     try {
       const batches = batchArray(supplierAddresses)
       let update: Partial<SummaryData>
@@ -155,7 +159,7 @@ export default function Summary({
       if (part === 'rewards') setRewardsError(true)
     } finally {
       // A superseded fetch must not end the loading state of the newer one
-      if (!isStale()) setIsLoading(false)
+      if (!isStale()) setPartLoading(false)
       inFlightRef.current--
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
@@ -186,7 +190,7 @@ export default function Summary({
   // a settlement-triggered fetch is never skipped.
   useBlockRetry({
     key: 'rewards',
-    shouldRetry: addresses.length > 0 && rewardsError,
+    shouldRetry: addresses.length > 0 && (rewardsError || isFailedTotal(data?.last24h) || isFailedTotal(data?.last48h)),
     isBusy: () => rewardsInFlightRef.current > 0,
     run: () => fetchBatched('rewards'),
   })

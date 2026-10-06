@@ -1,4 +1,4 @@
-import { coverageNote, isUncovered, maskUncoveredBuckets, parseTime, unwrapRange } from './range'
+import { coverageNote, isFailedTotal, isUncovered, maskUncoveredBuckets, parseTime, unwrapRange } from './range'
 import { combineRewardRows, combineRewardsWindows, mergeRewardRows, sumRewardTotals } from './rewards'
 
 // Shapes from the indexer's range contract (pocketdex RESULT.md, "Contract as implemented")
@@ -199,6 +199,17 @@ describe('scalar totals as JSON strings', () => {
       last24h: { data: 201156530, range: partialRange },
       last48h: { data: 402313058, range: partialRange },
     })
+  })
+})
+
+describe('isFailedTotal', () => {
+  it('is an error or a null total over a covered window, never an uncovered one', () => {
+    expect(isFailedTotal(null)).toBe(true)
+    expect(isFailedTotal({ data: null, range: null })).toBe(true)
+    expect(isFailedTotal({ data: null, range: partialRange })).toBe(true)
+    expect(isFailedTotal({ data: null, range: notCovered })).toBe(false)
+    expect(isFailedTotal({ data: 0, range: partialRange })).toBe(false)
+    expect(isFailedTotal({ data: '5', range: null })).toBe(false)
   })
 })
 

@@ -26,7 +26,7 @@ export default function useBlockRetry({ shouldRetry, isBusy, run, key }: BlockRe
   // Declared first, so the retry effect below reads this render's values
   useEffect(() => {
     latestRef.current = { shouldRetry, isBusy, run, key, settlementHeight }
-    if (!shouldRetry) budgetRef.current.reset()
+    if (!shouldRetry) budgetRef.current.reset(key)
   })
 
   useEffect(() => {

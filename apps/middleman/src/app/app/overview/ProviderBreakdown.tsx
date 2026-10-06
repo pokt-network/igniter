@@ -8,7 +8,7 @@ import { GetProviderRewards, GetProviderStakes, type ProviderBreakdownData } fro
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
-import { coverageNote, isUncovered } from '@igniter/ui/lib/range'
+import { coverageNote, isFailedTotal } from '@igniter/ui/lib/range'
 import useBlockRetry from '@igniter/ui/hooks/useBlockRetry'
 import { Button } from '@igniter/ui/components/button'
 import { useHeightContext } from '@igniter/ui/context/Height/height'
@@ -85,10 +85,9 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   // nothing covered, a null reward is "no data", not a failure)
   const rewardsFailed = useMemo(() => {
     if (!rewardsData) return false
-    const uncovered24h = isUncovered(rewardsData.coverage24h)
-    const uncovered48h = isUncovered(rewardsData.coverage48h)
     return rewardsData.providers.some((r) =>
-      (r.rewards24h == null && !uncovered24h) || (r.rewards48h == null && !uncovered48h))
+      isFailedTotal({ data: r.rewards24h, range: rewardsData.coverage24h }) ||
+      isFailedTotal({ data: r.rewards48h, range: rewardsData.coverage48h }))
   }, [rewardsData])
   // ...or a provider in the stakes poll is not in the last rewards response (it gets the inline
   // mark, and its rewards with the next settlement)

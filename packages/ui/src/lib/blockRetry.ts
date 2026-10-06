@@ -5,27 +5,28 @@
 export const MAX_BLOCK_RETRIES = 5
 
 /**
- * The per-block retry budget of one fetched part, per (settlement height, key). `take` says
- * whether a retry may run on this block and counts it; a new height or key, or `reset` (the part
- * no longer needs a retry), restores it.
+ * The per-block retry budgets of one component, one per key, all cleared on a new settlement
+ * height. `take` says whether a retry of `key` may run on this block and counts it; `reset` (the
+ * part no longer needs a retry) restores that key's budget. Switching back to a key whose budget
+ * is spent does not refill it.
  */
 export function createBlockRetryBudget(max = MAX_BLOCK_RETRIES) {
-  let used = 0
-  let budgetKey: string | undefined
+  let height: number | undefined
+  const used = new Map<string, number>()
 
   return {
     take(settlementHeight: number, key: string): boolean {
-      const nextKey = `${settlementHeight}|${key}`
-      if (nextKey !== budgetKey) {
-        budgetKey = nextKey
-        used = 0
+      if (settlementHeight !== height) {
+        height = settlementHeight
+        used.clear()
       }
-      if (used >= max) return false
-      used++
+      const count = used.get(key) ?? 0
+      if (count >= max) return false
+      used.set(key, count + 1)
       return true
     },
-    reset() {
-      used = 0
+    reset(key: string) {
+      used.delete(key)
     },
   }
 }
