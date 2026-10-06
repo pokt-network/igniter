@@ -1,9 +1,10 @@
 import { summaryVariables } from './operations'
-import Summary from './Summary'
-import { getLatestBlock } from '../../api/blocks'
+import Summary, { type SummaryData } from './Summary'
+import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { summaryDocument } from '@igniter/graphql/rewards'
 import { batchArray } from '../../lib/batch'
+import { combineRewardsWindows } from '../../lib/rewards'
 
 interface ServerSummaryProps {
   addresses: Array<string>
@@ -24,11 +25,12 @@ export default async function ServerSummary({
   dbSuppliersCount,
   dbStakedTokens,
 }: ServerSummaryProps) {
-  let data, error = false
+  let data: SummaryData | null = null, error = false
 
   if (addresses.length && graphQlUrl) {
     try {
-      const latestBlock = await getLatestBlock(graphQlUrl)
+      // Same cached status as the height context, so the window ends at or after its settlement height
+      const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)
 
@@ -47,7 +49,7 @@ export default async function ServerSummary({
       )
 
       // Aggregate results across batches
-      data = results.reduce(
+      const aggregated = results.reduce(
         (acc, { data: d }) => {
           if (!acc) return d
           return {
@@ -66,14 +68,12 @@ export default async function ServerSummary({
                 },
               },
             },
-            last24h:
-              Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-            last48h:
-              Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
           }
         },
         null as typeof results[0]['data'] | null,
       )
+      // The rewards totals, normalised once (see range.ts), are what crosses to the client
+      if (aggregated) data = { ...aggregated, ...combineRewardsWindows(results.map((r) => r.data)) }
     } catch {
       error = true
     }

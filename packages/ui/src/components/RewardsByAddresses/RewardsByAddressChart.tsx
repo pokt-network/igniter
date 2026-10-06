@@ -18,15 +18,19 @@ import ItemsSelector from './ItemsSelector'
 import { clsx } from 'clsx'
 import { useGroupAll } from './GroupAllSwitch'
 import { amountToPokt, getShortAddress, toCompactFormat, toCurrencyFormat } from '../../lib/utils'
-import { DocumentNodeData, ExtractVariables } from '../../hooks/useFetchOnNewBlock'
+import { ExtractVariables } from '../../lib/graphql/types'
 import { ContentLoader } from './Loader'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
 import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
+import useBlockRetry from '../../hooks/useBlockRetry'
+import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
+import { coverageNote, isUncovered, maskUncoveredBuckets, NO_COVERAGE_NOTE, Ranged } from '../../lib/range'
 
 export interface RewardItem extends LineBarItem {
-  totalAmount: number
+  // null: a bucket the indexer did not cover (see range.ts), drawn as a break, never as 0
+  totalAmount: number | null
 }
 
 interface RewardsByAddressChartProps {
@@ -34,7 +38,7 @@ interface RewardsByAddressChartProps {
   addresses: Array<string>
   supplierAddresses: Array<string>
   noDataMessage?: string
-  initialData: DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument> | null
+  initialData: Ranged<Array<RewardByAddressAndDate>> | null
   initialVariables: ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument> | null
 }
 
@@ -50,55 +54,61 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentHeight, currentTime, firstHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
-  type RewardsData = DocumentNodeData<typeof rewardsByAddressAndTimeGroupByDateDocument>
-  const [rawData, setRawData] = useState<RewardsData | null>(initialData)
+  // The rows of the selected range, normalised once (see range.ts)
+  const [rawData, setRawData] = useState<Ranged<Array<RewardByAddressAndDate>> | null>(initialData)
+  // The time selection rawData belongs to: after a failed fetch for a new selection, the data
+  // on hand is for another range and must not be shown under it.
+  const [rawDataTime, setRawDataTime] = useState(selectedTime)
   const [error, setError] = useState(initialError)
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastSelectedTimeRef = useRef(selectedTime)
+  // Fetches running, and the id of the latest one: only the latest may write its result.
+  const inFlightRef = useRef(0)
+  const seqRef = useRef(0)
 
   const fetchBatched = useCallback(async () => {
     if (!addresses.length) return
 
+    const seq = ++seqRef.current
+    inFlightRef.current++
     setIsLoading(true)
     try {
       const batches = batchArray(supplierAddresses)
+      const batchVariables = batches.map((batch) => rewardsByAddressAndTimeGroupByDateVariables(
+        addresses,
+        batch,
+        currentTime,
+        selectedTime,
+      ))
       const results = await Promise.all(
-        batches.map((batch) => {
-          const vars = rewardsByAddressAndTimeGroupByDateVariables(
-            addresses,
-            batch,
-            currentTime,
-            selectedTime,
-          )
-          lastVariables.current = vars
-          return client.query({
+        batchVariables.map((vars) =>
+          client.query({
             query: rewardsByAddressAndTimeGroupByDateDocument,
             variables: vars,
             fetchPolicy: 'network-only',
-          })
-        }),
+          }),
+        ),
       )
 
-      const aggregated = results.reduce(
-        (acc, { data: d }) => {
-          if (!acc) return d
-          const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
-          const dRewards = Array.isArray(d.rewards) ? d.rewards : []
-          return { ...d, rewards: [...accRewards, ...dRewards] }
-        },
-        null as RewardsData | null,
-      )
+      const aggregated = combineRewardRows(results.map((r) => r.data))
 
+      if (seq !== seqRef.current) return
+
+      lastVariables.current = batchVariables[0] ?? lastVariables.current
       setRawData(aggregated)
+      setRawDataTime(selectedTime)
       setError(false)
     } catch {
+      if (seq !== seqRef.current) return
       setError(true)
     } finally {
-      setIsLoading(false)
+      inFlightRef.current--
+      // A superseded fetch must not end the loading state of the newer one
+      if (seq === seqRef.current) setIsLoading(false)
     }
   }, [client, addresses, supplierAddresses, currentTime, selectedTime])
 
@@ -110,25 +120,42 @@ export default function RewardsByAddressChart({
 
     if (!addresses.length) return
 
-    // Refetch on new session or when selectedTime changes
+    // Refetch on new settlement or when selectedTime changes
     const timeChanged = lastSelectedTimeRef.current !== selectedTime
     lastSelectedTimeRef.current = selectedTime
 
     if (
       timeChanged ||
-      currentHeight !== firstHeight
+      settlementHeight !== firstSettlementHeight
     ) {
       fetchBatched()
     }
     // eslint-disable-next-line
-  }, [currentHeight, selectedTime])
+  }, [settlementHeight, selectedTime])
+
+  // While in error, retry on new blocks (capped per selected range, see useBlockRetry)
+  useBlockRetry({
+    key: selectedTime,
+    shouldRetry: error && addresses.length > 0,
+    isBusy: () => inFlightRef.current > 0,
+    run: fetchBatched,
+  })
+
+  // Data for the selected range is on hand: keep showing it while refetching or after a failed
+  // refresh, with an inline error mark, instead of the loader or the error card.
+  const hasCurrentData = rawData != null && rawDataTime === selectedTime
+  const showLoader = isLoading && !hasCurrentData
 
   const {groupAll: groupAllAddresses} = useGroupAll()
 
   const processedData: Record<string, Array<RewardItem>> = useMemo(() => {
-    const rawPoints: Array<{date_truncated: string, total_amount: string | number, address: string}> = rawData?.rewards || []
+    // data null is no rows, covered or not (the range says which)
+    const rawPoints = rawData?.data || []
 
-    if (!addresses.length || !rawData?.rewards) return {}
+    if (!addresses.length || !rawData?.data) return {}
+
+    const unit = lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day'
+    const range = rawData.range
 
     if (groupAllAddresses) {
       const amountByDate = rawPoints.reduce((acc, item) => ({
@@ -144,15 +171,15 @@ export default function RewardsByAddressChart({
       }))
 
       return {
-        'all': fillChartData({
+        'all': maskUncoveredBuckets(fillChartData({
           data: dataNotFilled,
           startDate: lastVariables?.current?.startDate,
           endDate: lastVariables?.current?.endDate,
-          unitToFormatDate: lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day',
+          unitToFormatDate: unit,
           defaultProps: {
             totalAmount: 0,
           }
-        })
+        }), range, unit, 'totalAmount')
       } as Record<string, Array<RewardItem>>
     }
 
@@ -171,16 +198,16 @@ export default function RewardsByAddressChart({
 
     return addresses.reduce((acc, address) => ({
       ...acc,
-      [address]: fillChartData({
+      [address]: maskUncoveredBuckets(fillChartData({
         data: dataByAddress[address] || [],
         startDate: lastVariables?.current?.startDate,
         endDate: lastVariables?.current?.endDate,
-        unitToFormatDate: lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day',
+        unitToFormatDate: unit,
         defaultProps: {
           id: address,
           totalAmount: 0,
         }
-      })
+      }), range, unit, 'totalAmount')
     }), {})
   }, [rawData, addresses, groupAllAddresses])
 
@@ -189,7 +216,7 @@ export default function RewardsByAddressChart({
       id: address,
       label: getShortAddress(address, 6),
       value: items.reduce((acc, item) => {
-        return acc + amountToPokt(item.totalAmount)
+        return acc + amountToPokt(item.totalAmount ?? 0)
       }, 0)
     })), ['value'], ['desc'])
   }, [processedData])
@@ -255,17 +282,31 @@ export default function RewardsByAddressChart({
 
   let content: React.ReactNode
 
+  // The indexer covers only part of the selected range (new shape only)
+  const rangeNote = useMemo(() => coverageNote(rawData?.range ?? null), [rawData])
+  const uncovered = isUncovered(rawData?.range ?? null)
+  const rangeMark = rangeNote && (
+    <p className={'w-full text-xs text-text-tertiary'}>{rangeNote}</p>
+  )
+
+  const errorMark = error && (
+    <p className={'w-full text-xs text-text-tertiary'}>
+      Could not refresh the rewards; showing the last data loaded.
+      <button type="button" onClick={fetchBatched} className="ml-2 underline">Retry</button>
+    </p>
+  )
+
   if (!addresses.length) {
     content = (
       <div className={'mt-[-10px] flex w-full items-center justify-center'}>
         <NoData label={noDataMessage} />
       </div>
     )
-  } else if (isLoading) {
+  } else if (showLoader) {
     content = (
       <ContentLoader chartType={chartType} hideSelector={groupAllAddresses} />
     )
-  } else if (error) {
+  } else if (error && !hasCurrentData) {
     content = (
       <div className={'mt-[-10px] flex w-full grow'}>
         <ErrorRetry
@@ -277,14 +318,18 @@ export default function RewardsByAddressChart({
     if (data.length === 0 && addressesWithRewards.every(i => i.value === 0)) {
       content = (
         <>
+          {errorMark}
+          {!uncovered && rangeMark}
           <div className={'mt-[-10px] flex w-full items-center justify-center'}>
-            <NoData label={'No data available for the selected time.'} />
+            <NoData label={uncovered ? NO_COVERAGE_NOTE : 'No data available for the selected time.'} />
           </div>
         </>
       )
     } else {
       content = (
         <>
+          {errorMark}
+          {rangeMark}
           <div className={'flex flex-col xl:flex-row w-full grow items-center gap-4'}>
             <div
               className={
@@ -303,7 +348,9 @@ export default function RewardsByAddressChart({
                 chartType={chartType}
                 unitToFormatDate={lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day'}
                 getTooltipLabel={(item) => {
-                  const value = `${toCurrencyFormat(amountToPokt(item.totalAmount))} POKT`
+                  const value = item.totalAmount == null
+                    ? 'Not indexed'
+                    : `${toCurrencyFormat(amountToPokt(item.totalAmount))} POKT`
 
                   if (groupAllAddresses) {
                     return value
@@ -346,8 +393,8 @@ export default function RewardsByAddressChart({
     <div
       className={
         clsx(
-          !isLoading && 'flex flex-col items-center px-4 pt-2 pb-4 h-full gap-4',
-          isLoading && 'flex flex-col xl:flex-row items-center px-4 pt-2 pb-4 h-[calc(100%-44px)] gap-4'
+          !showLoader && 'flex flex-col items-center px-4 pt-2 pb-4 h-full gap-4',
+          showLoader && 'flex flex-col xl:flex-row items-center px-4 pt-2 pb-4 h-[calc(100%-44px)] gap-4'
         )
       }
     >

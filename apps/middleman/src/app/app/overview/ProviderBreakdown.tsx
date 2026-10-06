@@ -2,13 +2,16 @@
 
 import type { PieChartItem } from '@igniter/ui/components/PieChart/PieChart'
 import { Download } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
-import React, { useCallback, useMemo, useState } from 'react'
-import { GetProviderBreakdown, type ProviderBreakdownData } from '@/actions/Nodes'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GetProviderRewards, GetProviderStakes, type ProviderBreakdownData } from '@/actions/Nodes'
 import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
+import { coverageNote, isFailedTotal } from '@igniter/ui/lib/range'
+import useBlockRetry from '@igniter/ui/hooks/useBlockRetry'
 import { Button } from '@igniter/ui/components/button'
+import { useHeightContext } from '@igniter/ui/context/Height/height'
 
 type SortKey = 'name' | 'suppliers' | 'stakedPokt' | 'rewards24h' | 'rewards48h'
 type SortDir = 'asc' | 'desc'
@@ -21,11 +24,13 @@ function buildPieData(
   providers: ProviderBreakdownData[],
   metric: keyof Pick<ProviderBreakdownData, 'suppliers' | 'stakedPokt' | 'rewards24h' | 'rewards48h'>,
 ): PieChartItem[] {
-  const total = providers.reduce((sum, p) => sum + p[metric], 0)
-  return providers.map((p) => ({
+  // Providers whose rewards could not be fetched (null) are left out rather than drawn as 0
+  const known = providers.filter((p) => p[metric] != null)
+  const total = known.reduce((sum, p) => sum + (p[metric] ?? 0), 0)
+  return known.map((p) => ({
     id: p.name,
-    value: p[metric],
-    percent: total > 0 ? (p[metric] / total) * 100 : 0,
+    value: p[metric] ?? 0,
+    percent: total > 0 ? ((p[metric] ?? 0) / total) * 100 : 0,
   }))
 }
 
@@ -33,7 +38,7 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
   const header = 'Provider,Suppliers,Staked POKT,24h Rewards,48h Rewards'
   const rows = providers.map(
     (p) =>
-      `"${p.name}",${p.suppliers},${p.stakedPokt.toFixed(2)},${p.rewards24h.toFixed(2)},${p.rewards48h.toFixed(2)}`,
+      `"${p.name}",${p.suppliers},${p.stakedPokt.toFixed(2)},${p.rewards24h?.toFixed(2) ?? 'N/A'},${p.rewards48h?.toFixed(2) ?? 'N/A'}`,
   )
   const csv = [header, ...rows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -48,12 +53,81 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
-  const { data: providers, isLoading, isError, refetch } = useQuery({
-    queryKey: ['providerBreakdown'],
-    queryFn: GetProviderBreakdown,
+  const { settlementHeight, currentTime } = useHeightContext()
+  // Suppliers and stake come from our database and change on any stake or unstake, so they
+  // poll every 60 s (React Query pauses the interval while the tab is hidden).
+  const stakes = useQuery({
+    queryKey: ['providerStakes'],
+    queryFn: GetProviderStakes,
     refetchInterval: 60000,
     enabled: providerCount > 1,
   })
+  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer.
+  // currentTime comes from the same status response as settlementHeight, so the window includes it.
+  const rewards = useQuery({
+    queryKey: ['providerRewards', settlementHeight],
+    queryFn: () => GetProviderRewards(currentTime),
+    placeholderData: keepPreviousData,
+    // While hidden the status poll stops, so currentTime goes stale; the next poll after the tab
+    // returns brings a new settlement height, which refetches with a fresh timestamp.
+    refetchOnWindowFocus: false,
+    enabled: providerCount > 1,
+  })
+
+  // Last rewards that loaded, kept on screen when a later fetch fails (an errored query for a new
+  // settlement height has no data of its own).
+  const lastRewardsRef = useRef(rewards.data)
+  useEffect(() => {
+    if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
+  }, [rewards.data, rewards.isPlaceholderData])
+  const rewardsData = rewards.data ?? lastRewardsRef.current
+  // Some provider's batch failed on the server (its rewards came back null; in a window with
+  // nothing covered, a null reward is "no data", not a failure)
+  const rewardsFailed = useMemo(() => {
+    if (!rewardsData) return false
+    return rewardsData.providers.some((r) =>
+      isFailedTotal({ data: r.rewards24h, range: rewardsData.coverage24h }) ||
+      isFailedTotal({ data: r.rewards48h, range: rewardsData.coverage48h }))
+  }, [rewardsData])
+  // ...or a provider in the stakes poll is not in the last rewards response (it gets the inline
+  // mark, and its rewards with the next settlement)
+  const rewardsIncomplete = useMemo(() => {
+    if (!rewardsData) return false
+    const rewardIdentities = new Set(rewardsData.providers.map((r) => r.identity))
+    return rewardsFailed || (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
+  }, [rewardsData, rewardsFailed, stakes.data])
+
+  // While the rewards are in error, retry on new blocks (capped, see useBlockRetry)
+  useBlockRetry({
+    key: 'rewards',
+    shouldRetry: rewards.isError || rewardsFailed,
+    isBusy: () => rewards.isFetching,
+    run: () => void rewards.refetch(),
+  })
+
+  // Rewards missing for a provider (not loaded, failed, or absent) stay null and show as N/A.
+  const providers = useMemo<ProviderBreakdownData[] | undefined>(() => {
+    if (!stakes.data) return undefined
+    const rewardsByIdentity = new Map((rewardsData?.providers ?? []).map((r) => [r.identity, r]))
+    return stakes.data.map((p) => ({
+      ...p,
+      rewards24h: rewardsByIdentity.get(p.identity)?.rewards24h ?? null,
+      rewards48h: rewardsByIdentity.get(p.identity)?.rewards48h ?? null,
+    }))
+  }, [stakes.data, rewardsData])
+  const isLoading = stakes.isLoading || (rewards.isLoading && !rewardsData)
+  // Only a breakdown with nothing to show is replaced by the error card; otherwise the table
+  // stays, with an inline mark and N/A for what is missing.
+  const isError = stakes.isError && !stakes.data
+  const hasPartialError = stakes.isError || rewards.isError || rewardsIncomplete
+  // The indexer covers only part of a window (new result shape only)
+  const rangeNote = useMemo(() => {
+    const note24h = coverageNote(rewardsData?.coverage24h ?? null)
+    const note48h = coverageNote(rewardsData?.coverage48h ?? null)
+    if (note24h === note48h) return note48h
+    return [note24h && `24h: ${note24h}`, note48h && `48h: ${note48h}`].filter(Boolean).join('; ')
+  }, [rewardsData])
+  const refetch = () => Promise.all([stakes.refetch(), rewards.refetch()])
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')
   const [sortKey, setSortKey] = useState<SortKey>('suppliers')
@@ -67,7 +141,11 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
       }
-      return sortDir === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number)
+      // Missing rewards (null) sort as the lowest value
+      const aNum = (aVal as number | null) ?? -Infinity
+      const bNum = (bVal as number | null) ?? -Infinity
+      if (aNum === bNum) return 0
+      return sortDir === 'asc' ? (aNum < bNum ? -1 : 1) : (aNum < bNum ? 1 : -1)
     })
   }, [providers, sortKey, sortDir])
 
@@ -154,6 +232,14 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
         </Button>
       </div>
 
+      {hasPartialError && (
+        <p className="text-xs text-muted-foreground">
+          Some data could not be refreshed; showing the last data loaded, and N/A where there is none.
+          <button type="button" onClick={() => refetch()} className="ml-2 underline">Retry</button>
+        </p>
+      )}
+      {rangeNote && <p className="text-xs text-muted-foreground">{rangeNote}</p>}
+
       <div className="flex flex-col xl:flex-row gap-4">
         {/* Table card */}
         <div className={`${cardClasses} flex-1 min-w-0 overflow-x-auto`}>
@@ -194,10 +280,10 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
                     {toCurrencyFormat(p.stakedPokt, 0)}
                   </td>
                   <td className={`${CELL_CLASSES} text-right font-mono`}>
-                    {toCurrencyFormat(p.rewards24h, 2)}
+                    {p.rewards24h != null ? toCurrencyFormat(p.rewards24h, 2) : 'N/A'}
                   </td>
                   <td className={`${CELL_CLASSES} text-right font-mono`}>
-                    {toCurrencyFormat(p.rewards48h, 2)}
+                    {p.rewards48h != null ? toCurrencyFormat(p.rewards48h, 2) : 'N/A'}
                   </td>
                 </tr>
               ))}

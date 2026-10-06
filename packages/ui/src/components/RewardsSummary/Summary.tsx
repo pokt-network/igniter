@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApolloClient } from '@apollo/client'
 import ErrorRetry from '../ErrorRetry'
 import FourCard from '../FourCards/FourCard'
@@ -8,48 +8,58 @@ import { combineByIndex } from '../FourCards/utils'
 import { labels } from './constants'
 import NoData from '../NoData'
 import { amountToPokt, toCurrencyFormat } from '../../lib/utils'
-import { DocumentNodeData } from '../../hooks/useFetchOnNewBlock'
+import { DocumentNodeData } from '../../lib/graphql/types'
 import { useHeightContext } from '../../context/Height/height'
-import { summaryDocument } from '@igniter/graphql/rewards'
+import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
+import useBlockRetry from '../../hooks/useBlockRetry'
+import { coverageNote, isFailedTotal, Ranged } from '../../lib/range'
+import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
 import SummaryLoader from './Loader'
 
-type SummaryData = DocumentNodeData<typeof summaryDocument>
+// The rewards totals normalised once (see range.ts); null: they could not be fetched
+export type SummaryData = Omit<DocumentNodeData<typeof summaryDocument>, 'last24h' | 'last48h'> & {
+  [K in keyof RewardsWindows]: RewardsWindows[K] | null
+}
+type SuppliersData = DocumentNodeData<typeof suppliersSummaryDocument>
 
-function aggregateSummaryResults(results: SummaryData[]): SummaryData {
-  return results.reduce((acc, d) => {
-    if (!acc) return d
-    return {
-      ...d,
-      suppliers: {
-        ...d.suppliers,
-        totalCount:
-          (acc.suppliers?.totalCount ?? 0) +
-          (d.suppliers?.totalCount ?? 0),
-        aggregates: {
-          ...d.suppliers?.aggregates,
-          sum: {
-            stakeAmount:
-              Number(acc.suppliers?.aggregates?.sum?.stakeAmount ?? 0) +
-              Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0),
-          },
+// Suppliers and stake change on any stake or unstake, so they refresh on a timer; rewards only
+// change when claims settle, so they refresh on a new settlement height.
+const SUPPLIERS_REFRESH_MS = 60 * 1000
+
+function aggregateSuppliersResults(results: SuppliersData[]): Pick<SummaryData, 'suppliers'> {
+  return {
+    suppliers: {
+      totalCount: results.reduce((sum, d) => sum + (d.suppliers?.totalCount ?? 0), 0),
+      aggregates: {
+        sum: {
+          stakeAmount: results.reduce((sum, d) => sum + Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0), 0),
         },
       },
-      last24h:
-        Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-      last48h:
-        Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
-    }
-  }) as SummaryData
+    },
+  }
 }
 
-function Value({value, tooltip}: {value: string, tooltip?: string}) {
+function Value({value, tooltip, note, onRetry}: {value: string, tooltip?: string, note?: string | null, onRetry?: () => void}) {
   return (
     <p className={'mt-1 sm:text-lg font-medium'} title={tooltip}>
       {value}{tooltip && <span className="inline-block ml-1 text-xs text-text-tertiary cursor-help" title={tooltip}>&#9432;</span>}
+      {onRetry && <button type="button" onClick={onRetry} className="ml-2 text-xs underline text-text-tertiary">Retry</button>}
+      {note && <span className="block text-xs font-normal text-text-tertiary">{note}</span>}
     </p>
   )
+}
+
+// A rewards total (see range.ts). A missing total (failed fetch) and a window with nothing
+// covered both show N/A, never 0; the indexer's range, when it sends one, adds a note on what is
+// covered.
+function rewardValue(total: Ranged<number> | null) {
+  return {
+    value: total?.data != null ? toCurrencyFormat(amountToPokt(total.data), 2) : 'N/A',
+    tooltip: total?.data == null && !total?.range ? 'Indexer data unavailable' : undefined,
+    note: coverageNote(total?.range ?? null),
+  }
 }
 
 interface SummaryProps {
@@ -57,7 +67,7 @@ interface SummaryProps {
   addresses: Array<string>
   supplierAddresses: Array<string>
   noDataMessage?: string
-  initialData: DocumentNodeData<typeof summaryDocument> | null
+  initialData: SummaryData | null
   initialError: boolean
 }
 
@@ -70,39 +80,94 @@ export default function Summary({
   initialData
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentHeight, currentTime, firstHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const [data, setData] = useState<SummaryData | null>(initialData)
   const [error, setError] = useState(initialError)
-  const [isLoading, setIsLoading] = useState(false)
+  // Tracked apart from `error`: the suppliers refresh can succeed and hide the error card while
+  // the rewards are still missing, and those would otherwise wait for the next settlement.
+  const [rewardsError, setRewardsError] = useState(initialError || initialData?.last24h == null)
+  // Fetches running per part, and the id of the latest one: only the latest may write its result,
+  // so a slow retry cannot overwrite a newer fetch (settlement-triggered, or the suppliers timer).
+  const rewardsInFlightRef = useRef(0)
+  const rewardsSeqRef = useRef(0)
+  const suppliersInFlightRef = useRef(0)
+  const suppliersSeqRef = useRef(0)
+  // Per part, so one part's fetch never ends the other's loading state
+  const [rewardsLoading, setRewardsLoading] = useState(false)
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const isLoading = rewardsLoading || suppliersLoading
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
 
-  const fetchBatched = useCallback(async () => {
+  const fetchBatched = useCallback(async (part: 'rewards' | 'suppliers') => {
     if (!addresses.length) return
+    const seqRef = part === 'rewards' ? rewardsSeqRef : suppliersSeqRef
+    const seq = ++seqRef.current
+    const isStale = () => seq !== seqRef.current
+    const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
+    inFlightRef.current++
 
-    setIsLoading(true)
+    const setPartLoading = part === 'rewards' ? setRewardsLoading : setSuppliersLoading
+    setPartLoading(true)
     try {
       const batches = batchArray(supplierAddresses)
-      const results = await Promise.all(
-        batches.map((batch) =>
-          client.query({
-            query: summaryDocument,
-            variables: summaryVariables(isOwners, addresses, batch, currentTime),
-            fetchPolicy: 'network-only',
-          }),
-        ),
-      )
+      let update: Partial<SummaryData>
 
-      const aggregated = aggregateSummaryResults(results.map((r) => r.data))
-      lastValueRef.current = aggregated
-      setData(aggregated)
+      if (part === 'rewards') {
+        const results = await Promise.all(
+          batches.map((batch) => {
+            const v = summaryVariables(isOwners, addresses, batch, currentTime)
+            return client.query({
+              query: rewardsWindowsDocument,
+              variables: {
+                addresses: v.addresses,
+                supplierAddresses: v.supplierAddresses,
+                currentDate: v.currentDate,
+                last24Hours: v.last24Hours,
+                last48Hours: v.last48Hours,
+              },
+              fetchPolicy: 'network-only',
+            })
+          }),
+        )
+        update = combineRewardsWindows(results.map((r) => r.data))
+      } else {
+        const results = await Promise.all(
+          batches.map((batch) =>
+            client.query({
+              query: suppliersSummaryDocument,
+              variables: { filter: summaryVariables(isOwners, addresses, batch, currentTime).filter },
+              fetchPolicy: 'network-only',
+            }),
+          ),
+        )
+        update = aggregateSuppliersResults(results.map((r) => r.data))
+      }
+
+      if (isStale()) return
+
+      setData((prev) => {
+        const next = { ...prev, ...update } as SummaryData
+        lastValueRef.current = next
+        return next
+      })
       setError(false)
+      if (part === 'rewards') setRewardsError(false)
     } catch {
+      if (isStale()) return
       setError(true)
+      if (part === 'rewards') setRewardsError(true)
     } finally {
-      setIsLoading(false)
+      // A superseded fetch must not end the loading state of the newer one
+      if (!isStale()) setPartLoading(false)
+      inFlightRef.current--
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
+
+  const fetchAll = useCallback(() => {
+    fetchBatched('suppliers')
+    fetchBatched('rewards')
+  }, [fetchBatched])
 
   useEffect(() => {
     if (firstRenderRef.current) {
@@ -112,11 +177,48 @@ export default function Summary({
 
     if (!addresses.length) return
 
-    if (currentHeight !== firstHeight) {
-      fetchBatched()
+    if (settlementHeight !== firstSettlementHeight) {
+      fetchBatched('rewards')
+      // Missing suppliers (a failed load) also come back on a settlement, not only on their timer
+      if (data?.suppliers == null) fetchBatched('suppliers')
     }
     // eslint-disable-next-line
-  }, [currentHeight])
+  }, [settlementHeight])
+
+  // While the rewards are in error or the suppliers are missing (a failed first load), retry them
+  // on new blocks (capped, see useBlockRetry). Each part is skipped while a fetch of it is running;
+  // a settlement-triggered fetch is never skipped.
+  useBlockRetry({
+    key: 'rewards',
+    shouldRetry: addresses.length > 0 && (rewardsError || isFailedTotal(data?.last24h) || isFailedTotal(data?.last48h)),
+    isBusy: () => rewardsInFlightRef.current > 0,
+    run: () => fetchBatched('rewards'),
+  })
+  useBlockRetry({
+    key: 'suppliers',
+    shouldRetry: addresses.length > 0 && data?.suppliers == null,
+    isBusy: () => suppliersInFlightRef.current > 0,
+    run: () => fetchBatched('suppliers'),
+  })
+
+  // The interval reads the latest fetchBatched through a ref, so a new block does not reset it.
+  const fetchBatchedRef = useRef(fetchBatched)
+  fetchBatchedRef.current = fetchBatched
+
+  useEffect(() => {
+    if (!addresses.length) return
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchBatchedRef.current('suppliers')
+      }
+    }, SUPPLIERS_REFRESH_MS)
+
+    return () => clearInterval(interval)
+  }, [addresses.length])
+
+  const reward24h = useMemo(() => rewardValue(data?.last24h ?? null), [data?.last24h])
+  const reward48h = useMemo(() => rewardValue(data?.last48h ?? null), [data?.last48h])
 
   if (isLoading && !lastValueRef.current) {
     return <SummaryLoader />
@@ -124,7 +226,7 @@ export default function Summary({
     return (
       <div className={"bg-[color:--main-background] pt-3 pb-1 gap-1 rounded-lg border border-[color:--divider] base-shadow"}>
         <ErrorRetry
-          onRetry={fetchBatched}
+          onRetry={fetchAll}
           errorMessage={'Oops. There was an error loading the summary data.'}
         />
       </div>
@@ -148,42 +250,35 @@ export default function Summary({
             1: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    data?.suppliers?.totalCount || 0,
-                  )
+                  data?.suppliers != null
+                    ? toCurrencyFormat(data.suppliers.totalCount || 0)
+                    : 'N/A'
                 }
+                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
+                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
               />
             ),
             2: (
               <Value
                 value={
-                  toCurrencyFormat(
-                    amountToPokt(
-                      data?.suppliers?.aggregates?.sum?.stakeAmount
-                    ),
-                    2,
-                  )
+                  data?.suppliers != null
+                    ? toCurrencyFormat(amountToPokt(data.suppliers.aggregates?.sum?.stakeAmount), 2)
+                    : 'N/A'
                 }
+                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
+                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
               />
             ),
             3: (
               <Value
-                value={
-                  data?.last24h != null
-                    ? toCurrencyFormat(amountToPokt(data.last24h), 2)
-                    : 'N/A'
-                }
-                tooltip={data?.last24h == null ? 'Indexer data unavailable' : undefined}
+                {...reward24h}
+                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
             4: (
               <Value
-                value={
-                  data?.last48h != null
-                    ? toCurrencyFormat(amountToPokt(data.last48h), 2)
-                    : 'N/A'
-                }
-                tooltip={data?.last48h == null ? 'Indexer data unavailable' : undefined}
+                {...reward48h}
+                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
               />
             ),
           }
