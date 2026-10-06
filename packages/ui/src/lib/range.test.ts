@@ -190,6 +190,18 @@ describe('combineRewardsWindows and combineRewardRows', () => {
   })
 })
 
+describe('scalar totals as JSON strings', () => {
+  it('sums data sent as a numeric string, as the new legacy_ scalars do', () => {
+    expect(combineRewardsWindows([
+      { last24h: { range: partialRange, data: '201156529' }, last48h: { range: partialRange, data: '402313058' } },
+      { last24h: { range: partialRange, data: '1' }, last48h: { range: partialRange, data: '0' } },
+    ])).toEqual({
+      last24h: { data: 201156530, range: partialRange },
+      last48h: { data: 402313058, range: partialRange },
+    })
+  })
+})
+
 describe('isUncovered', () => {
   it('is true only for null covered bounds, never for data', () => {
     expect(isUncovered(notCovered)).toBe(true)
