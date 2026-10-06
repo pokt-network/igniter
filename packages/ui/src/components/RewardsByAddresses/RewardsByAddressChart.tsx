@@ -24,7 +24,7 @@ import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rew
 import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
-import { createBlockRetryBudget } from '../../lib/blockRetry'
+import useBlockRetry from '../../hooks/useBlockRetry'
 import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
 import { coverageNote, isUncovered, maskUncoveredBuckets, NO_COVERAGE_NOTE, Ranged } from '../../lib/range'
 
@@ -54,7 +54,7 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentHeight, firstHeight, currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   // The rows of the selected range, normalised once (see range.ts)
@@ -69,8 +69,6 @@ export default function RewardsByAddressChart({
   // Fetches running, and the id of the latest one: only the latest may write its result.
   const inFlightRef = useRef(0)
   const seqRef = useRef(0)
-  // Per-block retries, capped until the next settlement height (see blockRetry.ts)
-  const retryRef = useRef(createBlockRetryBudget())
 
   const fetchBatched = useCallback(async () => {
     if (!addresses.length) return
@@ -104,7 +102,6 @@ export default function RewardsByAddressChart({
       setRawData(aggregated)
       setRawDataTime(selectedTime)
       setError(false)
-      retryRef.current.reset()
     } catch {
       if (seq !== seqRef.current) return
       setError(true)
@@ -136,14 +133,13 @@ export default function RewardsByAddressChart({
     // eslint-disable-next-line
   }, [settlementHeight, selectedTime])
 
-  // While in error, retry on every new block instead of waiting for the next settlement, up to
-  // MAX_BLOCK_RETRIES in a row.
-  useEffect(() => {
-    if (!error || !addresses.length || currentHeight === firstHeight || inFlightRef.current > 0) return
-    if (!retryRef.current.take(settlementHeight)) return
-    fetchBatched()
-    // eslint-disable-next-line
-  }, [currentHeight])
+  // While in error, retry on new blocks (capped per selected range, see useBlockRetry)
+  useBlockRetry({
+    key: selectedTime,
+    shouldRetry: error && addresses.length > 0,
+    isBusy: () => inFlightRef.current > 0,
+    run: fetchBatched,
+  })
 
   // Data for the selected range is on hand: keep showing it while refetching or after a failed
   // refresh, with an inline error mark, instead of the loader or the error card.

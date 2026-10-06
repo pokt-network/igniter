@@ -9,7 +9,7 @@ import DistributionPieChart from '@igniter/ui/components/PieChart/PieChart'
 import { Skeleton } from '@igniter/ui/components/skeleton'
 import { toCurrencyFormat } from '@igniter/ui/lib/utils'
 import { coverageNote, isUncovered } from '@igniter/ui/lib/range'
-import { createBlockRetryBudget } from '@igniter/ui/lib/blockRetry'
+import useBlockRetry from '@igniter/ui/hooks/useBlockRetry'
 import { Button } from '@igniter/ui/components/button'
 import { useHeightContext } from '@igniter/ui/context/Height/height'
 
@@ -53,7 +53,7 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
-  const { currentHeight, firstHeight, settlementHeight, currentTime } = useHeightContext()
+  const { settlementHeight, currentTime } = useHeightContext()
   // Suppliers and stake come from our database and change on any stake or unstake, so they
   // poll every 60 s (React Query pauses the interval while the tab is hidden).
   const stakes = useQuery({
@@ -81,28 +81,30 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
     if (rewards.data && !rewards.isPlaceholderData) lastRewardsRef.current = rewards.data
   }, [rewards.data, rewards.isPlaceholderData])
   const rewardsData = rewards.data ?? lastRewardsRef.current
-  // Some provider's batch failed on the server (its rewards came back null), or a provider in the
-  // stakes poll is not in the last rewards response
-  const rewardsIncomplete = useMemo(() => {
+  // Some provider's batch failed on the server (its rewards came back null; in a window with
+  // nothing covered, a null reward is "no data", not a failure)
+  const rewardsFailed = useMemo(() => {
     if (!rewardsData) return false
-    const rewardIdentities = new Set(rewardsData.providers.map((r) => r.identity))
-    // In a window with nothing covered, a null reward is "no data", not a failure
     const uncovered24h = isUncovered(rewardsData.coverage24h)
     const uncovered48h = isUncovered(rewardsData.coverage48h)
     return rewardsData.providers.some((r) =>
-      (r.rewards24h == null && !uncovered24h) || (r.rewards48h == null && !uncovered48h)) ||
-      (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
-  }, [rewardsData, stakes.data])
+      (r.rewards24h == null && !uncovered24h) || (r.rewards48h == null && !uncovered48h))
+  }, [rewardsData])
+  // ...or a provider in the stakes poll is not in the last rewards response (it gets the inline
+  // mark, and its rewards with the next settlement)
+  const rewardsIncomplete = useMemo(() => {
+    if (!rewardsData) return false
+    const rewardIdentities = new Set(rewardsData.providers.map((r) => r.identity))
+    return rewardsFailed || (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
+  }, [rewardsData, rewardsFailed, stakes.data])
 
-  // While the rewards are in error or incomplete, retry on every new block instead of waiting for
-  // the next settlement, up to MAX_BLOCK_RETRIES in a row (a new settlement height refetches anyway).
-  const retryRef = useRef(createBlockRetryBudget())
-  useEffect(() => {
-    if (!(rewards.isError || rewardsIncomplete) || rewards.isFetching || currentHeight === firstHeight) return
-    if (!retryRef.current.take(settlementHeight)) return
-    rewards.refetch()
-    // eslint-disable-next-line
-  }, [currentHeight])
+  // While the rewards are in error, retry on new blocks (capped, see useBlockRetry)
+  useBlockRetry({
+    key: 'rewards',
+    shouldRetry: rewards.isError || rewardsFailed,
+    isBusy: () => rewards.isFetching,
+    run: () => void rewards.refetch(),
+  })
 
   // Rewards missing for a provider (not loaded, failed, or absent) stay null and show as N/A.
   const providers = useMemo<ProviderBreakdownData[] | undefined>(() => {

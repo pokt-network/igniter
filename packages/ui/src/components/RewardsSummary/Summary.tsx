@@ -13,7 +13,7 @@ import { useHeightContext } from '../../context/Height/height'
 import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
-import { createBlockRetryBudget } from '../../lib/blockRetry'
+import useBlockRetry from '../../hooks/useBlockRetry'
 import { coverageNote, Ranged } from '../../lib/range'
 import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
 import SummaryLoader from './Loader'
@@ -80,7 +80,7 @@ export default function Summary({
   initialData
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentHeight, firstHeight, currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
+  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
   const [data, setData] = useState<SummaryData | null>(initialData)
   const [error, setError] = useState(initialError)
   // Tracked apart from `error`: the suppliers refresh can succeed and hide the error card while
@@ -92,9 +92,6 @@ export default function Summary({
   const rewardsSeqRef = useRef(0)
   const suppliersInFlightRef = useRef(0)
   const suppliersSeqRef = useRef(0)
-  // Per-block retries of each part, capped until the next settlement height (see blockRetry.ts)
-  const rewardsRetryRef = useRef(createBlockRetryBudget())
-  const suppliersRetryRef = useRef(createBlockRetryBudget())
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastValueRef = useRef<SummaryData | null>(initialData)
@@ -105,7 +102,6 @@ export default function Summary({
     const seq = ++seqRef.current
     const isStale = () => seq !== seqRef.current
     const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
-    const retryRef = part === 'rewards' ? rewardsRetryRef : suppliersRetryRef
     inFlightRef.current++
 
     setIsLoading(true)
@@ -153,13 +149,13 @@ export default function Summary({
       })
       setError(false)
       if (part === 'rewards') setRewardsError(false)
-      retryRef.current.reset()
     } catch {
       if (isStale()) return
       setError(true)
       if (part === 'rewards') setRewardsError(true)
     } finally {
-      setIsLoading(false)
+      // A superseded fetch must not end the loading state of the newer one
+      if (!isStale()) setIsLoading(false)
       inFlightRef.current--
     }
   }, [client, isOwners, addresses, supplierAddresses, currentTime])
@@ -179,24 +175,27 @@ export default function Summary({
 
     if (settlementHeight !== firstSettlementHeight) {
       fetchBatched('rewards')
+      // Missing suppliers (a failed load) also come back on a settlement, not only on their timer
+      if (data?.suppliers == null) fetchBatched('suppliers')
     }
     // eslint-disable-next-line
   }, [settlementHeight])
 
   // While the rewards are in error or the suppliers are missing (a failed first load), retry them
-  // on every new block instead of waiting for a settlement or the suppliers timer, up to
-  // MAX_BLOCK_RETRIES in a row. Each part is skipped while a fetch of it is running; a
-  // settlement-triggered fetch is never skipped.
-  useEffect(() => {
-    if (!addresses.length || currentHeight === firstHeight) return
-    if (rewardsError && rewardsInFlightRef.current === 0 && rewardsRetryRef.current.take(settlementHeight)) {
-      fetchBatched('rewards')
-    }
-    if (data?.suppliers == null && suppliersInFlightRef.current === 0 && suppliersRetryRef.current.take(settlementHeight)) {
-      fetchBatched('suppliers')
-    }
-    // eslint-disable-next-line
-  }, [currentHeight])
+  // on new blocks (capped, see useBlockRetry). Each part is skipped while a fetch of it is running;
+  // a settlement-triggered fetch is never skipped.
+  useBlockRetry({
+    key: 'rewards',
+    shouldRetry: addresses.length > 0 && rewardsError,
+    isBusy: () => rewardsInFlightRef.current > 0,
+    run: () => fetchBatched('rewards'),
+  })
+  useBlockRetry({
+    key: 'suppliers',
+    shouldRetry: addresses.length > 0 && data?.suppliers == null,
+    isBusy: () => suppliersInFlightRef.current > 0,
+    run: () => fetchBatched('suppliers'),
+  })
 
   // The interval reads the latest fetchBatched through a ref, so a new block does not reset it.
   const fetchBatchedRef = useRef(fetchBatched)
