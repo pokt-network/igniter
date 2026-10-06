@@ -13,6 +13,7 @@ export interface CoverageGap {
 export interface CoverageRange {
   requested_from: string | null
   requested_to: string | null
+  // both null when nothing in the requested window is covered
   covered_from: string | null
   covered_to: string | null
   gaps: Array<CoverageGap>
@@ -73,17 +74,22 @@ function formatUtc(date: string): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    // not hour12: false, which some engines print as 24:00 at midnight
+    hourCycle: 'h23',
     timeZone: 'UTC',
   }) + ' UTC'
 }
 
+export const NO_COVERAGE_NOTE = 'No indexed data for this range'
+
 /**
  * A short note when the data covers less than the requested window: "Data since <date>", plus
- * the gaps inside it. null for the old shape and for a fully covered window.
+ * the gaps inside it, or NO_COVERAGE_NOTE when nothing is covered. null for the old shape and
+ * for a fully covered window.
  */
 export function coverageNote(range: CoverageRange | null): string | null {
   if (!range) return null
+  if (range.covered_from == null && range.covered_to == null) return NO_COVERAGE_NOTE
   const parts: Array<string> = []
   if (
     range.covered_from &&

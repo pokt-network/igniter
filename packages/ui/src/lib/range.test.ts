@@ -18,6 +18,8 @@ const gapRange = {
 }
 const beforeCoverage = { ...partialRange, requested_to: '2026-08-31T12:00:00+00:00', covered_to: '2026-08-31T12:00:00+00:00' }
 const fullRange = { ...partialRange, requested_from: '2026-09-01T12:00:00+00:00' }
+// The indexer's current wording: nothing covered gives covered_from / covered_to null
+const notCovered = { ...partialRange, covered_from: null, covered_to: null }
 
 
 describe('unwrapRange', () => {
@@ -27,6 +29,7 @@ describe('unwrapRange', () => {
 
   it('keeps data null as null, never 0', () => {
     expect(unwrapRange({ range: beforeCoverage, data: null })).toEqual({ data: null, range: beforeCoverage })
+    expect(unwrapRange({ range: notCovered, data: null })).toEqual({ data: null, range: notCovered })
   })
 
   it('passes the old shape through with no range', () => {
@@ -55,6 +58,10 @@ describe('sumRewardTotals and mergeRewardRows', () => {
     expect(sumRewardTotals([{ range: beforeCoverage, data: null }, { range: beforeCoverage, data: null }])).toEqual({
       data: null,
       range: beforeCoverage,
+    })
+    expect(sumRewardTotals([{ range: notCovered, data: null }, { range: notCovered, data: null }])).toEqual({
+      data: null,
+      range: notCovered,
     })
     expect(sumRewardTotals([{ range: partialRange, data: null }, { range: partialRange, data: 0 }])).toEqual({
       data: 0,
@@ -89,6 +96,15 @@ describe('coverageNote', () => {
 
   it('names the coverage start when it is after the requested start', () => {
     expect(coverageNote(partialRange)).toBe('Data since Sep 01, 2026, 12:00 UTC')
+  })
+
+  it('says nothing is covered when covered_from and covered_to are null', () => {
+    expect(coverageNote(notCovered)).toBe('No indexed data for this range')
+  })
+
+  it('prints midnight as 00:00', () => {
+    expect(coverageNote({ ...fullRange, requested_from: '2026-09-01T00:00:00Z', covered_from: '2026-09-02T00:00:00Z' }))
+      .toBe('Data since Sep 02, 2026, 00:00 UTC')
   })
 
   it('lists the gaps', () => {
