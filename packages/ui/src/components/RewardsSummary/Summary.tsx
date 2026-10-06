@@ -13,7 +13,7 @@ import { useHeightContext } from '../../context/Height/height'
 import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
-import { coverageNote, NO_COVERAGE_NOTE, Ranged, unwrapRange } from '../../lib/range'
+import { coverageNote, Ranged, unwrapRange } from '../../lib/range'
 import { sumRewardTotals } from '../../lib/rewards'
 import SummaryLoader from './Loader'
 
@@ -62,7 +62,7 @@ function rewardValue(total: Ranged<string | number>) {
   return {
     value: total.data != null ? toCurrencyFormat(amountToPokt(total.data), 2) : 'N/A',
     tooltip: total.data == null && !total.range ? 'Indexer data unavailable' : undefined,
-    note: coverageNote(total.range) ?? (total.data == null && total.range ? NO_COVERAGE_NOTE : null),
+    note: coverageNote(total.range),
   }
 }
 

@@ -84,7 +84,8 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
     if (!rewardsData) return false
     const rewardIdentities = new Set(rewardsData.map((r) => r.identity))
     // With the indexer's coverage at hand, a null reward is a window with nothing covered, not a failure
-    return rewardsData.some((r) => r.coverage48h == null && (r.rewards24h == null || r.rewards48h == null)) ||
+    return rewardsData.some((r) =>
+      (r.rewards24h == null && r.coverage24h == null) || (r.rewards48h == null && r.coverage48h == null)) ||
       (stakes.data ?? []).some((p) => !rewardIdentities.has(p.identity))
   }, [rewardsData, stakes.data])
 
@@ -111,12 +112,14 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
   // stays, with an inline mark and N/A for what is missing.
   const isError = stakes.isError && !stakes.data
   const hasPartialError = stakes.isError || rewards.isError || rewardsIncomplete
-  // The indexer covers only part of the 48h window (new result shape only; every provider asks
-  // for the same window)
-  const rangeNote = useMemo(
-    () => coverageNote(rewardsData?.find((r) => r.coverage48h)?.coverage48h ?? null),
-    [rewardsData],
-  )
+  // The indexer covers only part of a window (new result shape only; every provider asks for the
+  // same windows)
+  const rangeNote = useMemo(() => {
+    const note24h = coverageNote(rewardsData?.find((r) => r.coverage24h)?.coverage24h ?? null)
+    const note48h = coverageNote(rewardsData?.find((r) => r.coverage48h)?.coverage48h ?? null)
+    if (note24h === note48h) return note48h
+    return [note24h && `24h: ${note24h}`, note48h && `48h: ${note48h}`].filter(Boolean).join('; ')
+  }, [rewardsData])
   const refetch = () => Promise.all([stakes.refetch(), rewards.refetch()])
 
   const [rewardsPeriod, setRewardsPeriod] = useState<'24h' | '48h'>('24h')

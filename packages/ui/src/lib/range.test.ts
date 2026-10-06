@@ -71,13 +71,24 @@ describe('sumRewardTotals and mergeRewardRows', () => {
 
   it('merges new-shape rows per (address, date) and the gaps of every batch', () => {
     const a = { range: gapRange, data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 100 }] }
+    const otherGap = { from: '2026-09-02T02:00:00+00:00', to: '2026-09-02T03:00:00+00:00' }
     const b = {
-      range: { ...gapRange, covered_from: '2026-09-01T13:00:00+00:00' },
+      range: {
+        ...gapRange,
+        covered_from: '2026-09-01T13:00:00+00:00',
+        covered_to: '2026-09-02T08:00:00+00:00',
+        gaps: [...gapRange.gaps, otherGap],
+      },
       data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 30 }],
     }
     expect(mergeRewardRows([a, b])).toEqual({
       data: [{ address: 'pokt1a', date_truncated: '2026-09-01T00:00:00', total_amount: 130 }],
-      range: { ...gapRange, covered_from: '2026-09-01T13:00:00+00:00' },
+      range: {
+        ...gapRange,
+        covered_from: '2026-09-01T13:00:00+00:00',
+        covered_to: '2026-09-02T08:00:00+00:00',
+        gaps: [...gapRange.gaps, otherGap],
+      },
     })
   })
 

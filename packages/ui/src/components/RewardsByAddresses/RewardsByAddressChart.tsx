@@ -25,7 +25,7 @@ import { useSelectedTime } from './TimeSelector'
 import { useHeightContext } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
 import { mergeRewardRows } from '../../lib/rewards'
-import { coverageNote, unwrapRange } from '../../lib/range'
+import { coverageNote, NO_COVERAGE_NOTE, unwrapRange } from '../../lib/range'
 
 export interface RewardItem extends LineBarItem {
   totalAmount: number
@@ -319,9 +319,9 @@ export default function RewardsByAddressChart({
       content = (
         <>
           {errorMark}
-          {rangeMark}
+          {rangeNote !== NO_COVERAGE_NOTE && rangeMark}
           <div className={'mt-[-10px] flex w-full items-center justify-center'}>
-            <NoData label={'No data available for the selected time.'} />
+            <NoData label={rangeNote === NO_COVERAGE_NOTE ? NO_COVERAGE_NOTE : 'No data available for the selected time.'} />
           </div>
         </>
       )
