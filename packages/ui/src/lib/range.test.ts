@@ -131,6 +131,11 @@ describe('coverageNote', () => {
     )
   })
 
+  it('reads the microseconds Postgres prints', () => {
+    expect(coverageNote({ ...fullRange, requested_from: '2026-09-01T00:00:00+00:00', covered_from: '2026-09-01T12:00:03.412345+00:00' }))
+      .toBe('Data since Sep 01, 2026, 12:00 UTC')
+  })
+
   it('prints midnight as 00:00', () => {
     expect(coverageNote({ ...fullRange, requested_from: '2026-09-01T00:00:00Z', covered_from: '2026-09-02T00:00:00Z' }))
       .toBe('Data since Sep 02, 2026, 00:00 UTC')

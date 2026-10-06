@@ -34,12 +34,17 @@ export function unwrapRange<T>(value: unknown): Ranged<T> {
   return { data: value as T | null, range: null }
 }
 
+// Postgres prints timestamptz with up to 6 fractional digits; ECMAScript only specifies 3
+function parseTime(time: string): Date {
+  return new Date(time.replace(/(\.\d{3})\d+/, '$1'))
+}
+
 // Every batch asks for the same window, so their ranges match; merged conservatively anyway.
 function mergeRanges(ranges: Array<CoverageRange | null>): CoverageRange | null {
   const present = ranges.filter((r): r is CoverageRange => r != null)
   if (!present.length) return null
-  const latest = (a: string | null, b: string | null) => (a == null || (b != null && new Date(b) > new Date(a)) ? b : a)
-  const earliest = (a: string | null, b: string | null) => (a == null || (b != null && new Date(b) < new Date(a)) ? b : a)
+  const latest = (a: string | null, b: string | null) => (a == null || (b != null && parseTime(b) > parseTime(a)) ? b : a)
+  const earliest = (a: string | null, b: string | null) => (a == null || (b != null && parseTime(b) < parseTime(a)) ? b : a)
   const gaps = new Map<string, CoverageGap>()
   for (const gap of present.flatMap((r) => r.gaps ?? [])) gaps.set(`${gap.from}|${gap.to}`, gap)
   return present.slice(1).reduce(
@@ -68,7 +73,7 @@ export function combineBatches<T>(values: Array<unknown>, combine: (values: Arra
 }
 
 function formatUtc(date: string): string {
-  return new Date(date).toLocaleString('en-US', {
+  return parseTime(date).toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: '2-digit',
@@ -94,13 +99,13 @@ export function coverageNote(range: CoverageRange | null): string | null {
   const parts: Array<string> = []
   if (
     range.covered_from &&
-    (range.requested_from == null || new Date(range.covered_from) > new Date(range.requested_from))
+    (range.requested_from == null || parseTime(range.covered_from) > parseTime(range.requested_from))
   ) {
     parts.push(`Data since ${formatUtc(range.covered_from)}`)
   }
   // A gap that ends where the data starts is already said by "Data since"
   const gaps = (range.gaps ?? []).filter(
-    (g) => range.covered_from == null || new Date(g.to) > new Date(range.covered_from),
+    (g) => range.covered_from == null || parseTime(g.to) > parseTime(range.covered_from),
   )
   if (gaps.length) {
     const listed = gaps.slice(0, MAX_LISTED_GAPS).map((g) => `${formatUtc(g.from)} – ${formatUtc(g.to)}`)
