@@ -115,8 +115,8 @@ function clipGap(gap: CoverageGap, range: CoverageRange): CoverageGap | null {
 const BUCKET_MS = { hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000 }
 
 /**
- * Sets `key` to null on the chart buckets the indexer did not cover: wholly before covered_from,
- * after covered_to, or wholly inside a gap (gaps merged; a null gap edge is open-ended). The line
+ * Sets `key` to null on the chart buckets the indexer did not cover: wholly inside what lies before
+ * covered_from, after covered_to and in the gaps, merged (a null gap edge is open-ended). The line
  * then breaks there instead of drawing 0. Unchanged with the old shape (no range); a bound that
  * does not parse masks nothing.
  */
@@ -127,32 +127,29 @@ export function maskUncoveredBuckets<T extends { point: string }>(
   key: keyof T,
 ): Array<T> {
   if (!range) return items
-  const from = range.covered_from == null ? NaN : parseTime(range.covered_from).getTime()
-  const to = range.covered_to == null ? NaN : parseTime(range.covered_to).getTime()
-  // legacy_ ranges end inclusive unless the indexer says otherwise
-  const endInclusive = range.end_inclusive ?? true
-  const gaps = (range.gaps ?? [])
-    .map((g) => [
-      g.from == null ? -Infinity : parseTime(g.from).getTime(),
-      g.to == null ? Infinity : parseTime(g.to).getTime(),
-    ])
-    .filter(([f, t]) => !Number.isNaN(f) && !Number.isNaN(t) && f! < t!)
-    .sort((a, b) => a[0]! - b[0]!)
-    .reduce((merged: Array<[number, number]>, [f, t]) => {
-      const last = merged[merged.length - 1]
-      if (last && f! <= last[1]) last[1] = Math.max(last[1], t!)
-      else merged.push([f!, t!])
-      return merged
+  if (isUncovered(range)) return items.map((item) => ({ ...item, [key]: null }))
+  const time = (t: string | null, open: number) => (t == null ? open : parseTime(t).getTime())
+  // Everything not covered, as one merged set of half-open intervals: before covered_from, after
+  // covered_to (legacy_ ranges end inclusive unless the indexer says otherwise), and the gaps.
+  const coveredTo = time(range.covered_to, Infinity)
+  const holes: Array<[number, number]> = [
+    [-Infinity, time(range.covered_from, -Infinity)],
+    [(range.end_inclusive ?? true) ? coveredTo + 1 : coveredTo, Infinity],
+    ...(range.gaps ?? []).map((g): [number, number] => [time(g.from, -Infinity), time(g.to, Infinity)]),
+  ]
+  const merged = holes
+    .filter(([f, t]) => !Number.isNaN(f) && !Number.isNaN(t) && f < t)
+    .sort((a, b) => a[0] - b[0])
+    .reduce((acc: Array<[number, number]>, [f, t]) => {
+      const last = acc[acc.length - 1]
+      if (last && f <= last[1]) last[1] = Math.max(last[1], t)
+      else acc.push([f, t])
+      return acc
     }, [])
   return items.map((item) => {
     const start = parseTime(item.point).getTime()
     const end = start + BUCKET_MS[unit]
-    const uncovered =
-      isUncovered(range) ||
-      end <= from ||
-      (endInclusive ? start > to : start >= to) ||
-      gaps.some(([f, t]) => f <= start && end <= t)
-    return uncovered ? { ...item, [key]: null } : item
+    return merged.some(([f, t]) => f <= start && end <= t) ? { ...item, [key]: null } : item
   })
 }
 

@@ -346,7 +346,9 @@ export default function RewardsByAddressChart({
                 chartType={chartType}
                 unitToFormatDate={lastVariables?.current?.truncInterval === 'hour' ? 'hour' : 'day'}
                 getTooltipLabel={(item) => {
-                  const value = `${toCurrencyFormat(amountToPokt(item.totalAmount ?? 0))} POKT`
+                  const value = item.totalAmount == null
+                    ? 'Not indexed'
+                    : `${toCurrencyFormat(amountToPokt(item.totalAmount))} POKT`
 
                   if (groupAllAddresses) {
                     return value

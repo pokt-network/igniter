@@ -275,6 +275,17 @@ describe('maskUncoveredBuckets', () => {
       .toEqual([0, null])
   })
 
+  it('masks a bucket left uncovered only by a gap and the end together', () => {
+    const range = {
+      ...partialRange,
+      covered_from: '2026-09-01T00:00:00Z',
+      covered_to: '2026-09-01T18:30:00Z',
+      end_inclusive: false,
+      gaps: [{ from: '2026-09-01T18:00:00Z', to: '2026-09-01T18:30:00Z' }],
+    }
+    expect(amounts(maskUncoveredBuckets(hours(17, 18), range, 'hour', 'totalAmount'))).toEqual([0, null])
+  })
+
   it('reads open-ended gaps, masks everything when nothing is covered, and nothing for a bad bound', () => {
     const range = { ...partialRange, covered_from: '2026-09-01T00:00:00Z', covered_to: '2026-09-01T23:00:00Z' }
     expect(amounts(maskUncoveredBuckets(hours(8, 10), { ...range, gaps: [{ from: '2026-09-01T09:00:00Z', to: null }] }, 'hour', 'totalAmount')))
