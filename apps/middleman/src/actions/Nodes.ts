@@ -1,16 +1,17 @@
 'use server'
 
-import type { NodeWithDetails } from '@igniter/db/middleman/schema'
 import { NodeStatus } from '@igniter/db/middleman/enums'
 import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
-import { summaryDocument, StakeStatus } from '@igniter/graphql'
+import { rewardsWindowsDocument } from '@igniter/graphql'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
 import { amountToPokt } from '@igniter/ui/lib/utils'
 import { batchArray } from '@igniter/ui/lib/batch'
+import { type CoverageRange, mergeRanges } from '@igniter/ui/lib/range'
+import { combineRewardsWindows } from '@igniter/ui/lib/rewards'
 
 export async function GetAllNodes() {
   await requireAdmin()
@@ -62,16 +63,99 @@ export async function GetProviderCount(): Promise<number> {
   return await getProviderCountByUser(userIdentity)
 }
 
-export interface ProviderBreakdownData {
+export interface ProviderStakeData {
   identity: string
   name: string
   suppliers: number
   stakedPokt: number
-  rewards24h: number
-  rewards48h: number
 }
 
-export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
+// null: the provider's rewards could not be fetched (shown as N/A, never as 0)
+export interface ProviderRewardsData {
+  identity: string
+  rewards24h: number | null
+  rewards48h: number | null
+}
+
+export interface ProviderRewards {
+  providers: ProviderRewardsData[]
+  // The indexer's coverage of each window, the same for every provider; null with its old result
+  // shape (see range.ts). An uncovered window (isUncovered) makes a null reward "no data", not a
+  // failed fetch.
+  coverage24h: CoverageRange | null
+  coverage48h: CoverageRange | null
+}
+
+export interface ProviderBreakdownData extends ProviderStakeData {
+  rewards24h: number | null
+  rewards48h: number | null
+}
+
+// Groups the staked nodes by provider, skipping nodes without a provider and providers
+// without staked nodes (provider visibility).
+type UserNode = Awaited<ReturnType<typeof GetUserNodes>>[number]
+
+function groupStakedNodesByProvider(userNodes: UserNode[]) {
+  const providerGroups = new Map<string, { name: string; nodes: UserNode[] }>()
+  for (const node of userNodes) {
+    if (!node.providerId || node.status !== NodeStatus.Staked) continue
+    const name = node.provider?.name ?? node.providerId
+    let group = providerGroups.get(node.providerId)
+    if (!group) {
+      group = { name, nodes: [] }
+      providerGroups.set(node.providerId, group)
+    }
+    group.nodes.push(node)
+  }
+  return Array.from(providerGroups.entries())
+}
+
+/**
+ * Suppliers and staked POKT per provider, from the database. Cheap, so the client polls it on
+ * a short interval; the rewards columns come from GetProviderRewards.
+ */
+export async function GetProviderStakes(): Promise<ProviderStakeData[]> {
+  const userNodes = await GetUserNodes()
+
+  const providers: ProviderStakeData[] = groupStakedNodesByProvider(userNodes).map(([identity, group]) => ({
+    identity,
+    name: group.name,
+    suppliers: group.nodes.length,
+    stakedPokt: group.nodes.reduce(
+      (sum, n) => sum + amountToPokt(n.stakeAmount),
+      0,
+    ),
+  }))
+
+  providers.sort((a, b) => b.suppliers - a.suppliers)
+  return providers
+}
+
+const BLOCK_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$/
+// Accepted range of a client timestamp, against the server clock (not the cached latest block,
+// which unstable_cache can serve stale for as long as nobody requests it): at most 2 min ahead,
+// and no older than the 48 h window plus a margin.
+const MAX_BLOCK_TIMESTAMP_AHEAD_MS = 2 * 60 * 1000
+const MAX_BLOCK_TIMESTAMP_AGE_MS = 49 * 60 * 60 * 1000
+
+// Parses an indexer block timestamp, which may come without the trailing Z. The value comes
+// from the client, so anything that is not that exact shape is rejected.
+function parseBlockTimestamp(timestamp: unknown): Date | null {
+  if (typeof timestamp !== 'string' || !BLOCK_TIMESTAMP_PATTERN.test(timestamp)) return null
+  const date = new Date(timestamp.endsWith('Z') ? timestamp : timestamp + 'Z')
+  const now = Date.now()
+  if (Number.isNaN(date.getTime())) return null
+  if (date.getTime() > now + MAX_BLOCK_TIMESTAMP_AHEAD_MS || date.getTime() < now - MAX_BLOCK_TIMESTAMP_AGE_MS) return null
+  return date
+}
+
+/**
+ * @param blockTimestamp - Timestamp of the block the client read its settlement height from.
+ * The rewards windows end there, so a refetch triggered by a new settlement always includes it;
+ * the cached latest block could predate it. Falls back to the latest block when absent, malformed,
+ * or outside the accepted range around the server clock.
+ */
+export async function GetProviderRewards(blockTimestamp?: string): Promise<ProviderRewards> {
   const [userNodes, ownerAddresses, applicationSettings] = await Promise.all([
     GetUserNodes(),
     GetOwnerAddresses(),
@@ -90,48 +174,26 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
     }
   }
 
-  // Group nodes by provider, skipping nodes without a provider
-  const providerGroups = new Map<string, { name: string; nodes: NodeWithDetails[] }>()
-  for (const node of userNodes) {
-    if (!node.providerId) continue
-    const name = node.provider?.name ?? node.providerId
-    let group = providerGroups.get(node.providerId)
-    if (!group) {
-      group = { name, nodes: [] }
-      providerGroups.set(node.providerId, group)
-    }
-    group.nodes.push(node)
-  }
-
-  const providerEntries = Array.from(providerGroups.entries())
-  const latestBlock = await getLatestBlock(graphqlUrl)
+  const providerEntries = groupStakedNodesByProvider(userNodes)
   const client = getServerApolloClient(graphqlUrl)
 
-  const blockDate = new Date(
-    latestBlock.timestamp.endsWith('Z')
-      ? latestBlock.timestamp
-      : latestBlock.timestamp + 'Z',
-  )
+  const blockDate =
+    parseBlockTimestamp(blockTimestamp) ??
+    new Date((await getLatestBlock(graphqlUrl)).timestamp)
   const currentDate = blockDate.toISOString()
   const last24Hours = new Date(blockDate.getTime() - 24 * 60 * 60 * 1000).toISOString()
   const last48Hours = new Date(blockDate.getTime() - 48 * 60 * 60 * 1000).toISOString()
 
   const results = await Promise.allSettled(
     providerEntries.map(async ([, group]) => {
-      const stakedNodes = group.nodes.filter((n) => n.status === NodeStatus.Staked)
-      const supplierAddresses: Array<string> = stakedNodes.map((n) => n.address)
+      const supplierAddresses: Array<string> = group.nodes.map((n) => n.address)
       const batches = batchArray(supplierAddresses)
 
       const batchResults = await Promise.all(
         batches.map((batch) =>
           client.query({
-            query: summaryDocument,
+            query: rewardsWindowsDocument,
             variables: {
-              filter: {
-                stakeStatus: { equalTo: StakeStatus.Staked },
-                id: { in: batch },
-                ownerId: { in: ownerAddresses },
-              },
               currentDate,
               last24Hours,
               last48Hours,
@@ -142,39 +204,23 @@ export async function GetProviderBreakdown(): Promise<ProviderBreakdownData[]> {
         ),
       )
 
-      return batchResults.reduce(
-        (acc, { data: d }) => ({
-          last24h: Number(acc.last24h ?? 0) + Number(d.last24h ?? 0),
-          last48h: Number(acc.last48h ?? 0) + Number(d.last48h ?? 0),
-        }),
-        { last24h: 0, last48h: 0 } as { last24h: number; last48h: number },
-      )
+      // Either indexer shape, normalised once (see range.ts)
+      return combineRewardsWindows(batchResults.map(({ data: d }) => d))
     }),
   )
 
-  const allProviders: ProviderBreakdownData[] = providerEntries.map(
-    ([identity, group], index) => {
-      const result = results[index]
-      const data = result?.status === 'fulfilled' ? result.value : null
-      const stakedNodes = group.nodes.filter((n) => n.status === NodeStatus.Staked)
+  const windows = results.map((result) => (result.status === 'fulfilled' ? result.value : null))
 
+  return {
+    providers: providerEntries.map(([identity], index) => {
+      const data = windows[index]
       return {
         identity,
-        name: group.name,
-        suppliers: stakedNodes.length,
-        stakedPokt: stakedNodes.reduce(
-          (sum, n) => sum + amountToPokt(n.stakeAmount),
-          0,
-        ),
-        rewards24h: amountToPokt(data?.last24h ?? 0),
-        rewards48h: amountToPokt(data?.last48h ?? 0),
+        rewards24h: data?.last24h.data != null ? amountToPokt(data.last24h.data) : null,
+        rewards48h: data?.last48h.data != null ? amountToPokt(data.last48h.data) : null,
       }
-    },
-  )
-
-  // Remove provider entries that have no staked suppliers (provider visibility)
-  const providers: ProviderBreakdownData[] = allProviders.filter((p) => p.suppliers > 0)
-
-  providers.sort((a, b) => b.suppliers - a.suppliers)
-  return providers
+    }),
+    coverage24h: mergeRanges(windows.map((w) => w?.last24h.range ?? null)),
+    coverage48h: mergeRanges(windows.map((w) => w?.last48h.range ?? null)),
+  }
 }

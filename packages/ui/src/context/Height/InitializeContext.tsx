@@ -27,6 +27,7 @@ export default async function InitializeHeightContext({
       firstHeight={Number(data?.height?.toString() || 0)}
       firstTime={data?.timestamp || ''}
       networkHeight={data?.networkHeight || 0}
+      firstSettlementHeight={data?.settlementHeight || 0}
     >
       {children}
     </HeightContextProvider>

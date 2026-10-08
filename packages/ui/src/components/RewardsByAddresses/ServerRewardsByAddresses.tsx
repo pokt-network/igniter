@@ -10,11 +10,13 @@ import RewardsByAddressChart from './RewardsByAddressChart'
 import CardActions from './CardActions'
 import { GroupAllProvider } from './GroupAllSwitch'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
-import { getLatestBlock } from '../../api/blocks'
+import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
 import { getValidTime, Time } from '../../lib/dates'
 import { SelectedTimeProvider } from './TimeSelector'
 import { batchArray } from '../../lib/batch'
+import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
+import { Ranged } from '../../lib/range'
 
 interface RewardsByAddressesProps {
   addresses: Array<string>
@@ -30,7 +32,7 @@ export default async function ServerRewardsByAddresses({
   noDataMessage,
 }: RewardsByAddressesProps) {
   let
-    data,
+    data: Ranged<Array<RewardByAddressAndDate>> | null = null,
     variables,
     error = false,
     chartType: 'line' | 'bar' = 'line',
@@ -39,12 +41,13 @@ export default async function ServerRewardsByAddresses({
   if (addresses.length) {
     try {
       const cookiesAwaited = await cookies()
-      const timeSelected = getValidTime(
+      timeSelected = getValidTime(
         cookiesAwaited.get(timeSelectedCookieKey)?.value || ''
       )
       chartType = cookiesAwaited?.get(chartTypeCookieKey)?.value === 'bar' ? 'bar' : 'line'
 
-      const latestBlock = await getLatestBlock(graphQlUrl)
+      // Same cached status as the height context, so the window ends at or after its settlement height
+      const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)
 
@@ -70,16 +73,9 @@ export default async function ServerRewardsByAddresses({
         ),
       )
 
-      // Aggregate: concatenate the rewards JSON arrays from each batch
-      data = results.reduce(
-        (acc, { data: d }) => {
-          if (!acc) return d
-          const accRewards = Array.isArray(acc.rewards) ? acc.rewards : []
-          const dRewards = Array.isArray(d.rewards) ? d.rewards : []
-          return { ...d, rewards: [...accRewards, ...dRewards] }
-        },
-        null as typeof results[0]['data'] | null,
-      )
+      // Merge the rows of every batch, summing per (address, date), normalised once (see range.ts):
+      // that is what crosses to the client
+      data = combineRewardRows(results.map((r) => r.data))
     } catch {
       error = true
     }

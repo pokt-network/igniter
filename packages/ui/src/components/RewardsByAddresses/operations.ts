@@ -1,5 +1,5 @@
 import { getStartAndEndDateBasedOnTime } from '../../lib/dates'
-import { ExtractVariables } from '../../hooks/useFetchOnNewBlock'
+import { ExtractVariables } from '../../lib/graphql/types'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql'
 
 export function rewardsByAddressAndTimeGroupByDateVariables(
