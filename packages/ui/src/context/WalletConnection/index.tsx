@@ -13,6 +13,24 @@ const log = getLogger(['ui', 'wallet-connection'])
 
 const WALLET_TIMEOUT_MS = 15_000
 
+const ACTIVE_ADDRESS_STORAGE_PREFIX = 'igniter.activeAddress.'
+
+function readStoredActiveAddress(identity: string): string | undefined {
+  try {
+    return window.localStorage.getItem(ACTIVE_ADDRESS_STORAGE_PREFIX + identity) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeStoredActiveAddress(identity: string, address: string): void {
+  try {
+    window.localStorage.setItem(ACTIVE_ADDRESS_STORAGE_PREFIX + identity, address)
+  } catch {
+    // Storage unavailable (private mode, blocked): the choice lives for the session only.
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number = WALLET_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
@@ -49,6 +67,13 @@ export interface WalletConnectionContext {
   expectedChainId: string;
   connectedIdentity?: string;
   connectedIdentities?: Array<string>;
+  /**
+   * Address the app acts as (delegations, default owner address in flows).
+   * Defaults to the signed-in identity; the user can pick any other address the
+   * wallet exposes. Persisted per signed-in identity in localStorage.
+   */
+  activeAddress?: string;
+  setActiveAddress(address: string): void;
   connect(providerInfo: ProviderInfoWithConnection): Promise<Array<string>>;
   connectIdentity(address: string): void;
   clearConnectedIdentity(): void;
@@ -75,6 +100,9 @@ export const WalletConnectionContext = createContext<WalletConnectionContext>({
   getChain: async () => {
     log.warn('Method not implemented: getChain. Something is wrong with the wallet connection provider.');
     return '';
+  },
+  setActiveAddress: () => {
+    log.warn('Method not implemented: setActiveAddress. Something is wrong with the wallet connection provider.');
   },
   connectIdentity: (address: string) => {
     log.warn('Method not implemented: connectedIdentity. Something is wrong with the wallet connection provider.');
@@ -145,6 +173,7 @@ export const WalletConnectionProvider = ({
   const [isConnected, setIsConnected] = useState(false);
   const [connectedIdentity, setConnectedIdentity] = useState<string | undefined>(undefined);
   const [allConnectedIdentities, setAllConnectedIdentities] = useState<Array<string>>([]);
+  const [activeAddress, setActiveAddressState] = useState<string | undefined>(undefined);
   const removeAccountListenerRef = useRef<(() => void) | null>(null);
 
   const [connection, setConnection] = useState<WalletConnection | null>(null)
@@ -362,6 +391,29 @@ export const WalletConnectionProvider = ({
     return await withTimeout(connection.signTransaction(messages, signer, memo), 60_000);
   }, [connection])
 
+  // Resolve the active address whenever the identity or the wallet's address
+  // list changes: stored choice if still exposed by the wallet, else the
+  // signed-in identity. Reading localStorage here (not in useState) keeps SSR
+  // and the first client render identical.
+  useEffect(() => {
+    if (!connectedIdentity) {
+      setActiveAddressState(undefined);
+      return;
+    }
+    const stored = readStoredActiveAddress(connectedIdentity);
+    const candidate = stored && allConnectedIdentities.includes(stored) ? stored : connectedIdentity;
+    setActiveAddressState(candidate);
+  }, [connectedIdentity, allConnectedIdentities]);
+
+  const setActiveAddress = useCallback((address: string) => {
+    if (!connectedIdentity) return;
+    if (!allConnectedIdentities.includes(address)) {
+      throw new Error(`Address ${address} is not exposed by the connected wallet`);
+    }
+    writeStoredActiveAddress(connectedIdentity, address);
+    setActiveAddressState(address);
+  }, [connectedIdentity, allConnectedIdentities]);
+
   const clearConnectedIdentity = useCallback(() => {
     if (connection) {
       connection.clearConnectedIdentity();
@@ -376,6 +428,8 @@ export const WalletConnectionProvider = ({
         connectedIdentity,
         expectedChainId: settings.chainId,
         connectedIdentities: allConnectedIdentities,
+        activeAddress,
+        setActiveAddress,
         connect,
         reconnect,
         connectIdentity,
