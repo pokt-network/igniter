@@ -40,6 +40,7 @@ import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
 import { supplierRewardShare } from './supplierRewardShare'
 import { fetchAddressGroupRewards, MAX_COUNT_LIST as MAX_INDEXER_DOMAINS } from './groupRewards'
+import { endpointDomain, hostDomain } from './endpointDomain'
 import { mergeProviderSupplierStats } from './providerSupplierStats'
 
 export type Height = number
@@ -67,51 +68,31 @@ export type RewardBySupplier = {
 }
 
 
-/**
- * Extracts the hostname from a URL string, stripping the protocol, port, and path.
- * Returns null if the URL cannot be parsed.
- */
-function extractDomainFromUrl(rawUrl: string): string | null {
-  try {
-    return new URL(rawUrl).hostname || null
-  } catch {
-    // Fallback for URLs with template placeholders that confuse the URL parser
-    let s = rawUrl.replace(/^https?:\/\//, '')
-    s = (s.split('/')[0] ?? '').split(':')[0] ?? ''
-    return s || null
-  }
-}
 
 /**
  * Returns the unique set of relay miner domains for an address group, derived from
  * each service's endpoint URLs. Falls back to relayMiner.domain when:
  *   - the service has no endpoints, OR
  *   - the endpoint URL ends with the literal "{domain}" template placeholder.
- * Otherwise extracts the domain directly from the endpoint URL.
+ * Otherwise extracts the domain directly from the endpoint URL. Every domain follows pocketdex's rule
+ * (endpointDomain.ts), so the indexer's domain functions find it.
  */
 function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
   const domains = new Set<string>()
   for (const ags of ag.addressGroupServices) {
     const endpoints = ags.service?.endpoints
     if (!endpoints || endpoints.length === 0) {
-      domains.add(ag.relayMiner.domain)
+      const domain = hostDomain(ag.relayMiner.domain)
+      if (domain) domains.add(domain)
     } else {
       for (const ep of endpoints) {
-        if (ep.url.endsWith('{domain}')) {
-          domains.add(ag.relayMiner.domain)
-        } else {
-          const domain = extractDomainFromUrl(ep.url)
-          if (domain) domains.add(domain)
-        }
+        const domain = ep.url.endsWith('{domain}') ? hostDomain(ag.relayMiner.domain) : endpointDomain(ep.url)
+        if (domain) domains.add(domain)
       }
     }
   }
 
-  // Deduplicated after the reduction: two hosts can share a registrable domain
-  return Array.from(new Set(Array.from(domains).map((d) => {
-    const parts = d.split('.')
-    return parts.length > 2 ? parts.slice(-2).join('.') : d
-  })))
+  return Array.from(domains)
 }
 
 export type GovernanceSyncResult = {
