@@ -52,8 +52,9 @@ describe('hostDomain', () => {
 // The same rule as pocketdex's copy (src/mappings/utils/service_config_history.ts endpointDomain + ipv6),
 // pinned on both sides by the sha256 of the normalised source: change one, update the other and both
 // pins to the same hash. Normalisation: (1) the text of each function, from `function <name>(` to
-// its matching closing brace, endpointDomain then ipv6; (2) lines whose trimmed text starts with `//`
-// removed; (3) `"` -> `'`; (4) `;` removed; (5) a TypeScript non-null `!` right before `,` `)` `]` or `.`
+// its matching closing brace, endpointDomain then ipv6; (2) block comments removed, then line comments,
+// each one opened at the start of a line or after whitespace (so the `//` of `http://` in a string is
+// kept); (3) `"` -> `'`; (4) `;` removed; (5) a TypeScript non-null `!` right before `,` `)` `]` or `.`
 // removed; (6) all whitespace removed; (7) the two concatenated; sha256 hex of the UTF-8 bytes.
 const DOMAIN_RULE_SHA256 = 'b596552d083a61180943f52566d6e33cf56ead44e5bc067461391042559a6c36'
 
@@ -70,7 +71,7 @@ function functionText(src: string, name: string): string {
 }
 
 function normalise(text: string): string {
-  return text.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  return text.replace(/(^|\s)\/\*[\s\S]*?\*\//g, '$1').replace(/(^|\s)\/\/[^\n]*/g, '$1')
     .replace(/"/g, "'").replace(/;/g, '').replace(/!(?=[,)\].])/g, '').replace(/\s+/g, '')
 }
 
@@ -79,5 +80,10 @@ describe('the domain rule pin', () => {
     const src = readFileSync(join(__dirname, 'endpointDomain.ts'), 'utf8')
     const hash = createHash('sha256').update(normalise(functionText(src, 'endpointDomain')) + normalise(functionText(src, 'ipv6'))).digest('hex')
     expect(hash).toBe(DOMAIN_RULE_SHA256)
+  })
+
+  it('normalises comments, quotes, semicolons and whitespace away, not the // of a URL', () => {
+    expect(normalise('a("x"); // why\n  /* note\n  more */ b!.c;\n// whole line\n')).toBe("a('x')b.c")
+    expect(normalise('u(`http://[${x}]/`) /* c */')).toBe('u(`http://[${x}]/`)')
   })
 })
