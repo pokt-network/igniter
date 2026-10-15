@@ -14,16 +14,24 @@ jest.mock('@temporalio/activity', () => {
 
 const group = (urls: Array<string>, relayMinerDomain = 'rm1.nodefleet.net') =>
   ({
-    relayMiner: { domain: relayMinerDomain },
-    addressGroupServices: [{ service: { endpoints: urls.map((url) => ({ url, rpcType: 3 })) } }],
+    relayMiner: { domain: relayMinerDomain, identity: 'rm-1', region: { urlValue: 'us-east' } },
+    addressGroupServices: [{ serviceId: 'eth', service: { endpoints: urls.map((url) => ({ url, rpcType: 3 })) } }],
   }) as unknown as AddressGroupsJson[number]
 
 describe('extractDomainsForAddressGroup', () => {
-  it('takes the relay miner domain for a {domain} placeholder anywhere in the URL', () => {
-    // igniter's default template, one with a path after the placeholder, and one with a port after it
-    expect(extractDomainsForAddressGroup(group(['{scheme}://{region}-{rm}-{sid}-{protocol}.{domain}']))).toEqual(['nodefleet.net'])
-    expect(extractDomainsForAddressGroup(group(['https://{region}-{rm}-{sid}-{protocol}.{domain}/v1']))).toEqual(['nodefleet.net'])
-    expect(extractDomainsForAddressGroup(group(['https://eth-{sid}.{domain}:8545']))).toEqual(['nodefleet.net'])
+  it('reads each endpoint URL as the chain gets it, with its template tokens filled in', () => {
+    const domains = (url: string) => extractDomainsForAddressGroup(group([url]))
+    // igniter's default template, a path after {domain}, a port after it
+    expect(domains('https://{region}-{rm}-{sid}-{protocol}.{domain}')).toEqual(['nodefleet.net'])
+    expect(domains('https://{region}-{rm}-{sid}-{protocol}.{domain}/v1')).toEqual(['nodefleet.net'])
+    expect(domains('https://eth-{sid}.{domain}:8545')).toEqual(['nodefleet.net'])
+    // {domain} in the path or the query: the host is another one, and that is the domain the chain stores
+    expect(domains('https://gw.example.io/{domain}/rpc')).toEqual(['example.io'])
+    expect(domains('https://gw.example.io/rpc?node={domain}')).toEqual(['example.io'])
+    // {domain} as a host prefix: the labels after it are the domain
+    expect(domains('https://{domain}.cdn.example')).toEqual(['cdn.example'])
+    // an empty URL takes the default template for its RPC type
+    expect(domains('')).toEqual(['nodefleet.net'])
   })
 
   it('reads any other URL by pocketdex rule, and lists each domain once', () => {
@@ -31,7 +39,7 @@ describe('extractDomainsForAddressGroup', () => {
   })
 
   it('takes the relay miner domain when a service has no endpoints', () => {
-    const ag = { relayMiner: { domain: 'RM1.Nodefleet.net' }, addressGroupServices: [{ service: { endpoints: [] } }] } as unknown as AddressGroupsJson[number]
+    const ag = { relayMiner: { domain: 'RM1.Nodefleet.net' }, addressGroupServices: [{ serviceId: 'eth', service: { endpoints: [] } }] } as unknown as AddressGroupsJson[number]
     expect(extractDomainsForAddressGroup(ag)).toEqual(['nodefleet.net'])
   })
 })

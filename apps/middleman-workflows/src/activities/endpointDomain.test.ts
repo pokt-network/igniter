@@ -50,8 +50,8 @@ describe('hostDomain', () => {
 })
 
 // The same rule as pocketdex's copy (src/mappings/utils/service_config_history.ts endpointDomain + ipv6),
-// pinned on both sides by the sha256 of the normalised source: change one, and this fails until the other
-// and both pins change together. Normalisation: (1) the text of each function, from `function <name>(` to
+// pinned on both sides by the sha256 of the normalised source: change one, update the other and both
+// pins to the same hash. Normalisation: (1) the text of each function, from `function <name>(` to
 // its matching closing brace, endpointDomain then ipv6; (2) lines whose trimmed text starts with `//`
 // removed; (3) `"` -> `'`; (4) `;` removed; (5) a TypeScript non-null `!` right before `,` `)` `]` or `.`
 // removed; (6) all whitespace removed; (7) the two concatenated; sha256 hex of the UTF-8 bytes.

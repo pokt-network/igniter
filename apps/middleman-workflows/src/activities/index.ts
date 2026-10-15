@@ -41,6 +41,8 @@ import { postGraphql } from '@/lib/graphql'
 import { supplierRewardShare } from './supplierRewardShare'
 import { fetchAddressGroupRewards, MAX_COUNT_LIST as MAX_INDEXER_DOMAINS } from './groupRewards'
 import { endpointDomain, hostDomain } from './endpointDomain'
+import { getEndpointInterpolatedUrl } from '@igniter/domain/provider/utils'
+import type { RPCType } from '@igniter/pocket/proto/pocket/shared/service'
 import { mergeProviderSupplierStats } from './providerSupplierStats'
 
 export type Height = number
@@ -71,11 +73,13 @@ export type RewardBySupplier = {
 
 /**
  * Returns the unique set of relay miner domains for an address group, derived from
- * each service's endpoint URLs. Falls back to relayMiner.domain when:
- *   - the service has no endpoints, OR
- *   - the endpoint URL holds the "{domain}" template placeholder (anywhere: `.{domain}`, `{domain}/v1`, `{domain}:8545`).
- * Otherwise extracts the domain directly from the endpoint URL. Every domain follows pocketdex's rule
- * (endpointDomain.ts), so the indexer's domain functions find it.
+ * each service's endpoint URLs. Falls back to relayMiner.domain when the service has no endpoints.
+ * Each endpoint URL is built as the chain gets it (BuildSupplierServiceConfigHandler:
+ * getEndpointInterpolatedUrl, which fills {domain}, {region}, {rm}, {sid} and {protocol} wherever
+ * they are and takes the default URL for an empty one), then reduced by pocketdex's rule
+ * (endpointDomain.ts), so the indexer's domain functions find it. The provider's per-group endpoint
+ * overrides (getEndpointOverride) are not in the middleman's copy of the address group, so an
+ * overridden endpoint is read from its template.
  */
 export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
   const domains = new Set<string>()
@@ -86,7 +90,13 @@ export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): st
       if (domain) domains.add(domain)
     } else {
       for (const ep of endpoints) {
-        const domain = ep.url.includes('{domain}') ? hostDomain(ag.relayMiner.domain) : endpointDomain(ep.url)
+        const url = getEndpointInterpolatedUrl({ url: ep.url, rpcType: ep.rpcType as RPCType }, {
+          sid: ags.serviceId,
+          rm: ag.relayMiner.identity,
+          region: ag.relayMiner.region?.urlValue ?? '',
+          domain: ag.relayMiner.domain,
+        })
+        const domain = endpointDomain(url)
         if (domain) domains.add(domain)
       }
     }
