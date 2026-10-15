@@ -1,6 +1,6 @@
 // Consecutive per-block retries allowed while the indexer keeps failing. After that the part waits
-// for a new settlement height or a new key (see useBlockRetry), or for its own refresh: rewards
-// refetch on every settlement (or the fallback tick).
+// for a new rewards epoch (a new settlement height or the fallback tick, rewardsEpoch.ts) or a new
+// key (see useBlockRetry).
 export const MAX_BLOCK_RETRIES = 5
 
 /**

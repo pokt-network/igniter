@@ -24,7 +24,8 @@ export type SuppliersSummary = { count: number; stakeUpokt: number }
 const SUPPLIERS_REFRESH_MS = 60 * 1000
 
 // The rewards totals normalised once (see range.ts); null: they could not be fetched. Rewards only
-// change when claims settle, so they refresh on a new settlement height.
+// change when claims settle, so they refresh on a new rewards epoch (a new settlement height or the
+// fallback tick, rewardsEpoch.ts).
 export type SummaryRewards = {
   [K in keyof RewardsWindows]: RewardsWindows[K] | null
 }

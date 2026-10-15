@@ -18,11 +18,11 @@ const group = (id: number) => ({ id, ...old }) as unknown as Group
 // group 1's own answer: 12 Staked suppliers on its domains, whatever the fleet-wide stats say
 const fresh = { grossRewardsPerService: newRewards, rewardsSuppliersCount: 12, rewardsUpdatedAt: now.toISOString() }
 
-function run(input: { fetched: SupplierStats | null; hasDomains?: boolean; tooManyDomains?: boolean }) {
+function run(input: { fetched: SupplierStats | null; stored?: SupplierStats | null; hasDomains?: boolean; tooManyDomains?: boolean }) {
   const groups = [group(1), group(2)]
   const result = mergeProviderSupplierStats({
     fetched: input.fetched,
-    stored,
+    stored: input.stored === undefined ? stored : input.stored,
     hasDomains: input.hasDomains ?? true,
     tooManyDomains: input.tooManyDomains ?? false,
     groups,
@@ -48,6 +48,13 @@ describe('mergeProviderSupplierStats', () => {
     expect(supplierStats).toEqual(stored)
     expect(groups[0]).toEqual({ id: 1, ...fresh })
     expect(groups[1]).toEqual({ id: 2, ...old })
+  })
+
+  it('stats call failed and the stored stats have no stamp (written before updated_at): no stats', () => {
+    const { supplierStats, groups } = run({ fetched: null, stored: { suppliers_count: 40, total_staked_tokens: 4e12 } })
+
+    expect(supplierStats).toBeNull()
+    expect(groups[0]).toEqual({ id: 1, ...fresh })
   })
 
   it('too many domains: stores no stats; the groups update the same way', () => {

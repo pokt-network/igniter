@@ -29,8 +29,10 @@ export const GROUP_REWARDS_QUERY = `
 /**
  * One address group's rewards of the last days, at the supplier's share, and its own supplier count,
  * in one request read alias by alias: an error on the rewards alias throws (the group keeps its
- * previous snapshot); a failed or missing count keeps the rewards with count 0 (performance
- * unavailable) and calls onCountFailed. Over MAX_COUNT_LIST domains or services the count is not
+ * previous snapshot); a failed or missing count keeps the rewards with count 0 and calls
+ * onCountFailed. The count is only the fallback for a service row without staked_suppliers (the
+ * readers take `staked_suppliers || rewardsSuppliersCount`), so a 0 matters only where a
+ * service row has none. Over MAX_COUNT_LIST domains or services the count is not
  * asked for: 0.
  */
 export async function fetchAddressGroupRewards({

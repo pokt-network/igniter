@@ -41,7 +41,7 @@ const log = getLogger(['provider', 'keys'])
 export async function GetStakedKeysSummary(): Promise<{ count: number; stakeUpokt: number }> {
   const result = await withRequireOwnerOrAdmin(async () => getKeysSummary())
   if (!result.success) throw new Error(result.error.message)
-  return { count: result.data.stakedKeys, stakeUpokt: result.data.totalStakedUpokt }
+  return { count: Number(result.data.stakedKeys), stakeUpokt: result.data.totalStakedUpokt }
 }
 
 export async function CountKeys(): Promise<ActionResult<number>> {

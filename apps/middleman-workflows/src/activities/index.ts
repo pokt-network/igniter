@@ -1129,7 +1129,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     // One row for the whole fleet. The indexer takes up to 200 domains a call, and two calls cannot be
     // summed (a supplier can have endpoints on domains of both). A provider's domains are its
-    // registrable domains, or one per IP endpoint (extractDomainsForAddressGroup), so more are not
+    // hosts' last two labels, or one per IP endpoint (extractDomainsForAddressGroup), so more are not
     // expected: then the stats call is skipped on every run (see mergeProviderSupplierStats for what
     // is stored then).
     const supplierStatsQuery = `
