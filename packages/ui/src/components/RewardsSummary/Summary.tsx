@@ -8,7 +8,7 @@ import { combineByIndex } from '../FourCards/utils'
 import { labels } from './constants'
 import NoData from '../NoData'
 import { amountToPokt, toCurrencyFormat } from '../../lib/utils'
-import { useHeightContext } from '../../context/Height/height'
+import { useHeightContext, useRewardsEpochChange } from '../../context/Height/height'
 import { rewardsWindowsDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
@@ -70,7 +70,7 @@ export default function Summary({
   initialRewards
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentTime, settlementHeight, rewardsFallbackTick } = useHeightContext()
+  const { currentTime } = useHeightContext()
   const queryClient = useQueryClient()
   const suppliersKey = ['rewardsSummarySuppliers', addresses]
   // A failed refresh keeps the last values on screen; the next interval retries
@@ -103,8 +103,6 @@ export default function Summary({
   // retry cannot overwrite a newer (settlement-triggered) fetch.
   const rewardsInFlightRef = useRef(0)
   const rewardsSeqRef = useRef(0)
-  // The settlement height and fallback tick the rewards were last fetched for (height.tsx)
-  const lastRefreshRef = useRef({ settlementHeight, rewardsFallbackTick })
 
   const fetchRewards = useCallback(async () => {
     if (!addresses.length) return
@@ -133,14 +131,8 @@ export default function Summary({
     }
   }, [client, addresses, supplierAddresses, currentTime])
 
-  // Refetch when the settlement height or its fallback tick moved since the last fetch
-  useEffect(() => {
-    const last = lastRefreshRef.current
-    if (last.settlementHeight === settlementHeight && last.rewardsFallbackTick === rewardsFallbackTick) return
-    lastRefreshRef.current = { settlementHeight, rewardsFallbackTick }
-    fetchRewards()
-    // eslint-disable-next-line
-  }, [settlementHeight, rewardsFallbackTick])
+  // Refetch when the rewards epoch changes (rewardsEpoch.ts)
+  useRewardsEpochChange(fetchRewards)
 
   // While the rewards are in error, retry them on new blocks (capped, see useBlockRetry), skipped
   // while a fetch is running; a settlement-triggered fetch is never skipped.

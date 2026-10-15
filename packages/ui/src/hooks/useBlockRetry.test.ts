@@ -3,7 +3,7 @@
 // useRef / useEffect (effects run after the render, in declaration order, when their deps change)
 // and for the height context.
 const mockHooks = { slots: [] as Array<unknown>, index: 0, effects: [] as Array<() => void> }
-let mockHeight: Record<string, number> = { currentHeight: 10, firstHeight: 10, settlementHeight: 100 }
+let mockHeight: Record<string, number | string> = { currentHeight: 10, firstHeight: 10, rewardsEpoch: '100/0' }
 
 jest.mock('react', () => ({
   useRef: (initial: unknown) => {
@@ -50,7 +50,7 @@ describe('useBlockRetry', () => {
 
   beforeEach(() => {
     mockHooks.slots = []
-    mockHeight = { currentHeight: 10, firstHeight: 10, settlementHeight: 100 }
+    mockHeight = { currentHeight: 10, firstHeight: 10, rewardsEpoch: '100/0' }
     run = jest.fn()
   })
 
@@ -63,7 +63,7 @@ describe('useBlockRetry', () => {
     const hook = renderHook(options())
     blocks(hook, 11, 20)
     expect(run).toHaveBeenCalledTimes(MAX_BLOCK_RETRIES)
-    mockHeight = { ...mockHeight, settlementHeight: 120 }
+    mockHeight = { ...mockHeight, rewardsEpoch: '120/0' }
     blocks(hook, 21, 30)
     expect(run).toHaveBeenCalledTimes(2 * MAX_BLOCK_RETRIES)
   })
@@ -89,7 +89,7 @@ describe('useBlockRetry', () => {
     const hook = renderHook(options())
     blocks(hook, 11, 20)
     expect(run).toHaveBeenCalledTimes(MAX_BLOCK_RETRIES)
-    mockHeight = { ...mockHeight, rewardsFallbackTick: 1 }
+    mockHeight = { ...mockHeight, rewardsEpoch: '100/1' }
     blocks(hook, 21, 30)
     expect(run).toHaveBeenCalledTimes(2 * MAX_BLOCK_RETRIES)
   })

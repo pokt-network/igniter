@@ -22,7 +22,7 @@ import { ExtractVariables } from '../../lib/graphql/types'
 import { ContentLoader } from './Loader'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
 import { useSelectedTime } from './TimeSelector'
-import { useHeightContext } from '../../context/Height/height'
+import { useHeightContext, useRewardsEpochChange } from '../../context/Height/height'
 import { batchArray } from '../../lib/batch'
 import useBlockRetry from '../../hooks/useBlockRetry'
 import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
@@ -54,7 +54,7 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentTime, settlementHeight, rewardsFallbackTick } = useHeightContext()
+  const { currentTime } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   // The rows of the selected range, normalised once (see range.ts)
@@ -66,8 +66,6 @@ export default function RewardsByAddressChart({
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastSelectedTimeRef = useRef(selectedTime)
-  // The settlement height and fallback tick the rows were last fetched for (height.tsx)
-  const lastRefreshRef = useRef({ settlementHeight, rewardsFallbackTick })
   // Fetches running, and the id of the latest one: only the latest may write its result.
   const inFlightRef = useRef(0)
   const seqRef = useRef(0)
@@ -122,19 +120,17 @@ export default function RewardsByAddressChart({
 
     if (!addresses.length) return
 
-    // Refetch when selectedTime changes, or when the settlement height or its fallback tick (see
-    // height.tsx) moved since the last fetch
-    const timeChanged = lastSelectedTimeRef.current !== selectedTime
+    // Refetch when selectedTime changes
+    if (lastSelectedTimeRef.current === selectedTime) return
     lastSelectedTimeRef.current = selectedTime
-    const last = lastRefreshRef.current
-    const settled = last.settlementHeight !== settlementHeight || last.rewardsFallbackTick !== rewardsFallbackTick
-    lastRefreshRef.current = { settlementHeight, rewardsFallbackTick }
-
-    if (timeChanged || settled) {
-      fetchBatched()
-    }
+    fetchBatched()
     // eslint-disable-next-line
-  }, [settlementHeight, rewardsFallbackTick, selectedTime])
+  }, [selectedTime])
+
+  // Refetch when the rewards epoch changes (rewardsEpoch.ts)
+  useRewardsEpochChange(() => {
+    if (addresses.length) fetchBatched()
+  })
 
   // While in error, retry on new blocks (capped per selected range, see useBlockRetry)
   useBlockRetry({

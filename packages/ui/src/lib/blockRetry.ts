@@ -5,7 +5,7 @@ export const MAX_BLOCK_RETRIES = 5
 
 /**
  * The per-block retry budgets of one component, one per key, all cleared on a new epoch (the
- * settlement height, and the rewards fallback tick in useBlockRetry). `take` says whether a retry
+ * rewards epoch in useBlockRetry, rewardsEpoch.ts). `take` says whether a retry
  * of `key` may run on this block and counts it; `reset` (the part no longer needs a retry)
  * restores that key's budget. Switching back to a key whose budget
  * is spent does not refill it.
