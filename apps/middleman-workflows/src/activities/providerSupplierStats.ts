@@ -3,17 +3,16 @@ import type { AddressGroupsJson } from '@igniter/db/middleman/schema'
 // updated_at: when the stats were fetched; the middleman hides them once old (freshSupplierStats)
 export type SupplierStats = { suppliers_count: number; total_staked_tokens: number; updated_at?: string }
 
-// One address group's answer of this run: its rewards and its own Staked supplier count (its domains)
+// One address group's answer of this run: its rewards
 export type GroupRewards = {
   id: number
   rewards: NonNullable<AddressGroupsJson[number]['grossRewardsPerService']>
-  suppliersCount: number
 }
 
 /**
  * What one processProviderStatus run stores: the fleet-wide supplier stats, and the address groups
- * with the rewards and supplier count of each group whose own call succeeded, whatever happened to
- * the stats. A group whose call failed keeps its previous rewards, count and rewardsUpdatedAt.
+ * with the rewards of each group whose own call succeeded, whatever happened to the stats. Each such
+ * group's rewardsSuppliersCount is the fleet count fetched in this run, 0 when none was. A group whose call failed keeps its previous rewards, count and rewardsUpdatedAt.
  * - Stats fetched in this run: stored with updated_at = now.
  * - The stats call failed: the stored stats are kept with their old updated_at, so the middleman hides
  *   them once old; stored stats without updated_at (written before it existed) are dropped, as they
@@ -47,7 +46,7 @@ export function mergeProviderSupplierStats({
       return {
         ...group,
         grossRewardsPerService: entry.rewards,
-        rewardsSuppliersCount: entry.suppliersCount,
+        rewardsSuppliersCount: fetched?.suppliers_count ?? 0,
         rewardsUpdatedAt: now.toISOString(),
       }
     }),

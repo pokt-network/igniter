@@ -15,8 +15,8 @@ const old = { grossRewardsPerService: oldRewards, rewardsSuppliersCount: 40, rew
 const stored: SupplierStats = { suppliers_count: 40, total_staked_tokens: 4e12, updated_at: '2026-10-13T00:00:00.000Z' }
 const fetched: SupplierStats = { suppliers_count: 55, total_staked_tokens: 5.5e12 }
 const group = (id: number) => ({ id, ...old }) as unknown as Group
-// group 1's own answer: 12 Staked suppliers on its domains, whatever the fleet-wide stats say
-const fresh = { grossRewardsPerService: newRewards, rewardsSuppliersCount: 12, rewardsUpdatedAt: now.toISOString() }
+// group 1 after its own answer, with the fleet count of this run (0 when none was fetched)
+const fresh = (rewardsSuppliersCount: number) => ({ grossRewardsPerService: newRewards, rewardsSuppliersCount, rewardsUpdatedAt: now.toISOString() })
 
 function run(input: { fetched: SupplierStats | null; stored?: SupplierStats | null; hasDomains?: boolean; tooManyDomains?: boolean }) {
   const groups = [group(1), group(2)]
@@ -27,26 +27,26 @@ function run(input: { fetched: SupplierStats | null; stored?: SupplierStats | nu
     tooManyDomains: input.tooManyDomains ?? false,
     groups,
     // group 2's rewards call failed
-    rewardsByGroupId: [{ id: 1, rewards: newRewards, suppliersCount: 12 }, null],
+    rewardsByGroupId: [{ id: 1, rewards: newRewards }, null],
     now,
   })
   return { ...result, input: groups }
 }
 
 describe('mergeProviderSupplierStats', () => {
-  it('stats fetched: stores them stamped now; each group takes its own rewards and count', () => {
+  it('stats fetched: stores them stamped now; each group takes its rewards and the fleet count', () => {
     const { supplierStats, groups } = run({ fetched })
 
     expect(supplierStats).toEqual({ ...fetched, updated_at: now.toISOString() })
-    expect(groups[0]).toEqual({ id: 1, ...fresh })
+    expect(groups[0]).toEqual({ id: 1, ...fresh(55) })
     expect(groups[1]).toEqual({ id: 2, ...old })
   })
 
-  it('stats call failed: keeps the stored stats with their old stamp; the groups update the same way', () => {
+  it('stats call failed: keeps the stored stats with their old stamp; the groups take their rewards with count 0', () => {
     const { supplierStats, groups } = run({ fetched: null })
 
     expect(supplierStats).toEqual(stored)
-    expect(groups[0]).toEqual({ id: 1, ...fresh })
+    expect(groups[0]).toEqual({ id: 1, ...fresh(0) })
     expect(groups[1]).toEqual({ id: 2, ...old })
   })
 
@@ -54,14 +54,14 @@ describe('mergeProviderSupplierStats', () => {
     const { supplierStats, groups } = run({ fetched: null, stored: { suppliers_count: 40, total_staked_tokens: 4e12 } })
 
     expect(supplierStats).toBeNull()
-    expect(groups[0]).toEqual({ id: 1, ...fresh })
+    expect(groups[0]).toEqual({ id: 1, ...fresh(0) })
   })
 
-  it('too many domains: stores no stats; the groups update the same way', () => {
+  it('too many domains: stores no stats; the groups take their rewards with count 0', () => {
     const { supplierStats, groups } = run({ fetched: null, tooManyDomains: true })
 
     expect(supplierStats).toBeNull()
-    expect(groups[0]).toEqual({ id: 1, ...fresh })
+    expect(groups[0]).toEqual({ id: 1, ...fresh(0) })
   })
 
   it('no domains: no stats', () => {

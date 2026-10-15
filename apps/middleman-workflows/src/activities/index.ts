@@ -39,7 +39,7 @@ import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
 import { supplierRewardShare } from './supplierRewardShare'
-import { fetchAddressGroupRewards, MAX_COUNT_LIST as MAX_INDEXER_DOMAINS } from './groupRewards'
+import { fetchAddressGroupRewards } from './groupRewards'
 import { endpointDomain, hostDomain } from './endpointDomain'
 import { getEndpointInterpolatedUrl, getEndpointOverride } from '@igniter/domain/provider/utils'
 import type { RPCType } from '@igniter/pocket/proto/pocket/shared/service'
@@ -173,14 +173,8 @@ function warnIndexerApiUrlMissingOnce(context: Record<string, unknown> = {}) {
   log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', context)
 }
 
-// Address groups whose supplier count failed, already logged: logged once per group and worker
-// process, as the failure tends to repeat on every run
-const groupCountFailedWarned = new Set<string>()
-function warnGroupCountFailedOnce(key: string, context: Record<string, unknown>) {
-  if (groupCountFailedWarned.has(key)) return
-  groupCountFailedWarned.add(key)
-  log.error('Indexer supplier count failed for an address group; its performance is unavailable', context)
-}
+// Domains getSupplierFleetList takes in one call
+const MAX_INDEXER_DOMAINS = 200
 
 // Providers already warned about having more domains than getSupplierFleetList takes in one call:
 // the condition holds on every run, so it is logged once per provider and worker process
@@ -1192,11 +1186,6 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
                 startTs,
                 endTs,
                 supplierShare,
-                onCountFailed: (error) => warnGroupCountFailedOnce(`${provider.identity}#${ag.id}`, {
-                  providerIdentity: provider.identity,
-                  addressGroupId: ag.id,
-                  error,
-                }),
               })
             } catch (e) {
               log.error('Failed to fetch rewards for address group', { addressGroupId: ag.id, error: e })

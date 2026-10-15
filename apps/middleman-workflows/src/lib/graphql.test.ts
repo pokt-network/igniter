@@ -1,4 +1,4 @@
-import { postGraphql, postGraphqlPartial } from './graphql'
+import { postGraphql } from './graphql'
 
 const fetchMock = jest.fn()
 const realFetch = global.fetch
@@ -47,31 +47,5 @@ describe('postGraphql', () => {
       method: 'POST',
       body: JSON.stringify({ query: 'query q($a: Int) { x }', variables: { a: 1 } }),
     }))
-  })
-})
-
-describe('postGraphqlPartial', () => {
-  it('returns the data of the other aliases with an alias error keyed by its alias', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, {
-      data: { data: { services: [] }, count: null },
-      errors: [{ message: 'domains must have between 1 and 200 elements (has 201)', path: ['count'] }],
-    }))
-
-    await expect(postGraphqlPartial('https://indexer.test', 'query { x }')).resolves.toEqual({
-      data: { data: { services: [] }, count: null },
-      errors: { count: 'domains must have between 1 and 200 elements (has 201)' },
-    })
-  })
-
-  it('throws on an error with no alias (a document the schema rejects)', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(400, { errors: [{ message: 'Unknown argument "x"' }] }))
-
-    await expect(postGraphqlPartial('https://indexer.test', 'query { x }')).rejects.toThrow('HTTP 400: Unknown argument "x"')
-  })
-
-  it('throws when the answer has no data', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { data: null, errors: [{ message: 'boom', path: ['data'] }] }))
-
-    await expect(postGraphqlPartial('https://indexer.test', 'query { x }')).rejects.toThrow('HTTP 200: boom')
   })
 })
