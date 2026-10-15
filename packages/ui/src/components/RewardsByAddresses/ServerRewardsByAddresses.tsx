@@ -46,7 +46,9 @@ export default async function ServerRewardsByAddresses({
       )
       chartType = cookiesAwaited?.get(chartTypeCookieKey)?.value === 'bar' ? 'bar' : 'line'
 
-      // Same cached status as the height context, so the window ends at or after its settlement height
+      // Same cached status as the height context. Its block and settlement height are separate reads
+      // (one request is not one snapshot), so the window can end a block before that settlement; the
+      // next settlement refetch covers it.
       const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)

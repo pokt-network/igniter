@@ -1,7 +1,7 @@
 'use server'
 
 import { NodeStatus } from '@igniter/db/middleman/enums'
-import { countAllNodes, getAllNodes, getNode, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress } from '@/lib/dal/nodes'
+import { countAllNodes, getAllNodes, getNode, getStakedNodesSummary, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress, getUserStakedNodesSummary } from '@/lib/dal/nodes'
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
@@ -51,6 +51,20 @@ export async function GetNode(address: string) {
 
   assertOwnership(node, userIdentity, 'createdBy', 'Node')
   return node
+}
+
+// The rewards summary's Suppliers and Staked Tokens tiles (user overview): the user's Staked nodes
+export async function GetUserStakedSummary(): Promise<{ count: number; stakeUpokt: number }> {
+  const userIdentity = await requireAuth()
+  const { count, totalStaked } = await getUserStakedNodesSummary(userIdentity)
+  return { count, stakeUpokt: totalStaked }
+}
+
+// The rewards summary's Suppliers and Staked Tokens tiles (admin overview): every Staked node
+export async function GetAllStakedSummary(): Promise<{ count: number; stakeUpokt: number }> {
+  await requireAdmin()
+  const { count, totalStaked } = await getStakedNodesSummary()
+  return { count, stakeUpokt: totalStaked }
 }
 
 export async function GetOwnerAddresses() {

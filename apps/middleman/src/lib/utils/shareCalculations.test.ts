@@ -4,6 +4,7 @@ import {
   hasNonUniformClientShare,
   calculateAddressGroupPerformance,
   calculateProviderPerformance,
+  freshSupplierStats,
   calculateEffectiveYield,
   formatPerformance,
 } from './shareCalculations';
@@ -353,5 +354,24 @@ describe('formatPerformance', () => {
 
   it('rounds to two decimal places', () => {
     expect(formatPerformance(1.999)).toBe('2.00 POKT/supplier/day');
+  });
+});
+
+// ── freshSupplierStats ──────────────────────────────────────────
+describe('freshSupplierStats', () => {
+  const stats = { suppliers_count: 5, total_staked_tokens: 5e11 };
+
+  it('keeps stats updated within 48 h', () => {
+    const recent = { ...stats, updated_at: new Date(Date.now() - 60 * 60 * 1000).toISOString() };
+    expect(freshSupplierStats(recent)).toEqual(recent);
+  });
+
+  it('hides stats whose stamp is older than 48 h', () => {
+    expect(freshSupplierStats({ ...stats, updated_at: new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString() })).toBeNull();
+    expect(freshSupplierStats(null)).toBeNull();
+  });
+
+  it('shows stats without a stamp (unknown age, until the workflow restamps them)', () => {
+    expect(freshSupplierStats(stats)).toEqual(stats);
   });
 });

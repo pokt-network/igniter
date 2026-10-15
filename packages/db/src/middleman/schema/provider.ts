@@ -81,7 +81,8 @@ export const providersTable = pgTable('providers', {
   minimumStake: integer().notNull().default(0),
   operationalFunds: integer().notNull().default(5),
   addressGroups: jsonb('address_groups').$type<AddressGroupsJson>().default([]),
-  supplierStats: jsonb('supplier_stats').$type<{ suppliers_count: number; total_staked_tokens: number }>(),
+  // updated_at: when the middleman workflow fetched them (absent before 2026-10)
+  supplierStats: jsonb('supplier_stats').$type<{ suppliers_count: number; total_staked_tokens: number; updated_at?: string }>(),
   rewardAddresses: varchar().array(),
   returnSupplierFundsToOwner: boolean().notNull().default(true),
   createdAt: timestamp().defaultNow(),

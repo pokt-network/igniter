@@ -24,10 +24,10 @@ export const statusQuery = graphql(`
       targetHeight
       lastProcessedHeight
     }
-    lastSettlement: eventClaimSettleds(orderBy: BLOCK_ID_DESC, first: 1) {
-      nodes {
-        blockId
-      }
+    # The last settlement the indexer's money tables hold: moves when they write one (also a height
+    # with only expirations), so it can lag the chain while the money step catches up
+    lastSettlement: getLastSettlement {
+      height
     }
   }
 `)

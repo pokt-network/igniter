@@ -53,7 +53,7 @@ function exportToCsv(providers: ProviderBreakdownData[]) {
 const cardClasses = 'rounded-lg border border-[color:--divider] bg-[color:--main-background] base-shadow p-4'
 
 export default function ProviderBreakdown({ providerCount }: { providerCount: number }) {
-  const { settlementHeight, currentTime } = useHeightContext()
+  const { settlementHeight, rewardsFallbackTick, currentTime } = useHeightContext()
   // Suppliers and stake come from our database and change on any stake or unstake, so they
   // poll every 60 s (React Query pauses the interval while the tab is hidden).
   const stakes = useQuery({
@@ -62,10 +62,12 @@ export default function ProviderBreakdown({ providerCount }: { providerCount: nu
     refetchInterval: 60000,
     enabled: providerCount > 1,
   })
-  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer.
-  // currentTime comes from the same status response as settlementHeight, so the window includes it.
+  // Rewards only change when claims settle, so refetch on a new settlement instead of on a timer
+  // (and on the fallback tick, see height.tsx). currentTime comes from the same status request as
+  // settlementHeight, but as a separate read (one request is not one snapshot): the window can end a
+  // block before that settlement, and the next refetch covers it.
   const rewards = useQuery({
-    queryKey: ['providerRewards', settlementHeight],
+    queryKey: ['providerRewards', settlementHeight, rewardsFallbackTick],
     queryFn: () => GetProviderRewards(currentTime),
     placeholderData: keepPreviousData,
     // While hidden the status poll stops, so currentTime goes stale; the next poll after the tab

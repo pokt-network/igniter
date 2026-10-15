@@ -54,7 +54,7 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
+  const { currentTime, settlementHeight, rewardsFallbackTick } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   // The rows of the selected range, normalised once (see range.ts)
@@ -66,6 +66,8 @@ export default function RewardsByAddressChart({
   const [isLoading, setIsLoading] = useState(false)
   const firstRenderRef = useRef(true)
   const lastSelectedTimeRef = useRef(selectedTime)
+  // The settlement height and fallback tick the rows were last fetched for (height.tsx)
+  const lastRefreshRef = useRef({ settlementHeight, rewardsFallbackTick })
   // Fetches running, and the id of the latest one: only the latest may write its result.
   const inFlightRef = useRef(0)
   const seqRef = useRef(0)
@@ -120,18 +122,19 @@ export default function RewardsByAddressChart({
 
     if (!addresses.length) return
 
-    // Refetch on new settlement or when selectedTime changes
+    // Refetch when selectedTime changes, or when the settlement height or its fallback tick (see
+    // height.tsx) moved since the last fetch
     const timeChanged = lastSelectedTimeRef.current !== selectedTime
     lastSelectedTimeRef.current = selectedTime
+    const last = lastRefreshRef.current
+    const settled = last.settlementHeight !== settlementHeight || last.rewardsFallbackTick !== rewardsFallbackTick
+    lastRefreshRef.current = { settlementHeight, rewardsFallbackTick }
 
-    if (
-      timeChanged ||
-      settlementHeight !== firstSettlementHeight
-    ) {
+    if (timeChanged || settled) {
       fetchBatched()
     }
     // eslint-disable-next-line
-  }, [settlementHeight, selectedTime])
+  }, [settlementHeight, rewardsFallbackTick, selectedTime])
 
   // While in error, retry on new blocks (capped per selected range, see useBlockRetry)
   useBlockRetry({

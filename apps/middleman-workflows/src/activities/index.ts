@@ -38,8 +38,9 @@ import { txTypeToUserEventType } from './txEventType'
 import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
-import { supplierRewardAmount, supplierRewardShare } from './supplierRewardShare'
-import { configuredServiceRewards } from './configuredServiceRewards'
+import { supplierRewardShare } from './supplierRewardShare'
+import { fetchAddressGroupRewards, MAX_COUNT_LIST as MAX_INDEXER_DOMAINS } from './groupRewards'
+import { mergeProviderSupplierStats } from './providerSupplierStats'
 
 export type Height = number
 
@@ -106,10 +107,11 @@ function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] 
     }
   }
 
-  return Array.from(domains).map((d) => {
+  // Deduplicated after the reduction: two hosts can share a registrable domain
+  return Array.from(new Set(Array.from(domains).map((d) => {
     const parts = d.split('.')
     return parts.length > 2 ? parts.slice(-2).join('.') : d
-  })
+  })))
 }
 
 export type GovernanceSyncResult = {
@@ -179,6 +181,24 @@ function warnIndexerApiUrlMissingOnce(context: Record<string, unknown> = {}) {
   if (indexerApiUrlWarned) return
   indexerApiUrlWarned = true
   log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', context)
+}
+
+// Address groups whose supplier count failed, already logged: logged once per group and worker
+// process, as the failure tends to repeat on every run
+const groupCountFailedWarned = new Set<string>()
+function warnGroupCountFailedOnce(key: string, context: Record<string, unknown>) {
+  if (groupCountFailedWarned.has(key)) return
+  groupCountFailedWarned.add(key)
+  log.error('Indexer supplier count failed for an address group; its performance is unavailable', context)
+}
+
+// Providers already warned about having more domains than getSupplierFleetList takes in one call:
+// the condition holds on every run, so it is logged once per provider and worker process
+const tooManyDomainsWarned = new Set<string>()
+function warnTooManyDomainsOnce(providerIdentity: string, domains: number) {
+  if (tooManyDomainsWarned.has(providerIdentity)) return
+  tooManyDomainsWarned.add(providerIdentity)
+  log.error('Too many domains for the indexer supplier stats; supplier stats not shown', { providerIdentity, domains })
 }
 
 /**
@@ -1117,18 +1137,16 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const supplierShare = supplierRewardShare(paramResult.claimDistribution?.value, paramResult.mintRatio?.value)
 
-    const rewardsQuery = `
-      query RewardsByDomains($domains: [String!]!, $startTs: Datetime!, $endTs: Datetime!) {
-        data: getRewardsByDomainsAndTimeGroupByService(
-          domains: $domains,
-          startTs: $startTs,
-          endTs: $endTs
-        )
-      }
-    `
+    // One row for the whole fleet. The indexer takes up to 200 domains a call, and two calls cannot be
+    // summed (a supplier can have endpoints on domains of both). A provider's domains are its
+    // registrable domains (extractDomainsForAddressGroup), so more are not expected: then the stats
+    // call is skipped on every run (see mergeProviderSupplierStats for what is stored then).
     const supplierStatsQuery = `
-      query SupplierStatsByDomains($domains: [String!]!) {
-        data: getSupplierStatsByDomains(pDomains: $domains)
+      query SupplierFleetByDomains($domains: [String!]!) {
+        fleet: getSupplierFleetList(domains: $domains, stakeStatuses: ["Staked"], bySupplier: false) {
+          supplierCount
+          stakeUpokt
+        }
       }
     `
 
@@ -1139,15 +1157,28 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     }
 
     const addressGroupsData = (dbProvider.addressGroups ?? [])
-    const currentAddressGroups = addressGroupsData as Array<{ id: number; grossRewardsPerService?: unknown; [key: string]: unknown }>
 
     const allDomains = Array.from(
       new Set(addressGroupsData.flatMap((ag) => extractDomainsForAddressGroup(ag)))
     )
 
+    const tooManyDomains = allDomains.length > MAX_INDEXER_DOMAINS
+    if (tooManyDomains) warnTooManyDomainsOnce(provider.identity, allDomains.length)
+
     const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
-      allDomains.length > 0
-        ? postGraphql<{ data: { suppliers_count: number; total_staked_tokens: number } }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
+      allDomains.length > 0 && !tooManyDomains
+        ? postGraphql<{ fleet: Array<{ supplierCount: string; stakeUpokt: string } | null> | null }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
+            // Stored as before (numbers): the providers pages read supplierStats
+            .then(({ fleet }) => {
+              const row = fleet?.[0]
+              if (!row) throw new Error(`Indexer returned no supplier fleet row (fleet: ${JSON.stringify(fleet)})`)
+              return {
+                data: {
+                  suppliers_count: Number(row.supplierCount ?? 0),
+                  total_staked_tokens: Number(row.stakeUpokt ?? 0),
+                },
+              }
+            })
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
         : Promise.resolve(null),
 
@@ -1163,21 +1194,19 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
             }
 
             try {
-              const result = await postGraphql<{ data: { services: RewardBySupplier[]; suppliers_count: number } }>(
+              return await fetchAddressGroupRewards({
                 indexerApiUrl,
-                rewardsQuery,
-                { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },
-              )
-              const rawRewards: Array<RewardBySupplier> = result.data?.services ?? []
-
-              const filteredRewards = configuredServiceRewards(rawRewards, ag.addressGroupServices.map((s) => s.serviceId))
-
-              const adjustedRewards = filteredRewards.map((entry) => ({
-                ...entry,
-                amount: supplierRewardAmount(entry.gross_rewards, supplierShare),
-              }))
-
-              return { id: ag.id, rewards: adjustedRewards }
+                group: ag,
+                domains,
+                startTs,
+                endTs,
+                supplierShare,
+                onCountFailed: (error) => warnGroupCountFailedOnce(`${provider.identity}#${ag.id}`, {
+                  providerIdentity: provider.identity,
+                  addressGroupId: ag.id,
+                  error,
+                }),
+              })
             } catch (e) {
               log.error('Failed to fetch rewards for address group', { addressGroupId: ag.id, error: e })
               return null
@@ -1186,21 +1215,20 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       ),
     ])
 
-    const supplierStats = supplierStatsResult?.data ?? null
-    const suppliersCount = supplierStats?.suppliers_count ?? 0
-
-    for (const entry of rewardsByGroupId) {
-      if (!entry) continue
-      const matchingEntry = currentAddressGroups.find((ag) => ag.id === entry.id)
-      if (matchingEntry) {
-        matchingEntry.grossRewardsPerService = entry.rewards
-        matchingEntry.rewardsSuppliersCount = suppliersCount
-        matchingEntry.rewardsUpdatedAt = new Date().toISOString()
-      }
-    }
+    // Which stats and group rewards this run stores, when the stats call failed or was skipped
+    // (too many domains) included: see mergeProviderSupplierStats
+    const { supplierStats, groups: updatedAddressGroups } = mergeProviderSupplierStats({
+      fetched: supplierStatsResult?.data ?? null,
+      stored: dbProvider.supplierStats ?? null,
+      hasDomains: allDomains.length > 0,
+      tooManyDomains,
+      groups: addressGroupsData,
+      rewardsByGroupId,
+      now: new Date(),
+    })
 
     await dal.provider.updateProvider(dbProvider.id, {
-      addressGroups: currentAddressGroups as typeof dbProvider.addressGroups,
+      addressGroups: updatedAddressGroups,
       supplierStats,
     })
 

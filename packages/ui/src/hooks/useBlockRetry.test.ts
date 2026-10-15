@@ -3,7 +3,7 @@
 // useRef / useEffect (effects run after the render, in declaration order, when their deps change)
 // and for the height context.
 const mockHooks = { slots: [] as Array<unknown>, index: 0, effects: [] as Array<() => void> }
-let mockHeight = { currentHeight: 10, firstHeight: 10, settlementHeight: 100 }
+let mockHeight: Record<string, number> = { currentHeight: 10, firstHeight: 10, settlementHeight: 100 }
 
 jest.mock('react', () => ({
   useRef: (initial: unknown) => {
@@ -81,6 +81,15 @@ describe('useBlockRetry', () => {
     blocks(hook, 11, 20)
     expect(run).toHaveBeenCalledTimes(MAX_BLOCK_RETRIES)
     hook.rerender(options({ shouldRetry: false }))
+    blocks(hook, 21, 30)
+    expect(run).toHaveBeenCalledTimes(2 * MAX_BLOCK_RETRIES)
+  })
+
+  it('starts over on a rewards fallback tick', () => {
+    const hook = renderHook(options())
+    blocks(hook, 11, 20)
+    expect(run).toHaveBeenCalledTimes(MAX_BLOCK_RETRIES)
+    mockHeight = { ...mockHeight, rewardsFallbackTick: 1 }
     blocks(hook, 21, 30)
     expect(run).toHaveBeenCalledTimes(2 * MAX_BLOCK_RETRIES)
   })
