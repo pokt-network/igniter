@@ -21,16 +21,17 @@ jest.mock('react', () => ({
 }))
 jest.mock('../context/Height/height', () => ({ useHeightContext: () => mockHeight }))
 
-import useBlockRetry from './useBlockRetry'
+// imported under another name: the test calls it outside a component, which the hooks lint rule flags
+import blockRetry from './useBlockRetry'
 import { MAX_BLOCK_RETRIES } from '../lib/blockRetry'
 
-type Options = Parameters<typeof useBlockRetry>[0]
+type Options = Parameters<typeof blockRetry>[0]
 
 function renderHook(initial: Options) {
   const render = (options: Options) => {
     mockHooks.index = 0
     mockHooks.effects = []
-    useBlockRetry(options)
+    blockRetry(options)
     mockHooks.effects.forEach((effect) => effect())
   }
   render(initial)

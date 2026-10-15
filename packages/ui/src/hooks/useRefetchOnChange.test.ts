@@ -17,12 +17,13 @@ jest.mock('react', () => ({
   },
 }))
 
-import useRefetchOnChange from './useRefetchOnChange'
+// imported under another name: the test calls it outside a component, which the hooks lint rule flags
+import refetchOnChange from './useRefetchOnChange'
 
 function render(keys: Array<unknown>, refetch: () => void) {
   mockHooks.index = 0
   mockHooks.effects = []
-  useRefetchOnChange(keys, refetch)
+  refetchOnChange(keys, refetch)
   mockHooks.effects.forEach((effect) => effect())
 }
 

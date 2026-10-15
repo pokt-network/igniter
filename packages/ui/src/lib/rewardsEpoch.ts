@@ -42,14 +42,16 @@ export function onSettlementAnswer(epoch: RewardsEpoch, answer: string | number 
 
 /**
  * The clock at `now` ms: a pending rewind that has held long enough is a new epoch, else the
- * fallback tick once REWARDS_FALLBACK_MS passed. A hidden tab does not tick: `waitForShown` says the
- * tick is due, and height.tsx decides it once the tab is shown (fallbackTick).
+ * fallback tick once REWARDS_FALLBACK_MS passed. A hidden tab takes neither: `waitForShown` says
+ * one is due, and the status poll when the tab is shown confirms or drops it (shownUpdate).
  */
 export function onClock(epoch: RewardsEpoch, now: number, hidden: boolean): { epoch: RewardsEpoch; waitForShown: boolean } {
   const matured = matureRewind(epoch.height, epoch.pending, now)
-  if (matured.height !== epoch.height) return { epoch: { ...epoch, height: matured.height, pending: null, since: now }, waitForShown: false }
-  if (now - epoch.since < REWARDS_FALLBACK_MS) return { epoch, waitForShown: false }
-  return hidden ? { epoch, waitForShown: true } : { epoch: fallbackTick(epoch, now), waitForShown: false }
+  const rewindDue = matured.height !== epoch.height
+  if (!rewindDue && now - epoch.since < REWARDS_FALLBACK_MS) return { epoch, waitForShown: false }
+  if (hidden) return { epoch, waitForShown: true }
+  if (rewindDue) return { epoch: { ...epoch, height: matured.height, pending: null, since: now }, waitForShown: false }
+  return { epoch: fallbackTick(epoch, now), waitForShown: false }
 }
 
 /** The fallback tick: a new epoch at the same settlement height. */
@@ -75,15 +77,12 @@ export function clockUpdate(scheduled: RewardsEpoch, next: RewardsEpoch): (curre
 /**
  * The update for a tab shown again, from a status poll started after that (`answer`: its settlement
  * height; null when the poll failed): the answer, then the clock, as one change, so a higher height
- * is the new epoch and the fallback does not tick on top of it.
+ * is the new epoch and the fallback does not tick on top of it. A rewind that came due while hidden
+ * is confirmed by a lower answer (it keeps its pending.since, so it is taken at once) and dropped by
+ * an equal or higher one.
  */
 export function shownUpdate(answer: string | number | null | undefined, now: number): (current: RewardsEpoch) => RewardsEpoch {
   return (current) => onClock(onSettlementAnswer(current, answer, now), now, false).epoch
-}
-
-/** While a hidden tab waits to be shown for the fallback, when a pending rewind still has to mature (ms), or null. */
-export function hiddenRewindAt(epoch: RewardsEpoch): number | null {
-  return epoch.pending ? epoch.pending.since + REWIND_CONFIRM_MS : null
 }
 
 function samePending(a: PendingRewind | null, b: PendingRewind | null): boolean {

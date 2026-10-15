@@ -6,7 +6,6 @@ import useRefetchOnChange from '../../hooks/useRefetchOnChange'
 import { statusQuery } from '@igniter/graphql'
 import {
   clockUpdate,
-  hiddenRewindAt,
   initialRewardsEpoch,
   nextClockAt,
   onClock,
@@ -88,11 +87,10 @@ export default function HeightContextProvider({
   // The epoch's clock (rewardsEpoch.ts): one timer for a pending rewind and the fallback tick,
   // restarted on every change. A hidden tab does not tick: once shown, it decides on a status poll
   // started after that (its answer counts even when it equals the last one, which Apollo would not
-  // report), the answer and the clock in one change (shownUpdate). While it waits, a pending rewind
-  // still matures on its own timer.
+  // report), the answer and the clock in one change (shownUpdate). A rewind that comes due while it
+  // is hidden waits too: that poll confirms it or drops it.
   useEffect(() => {
     let cancelled = false
-    let rewindTimeout: ReturnType<typeof setTimeout> | undefined
     const onVisible = () => {
       if (document.hidden) return
       document.removeEventListener('visibilitychange', onVisible)
@@ -107,23 +105,13 @@ export default function HeightContextProvider({
     }
     const timeout = setTimeout(() => {
       const { epoch: next, waitForShown } = onClock(epoch, performance.now(), document.hidden)
-      if (!waitForShown) {
-        setEpoch(clockUpdate(epoch, next))
-        return
-      }
-      document.addEventListener('visibilitychange', onVisible)
-      const rewindAt = hiddenRewindAt(epoch)
-      if (rewindAt !== null) {
-        rewindTimeout = setTimeout(() => {
-          setEpoch(clockUpdate(epoch, onClock(epoch, performance.now(), true).epoch))
-        }, Math.max(0, rewindAt - performance.now()))
-      }
+      if (waitForShown) document.addEventListener('visibilitychange', onVisible)
+      else setEpoch(clockUpdate(epoch, next))
     }, Math.max(0, nextClockAt(epoch) - performance.now()))
 
     return () => {
       cancelled = true
       clearTimeout(timeout)
-      clearTimeout(rewindTimeout)
       document.removeEventListener('visibilitychange', onVisible)
     }
     // eslint-disable-next-line

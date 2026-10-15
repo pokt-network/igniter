@@ -1,7 +1,6 @@
 import {
   clockUpdate,
   fallbackTick,
-  hiddenRewindAt,
   initialRewardsEpoch,
   nextClockAt,
   onClock,
@@ -93,12 +92,20 @@ describe('rewardsEpoch', () => {
     expect(shownUpdate(null, REWARDS_FALLBACK_MS + MIN)(start)).toMatchObject({ height: 100, tick: 1 })
   })
 
-  it('a hidden tab waiting for the fallback still takes a pending rewind on time', () => {
-    const pending = onSettlementAnswer(start, '90', REWARDS_FALLBACK_MS - MIN)
-    expect(onClock(pending, REWARDS_FALLBACK_MS, true).waitForShown).toBe(true)
-    expect(hiddenRewindAt(pending)).toBe(REWARDS_FALLBACK_MS - MIN + REWIND_CONFIRM_MS)
-    expect(hiddenRewindAt(start)).toBeNull()
-    const matured = onClock(pending, REWARDS_FALLBACK_MS - MIN + REWIND_CONFIRM_MS, true)
-    expect(matured).toMatchObject({ waitForShown: false, epoch: { height: 90 } })
+  it('a hidden tab takes no due rewind: the poll on show confirms it at once, keeping its start', () => {
+    const pending = onSettlementAnswer(start, '90', MIN)
+    const due = MIN + REWIND_CONFIRM_MS
+    expect(onClock(pending, due, true)).toEqual({ epoch: pending, waitForShown: true })
+    const shown = shownUpdate('90', due + 10 * MIN)(pending)
+    expect(shown.height).toBe(90)
+    expect(rewardsEpochKey(shown)).not.toBe(rewardsEpochKey(start))
+  })
+
+  it('a flap seen by a hidden tab (lower, then the same height on show) refetches nothing', () => {
+    const pending = onSettlementAnswer(start, '90', MIN)
+    expect(onClock(pending, MIN + REWIND_CONFIRM_MS, true).waitForShown).toBe(true)
+    const shown = shownUpdate('100', MIN + REWIND_CONFIRM_MS + MIN)(pending)
+    expect(shown).toMatchObject({ height: 100, pending: null, tick: 0 })
+    expect(rewardsEpochKey(shown)).toBe(rewardsEpochKey(start))
   })
 })
