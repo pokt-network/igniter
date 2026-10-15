@@ -22,7 +22,8 @@ import { ExtractVariables } from '../../lib/graphql/types'
 import { ContentLoader } from './Loader'
 import { rewardsByAddressAndTimeGroupByDateDocument } from '@igniter/graphql/rewards'
 import { useSelectedTime } from './TimeSelector'
-import { useHeightContext, useRewardsEpochChange } from '../../context/Height/height'
+import { useHeightContext } from '../../context/Height/height'
+import useRefetchOnChange from '../../hooks/useRefetchOnChange'
 import { batchArray } from '../../lib/batch'
 import useBlockRetry from '../../hooks/useBlockRetry'
 import { combineRewardRows, RewardByAddressAndDate } from '../../lib/rewards'
@@ -54,7 +55,7 @@ export default function RewardsByAddressChart({
   const {setData, data} = useDataContext<RewardItem>()
   const {selectedTime} = useSelectedTime()
   const client = useApolloClient()
-  const { currentTime } = useHeightContext()
+  const { currentTime, rewardsEpoch } = useHeightContext()
   const lastVariables = useRef<ExtractVariables<typeof rewardsByAddressAndTimeGroupByDateDocument>>(initialVariables)
 
   // The rows of the selected range, normalised once (see range.ts)
@@ -64,8 +65,6 @@ export default function RewardsByAddressChart({
   const [rawDataTime, setRawDataTime] = useState(selectedTime)
   const [error, setError] = useState(initialError)
   const [isLoading, setIsLoading] = useState(false)
-  const firstRenderRef = useRef(true)
-  const lastSelectedTimeRef = useRef(selectedTime)
   // Fetches running, and the id of the latest one: only the latest may write its result.
   const inFlightRef = useRef(0)
   const seqRef = useRef(0)
@@ -112,23 +111,9 @@ export default function RewardsByAddressChart({
     }
   }, [client, addresses, supplierAddresses, currentTime, selectedTime])
 
-  useEffect(() => {
-    if (firstRenderRef.current) {
-      firstRenderRef.current = false
-      return
-    }
-
-    if (!addresses.length) return
-
-    // Refetch when selectedTime changes
-    if (lastSelectedTimeRef.current === selectedTime) return
-    lastSelectedTimeRef.current = selectedTime
-    fetchBatched()
-    // eslint-disable-next-line
-  }, [selectedTime])
-
-  // Refetch when the rewards epoch changes (rewardsEpoch.ts)
-  useRewardsEpochChange(() => {
+  // Refetch once when the rewards epoch (rewardsEpoch.ts) or the selected time changes, both in the
+  // same commit included
+  useRefetchOnChange([rewardsEpoch, selectedTime], () => {
     if (addresses.length) fetchBatched()
   })
 

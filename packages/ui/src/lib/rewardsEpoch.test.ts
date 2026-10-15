@@ -1,11 +1,14 @@
 import {
+  clockUpdate,
   fallbackTick,
+  hiddenRewindAt,
   initialRewardsEpoch,
   nextClockAt,
   onClock,
   onSettlementAnswer,
   REWARDS_FALLBACK_MS,
   rewardsEpochKey,
+  shownUpdate,
 } from './rewardsEpoch'
 import { REWIND_CONFIRM_MS } from './settlement'
 
@@ -60,5 +63,42 @@ describe('rewardsEpoch', () => {
   it('a hidden tab does not tick: it waits to be shown', () => {
     expect(onClock(start, REWARDS_FALLBACK_MS, true)).toEqual({ epoch: start, waitForShown: true })
     expect(rewardsEpochKey(fallbackTick(start, REWARDS_FALLBACK_MS + MIN))).toBe('100/1')
+  })
+
+  it('the clock keeps an epoch queued in the same tick: a higher height is not lost', () => {
+    // the timer was armed for `start` and finds the fallback due; a status answer with a higher height
+    // was queued before it in the same tick
+    const next = onClock(start, REWARDS_FALLBACK_MS, false).epoch
+    const queued = onSettlementAnswer(start, '120', REWARDS_FALLBACK_MS)
+    const applied = clockUpdate(start, next)(queued)
+    expect(applied).toBe(queued)
+    expect(applied.height).toBe(120)
+  })
+
+  it('the clock applies its epoch when nothing changed meanwhile, and a copy when nothing was due', () => {
+    const next = onClock(start, REWARDS_FALLBACK_MS, false).epoch
+    expect(clockUpdate(start, next)(start)).toBe(next)
+    const copy = clockUpdate(start, start)(start)
+    expect(copy).not.toBe(start)
+    expect(copy).toEqual(start)
+  })
+
+  it('a shown tab: a higher answer is one new epoch, with no fallback tick on top', () => {
+    const shown = shownUpdate('120', REWARDS_FALLBACK_MS + MIN)(start)
+    expect(shown).toMatchObject({ height: 120, tick: 0 })
+  })
+
+  it('a shown tab: the same answer, or a failed poll, ticks the fallback once', () => {
+    expect(shownUpdate('100', REWARDS_FALLBACK_MS + MIN)(start)).toMatchObject({ height: 100, tick: 1 })
+    expect(shownUpdate(null, REWARDS_FALLBACK_MS + MIN)(start)).toMatchObject({ height: 100, tick: 1 })
+  })
+
+  it('a hidden tab waiting for the fallback still takes a pending rewind on time', () => {
+    const pending = onSettlementAnswer(start, '90', REWARDS_FALLBACK_MS - MIN)
+    expect(onClock(pending, REWARDS_FALLBACK_MS, true).waitForShown).toBe(true)
+    expect(hiddenRewindAt(pending)).toBe(REWARDS_FALLBACK_MS - MIN + REWIND_CONFIRM_MS)
+    expect(hiddenRewindAt(start)).toBeNull()
+    const matured = onClock(pending, REWARDS_FALLBACK_MS - MIN + REWIND_CONFIRM_MS, true)
+    expect(matured).toMatchObject({ waitForShown: false, epoch: { height: 90 } })
   })
 })

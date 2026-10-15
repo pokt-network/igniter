@@ -42,12 +42,3 @@ export function matureRewind(
   if (pending && now - pending.since >= REWIND_CONFIRM_MS) return { height: pending.height, pending: null }
   return { height: current, pending }
 }
-
-/**
- * Whether the rewards fallback tick fires for a tab shown again (height.tsx), decided on a status
- * poll started after it was shown: a higher settlement height there refetches the rewards by
- * itself, anything else ticks.
- */
-export function shownTabTicks(shownAtHeight: number, height: number): boolean {
-  return !(height > shownAtHeight)
-}

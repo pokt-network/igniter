@@ -6,7 +6,8 @@ import { matureRewind, nextSettlement, REWIND_CONFIRM_MS, type PendingRewind } f
 export const REWARDS_FALLBACK_MS = 60 * 60 * 1000
 
 /**
- * When the rewards are fetched again, in one place (height.tsx holds it; Summary, the rewards
+ * When the rewards are fetched again, in one place (height.tsx holds it, its clock in
+ * performance.now() ms; Summary, the rewards
  * chart, ProviderBreakdown and useBlockRetry read its key). The rule: a higher settlement height
  * is a new epoch at once; a lower one (an indexer rewind) only once it has held for
  * REWIND_CONFIRM_MS (settlement.ts); with no new epoch for REWARDS_FALLBACK_MS, the fallback tick
@@ -59,6 +60,30 @@ export function fallbackTick(epoch: RewardsEpoch, now: number): RewardsEpoch {
 /** When onClock may next change the epoch (ms). */
 export function nextClockAt(epoch: RewardsEpoch): number {
   return Math.min(epoch.pending ? epoch.pending.since + REWIND_CONFIRM_MS : Infinity, epoch.since + REWARDS_FALLBACK_MS)
+}
+
+/**
+ * The update the clock applies when its timer fires, `scheduled` being the epoch the timer was armed
+ * for and `next` what onClock made of it: an epoch that changed meanwhile (a status answer queued in
+ * the same tick) is kept as it is; else `next`, or a copy when nothing was due (the timer ran early),
+ * so the timer is armed again.
+ */
+export function clockUpdate(scheduled: RewardsEpoch, next: RewardsEpoch): (current: RewardsEpoch) => RewardsEpoch {
+  return (current) => (current !== scheduled ? current : next === scheduled ? { ...scheduled } : next)
+}
+
+/**
+ * The update for a tab shown again, from a status poll started after that (`answer`: its settlement
+ * height; null when the poll failed): the answer, then the clock, as one change, so a higher height
+ * is the new epoch and the fallback does not tick on top of it.
+ */
+export function shownUpdate(answer: string | number | null | undefined, now: number): (current: RewardsEpoch) => RewardsEpoch {
+  return (current) => onClock(onSettlementAnswer(current, answer, now), now, false).epoch
+}
+
+/** While a hidden tab waits to be shown for the fallback, when a pending rewind still has to mature (ms), or null. */
+export function hiddenRewindAt(epoch: RewardsEpoch): number | null {
+  return epoch.pending ? epoch.pending.since + REWIND_CONFIRM_MS : null
 }
 
 function samePending(a: PendingRewind | null, b: PendingRewind | null): boolean {

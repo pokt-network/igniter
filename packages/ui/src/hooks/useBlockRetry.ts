@@ -19,10 +19,9 @@ interface BlockRetryOptions {
  * restored once the part no longer needs a retry.
  */
 export default function useBlockRetry({ shouldRetry, isBusy, run, key }: BlockRetryOptions) {
-  const { currentHeight, firstHeight, rewardsEpoch } = useHeightContext()
-  const budgetRef = useRef(createBlockRetryBudget())
   // The budgets restart on a new rewards epoch (rewardsEpoch.ts)
-  const epoch = rewardsEpoch
+  const { currentHeight, firstHeight, rewardsEpoch: epoch } = useHeightContext()
+  const budgetRef = useRef(createBlockRetryBudget())
   const latestRef = useRef({ shouldRetry, isBusy, run, key, epoch })
 
   // Declared first, so the retry effect below reads this render's values

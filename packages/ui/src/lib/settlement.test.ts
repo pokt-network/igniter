@@ -1,4 +1,4 @@
-import { matureRewind, nextSettlement, REWIND_CONFIRM_MS, shownTabTicks } from './settlement'
+import { matureRewind, nextSettlement, REWIND_CONFIRM_MS } from './settlement'
 
 describe('nextSettlement', () => {
   it('changes nothing on an answer with no height: missing, empty, not a number, not positive', () => {
@@ -43,16 +43,5 @@ describe('matureRewind', () => {
 
   it('changes nothing without a pending rewind', () => {
     expect(matureRewind(100, null, 10)).toEqual({ height: 100, pending: null })
-  })
-})
-
-describe('shownTabTicks', () => {
-  it('does not tick when the first answer brings a higher settlement height', () => {
-    expect(shownTabTicks(100, 120)).toBe(false)
-  })
-
-  it('ticks when the first answer brings the same or a lower height', () => {
-    expect(shownTabTicks(100, 100)).toBe(true)
-    expect(shownTabTicks(100, 90)).toBe(true)
   })
 })

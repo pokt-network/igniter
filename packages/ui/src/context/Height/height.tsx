@@ -1,16 +1,18 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useQuery } from '@apollo/client'
+import useRefetchOnChange from '../../hooks/useRefetchOnChange'
 import { statusQuery } from '@igniter/graphql'
-import { shownTabTicks } from '../../lib/settlement'
 import {
-  fallbackTick,
+  clockUpdate,
+  hiddenRewindAt,
   initialRewardsEpoch,
   nextClockAt,
   onClock,
   onSettlementAnswer,
   rewardsEpochKey,
+  shownUpdate,
 } from '../../lib/rewardsEpoch'
 
 interface HeightContext {
@@ -21,12 +23,9 @@ interface HeightContext {
   updateNetworkHeight: () => void
   firstHeight: number
   currentTime: string
-  // height of the last settlement the indexer's money tables hold (getLastSettlement); the rewards
-  // read those tables, so they only change when it moves. It can lag the chain, moves on heights
-  // with only expirations too, and goes back if the indexer rewinds.
-  settlementHeight: number
-  // the epoch the rewards are fetched for (rewardsEpoch.ts): it changes when they should be
-  // fetched again; read it through useRewardsEpochChange or as a query key
+  // the epoch the rewards are fetched for (rewardsEpoch.ts): it changes when they should be fetched
+  // again, after the last settlement the indexer's money tables hold (getLastSettlement) moves or
+  // the fallback ticks; read it through useRewardsEpochChange or as a query key
   rewardsEpoch: string
 }
 
@@ -36,7 +35,6 @@ const HeightContext = createContext<HeightContext>({
   firstHeight: 0,
   sessionHeight: 0,
   currentTime: '',
-  settlementHeight: 0,
   rewardsEpoch: '0/0',
   updateNetworkHeight: () => {}
 });
@@ -59,7 +57,8 @@ export default function HeightContextProvider({
   const [skipQueries, setSkipQueries] = useState(true)
   const [networkHeight, setNetworkHeight] = useState(initialNetworkHeight)
   const [sessionHeight, setSessionHeight] = useState(Number(firstHeight))
-  const [epoch, setEpoch] = useState(() => initialRewardsEpoch(firstSettlementHeight, Date.now()))
+  // Its clock is performance.now() (monotonic): a wall clock change does not move the timers
+  const [epoch, setEpoch] = useState(() => initialRewardsEpoch(firstSettlementHeight, performance.now()))
   const [{currentHeight, currentTime}, setState] = useState({
     currentHeight: Number(firstHeight || 0),
     currentTime: firstTime,
@@ -89,33 +88,42 @@ export default function HeightContextProvider({
   // The epoch's clock (rewardsEpoch.ts): one timer for a pending rewind and the fallback tick,
   // restarted on every change. A hidden tab does not tick: once shown, it decides on a status poll
   // started after that (its answer counts even when it equals the last one, which Apollo would not
-  // report): a higher settlement height is a new epoch by itself; anything else, or a failed poll, ticks.
+  // report), the answer and the clock in one change (shownUpdate). While it waits, a pending rewind
+  // still matures on its own timer.
   useEffect(() => {
     let cancelled = false
-    const tick = () => {
-      if (!cancelled) setEpoch((current) => fallbackTick(current, Date.now()))
-    }
+    let rewindTimeout: ReturnType<typeof setTimeout> | undefined
     const onVisible = () => {
       if (document.hidden) return
       document.removeEventListener('visibilitychange', onVisible)
-      const shownAt = epoch.height
       refetch().then(
         ({ data: status }) => {
-          if (shownTabTicks(shownAt, Number(status?.lastSettlement?.height ?? 0))) tick()
+          if (!cancelled) setEpoch(shownUpdate(status?.lastSettlement?.height, performance.now()))
         },
-        tick,
+        () => {
+          if (!cancelled) setEpoch(shownUpdate(null, performance.now()))
+        },
       )
     }
     const timeout = setTimeout(() => {
-      const { epoch: next, waitForShown } = onClock(epoch, Date.now(), document.hidden)
-      if (waitForShown) document.addEventListener('visibilitychange', onVisible)
-      // nothing due yet (the timer ran early): a copy restarts it
-      else setEpoch(next === epoch ? { ...epoch } : next)
-    }, Math.max(0, nextClockAt(epoch) - Date.now()))
+      const { epoch: next, waitForShown } = onClock(epoch, performance.now(), document.hidden)
+      if (!waitForShown) {
+        setEpoch(clockUpdate(epoch, next))
+        return
+      }
+      document.addEventListener('visibilitychange', onVisible)
+      const rewindAt = hiddenRewindAt(epoch)
+      if (rewindAt !== null) {
+        rewindTimeout = setTimeout(() => {
+          setEpoch(clockUpdate(epoch, onClock(epoch, performance.now(), true).epoch))
+        }, Math.max(0, rewindAt - performance.now()))
+      }
+    }, Math.max(0, nextClockAt(epoch) - performance.now()))
 
     return () => {
       cancelled = true
       clearTimeout(timeout)
+      clearTimeout(rewindTimeout)
       document.removeEventListener('visibilitychange', onVisible)
     }
     // eslint-disable-next-line
@@ -124,7 +132,7 @@ export default function HeightContextProvider({
   useEffect(() => {
     const block = data?.blocks?.nodes[0]
 
-    setEpoch((current) => onSettlementAnswer(current, data?.lastSettlement?.height, Date.now()))
+    setEpoch((current) => onSettlementAnswer(current, data?.lastSettlement?.height, performance.now()))
 
     const newBlockId = Number(block?.id)
     if (block && newBlockId > currentHeight) {
@@ -158,7 +166,6 @@ export default function HeightContextProvider({
         networkHeight,
         firstHeight,
         sessionHeight,
-        settlementHeight: epoch.height,
         rewardsEpoch: rewardsEpochKey(epoch),
         updateNetworkHeight: refetch,
       }}
@@ -175,13 +182,5 @@ export function useHeightContext() {
 /** Calls onChange when the rewards epoch changes (not on mount): when the rewards should be fetched again. */
 export function useRewardsEpochChange(onChange: () => void) {
   const { rewardsEpoch } = useHeightContext()
-  const lastRef = useRef(rewardsEpoch)
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
-
-  useEffect(() => {
-    if (lastRef.current === rewardsEpoch) return
-    lastRef.current = rewardsEpoch
-    onChangeRef.current()
-  }, [rewardsEpoch])
+  useRefetchOnChange([rewardsEpoch], onChange)
 }
