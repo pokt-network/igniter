@@ -73,11 +73,11 @@ export type RewardBySupplier = {
  * Returns the unique set of relay miner domains for an address group, derived from
  * each service's endpoint URLs. Falls back to relayMiner.domain when:
  *   - the service has no endpoints, OR
- *   - the endpoint URL ends with the literal "{domain}" template placeholder.
+ *   - the endpoint URL holds the "{domain}" template placeholder (anywhere: `.{domain}`, `{domain}/v1`, `{domain}:8545`).
  * Otherwise extracts the domain directly from the endpoint URL. Every domain follows pocketdex's rule
  * (endpointDomain.ts), so the indexer's domain functions find it.
  */
-function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
+export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
   const domains = new Set<string>()
   for (const ags of ag.addressGroupServices) {
     const endpoints = ags.service?.endpoints
@@ -86,7 +86,7 @@ function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] 
       if (domain) domains.add(domain)
     } else {
       for (const ep of endpoints) {
-        const domain = ep.url.endsWith('{domain}') ? hostDomain(ag.relayMiner.domain) : endpointDomain(ep.url)
+        const domain = ep.url.includes('{domain}') ? hostDomain(ag.relayMiner.domain) : endpointDomain(ep.url)
         if (domain) domains.add(domain)
       }
     }
@@ -1120,8 +1120,9 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     // One row for the whole fleet. The indexer takes up to 200 domains a call, and two calls cannot be
     // summed (a supplier can have endpoints on domains of both). A provider's domains are its
-    // registrable domains (extractDomainsForAddressGroup), so more are not expected: then the stats
-    // call is skipped on every run (see mergeProviderSupplierStats for what is stored then).
+    // registrable domains, or one per IP endpoint (extractDomainsForAddressGroup), so more are not
+    // expected: then the stats call is skipped on every run (see mergeProviderSupplierStats for what
+    // is stored then).
     const supplierStatsQuery = `
       query SupplierFleetByDomains($domains: [String!]!) {
         fleet: getSupplierFleetList(domains: $domains, stakeStatuses: ["Staked"], bySupplier: false) {
