@@ -41,7 +41,7 @@ import { postGraphql } from '@/lib/graphql'
 import { supplierRewardShare } from './supplierRewardShare'
 import { fetchAddressGroupRewards, MAX_COUNT_LIST as MAX_INDEXER_DOMAINS } from './groupRewards'
 import { endpointDomain, hostDomain } from './endpointDomain'
-import { getEndpointInterpolatedUrl } from '@igniter/domain/provider/utils'
+import { getEndpointInterpolatedUrl, getEndpointOverride } from '@igniter/domain/provider/utils'
 import type { RPCType } from '@igniter/pocket/proto/pocket/shared/service'
 import { mergeProviderSupplierStats } from './providerSupplierStats'
 
@@ -74,12 +74,11 @@ export type RewardBySupplier = {
 /**
  * Returns the unique set of relay miner domains for an address group, derived from
  * each service's endpoint URLs. Falls back to relayMiner.domain when the service has no endpoints.
- * Each endpoint URL is built as the chain gets it (BuildSupplierServiceConfigHandler:
- * getEndpointInterpolatedUrl, which fills {domain}, {region}, {rm}, {sid} and {protocol} wherever
- * they are and takes the default URL for an empty one), then reduced by pocketdex's rule
- * (endpointDomain.ts), so the indexer's domain functions find it. The provider's per-group endpoint
- * overrides (getEndpointOverride) are not in the middleman's copy of the address group, so an
- * overridden endpoint is read from its template.
+ * Each endpoint URL is built as the chain gets it (BuildSupplierServiceConfigHandler): the group's
+ * override for its RPC type (getEndpointOverride), else the template with {domain}, {region}, {rm},
+ * {sid} and {protocol} filled wherever they are (getEndpointInterpolatedUrl, the default URL for an
+ * empty one); then it is reduced by pocketdex's rule (endpointDomain.ts), so the indexer's domain
+ * functions find it. A provider older than v0.8.0 sends no overrides: its templates are used.
  */
 export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
   const domains = new Set<string>()
@@ -90,7 +89,7 @@ export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): st
       if (domain) domains.add(domain)
     } else {
       for (const ep of endpoints) {
-        const url = getEndpointInterpolatedUrl({ url: ep.url, rpcType: ep.rpcType as RPCType }, {
+        const url = getEndpointOverride(ags.endpointOverrides, ep.rpcType as RPCType) || getEndpointInterpolatedUrl({ url: ep.url, rpcType: ep.rpcType as RPCType }, {
           sid: ags.serviceId,
           rm: ag.relayMiner.identity,
           region: ag.relayMiner.region?.urlValue ?? '',

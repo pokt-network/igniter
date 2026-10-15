@@ -12,10 +12,14 @@ jest.mock('@temporalio/activity', () => {
   }
 })
 
-const group = (urls: Array<string>, relayMinerDomain = 'rm1.nodefleet.net') =>
+const group = (urls: Array<string>, relayMinerDomain = 'rm1.nodefleet.net', endpointOverrides?: Record<string, string> | null) =>
   ({
     relayMiner: { domain: relayMinerDomain, identity: 'rm-1', region: { urlValue: 'us-east' } },
-    addressGroupServices: [{ serviceId: 'eth', service: { endpoints: urls.map((url) => ({ url, rpcType: 3 })) } }],
+    addressGroupServices: [{
+      serviceId: 'eth',
+      service: { endpoints: urls.map((url) => ({ url, rpcType: 3 })) },
+      ...(endpointOverrides === undefined ? {} : { endpointOverrides }),
+    }],
   }) as unknown as AddressGroupsJson[number]
 
 describe('extractDomainsForAddressGroup', () => {
@@ -41,5 +45,19 @@ describe('extractDomainsForAddressGroup', () => {
   it('takes the relay miner domain when a service has no endpoints', () => {
     const ag = { relayMiner: { domain: 'RM1.Nodefleet.net' }, addressGroupServices: [{ serviceId: 'eth', service: { endpoints: [] } }] } as unknown as AddressGroupsJson[number]
     expect(extractDomainsForAddressGroup(ag)).toEqual(['nodefleet.net'])
+  })
+
+  it("takes the group's override for the endpoint's RPC type, as the chain does, on whatever domain it is", () => {
+    const template = 'https://{region}-{rm}-{sid}-{protocol}.{domain}'
+    expect(extractDomainsForAddressGroup(group([template], 'rm1.nodefleet.net', { '3': 'https://eth.other-host.io:8545' }))).toEqual(['other-host.io'])
+    // an override for another RPC type leaves this endpoint on its template
+    expect(extractDomainsForAddressGroup(group([template], 'rm1.nodefleet.net', { '5': 'https://eth.other-host.io' }))).toEqual(['nodefleet.net'])
+  })
+
+  it('reads the template when the payload has no overrides (a provider older than v0.8.0), or empty ones', () => {
+    const template = 'https://{region}-{rm}-{sid}-{protocol}.{domain}'
+    expect(extractDomainsForAddressGroup(group([template]))).toEqual(['nodefleet.net'])
+    expect(extractDomainsForAddressGroup(group([template], 'rm1.nodefleet.net', null))).toEqual(['nodefleet.net'])
+    expect(extractDomainsForAddressGroup(group([template], 'rm1.nodefleet.net', {}))).toEqual(['nodefleet.net'])
   })
 })

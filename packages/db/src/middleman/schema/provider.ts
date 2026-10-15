@@ -49,6 +49,9 @@ export type AddressGroupsJson = Array<{
       name: string;
       endpoints?: Array<{ url: string; rpcType: number }>;
     };
+    // URL per RPC type that replaces the template for this group (provider address_group_services,
+    // sent in its status since v0.8.0); absent from older providers
+    endpointOverrides?: Record<string, string> | null;
   }>;
   rewardsSuppliersCount?: number;
   rewardsUpdatedAt?: string;
