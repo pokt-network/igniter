@@ -11,6 +11,7 @@ import { getDistinctRevAddresses } from '@/lib/dal/services'
 import { CircleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { listStakedAddresses, getKeysSummary } from '@/lib/dal/keys'
+import { GetStakedKeysSummary } from '@/actions/Keys'
 import { ListRegions } from '@/actions/Regions'
 import { ListServices } from '@/actions/Services'
 import { ListAddressGroups } from '@/actions/AddressGroups'
@@ -147,10 +148,10 @@ async function Rewards() {
             <ServerSummary
               addresses={addresses}
               supplierAddresses={supplierAddresses}
-              isOwners={false}
               graphQlUrl={graphqlUrl}
               dbSuppliersCount={keysSummary.stakedKeys}
               dbStakedTokens={keysSummary.totalStakedUpokt}
+              refreshSuppliers={GetStakedKeysSummary}
             />
           </Suspense>
         </div>

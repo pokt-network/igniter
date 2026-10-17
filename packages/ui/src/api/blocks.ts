@@ -36,7 +36,9 @@ export const getStatusQuery = cache(
   unstable_cache(
     async (graphQlUrl: string): Promise<LatestBlock & {networkHeight: number, settlementHeight: number}> => {
       const { data } = await getServerApolloClient(graphQlUrl).query({
-        query: statusQuery
+        query: statusQuery,
+        // A failing field (getLastSettlement) comes back null with the rest of the answer
+        errorPolicy: 'all',
       })
 
       const latestBlock = data?.blocks?.nodes?.at(0)
@@ -48,7 +50,7 @@ export const getStatusQuery = cache(
       return {
         height: latestBlock.id,
         networkHeight: data?._metadata?.targetHeight || 0,
-        settlementHeight: Number(data?.lastSettlement?.nodes?.at(0)?.blockId || 0),
+        settlementHeight: Number(data?.lastSettlement?.height || 0),
         // it does not include the Z
         timestamp: !latestBlock.timestamp.endsWith('Z') ? latestBlock.timestamp + 'Z' : latestBlock.timestamp
       }

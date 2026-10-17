@@ -12,41 +12,6 @@ export const rewardsByAddressAndTimeGroupByDateDocument = graphql(`
   }
 `)
 
-export const summaryDocument = graphql(`
-  query nodesSummary(
-    $filter: SupplierFilter!,
-    $supplierAddresses: [String!]!
-    $addresses: [String!]!,
-    $currentDate: Datetime!,
-    $last24Hours: Datetime!,
-    $last48Hours: Datetime!
-  ) {
-    suppliers(
-      filter: $filter
-    ) {
-      totalCount
-      aggregates {
-        sum {
-          stakeAmount
-        }
-      }
-    }
-    last24h: legacyRewardsOfAddressesBySuppliersAndTime(
-      addresses: $addresses,
-      supplierAddresses: $supplierAddresses,
-      startDate: $last24Hours,
-      endDate: $currentDate,
-    )
-
-    last48h: legacyRewardsOfAddressesBySuppliersAndTime(
-      addresses: $addresses,
-      supplierAddresses: $supplierAddresses,
-      startDate: $last48Hours,
-      endDate: $currentDate,
-    )
-  }
-`)
-
 export const rewardsWindowsDocument = graphql(`
   query rewardsWindows(
     $supplierAddresses: [String!]!
@@ -68,20 +33,5 @@ export const rewardsWindowsDocument = graphql(`
       startDate: $last48Hours,
       endDate: $currentDate,
     )
-  }
-`)
-
-export const suppliersSummaryDocument = graphql(`
-  query suppliersSummary($filter: SupplierFilter!) {
-    suppliers(
-      filter: $filter
-    ) {
-      totalCount
-      aggregates {
-        sum {
-          stakeAmount
-        }
-      }
-    }
   }
 `)

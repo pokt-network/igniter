@@ -1,35 +1,42 @@
 import { summaryVariables } from './operations'
-import Summary, { type SummaryData } from './Summary'
+import Summary, { type SuppliersSummary, type SummaryRewards } from './Summary'
 import { getStatusQuery } from '../../api/blocks'
 import { getServerApolloClient } from '../../lib/graphql/server'
-import { summaryDocument } from '@igniter/graphql/rewards'
+import { rewardsWindowsDocument } from '@igniter/graphql/rewards'
 import { batchArray } from '../../lib/batch'
 import { combineRewardsWindows } from '../../lib/rewards'
+import { getLogger } from '@igniter/logger'
+
+const log = getLogger(['ui', 'rewards-summary'])
 
 interface ServerSummaryProps {
   addresses: Array<string>
   supplierAddresses: Array<string>
-  isOwners: boolean
   graphQlUrl: string
   noDataMessage?: string
-  dbSuppliersCount?: number
-  dbStakedTokens?: number
+  // Suppliers count and staked tokens (upokt) from igniter's DB, the source of truth for them, and
+  // the server action that reads them again for the 60 s refresh
+  dbSuppliersCount: number
+  dbStakedTokens: number
+  refreshSuppliers: () => Promise<SuppliersSummary>
 }
 
 export default async function ServerSummary({
   addresses,
   supplierAddresses,
   noDataMessage,
-  isOwners,
   graphQlUrl,
   dbSuppliersCount,
   dbStakedTokens,
+  refreshSuppliers,
 }: ServerSummaryProps) {
-  let data: SummaryData | null = null, error = false
+  let rewards: SummaryRewards | null = null
 
   if (addresses.length && graphQlUrl) {
     try {
-      // Same cached status as the height context, so the window ends at or after its settlement height
+      // Same cached status as the height context. Its block and settlement height are separate reads
+      // (one request is not one snapshot), so the window can end a block before that settlement; the
+      // next settlement refetch covers it.
       const latestBlock = await getStatusQuery(graphQlUrl)
       const client = getServerApolloClient(graphQlUrl)
       const batches = batchArray(supplierAddresses)
@@ -37,9 +44,8 @@ export default async function ServerSummary({
       const results = await Promise.all(
         batches.map((batch) =>
           client.query({
-            query: summaryDocument,
+            query: rewardsWindowsDocument,
             variables: summaryVariables(
-              isOwners,
               addresses,
               batch,
               latestBlock.timestamp,
@@ -48,66 +54,24 @@ export default async function ServerSummary({
         ),
       )
 
-      // Aggregate results across batches
-      const aggregated = results.reduce(
-        (acc, { data: d }) => {
-          if (!acc) return d
-          return {
-            ...d,
-            suppliers: {
-              ...d.suppliers,
-              totalCount:
-                (acc.suppliers?.totalCount ?? 0) +
-                (d.suppliers?.totalCount ?? 0),
-              aggregates: {
-                ...d.suppliers?.aggregates,
-                sum: {
-                  stakeAmount:
-                    Number(acc.suppliers?.aggregates?.sum?.stakeAmount ?? 0) +
-                    Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0),
-                },
-              },
-            },
-          }
-        },
-        null as typeof results[0]['data'] | null,
-      )
       // The rewards totals, normalised once (see range.ts), are what crosses to the client
-      if (aggregated) data = { ...aggregated, ...combineRewardsWindows(results.map((r) => r.data)) }
-    } catch {
-      error = true
+      rewards = combineRewardsWindows(results.map((r) => r.data))
+    } catch (e) {
+      // Missing rewards show N/A, and Summary retries them; the cause tells a broken query from an outage
+      log.error('Failed to fetch the rewards summary', { error: e instanceof Error ? e.message : String(e) })
     }
   }
 
-  // Override suppliers count and staked tokens with DB data when available
-  // The DB is the source of truth for these values — the indexer may be behind or unavailable
-  if (dbSuppliersCount !== undefined || dbStakedTokens !== undefined) {
-    const indexerRewards = data ? { last24h: data.last24h, last48h: data.last48h } : { last24h: null, last48h: null }
-    data = {
-      ...data,
-      suppliers: {
-        ...data?.suppliers,
-        totalCount: dbSuppliersCount ?? 0,
-        aggregates: {
-          ...data?.suppliers?.aggregates,
-          sum: {
-            stakeAmount: dbStakedTokens ?? 0,
-          },
-        },
-      },
-      ...indexerRewards,
-    } as typeof data
-    error = false
-  }
-
+  // Suppliers count and staked tokens come from the DB only (here and in Summary's refresh): the
+  // indexer is not asked for them
   return (
     <Summary
-      isOwners={isOwners}
       addresses={addresses}
       supplierAddresses={supplierAddresses}
       noDataMessage={noDataMessage}
-      initialError={error}
-      initialData={data || null}
+      suppliers={{ count: dbSuppliersCount, stakeUpokt: dbStakedTokens }}
+      refreshSuppliers={refreshSuppliers}
+      initialRewards={rewards ?? { last24h: null, last48h: null }}
     />
   )
 }

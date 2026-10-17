@@ -9,6 +9,7 @@ import {
   countPrivateKeysByAddressGroup,
   countKeysForExport,
   countKeysForMigration,
+  getKeysSummary,
   getPrivateKeyById,
   insertMany,
   listDistinctOwnerAddresses,
@@ -27,12 +28,21 @@ import {
 import {
   type ActionResult,
   withRequireOwner,
+  withRequireOwnerOrAdmin,
 } from '@/lib/utils/actionUtils'
 import { findById as findAddressGroupById } from '@/lib/dal/addressGroups'
 import { TriggerAddressGroupMigrationSchedule } from '@/actions/Schedules'
 import { getLogger } from '@igniter/logger'
 
 const log = getLogger(['provider', 'keys'])
+
+// The rewards summary's Suppliers and Staked Tokens tiles (admin overview): the Staked keys. Throws
+// on an auth or DB failure, so the summary keeps the values on screen.
+export async function GetStakedKeysSummary(): Promise<{ count: number; stakeUpokt: number }> {
+  const result = await withRequireOwnerOrAdmin(async () => getKeysSummary())
+  if (!result.success) throw new Error(result.error.message)
+  return { count: Number(result.data.stakedKeys), stakeUpokt: result.data.totalStakedUpokt }
+}
 
 export async function CountKeys(): Promise<ActionResult<number>> {
   return withRequireOwner(async () => countKeys())

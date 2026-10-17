@@ -9,6 +9,7 @@ import {ProviderStatus, UserRole} from "@igniter/db/middleman/enums";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
+import { freshSupplierStats } from '@/lib/utils/shareCalculations'
 
 const log = getLogger(['middleman', 'providers'])
 
@@ -291,7 +292,7 @@ export async function ListProvidersWithPublicPlans(connectedAccounts: string[] =
         identity: provider.identity,
         status: provider.status,
         addressGroups: publicAddressGroups,
-        supplierStats: provider.supplierStats ?? null,
+        supplierStats: freshSupplierStats(provider.supplierStats),
       };
       return result;
     })

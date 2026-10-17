@@ -38,8 +38,12 @@ import { txTypeToUserEventType } from './txEventType'
 import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
 import { postGraphql } from '@/lib/graphql'
-import { supplierRewardAmount, supplierRewardShare } from './supplierRewardShare'
-import { configuredServiceRewards } from './configuredServiceRewards'
+import { supplierRewardShare } from './supplierRewardShare'
+import { fetchAddressGroupRewards } from './groupRewards'
+import { endpointDomain, hostDomain } from './endpointDomain'
+import { getEndpointInterpolatedUrl, getEndpointOverride } from '@igniter/domain/provider/utils'
+import type { RPCType } from '@igniter/pocket/proto/pocket/shared/service'
+import { mergeProviderSupplierStats, supplierStatsFromFleet } from './providerSupplierStats'
 
 export type Height = number
 
@@ -66,50 +70,38 @@ export type RewardBySupplier = {
 }
 
 
-/**
- * Extracts the hostname from a URL string, stripping the protocol, port, and path.
- * Returns null if the URL cannot be parsed.
- */
-function extractDomainFromUrl(rawUrl: string): string | null {
-  try {
-    return new URL(rawUrl).hostname || null
-  } catch {
-    // Fallback for URLs with template placeholders that confuse the URL parser
-    let s = rawUrl.replace(/^https?:\/\//, '')
-    s = (s.split('/')[0] ?? '').split(':')[0] ?? ''
-    return s || null
-  }
-}
 
 /**
  * Returns the unique set of relay miner domains for an address group, derived from
- * each service's endpoint URLs. Falls back to relayMiner.domain when:
- *   - the service has no endpoints, OR
- *   - the endpoint URL ends with the literal "{domain}" template placeholder.
- * Otherwise extracts the domain directly from the endpoint URL.
+ * each service's endpoint URLs. Falls back to relayMiner.domain when the service has no endpoints.
+ * Each endpoint URL is built as the chain gets it (BuildSupplierServiceConfigHandler): the group's
+ * override for its RPC type (getEndpointOverride), else the template with {domain}, {region}, {rm},
+ * {sid} and {protocol} filled wherever they are (getEndpointInterpolatedUrl, the default URL for an
+ * empty one); then it is reduced by pocketdex's rule (endpointDomain.ts), so the indexer's domain
+ * functions find it. A provider older than v0.8.0 sends no overrides: its templates are used.
  */
-function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
+export function extractDomainsForAddressGroup(ag: AddressGroupsJson[number]): string[] {
   const domains = new Set<string>()
   for (const ags of ag.addressGroupServices) {
     const endpoints = ags.service?.endpoints
     if (!endpoints || endpoints.length === 0) {
-      domains.add(ag.relayMiner.domain)
+      const domain = hostDomain(ag.relayMiner.domain)
+      if (domain) domains.add(domain)
     } else {
       for (const ep of endpoints) {
-        if (ep.url.endsWith('{domain}')) {
-          domains.add(ag.relayMiner.domain)
-        } else {
-          const domain = extractDomainFromUrl(ep.url)
-          if (domain) domains.add(domain)
-        }
+        const url = getEndpointOverride(ags.endpointOverrides, ep.rpcType as RPCType) || getEndpointInterpolatedUrl({ url: ep.url, rpcType: ep.rpcType as RPCType }, {
+          sid: ags.serviceId,
+          rm: ag.relayMiner.identity,
+          region: ag.relayMiner.region?.urlValue ?? '',
+          domain: ag.relayMiner.domain,
+        })
+        const domain = endpointDomain(url)
+        if (domain) domains.add(domain)
       }
     }
   }
 
-  return Array.from(domains).map((d) => {
-    const parts = d.split('.')
-    return parts.length > 2 ? parts.slice(-2).join('.') : d
-  })
+  return Array.from(domains)
 }
 
 export type GovernanceSyncResult = {
@@ -179,6 +171,18 @@ function warnIndexerApiUrlMissingOnce(context: Record<string, unknown> = {}) {
   if (indexerApiUrlWarned) return
   indexerApiUrlWarned = true
   log.warn('indexerApiUrl not configured in app settings — skipping address group rewards fetch', context)
+}
+
+// Domains getSupplierFleetList takes in one call
+const MAX_INDEXER_DOMAINS = 200
+
+// Providers already warned about having more domains than getSupplierFleetList takes in one call:
+// the condition holds on every run, so it is logged once per provider and worker process
+const tooManyDomainsWarned = new Set<string>()
+function warnTooManyDomainsOnce(providerIdentity: string, domains: number) {
+  if (tooManyDomainsWarned.has(providerIdentity)) return
+  tooManyDomainsWarned.add(providerIdentity)
+  log.error('Too many domains for the indexer supplier stats; supplier stats not shown', { providerIdentity, domains })
 }
 
 /**
@@ -1117,18 +1121,17 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const supplierShare = supplierRewardShare(paramResult.claimDistribution?.value, paramResult.mintRatio?.value)
 
-    const rewardsQuery = `
-      query RewardsByDomains($domains: [String!]!, $startTs: Datetime!, $endTs: Datetime!) {
-        data: getRewardsByDomainsAndTimeGroupByService(
-          domains: $domains,
-          startTs: $startTs,
-          endTs: $endTs
-        )
-      }
-    `
+    // One row for the whole fleet. The indexer takes up to 200 domains a call, and two calls cannot be
+    // summed (a supplier can have endpoints on domains of both). A provider's domains are its
+    // hosts' last two labels, or one per IP endpoint (extractDomainsForAddressGroup), so more are not
+    // expected: then the stats call is skipped on every run (see mergeProviderSupplierStats for what
+    // is stored then).
     const supplierStatsQuery = `
-      query SupplierStatsByDomains($domains: [String!]!) {
-        data: getSupplierStatsByDomains(pDomains: $domains)
+      query SupplierFleetByDomains($domains: [String!]!) {
+        fleet: getSupplierFleetList(domains: $domains, stakeStatuses: ["Staked"], bySupplier: false) {
+          supplierCount
+          stakeUpokt
+        }
       }
     `
 
@@ -1139,15 +1142,19 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     }
 
     const addressGroupsData = (dbProvider.addressGroups ?? [])
-    const currentAddressGroups = addressGroupsData as Array<{ id: number; grossRewardsPerService?: unknown; [key: string]: unknown }>
 
     const allDomains = Array.from(
       new Set(addressGroupsData.flatMap((ag) => extractDomainsForAddressGroup(ag)))
     )
 
+    const tooManyDomains = allDomains.length > MAX_INDEXER_DOMAINS
+    if (tooManyDomains) warnTooManyDomainsOnce(provider.identity, allDomains.length)
+
     const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
-      allDomains.length > 0
-        ? postGraphql<{ data: { suppliers_count: number; total_staked_tokens: number } }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
+      allDomains.length > 0 && !tooManyDomains
+        ? postGraphql<{ fleet: Array<{ supplierCount: string; stakeUpokt: string } | null> | null }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
+            // Stored as before (numbers): the providers pages read supplierStats
+            .then(({ fleet }) => ({ data: supplierStatsFromFleet(fleet) }))
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
         : Promise.resolve(null),
 
@@ -1163,21 +1170,14 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
             }
 
             try {
-              const result = await postGraphql<{ data: { services: RewardBySupplier[]; suppliers_count: number } }>(
+              return await fetchAddressGroupRewards({
                 indexerApiUrl,
-                rewardsQuery,
-                { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },
-              )
-              const rawRewards: Array<RewardBySupplier> = result.data?.services ?? []
-
-              const filteredRewards = configuredServiceRewards(rawRewards, ag.addressGroupServices.map((s) => s.serviceId))
-
-              const adjustedRewards = filteredRewards.map((entry) => ({
-                ...entry,
-                amount: supplierRewardAmount(entry.gross_rewards, supplierShare),
-              }))
-
-              return { id: ag.id, rewards: adjustedRewards }
+                group: ag,
+                domains,
+                startTs,
+                endTs,
+                supplierShare,
+              })
             } catch (e) {
               log.error('Failed to fetch rewards for address group', { addressGroupId: ag.id, error: e })
               return null
@@ -1186,21 +1186,20 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       ),
     ])
 
-    const supplierStats = supplierStatsResult?.data ?? null
-    const suppliersCount = supplierStats?.suppliers_count ?? 0
-
-    for (const entry of rewardsByGroupId) {
-      if (!entry) continue
-      const matchingEntry = currentAddressGroups.find((ag) => ag.id === entry.id)
-      if (matchingEntry) {
-        matchingEntry.grossRewardsPerService = entry.rewards
-        matchingEntry.rewardsSuppliersCount = suppliersCount
-        matchingEntry.rewardsUpdatedAt = new Date().toISOString()
-      }
-    }
+    // Which stats and group rewards this run stores, when the stats call failed or was skipped
+    // (too many domains) included: see mergeProviderSupplierStats
+    const { supplierStats, groups: updatedAddressGroups } = mergeProviderSupplierStats({
+      fetched: supplierStatsResult?.data ?? null,
+      stored: dbProvider.supplierStats ?? null,
+      hasDomains: allDomains.length > 0,
+      tooManyDomains,
+      groups: addressGroupsData,
+      rewardsByGroupId,
+      now: new Date(),
+    })
 
     await dal.provider.updateProvider(dbProvider.id, {
-      addressGroups: currentAddressGroups as typeof dbProvider.addressGroups,
+      addressGroups: updatedAddressGroups,
       supplierStats,
     })
 

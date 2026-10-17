@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { getApplicationSettings, GetAppName } from '@/actions/ApplicationSettings'
-import { getAllNodesSummary } from '@/lib/dal/nodes'
+import { GetAllStakedSummary } from '@/actions/Nodes'
 import InitializeHeightContext from '@igniter/ui/context/Height/InitializeContext'
 import { Suspense } from 'react'
 import SummaryLoader from '@igniter/ui/components/RewardsSummary/Loader'
@@ -57,7 +57,7 @@ async function Rewards() {
   const [applicationSettings, stakedNodes, nodesSummary] = await Promise.all([
     getApplicationSettings(),
     GetStakedNodesAddress(),
-    getAllNodesSummary(),
+    GetAllStakedSummary(),
   ]);
 
   let graphqlUrl = applicationSettings.indexerApiUrl
@@ -86,10 +86,10 @@ async function Rewards() {
             <ServerSummary
               addresses={addresses}
               supplierAddresses={stakedNodes}
-              isOwners={false}
               graphQlUrl={graphqlUrl}
               dbSuppliersCount={nodesSummary.count}
-              dbStakedTokens={nodesSummary.totalStaked}
+              dbStakedTokens={nodesSummary.stakeUpokt}
+              refreshSuppliers={GetAllStakedSummary}
             />
           </Suspense>
         </div>
