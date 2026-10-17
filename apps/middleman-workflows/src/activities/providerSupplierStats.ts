@@ -3,6 +3,19 @@ import type { AddressGroupsJson } from '@igniter/db/middleman/schema'
 // updated_at: when the stats were fetched; the middleman hides them once old (freshSupplierStats)
 export type SupplierStats = { suppliers_count: number; total_staked_tokens: number; updated_at?: string }
 
+type FleetRow = { supplierCount: string | null; stakeUpokt: string | null }
+
+/**
+ * The stats of one successful getSupplierFleetList(bySupplier: false) answer. An empty list is a
+ * legitimate answer (no staked supplier matches the domains): zero suppliers, zero stake. Only a
+ * missing list (null, as errorPolicy 'all' leaves it when the call fails) is not an answer: it throws.
+ */
+export function supplierStatsFromFleet(fleet: Array<FleetRow | null> | null | undefined): SupplierStats {
+  if (!Array.isArray(fleet)) throw new Error(`Indexer returned no supplier fleet list (fleet: ${JSON.stringify(fleet)})`)
+  const row = fleet[0]
+  return { suppliers_count: Number(row?.supplierCount ?? 0), total_staked_tokens: Number(row?.stakeUpokt ?? 0) }
+}
+
 // One address group's answer of this run: its rewards
 export type GroupRewards = {
   id: number

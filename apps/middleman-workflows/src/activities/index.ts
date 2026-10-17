@@ -43,7 +43,7 @@ import { fetchAddressGroupRewards } from './groupRewards'
 import { endpointDomain, hostDomain } from './endpointDomain'
 import { getEndpointInterpolatedUrl, getEndpointOverride } from '@igniter/domain/provider/utils'
 import type { RPCType } from '@igniter/pocket/proto/pocket/shared/service'
-import { mergeProviderSupplierStats } from './providerSupplierStats'
+import { mergeProviderSupplierStats, supplierStatsFromFleet } from './providerSupplierStats'
 
 export type Height = number
 
@@ -1154,16 +1154,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       allDomains.length > 0 && !tooManyDomains
         ? postGraphql<{ fleet: Array<{ supplierCount: string; stakeUpokt: string } | null> | null }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
             // Stored as before (numbers): the providers pages read supplierStats
-            .then(({ fleet }) => {
-              const row = fleet?.[0]
-              if (!row) throw new Error(`Indexer returned no supplier fleet row (fleet: ${JSON.stringify(fleet)})`)
-              return {
-                data: {
-                  suppliers_count: Number(row.supplierCount ?? 0),
-                  total_staked_tokens: Number(row.stakeUpokt ?? 0),
-                },
-              }
-            })
+            .then(({ fleet }) => ({ data: supplierStatsFromFleet(fleet) }))
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
         : Promise.resolve(null),
 

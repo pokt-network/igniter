@@ -1,5 +1,5 @@
 import type { AddressGroupsJson } from '@igniter/db/middleman/schema'
-import { mergeProviderSupplierStats, type SupplierStats } from './providerSupplierStats'
+import { mergeProviderSupplierStats, supplierStatsFromFleet, type SupplierStats } from './providerSupplierStats'
 
 type Group = AddressGroupsJson[number]
 type Rewards = NonNullable<Group['grossRewardsPerService']>
@@ -72,5 +72,22 @@ describe('mergeProviderSupplierStats', () => {
     const { input } = run({ fetched })
 
     expect(input).toEqual([{ id: 1, ...old }, { id: 2, ...old }])
+  })
+})
+
+describe('supplierStatsFromFleet', () => {
+  it('reads the fleet row', () => {
+    expect(supplierStatsFromFleet([{ supplierCount: '55', stakeUpokt: '5500000000000' }])).toEqual({
+      suppliers_count: 55,
+      total_staked_tokens: 5.5e12,
+    })
+  })
+
+  it('reads an empty list as a successful answer with zeros', () => {
+    expect(supplierStatsFromFleet([])).toEqual({ suppliers_count: 0, total_staked_tokens: 0 })
+  })
+
+  it.each([null, undefined])('throws when the call left no list (%s)', (fleet) => {
+    expect(() => supplierStatsFromFleet(fleet)).toThrow('no supplier fleet list')
   })
 })
