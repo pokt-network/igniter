@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { NodeWithDetails } from '@igniter/db/src/middleman/schema'
 import React, { Suspense } from 'react';
-import { GetOwnerAddresses, GetUserNodes } from '@/actions/Nodes'
+import { GetOwnerAddresses, GetUserNodes, GetUserStakedSummary } from '@/actions/Nodes'
 import ApolloWrapper from '@igniter/ui/graphql/client'
 import SummaryLoader from '@igniter/ui/components/RewardsSummary/Loader';
 import ServerSummary from '@igniter/ui/components/RewardsSummary/ServerSummary'
@@ -61,10 +61,11 @@ export default async function Page() {
 }
 
 async function Rewards() {
-  const [ownerAddresses, userNodes, applicationSettings] = await Promise.all([
+  const [ownerAddresses, userNodes, applicationSettings, stakedSummary] = await Promise.all([
     GetOwnerAddresses(),
     GetUserNodes(),
-    getApplicationSettings()
+    getApplicationSettings(),
+    GetUserStakedSummary(),
   ]);
 
   let graphqlUrl = applicationSettings.indexerApiUrl
@@ -81,8 +82,9 @@ async function Rewards() {
 
   const supplierAddresses = userNodes.map((n: NodeWithDetails) => n.address)
   const providerCount = new Set(userNodes.map((n: NodeWithDetails) => n.providerId).filter(Boolean)).size
-  const dbSuppliersCount = userNodes.length
-  const dbStakedTokens = userNodes.reduce((sum: number, n: NodeWithDetails) => sum + Number(n.stakeAmount || 0), 0)
+  // The Suppliers and Staked Tokens tiles count the user's Staked nodes only, as the owner addresses do
+  const dbSuppliersCount = stakedSummary.count
+  const dbStakedTokens = stakedSummary.stakeUpokt
 
 
   return (
@@ -98,11 +100,11 @@ async function Rewards() {
             <ServerSummary
               addresses={ownerAddresses}
               supplierAddresses={supplierAddresses}
-              isOwners={true}
               graphQlUrl={graphqlUrl}
               noDataMessage={'You do not have any stake yet. Stake to start getting rewards.'}
               dbSuppliersCount={dbSuppliersCount}
               dbStakedTokens={dbStakedTokens}
+              refreshSuppliers={GetUserStakedSummary}
             />
           </Suspense>
         </div>

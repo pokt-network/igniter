@@ -19,19 +19,20 @@ interface BlockRetryOptions {
  * restored once the part no longer needs a retry.
  */
 export default function useBlockRetry({ shouldRetry, isBusy, run, key }: BlockRetryOptions) {
-  const { currentHeight, firstHeight, settlementHeight } = useHeightContext()
+  // The budgets restart on a new rewards epoch (rewardsEpoch.ts)
+  const { currentHeight, firstHeight, rewardsEpoch: epoch } = useHeightContext()
   const budgetRef = useRef(createBlockRetryBudget())
-  const latestRef = useRef({ shouldRetry, isBusy, run, key, settlementHeight })
+  const latestRef = useRef({ shouldRetry, isBusy, run, key, epoch })
 
   // Declared first, so the retry effect below reads this render's values
   useEffect(() => {
-    latestRef.current = { shouldRetry, isBusy, run, key, settlementHeight }
+    latestRef.current = { shouldRetry, isBusy, run, key, epoch }
     if (!shouldRetry) budgetRef.current.reset(key)
   })
 
   useEffect(() => {
     const latest = latestRef.current
     if (!latest.shouldRetry || currentHeight === firstHeight || latest.isBusy()) return
-    if (budgetRef.current.take(latest.settlementHeight, latest.key)) latest.run()
+    if (budgetRef.current.take(latest.epoch, latest.key)) latest.run()
   }, [currentHeight, firstHeight])
 }

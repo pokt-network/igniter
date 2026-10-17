@@ -45,7 +45,7 @@ export interface RewardsWindows {
 }
 
 /**
- * The rewardsWindows / nodesSummary documents (legacyRewardsOfAddressesBySuppliersAndTime): the
+ * The rewardsWindows document (legacyRewardsOfAddressesBySuppliersAndTime): the
  * results of every supplier batch, normalised once to one Ranged total per window.
  */
 export function combineRewardsWindows(results: Array<{ last24h?: unknown; last48h?: unknown }>): RewardsWindows {
@@ -62,4 +62,17 @@ export function combineRewardsWindows(results: Array<{ last24h?: unknown; last48
  */
 export function combineRewardRows(results: Array<{ rewards?: unknown }>): Ranged<Array<RewardByAddressAndDate>> {
   return mergeRewardRows(results.map((r) => r.rewards))
+}
+
+/**
+ * Which of two totals of the same window to show: `server` (a server render's) only when it is an
+ * answer (data or a range) and its window ends later (range.requested_to, chain time) than the one
+ * on hand, or nothing is on hand. A failed server fetch (null) never replaces rewards on hand.
+ */
+export function newerTotal(onHand: Ranged<number> | null, server: Ranged<number> | null): Ranged<number> | null {
+  if (!server || (server.data == null && !server.range)) return onHand
+  if (!onHand || (onHand.data == null && !onHand.range)) return server
+  const serverEnd = Date.parse(server.range?.requested_to ?? '')
+  const onHandEnd = Date.parse(onHand.range?.requested_to ?? '')
+  return serverEnd > onHandEnd ? server : onHand
 }

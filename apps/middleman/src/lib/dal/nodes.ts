@@ -126,16 +126,34 @@ export async function countAllNodes(): Promise<number> {
   return value
 }
 
-export async function getAllNodesSummary(): Promise<{ count: number; totalStaked: number }> {
+// Staked nodes of one user: the user overview's Suppliers and Staked Tokens tiles
+export async function getUserStakedNodesSummary(userIdentity: string): Promise<{ count: number; totalStaked: number }> {
   const result = await getDb()
     .select({
       count: count(),
       totalStaked: sql<string>`coalesce(sum("stakeAmount"::numeric), 0)`,
     })
     .from(nodesTable)
+    .where(and(eq(nodesTable.createdBy, userIdentity), eq(nodesTable.status, NodeStatus.Staked)))
 
   return {
-    count: result[0]?.count ?? 0,
+    count: Number(result[0]?.count ?? 0),
+    totalStaked: Number(result[0]?.totalStaked ?? 0),
+  }
+}
+
+// Staked nodes only: the admin overview's Suppliers and Staked Tokens tiles
+export async function getStakedNodesSummary(): Promise<{ count: number; totalStaked: number }> {
+  const result = await getDb()
+    .select({
+      count: count(),
+      totalStaked: sql<string>`coalesce(sum("stakeAmount"::numeric), 0)`,
+    })
+    .from(nodesTable)
+    .where(eq(nodesTable.status, NodeStatus.Staked))
+
+  return {
+    count: Number(result[0]?.count ?? 0),
     totalStaked: Number(result[0]?.totalStaked ?? 0),
   }
 }

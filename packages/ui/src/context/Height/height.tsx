@@ -2,7 +2,17 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useQuery } from '@apollo/client'
+import useRefetchOnChange from '../../hooks/useRefetchOnChange'
 import { statusQuery } from '@igniter/graphql'
+import {
+  clockUpdate,
+  initialRewardsEpoch,
+  nextClockAt,
+  onClock,
+  onSettlementAnswer,
+  rewardsEpochKey,
+  shownUpdate,
+} from '../../lib/rewardsEpoch'
 
 interface HeightContext {
   currentHeight: number
@@ -12,9 +22,10 @@ interface HeightContext {
   updateNetworkHeight: () => void
   firstHeight: number
   currentTime: string
-  // height of the latest claim settlement; rewards only change when it does
-  settlementHeight: number
-  firstSettlementHeight: number
+  // the epoch the rewards are fetched for (rewardsEpoch.ts): it changes when they should be fetched
+  // again, after the last settlement the indexer's money tables hold (getLastSettlement) moves or
+  // the fallback ticks; read it through useRewardsEpochChange or as a query key
+  rewardsEpoch: string
 }
 
 const HeightContext = createContext<HeightContext>({
@@ -23,8 +34,7 @@ const HeightContext = createContext<HeightContext>({
   firstHeight: 0,
   sessionHeight: 0,
   currentTime: '',
-  settlementHeight: 0,
-  firstSettlementHeight: 0,
+  rewardsEpoch: '0/0',
   updateNetworkHeight: () => {}
 });
 
@@ -46,7 +56,8 @@ export default function HeightContextProvider({
   const [skipQueries, setSkipQueries] = useState(true)
   const [networkHeight, setNetworkHeight] = useState(initialNetworkHeight)
   const [sessionHeight, setSessionHeight] = useState(Number(firstHeight))
-  const [settlementHeight, setSettlementHeight] = useState(firstSettlementHeight)
+  // Its clock is performance.now() (monotonic): a wall clock change does not move the timers
+  const [epoch, setEpoch] = useState(() => initialRewardsEpoch(firstSettlementHeight, performance.now()))
   const [{currentHeight, currentTime}, setState] = useState({
     currentHeight: Number(firstHeight || 0),
     currentTime: firstTime,
@@ -57,6 +68,8 @@ export default function HeightContextProvider({
     {
       fetchPolicy: 'network-only',
       nextFetchPolicy: 'network-only',
+      // A failing field (getLastSettlement) comes back null with the rest of the answer
+      errorPolicy: 'all',
       pollInterval: 15 * 1000,
       skipPollAttempt: () => document.hidden,
       skip: skipQueries
@@ -71,13 +84,43 @@ export default function HeightContextProvider({
     return () => clearTimeout(timeout)
   }, [])
 
+  // The epoch's clock (rewardsEpoch.ts): one timer for a pending rewind and the fallback tick,
+  // restarted on every change. A hidden tab does not tick: once shown, it decides on a status poll
+  // started after that (its answer counts even when it equals the last one, which Apollo would not
+  // report), the answer and the clock in one change (shownUpdate). A rewind that comes due while it
+  // is hidden waits too: that poll confirms it or drops it.
+  useEffect(() => {
+    let cancelled = false
+    const onVisible = () => {
+      if (document.hidden) return
+      document.removeEventListener('visibilitychange', onVisible)
+      refetch().then(
+        ({ data: status }) => {
+          if (!cancelled) setEpoch(shownUpdate(status?.lastSettlement?.height, performance.now()))
+        },
+        () => {
+          if (!cancelled) setEpoch(shownUpdate(null, performance.now()))
+        },
+      )
+    }
+    const timeout = setTimeout(() => {
+      const { epoch: next, waitForShown } = onClock(epoch, performance.now(), document.hidden)
+      if (waitForShown) document.addEventListener('visibilitychange', onVisible)
+      else setEpoch(clockUpdate(epoch, next))
+    }, Math.max(0, nextClockAt(epoch) - performance.now()))
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+    // eslint-disable-next-line
+  }, [epoch])
+
   useEffect(() => {
     const block = data?.blocks?.nodes[0]
 
-    const newSettlementHeight = Number(data?.lastSettlement?.nodes[0]?.blockId || 0)
-    if (newSettlementHeight > settlementHeight) {
-      setSettlementHeight(newSettlementHeight)
-    }
+    setEpoch((current) => onSettlementAnswer(current, data?.lastSettlement?.height, performance.now()))
 
     const newBlockId = Number(block?.id)
     if (block && newBlockId > currentHeight) {
@@ -111,8 +154,7 @@ export default function HeightContextProvider({
         networkHeight,
         firstHeight,
         sessionHeight,
-        settlementHeight,
-        firstSettlementHeight,
+        rewardsEpoch: rewardsEpochKey(epoch),
         updateNetworkHeight: refetch,
       }}
     >
@@ -123,4 +165,10 @@ export default function HeightContextProvider({
 
 export function useHeightContext() {
   return useContext(HeightContext)
+}
+
+/** Calls onChange when the rewards epoch changes (not on mount): when the rewards should be fetched again. */
+export function useRewardsEpochChange(onChange: () => void) {
+  const { rewardsEpoch } = useHeightContext()
+  useRefetchOnChange([rewardsEpoch], onChange)
 }

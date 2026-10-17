@@ -2,19 +2,8 @@ import { graphql } from './gql'
 
 export const unstakeTimeAvgDocument = graphql(`
   query unstakeTimeAvg($startDate: Datetime!, $endDate: Datetime!) {
-    blocks(
-      filter: {
-        timestamp: {
-          greaterThanOrEqualTo: $startDate,
-          lessThanOrEqualTo: $endDate
-        }
-      }
-    ) {
-      aggregates {
-        average {
-          timeToBlock
-        }
-      }
+    blockStats: getBlockStatsList(rangeStart: $startDate, rangeEnd: $endDate) {
+      avgTimeToBlockMs
     }
     params(
       filter: {

@@ -2,43 +2,32 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApolloClient } from '@apollo/client'
-import ErrorRetry from '../ErrorRetry'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import FourCard from '../FourCards/FourCard'
 import { combineByIndex } from '../FourCards/utils'
 import { labels } from './constants'
 import NoData from '../NoData'
 import { amountToPokt, toCurrencyFormat } from '../../lib/utils'
-import { DocumentNodeData } from '../../lib/graphql/types'
-import { useHeightContext } from '../../context/Height/height'
-import { rewardsWindowsDocument, summaryDocument, suppliersSummaryDocument } from '@igniter/graphql/rewards'
+import { useHeightContext, useRewardsEpochChange } from '../../context/Height/height'
+import { rewardsWindowsDocument } from '@igniter/graphql/rewards'
 import { summaryVariables } from './operations'
 import { batchArray } from '../../lib/batch'
 import useBlockRetry from '../../hooks/useBlockRetry'
 import { coverageNote, isFailedTotal, Ranged } from '../../lib/range'
-import { combineRewardsWindows, RewardsWindows } from '../../lib/rewards'
-import SummaryLoader from './Loader'
+import { combineRewardsWindows, newerTotal, RewardsWindows } from '../../lib/rewards'
 
-// The rewards totals normalised once (see range.ts); null: they could not be fetched
-export type SummaryData = Omit<DocumentNodeData<typeof summaryDocument>, 'last24h' | 'last48h'> & {
-  [K in keyof RewardsWindows]: RewardsWindows[K] | null
-}
-type SuppliersData = DocumentNodeData<typeof suppliersSummaryDocument>
+export type SuppliersSummary = { count: number; stakeUpokt: number }
 
-// Suppliers and stake change on any stake or unstake, so they refresh on a timer; rewards only
-// change when claims settle, so they refresh on a new settlement height.
+// Suppliers and stake change on any stake or unstake, so they refresh from igniter's DB on a timer,
+// as ProviderBreakdown's stakes (React Query: one fetch at a time, paused while the tab is hidden);
+// rewards only change when claims settle.
 const SUPPLIERS_REFRESH_MS = 60 * 1000
 
-function aggregateSuppliersResults(results: SuppliersData[]): Pick<SummaryData, 'suppliers'> {
-  return {
-    suppliers: {
-      totalCount: results.reduce((sum, d) => sum + (d.suppliers?.totalCount ?? 0), 0),
-      aggregates: {
-        sum: {
-          stakeAmount: results.reduce((sum, d) => sum + Number(d.suppliers?.aggregates?.sum?.stakeAmount ?? 0), 0),
-        },
-      },
-    },
-  }
+// The rewards totals normalised once (see range.ts); null: they could not be fetched. Rewards only
+// change when claims settle, so they refresh on a new rewards epoch (a new settlement height or the
+// fallback tick, rewardsEpoch.ts).
+export type SummaryRewards = {
+  [K in keyof RewardsWindows]: RewardsWindows[K] | null
 }
 
 function Value({value, tooltip, note, onRetry}: {value: string, tooltip?: string, note?: string | null, onRetry?: () => void}) {
@@ -63,175 +52,100 @@ function rewardValue(total: Ranged<number> | null) {
 }
 
 interface SummaryProps {
-  isOwners: boolean
   addresses: Array<string>
   supplierAddresses: Array<string>
   noDataMessage?: string
-  initialData: SummaryData | null
-  initialError: boolean
+  // Suppliers count and stake from igniter's DB (ServerSummary), then every SUPPLIERS_REFRESH_MS
+  // from refreshSuppliers, a server action reading the same DB values. The indexer is not asked.
+  suppliers: SuppliersSummary
+  refreshSuppliers: () => Promise<SuppliersSummary>
+  initialRewards: SummaryRewards
 }
 
 export default function Summary({
-  isOwners,
   addresses,
   supplierAddresses,
   noDataMessage = 'There is no data available for your nodes.',
-  initialError,
-  initialData
+  suppliers,
+  refreshSuppliers,
+  initialRewards
 }: SummaryProps) {
   const client = useApolloClient()
-  const { currentTime, settlementHeight, firstSettlementHeight } = useHeightContext()
-  const [data, setData] = useState<SummaryData | null>(initialData)
-  const [error, setError] = useState(initialError)
-  // Tracked apart from `error`: the suppliers refresh can succeed and hide the error card while
-  // the rewards are still missing, and those would otherwise wait for the next settlement.
-  const [rewardsError, setRewardsError] = useState(initialError || initialData?.last24h == null)
-  // Fetches running per part, and the id of the latest one: only the latest may write its result,
-  // so a slow retry cannot overwrite a newer fetch (settlement-triggered, or the suppliers timer).
+  const { currentTime } = useHeightContext()
+  const queryClient = useQueryClient()
+  const suppliersKey = ['rewardsSummarySuppliers', addresses]
+  // A failed refresh keeps the last values on screen; the next interval retries
+  const { data: dbSuppliers = suppliers } = useQuery({
+    queryKey: suppliersKey,
+    queryFn: () => refreshSuppliers(),
+    initialData: suppliers,
+    staleTime: SUPPLIERS_REFRESH_MS,
+    refetchInterval: SUPPLIERS_REFRESH_MS,
+    enabled: addresses.length > 0,
+  })
+  const [rewards, setRewards] = useState<SummaryRewards>(initialRewards)
+  const [rewardsError, setRewardsError] = useState(initialRewards.last24h == null)
+
+  // New values from a server render (router.refresh()): the suppliers replace the cached ones; a
+  // rewards window only when the server's is an answer and ends later (newerTotal), so a failed
+  // server fetch never replaces good client rewards
+  useEffect(() => {
+    queryClient.setQueryData(suppliersKey, suppliers)
+    // eslint-disable-next-line
+  }, [suppliers])
+  useEffect(() => {
+    const next = { last24h: newerTotal(rewards.last24h, initialRewards.last24h), last48h: newerTotal(rewards.last48h, initialRewards.last48h) }
+    if (next.last24h === rewards.last24h && next.last48h === rewards.last48h) return
+    setRewards(next)
+    if (next.last24h != null && next.last48h != null) setRewardsError(false)
+    // eslint-disable-next-line
+  }, [initialRewards])
+  // Fetches running, and the id of the latest one: only the latest may write its result, so a slow
+  // retry cannot overwrite a newer (settlement-triggered) fetch.
   const rewardsInFlightRef = useRef(0)
   const rewardsSeqRef = useRef(0)
-  const suppliersInFlightRef = useRef(0)
-  const suppliersSeqRef = useRef(0)
-  // Per part, so one part's fetch never ends the other's loading state
-  const [rewardsLoading, setRewardsLoading] = useState(false)
-  const [suppliersLoading, setSuppliersLoading] = useState(false)
-  const isLoading = rewardsLoading || suppliersLoading
-  const firstRenderRef = useRef(true)
-  const lastValueRef = useRef<SummaryData | null>(initialData)
 
-  const fetchBatched = useCallback(async (part: 'rewards' | 'suppliers') => {
+  const fetchRewards = useCallback(async () => {
     if (!addresses.length) return
-    const seqRef = part === 'rewards' ? rewardsSeqRef : suppliersSeqRef
-    const seq = ++seqRef.current
-    const isStale = () => seq !== seqRef.current
-    const inFlightRef = part === 'rewards' ? rewardsInFlightRef : suppliersInFlightRef
-    inFlightRef.current++
+    const seq = ++rewardsSeqRef.current
+    const isStale = () => seq !== rewardsSeqRef.current
+    rewardsInFlightRef.current++
 
-    const setPartLoading = part === 'rewards' ? setRewardsLoading : setSuppliersLoading
-    setPartLoading(true)
     try {
-      const batches = batchArray(supplierAddresses)
-      let update: Partial<SummaryData>
-
-      if (part === 'rewards') {
-        const results = await Promise.all(
-          batches.map((batch) => {
-            const v = summaryVariables(isOwners, addresses, batch, currentTime)
-            return client.query({
-              query: rewardsWindowsDocument,
-              variables: {
-                addresses: v.addresses,
-                supplierAddresses: v.supplierAddresses,
-                currentDate: v.currentDate,
-                last24Hours: v.last24Hours,
-                last48Hours: v.last48Hours,
-              },
-              fetchPolicy: 'network-only',
-            })
+      const results = await Promise.all(
+        batchArray(supplierAddresses).map((batch) =>
+          client.query({
+            query: rewardsWindowsDocument,
+            variables: summaryVariables(addresses, batch, currentTime),
+            fetchPolicy: 'network-only',
           }),
-        )
-        update = combineRewardsWindows(results.map((r) => r.data))
-      } else {
-        const results = await Promise.all(
-          batches.map((batch) =>
-            client.query({
-              query: suppliersSummaryDocument,
-              variables: { filter: summaryVariables(isOwners, addresses, batch, currentTime).filter },
-              fetchPolicy: 'network-only',
-            }),
-          ),
-        )
-        update = aggregateSuppliersResults(results.map((r) => r.data))
-      }
-
+        ),
+      )
       if (isStale()) return
-
-      setData((prev) => {
-        const next = { ...prev, ...update } as SummaryData
-        lastValueRef.current = next
-        return next
-      })
-      setError(false)
-      if (part === 'rewards') setRewardsError(false)
+      setRewards(combineRewardsWindows(results.map((r) => r.data)))
+      setRewardsError(false)
     } catch {
       if (isStale()) return
-      setError(true)
-      if (part === 'rewards') setRewardsError(true)
+      setRewardsError(true)
     } finally {
-      // A superseded fetch must not end the loading state of the newer one
-      if (!isStale()) setPartLoading(false)
-      inFlightRef.current--
+      rewardsInFlightRef.current--
     }
-  }, [client, isOwners, addresses, supplierAddresses, currentTime])
+  }, [client, addresses, supplierAddresses, currentTime])
 
-  const fetchAll = useCallback(() => {
-    fetchBatched('suppliers')
-    fetchBatched('rewards')
-  }, [fetchBatched])
+  // Refetch when the rewards epoch changes (rewardsEpoch.ts)
+  useRewardsEpochChange(fetchRewards)
 
-  useEffect(() => {
-    if (firstRenderRef.current) {
-      firstRenderRef.current = false
-      return
-    }
-
-    if (!addresses.length) return
-
-    if (settlementHeight !== firstSettlementHeight) {
-      fetchBatched('rewards')
-      // Missing suppliers (a failed load) also come back on a settlement, not only on their timer
-      if (data?.suppliers == null) fetchBatched('suppliers')
-    }
-    // eslint-disable-next-line
-  }, [settlementHeight])
-
-  // While the rewards are in error or the suppliers are missing (a failed first load), retry them
-  // on new blocks (capped, see useBlockRetry). Each part is skipped while a fetch of it is running;
-  // a settlement-triggered fetch is never skipped.
+  // While the rewards are in error, retry them on new blocks (capped, see useBlockRetry), skipped
+  // while a fetch is running; a settlement-triggered fetch is never skipped.
   useBlockRetry({
     key: 'rewards',
-    shouldRetry: addresses.length > 0 && (rewardsError || isFailedTotal(data?.last24h) || isFailedTotal(data?.last48h)),
+    shouldRetry: addresses.length > 0 && (rewardsError || isFailedTotal(rewards.last24h) || isFailedTotal(rewards.last48h)),
     isBusy: () => rewardsInFlightRef.current > 0,
-    run: () => fetchBatched('rewards'),
-  })
-  useBlockRetry({
-    key: 'suppliers',
-    shouldRetry: addresses.length > 0 && data?.suppliers == null,
-    isBusy: () => suppliersInFlightRef.current > 0,
-    run: () => fetchBatched('suppliers'),
+    run: fetchRewards,
   })
 
-  // The interval reads the latest fetchBatched through a ref, so a new block does not reset it.
-  const fetchBatchedRef = useRef(fetchBatched)
-  fetchBatchedRef.current = fetchBatched
-
-  useEffect(() => {
-    if (!addresses.length) return
-
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        fetchBatchedRef.current('suppliers')
-      }
-    }, SUPPLIERS_REFRESH_MS)
-
-    return () => clearInterval(interval)
-  }, [addresses.length])
-
-  const reward24h = useMemo(() => rewardValue(data?.last24h ?? null), [data?.last24h])
-  const reward48h = useMemo(() => rewardValue(data?.last48h ?? null), [data?.last48h])
-
-  if (isLoading && !lastValueRef.current) {
-    return <SummaryLoader />
-  } else if (error && !lastValueRef.current) {
-    return (
-      <div className={"bg-[color:--main-background] pt-3 pb-1 gap-1 rounded-lg border border-[color:--divider] base-shadow"}>
-        <ErrorRetry
-          onRetry={fetchAll}
-          errorMessage={'Oops. There was an error loading the summary data.'}
-        />
-      </div>
-    )
-  }
+  const reward24h = useMemo(() => rewardValue(rewards.last24h), [rewards.last24h])
+  const reward48h = useMemo(() => rewardValue(rewards.last48h), [rewards.last48h])
 
   if (!addresses.length) {
     return (
@@ -247,38 +161,18 @@ export default function Summary({
         combineByIndex(
           labels,
           {
-            1: (
-              <Value
-                value={
-                  data?.suppliers != null
-                    ? toCurrencyFormat(data.suppliers.totalCount || 0)
-                    : 'N/A'
-                }
-                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
-                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
-              />
-            ),
-            2: (
-              <Value
-                value={
-                  data?.suppliers != null
-                    ? toCurrencyFormat(amountToPokt(data.suppliers.aggregates?.sum?.stakeAmount), 2)
-                    : 'N/A'
-                }
-                tooltip={data?.suppliers == null ? 'Indexer data unavailable' : undefined}
-                onRetry={data?.suppliers == null ? () => fetchBatched('suppliers') : undefined}
-              />
-            ),
+            1: <Value value={toCurrencyFormat(dbSuppliers.count)} />,
+            2: <Value value={toCurrencyFormat(amountToPokt(dbSuppliers.stakeUpokt), 2)} />,
             3: (
               <Value
                 {...reward24h}
-                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
+                onRetry={rewardsError ? fetchRewards : undefined}
               />
             ),
             4: (
               <Value
                 {...reward48h}
-                onRetry={rewardsError ? () => fetchBatched('rewards') : undefined}
+                onRetry={rewardsError ? fetchRewards : undefined}
               />
             ),
           }

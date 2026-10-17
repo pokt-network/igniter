@@ -52,7 +52,7 @@ export async function GetUnstakeDuration(): Promise<UnstakeDurationData | null> 
   })
 
   // Extract average time to block
-  const avgTimeToBlock = data.blocks?.aggregates?.average?.timeToBlock
+  const avgTimeToBlock = Number(data.blockStats?.at(0)?.avgTimeToBlockMs ?? 0)
   if (!avgTimeToBlock) {
     throw new Error('Failed to calculate average block time')
   }

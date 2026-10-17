@@ -22,6 +22,16 @@ type AddressGroup = {
 
 const REWARDS_STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours
 
+/**
+ * A provider's supplier stats unless their stamp says they are old (updated_at older than
+ * REWARDS_STALE_THRESHOLD_MS): the workflow keeps the last ones when a refresh fails, and those must
+ * not show as current. No stamp (stored before stamping) is unknown age: shown until restamped.
+ */
+export function freshSupplierStats<T extends object>(stats: (T & { updated_at?: string }) | null | undefined): T | null {
+  if (!stats) return null;
+  return !stats.updated_at || isRewardsFresh(stats.updated_at) ? stats : null;
+}
+
 function isRewardsFresh(rewardsUpdatedAt: string | undefined): boolean {
   if (!rewardsUpdatedAt) return false;
   return Date.now() - new Date(rewardsUpdatedAt).getTime() < REWARDS_STALE_THRESHOLD_MS;

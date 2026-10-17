@@ -19,11 +19,11 @@ function jsonResponse(status: number, body: unknown) {
 describe('postGraphql', () => {
   it('throws with the status and messages on a 400 {errors} response', async () => {
     fetchMock.mockResolvedValue(jsonResponse(400, {
-      errors: [{ message: 'Unknown argument "domains" on field "Query.getSupplierStatsByDomains". Did you mean "pDomains"?' }],
+      errors: [{ message: 'Unknown argument "pDomains" on field "Query.getSupplierFleetList". Did you mean "domains"?' }],
     }))
 
     await expect(postGraphql('https://indexer.test', 'query { x }')).rejects.toThrow(
-      'Indexer GraphQL request failed with HTTP 400: Unknown argument "domains" on field "Query.getSupplierStatsByDomains". Did you mean "pDomains"?',
+      'Indexer GraphQL request failed with HTTP 400: Unknown argument "pDomains" on field "Query.getSupplierFleetList". Did you mean "domains"?',
     )
   })
 

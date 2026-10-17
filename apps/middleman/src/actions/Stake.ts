@@ -28,6 +28,7 @@ import {
 } from '@igniter/commons/crypto'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
+import { freshSupplierStats } from '@/lib/utils/shareCalculations'
 
 const log = getLogger(['middleman', 'stake'])
 
@@ -106,7 +107,7 @@ export async function CalculateStakeDistribution(stakeAmount: number, ownerAddre
         status: provider.status,
         stakeDistribution: distribution,
         addressGroups: publicAddressGroups,
-        supplierStats: provider.supplierStats ?? null,
+        supplierStats: freshSupplierStats(provider.supplierStats),
       }
       return offer
     })
