@@ -1,4 +1,4 @@
-FROM node:22-slim AS base
+FROM node:24.22.1-slim AS base
 
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
