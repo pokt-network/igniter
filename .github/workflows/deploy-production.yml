@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           cache: pnpm
-          node-version: 18.20.3
+          node-version: 24.22.1
 
       - run: pnpm install --frozen-lockfile
 

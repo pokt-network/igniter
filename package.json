@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@types/json-bigint": "^1.0.4",
-    "@types/node": "^22",
+    "@types/node": "^24",
     "eslint": "^9.19.0",
     "json-bigint": "1.0.0",
     "prettier": "^3.5.3",
@@ -38,6 +38,6 @@
   },
   "packageManager": "pnpm@10.15.0",
   "engines": {
-    "node": ">=18"
+    "node": ">=24.22.1"
   }
 }
