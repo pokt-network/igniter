@@ -41,7 +41,6 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
-.nvmrc
 
 # Visual Studio Code
 .vscode

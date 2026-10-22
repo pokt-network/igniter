@@ -253,7 +253,7 @@ export default function getQueryClient(cometClient: Comet38Client, height?: numb
  * falls back to axios on Node 18's experimental fetch), where undici surfaces a socket failure
  * as `TypeError('fetch failed')` with the errno error on `.cause` (sometimes an `AggregateError`
  * when several addresses were tried); under axios `.code` sits on the error itself. The chain
- * is walked either way; the worker image is node:22, so the live path is fetch.
+ * is walked either way; the worker image is node:24, so the live path is fetch.
  *
  * ECONNRESET, EPIPE and "socket hang up" are deliberately excluded: the request may have been
  * written before the connection dropped, so the node may hold the tx. Those stay unknown.
