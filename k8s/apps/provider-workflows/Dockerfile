@@ -4,14 +4,16 @@ ARG APP
 
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+# pnpm 10+ resolves the global bin to $PNPM_HOME/bin and enforces it must be
+# in PATH. Earlier versions accepted $PNPM_HOME itself.
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
 
 # Install necessary tools and dependencies
 RUN apt-get update && apt-get install -y \
     git \
     openssh-client \
     curl \
-    && npm install -g pnpm@latest turbo@^2.4.4 \
+    && npm install -g pnpm@10.15.0 turbo@2.4.4 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
