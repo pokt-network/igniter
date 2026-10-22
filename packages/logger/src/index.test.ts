@@ -47,7 +47,7 @@ describe('newRequestId', () => {
     expect(newRequestId()).toMatch(UUID_V4)
   })
 
-  // F8 regression: Node 18 (CI test pin) exposes no global `crypto` under jest,
+  // F8 regression: Node 18 (the former CI pin) exposes no global `crypto` under jest,
   // so a bare `crypto.randomUUID()` throws ReferenceError. Simulate that by
   // deleting globalThis.crypto and assert the node:crypto fallback still works.
   it('falls back to node:crypto when globalThis.crypto is absent (Node 18 sim)', () => {

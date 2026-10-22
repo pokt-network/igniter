@@ -42,8 +42,8 @@ export function withRequestContext<T>(
 /**
  * UUID for request correlation. NEVER call inside a Temporal workflow sandbox.
  *
- * Prefers the global Web Crypto (browser/edge/Node 20+). Node 18 (the CI test
- * pin, 18.20.3) exposes no global `crypto` under jest, so there is a pure-JS
+ * Prefers the global Web Crypto (browser/edge/Node 20+). Runtimes without a
+ * global `crypto` (Node 18 under jest, the original CI pin) get a pure-JS
  * v4-shaped fallback. NO `require` of the node builtin here — even a dynamic
  * specifier is a hard build error under Turbopack ("Can't resolve <dynamic>"),
  * which analyzes every `require()` call site; webpack merely warned. The id is
