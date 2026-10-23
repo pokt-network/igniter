@@ -119,6 +119,23 @@ describe('evaluateLiveness', () => {
     expect(evaluateLiveness(desc, entry, NOW, s)).toBe('healthy')
   })
 
+  it('right after a ladder reset (no growth, no injected triggers): recent takenAt -> healthy', () => {
+    // resetLadder re-baselined lastActionCount to the current count; the next fire has not landed yet.
+    const desc = makeDesc({ recentTakenAt: [ago(20_000)], createdAt: ago(3_600_000), numActionsTaken: 52 })
+    expect(evaluateLiveness(desc, entry, NOW, state({ lastActionCount: 52 }))).toBe('healthy')
+  })
+
+  it('right after a ladder reset (no growth, no injected triggers): takenAt older than grace -> stale', () => {
+    const desc = makeDesc({ recentTakenAt: [ago(300_000)], createdAt: ago(3_600_000), numActionsTaken: 52 })
+    expect(evaluateLiveness(desc, entry, NOW, state({ lastActionCount: 52 }))).toBe('stale')
+  })
+
+  it('no growth but injected triggers outstanding: recent takenAt is not trusted -> stale (createdAt fallback)', () => {
+    // Write-ahead bumpInjectedTrigger counted a trigger whose run is not visible in the count yet.
+    const desc = makeDesc({ recentTakenAt: [ago(20_000)], createdAt: ago(3_600_000), numActionsTaken: 52 })
+    expect(evaluateLiveness(desc, entry, NOW, state({ lastActionCount: 52, injectedTriggers: 1 }))).toBe('stale')
+  })
+
   it('N1: tolerates a recentActions entry with an absent takenAt (no throw)', () => {
     // Eventual-consistency partiality: one entry has takenAt, one does not.
     const desc = {

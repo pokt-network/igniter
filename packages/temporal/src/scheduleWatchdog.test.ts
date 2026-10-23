@@ -106,6 +106,21 @@ describe('ScheduleWatchdog.tick', () => {
     expect(store.resetLadder).toHaveBeenCalledWith(entry.scheduleId, 52)
   })
 
+  it('tick right after a ladder reset, before the next fire: healthy, no re-heal (reset flap)', async () => {
+    // resetLadder re-baselined lastActionCount to the current count and zeroed
+    // injectedTriggers. Until the next fire there is no growth, but the latest
+    // takenAt (20s ago) is still a real fire — the schedule must not read stale
+    // off createdAt (1h ago) and re-enter the ladder.
+    const update = jest.fn()
+    const handle = { describe: jest.fn().mockResolvedValue(descWith({ recentActions: [{ takenAt: new Date(NOW_MS - 20_000), scheduledAt: new Date(NOW_MS - 20_000) }], numActionsTaken: 52 })), update, trigger: jest.fn() }
+    const store = makeStore({ ...defaultHealState(entry.scheduleId), lastActionCount: 52 })
+    const wd = new ScheduleWatchdog({ client: makeClient(handle), entries: [entry], store, config, logger })
+    await wd.tick()
+    expect(update).not.toHaveBeenCalled()
+    expect(store.bumpUnstuck).not.toHaveBeenCalled()
+    expect(store.baselineActionCount).not.toHaveBeenCalled()
+  })
+
   it('describe() NOT_FOUND + enforce: recordRecreate (write-ahead) -> ensureSchedule creates -> resetOnRecreate (S6)', async () => {
     const calls: string[] = []
     const create = jest.fn().mockImplementation(async () => { calls.push('create') })
