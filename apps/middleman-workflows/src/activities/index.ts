@@ -191,8 +191,14 @@ function warnTooManyDomainsOnce(providerIdentity: string, domains: number) {
  * verifier knows to skip the supplier verification path for it.
  */
 
-/** Upper bound on rows one dispatcher tick handles; the rest wait for the next tick. */
-const DISPATCH_BATCH_LIMIT = 500
+/**
+ * Upper bound on rows one dispatcher tick handles; the rest wait for the next tick. It does not
+ * guard against duplicates (the child's workflow id does). It bounds one dispatcher run: every
+ * listed row costs a startChild (and an attempt activity when it starts) in that run's history and
+ * a row in the list activity's result, so an unbounded backlog could push the run past Temporal's
+ * history or payload limits and kill dispatch for every row on every tick.
+ */
+const DISPATCH_BATCH_LIMIT = 100
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
   const activities = {

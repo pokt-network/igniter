@@ -85,6 +85,11 @@ export default class Transaction {
    * owns it and ExecuteTransaction would only hand it back; listing it cost a child start per tick.
    * Only the fields the dispatcher needs, never the payloads. `firstAttemptAgeMs` is measured by
    * the database clock (null before the first counted attempt).
+   *
+   * Ordered by attempts first, then id: a row never tried yet comes before rows that already have
+   * a child in flight or failing, so `limit` stuck rows cannot hold a new transaction back until
+   * they are given up (an hour or more). Rows that keep failing still gain an attempt per tick and
+   * are listed again once the fresher rows have left the queue.
    */
   async listDispatchable(limit: number): Promise<Array<{
     id: number
@@ -101,7 +106,7 @@ export default class Transaction {
       })
       .from(transactionsTable)
       .where(and(eq(transactionsTable.status, TransactionStatus.Pending), isNull(transactionsTable.hash)))
-      .orderBy(transactionsTable.id)
+      .orderBy(transactionsTable.dispatchAttempts, transactionsTable.id)
       .limit(limit);
   }
 
