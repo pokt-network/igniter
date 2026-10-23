@@ -1,5 +1,6 @@
 import {
   AnyPgColumn,
+  check,
   index,
   integer,
   pgTable,
@@ -34,6 +35,13 @@ export const transactionsTable = pgTable("transactions", {
   timeoutHeight: integer(),
   unavailableChecks: integer().notNull().default(0),
   lastVerificationAt: timestamp(),
+  // Dispatcher bookkeeping for a pending row that has no hash yet: how many ExecuteTransaction runs
+  // it has started for the row (counted only on ticks where the RPC answered, one per run id),
+  // since when, and the last run counted. The dispatcher gives up on the row after enough attempts
+  // over enough time; see ExecutePendingTransactions.
+  dispatchAttempts: integer().notNull().default(0),
+  firstDispatchAttemptAt: timestamp({ withTimezone: true }),
+  lastDispatchRunId: varchar({ length: 64 }),
 
   //Self-referencing foreign key workaround: https://orm.drizzle.team/docs/indexes-constraints#foreign-key
   dependsOn: integer().references((): AnyPgColumn => transactionsTable.id),
@@ -60,6 +68,11 @@ export const transactionsTable = pgTable("transactions", {
   createdBy: varchar().references(() => usersTable.identity).notNull(),
 }, (table) => ({
   verifierSweepIdx: index('mw_transactions_verifier_sweep_idx').on(table.status, table.lastVerificationAt).where(sql`"hash" IS NOT NULL`),
+  // NOT NULL still admits '': tx 519 (mainnet, 2026-10-22) was stored with an empty signedPayload
+  // and could never be broadcast. Added NOT VALID by migration 0020, so pre-existing rows are not
+  // rewritten; every insert and update since is checked.
+  signedPayloadNotEmpty: check('transactions_signed_payload_not_empty', sql`btrim(${table.signedPayload}) <> ''`),
+  unsignedPayloadNotEmpty: check('transactions_unsigned_payload_not_empty', sql`btrim(${table.unsignedPayload}) <> ''`),
 }));
 
 export const transactionsRelations = relations(

@@ -52,6 +52,18 @@ beforeEach(() => {
   sumStakeAmountByAddresses.mockResolvedValue('9300000000000')
 })
 
+describe('CreateUnstakeTransaction payload validation', () => {
+  it('rejects an empty signed payload without creating a row', async () => {
+    // tx 519 on mainnet: the wallet returned the body but no signed bytes, the row was stored
+    // with signedPayload '' and could never be broadcast.
+    const unsigned = request(payload('pokt1a'))
+    unsigned.transaction.signedPayload = ''
+
+    await expect(CreateUnstakeTransaction(unsigned)).rejects.toThrow('no signed transaction')
+    expect(insert).not.toHaveBeenCalled()
+  })
+})
+
 describe('CreateUnstakeTransaction amount derivation', () => {
   it('stores the derived amount on the transaction', async () => {
     // The whole point of #335: without this the row is created with a null

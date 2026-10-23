@@ -6,6 +6,7 @@ import {SignedMemo, SignedTransaction, TransactionMessage} from "../../lib/model
 import { PROVIDER_COOKIE_KEY } from './constants';
 import { KeplrWalletConnection } from './KeplrWalletConnection';
 import {PocketWalletConnection} from "./PocketWalletConnection";
+import { assertSignedTransaction } from '../../lib/signedTransaction';
 import { setCookie } from '../../lib/cookies'
 import { getLogger } from '@igniter/logger'
 
@@ -359,7 +360,7 @@ export const WalletConnectionProvider = ({
       throw new Error('Wallet connection not initialized')
     }
 
-    return await withTimeout(connection.signTransaction(messages, signer, memo), 60_000);
+    return assertSignedTransaction(await withTimeout(connection.signTransaction(messages, signer, memo), 60_000));
   }, [connection])
 
   const clearConnectedIdentity = useCallback(() => {

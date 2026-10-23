@@ -29,6 +29,7 @@ import {
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
 import { freshSupplierStats } from '@/lib/utils/shareCalculations'
+import { assertSignedTransaction } from '@igniter/ui/lib/signedTransaction'
 
 const log = getLogger(['middleman', 'stake'])
 
@@ -123,6 +124,8 @@ export async function CreateStakeTransaction(request: CreateStakeTransactionRequ
       providerId: request.offer.identity,
       estimatedFee: request.transaction.estimatedFee,
     })
+
+    assertSignedTransaction(request.transaction)
 
     const created = await insert({
       type: TransactionType.Stake,

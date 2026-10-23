@@ -141,6 +141,20 @@
       "when": 1787772204472,
       "tag": "0019_romantic_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792714365814,
+      "tag": "0020_unusual_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792715648366,
+      "tag": "0021_zippy_harrier",
+      "breakpoints": true
     }
   ]
 }

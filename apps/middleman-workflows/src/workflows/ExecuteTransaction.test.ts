@@ -262,6 +262,41 @@ describe('ExecuteTransaction — broadcast outcome handling', () => {
     expect(out.status).toBe(TransactionStatus.Failure)
   })
 
+  it('unhashable or missing payload: one wording for both, effects before the status flip', async () => {
+    activityMocks.persistBroadcastAnchor.mockResolvedValue(null)
+
+    await ExecuteTransaction({ transactionId: TX_ID })
+
+    expect(activityMocks.notifyUserOfFailedTransaction).toHaveBeenCalledWith(TX_ID, 'Signed transaction payload is missing or malformed')
+    expect(activityMocks.updateTransaction).toHaveBeenCalledWith(TX_ID, expect.objectContaining({
+      status: TransactionStatus.Failure,
+      log: 'signed payload is missing or not valid hex — nothing could be broadcast',
+    }))
+    expect(activityMocks.notifyUserOfFailedTransaction.mock.invocationCallOrder[0])
+      .toBeLessThan(activityMocks.updateTransaction.mock.invocationCallOrder[0]!)
+  })
+
+  it('a lost anchor CAS (the dispatcher gave up on the row meanwhile) ends quietly: no broadcast, no writes, no effects', async () => {
+    const lost = new (ActivityFailure as unknown as new (m: string, c: unknown) => Error)(
+      'Activity task failed',
+      new (ApplicationFailure as unknown as new (m: string, t: string, n: boolean) => Error)('Transaction is no longer pending and unanchored', 'transaction_not_pending', true),
+    )
+    activityMocks.persistBroadcastAnchor.mockRejectedValue(lost)
+
+    await expect(ExecuteTransaction({ transactionId: TX_ID })).resolves.toMatchObject({ id: TX_ID })
+
+    expect(activityMocks.executeTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.updateTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.notifyUserOfFailedTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.notifyProviderOfFailedStakes).not.toHaveBeenCalled()
+  })
+
+  it('any other anchor failure still fails the run', async () => {
+    activityMocks.persistBroadcastAnchor.mockRejectedValue(new Error('db down'))
+
+    await expect(ExecuteTransaction({ transactionId: TX_ID })).rejects.toThrow('db down')
+  })
+
   it('terminal failure goes through the CAS, never a blind write', async () => {
     activityMocks.executeTransaction.mockResolvedValue({
       transactionHash: LOCAL_HASH, success: false, rejected: true, attempt: 1, code: 11, message: 'out of gas',
