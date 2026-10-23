@@ -1,5 +1,6 @@
 import {
   AnyPgColumn,
+  check,
   index,
   integer,
   pgTable,
@@ -60,6 +61,11 @@ export const transactionsTable = pgTable("transactions", {
   createdBy: varchar().references(() => usersTable.identity).notNull(),
 }, (table) => ({
   verifierSweepIdx: index('mw_transactions_verifier_sweep_idx').on(table.status, table.lastVerificationAt).where(sql`"hash" IS NOT NULL`),
+  // NOT NULL still admits '': tx 519 (mainnet, 2026-10-22) was stored with an empty signedPayload
+  // and could never be broadcast. Added NOT VALID by migration 0020, so pre-existing rows are not
+  // rewritten; every insert and update since is checked.
+  signedPayloadNotEmpty: check('transactions_signed_payload_not_empty', sql`btrim(${table.signedPayload}) <> ''`),
+  unsignedPayloadNotEmpty: check('transactions_unsigned_payload_not_empty', sql`btrim(${table.unsignedPayload}) <> ''`),
 }));
 
 export const transactionsRelations = relations(
