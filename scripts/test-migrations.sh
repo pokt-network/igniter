@@ -27,3 +27,6 @@ MIGRATION_TEST_DATABASE_URL="$DB_URL" npx jest src/db/migrations.test.ts
 # The dispatcher's queue query (ordering + LIMIT) on the same migrated schema.
 cd "$ROOT/apps/middleman-workflows"
 MIGRATION_TEST_DATABASE_URL="$DB_URL" npx jest src/lib/dal/transaction.dispatch.pg.test.ts
+
+# The failure-effects outbox (0022): every CAS on the outbox columns, the notify fence, the CHECKs.
+MIGRATION_TEST_DATABASE_URL="$DB_URL" npx jest src/lib/dal/transaction.failureEffects.pg.test.ts

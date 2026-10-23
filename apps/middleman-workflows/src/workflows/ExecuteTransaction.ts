@@ -60,6 +60,17 @@ type TransactionRow = Awaited<ReturnType<Activities['getTransaction']>>
 const PATCH_COMMAND_SEQUENCE_V2 = 'execute-transaction-command-sequence-v2'
 
 /**
+ * Marks the terminal failure branches of `anchoredFlow` (expired before broadcast, unbroadcastable
+ * payload, rejected on attempt 1) switching to the failure-effects outbox: the failure CAS also
+ * records that the row's effects are owed, and TransactionFailureEffects (started by the
+ * dispatcher) releases the keys and notifies the owner. These branches then run no release and no
+ * notify. A run recorded before this marker replays today's calls in today's order, under the old
+ * activity names, so its effects are not run twice. Evaluated in each branch, where the commands
+ * diverge. REMOVAL: one release after it ships (a run lives minutes), with the old branches.
+ */
+const PATCH_FAILURE_OUTBOX = 'execute-transaction-failure-outbox'
+
+/**
  * Broadcaster. Anchors a pending transaction (hash + heights), broadcasts it, and leaves it
  * `pending` for the VerifyPendingTransactions sweeper to settle against the chain. No
  * verification happens here — that responsibility moved to the verifier so a slow or unreachable
@@ -94,6 +105,14 @@ export async function ExecuteTransaction(args: TransactionArgs) {
       maximumInterval: "30s",
       maximumAttempts: 5,
     },
+  });
+
+  // The outbox claims at the terminal branches. No maximumAttempts: the 10m schedule-to-close
+  // (inside the 15m CHILD_EXECUTION_TIMEOUT) bounds them, so a worker rollout cannot exhaust a
+  // claim whose activity name an old pod does not know yet.
+  const outbox = proxyActivities<Pick<Activities, 'claimUnbroadcastFailureWithEffects' | 'claimBroadcastFailureWithEffects'>>({
+    startToCloseTimeout: "30s",
+    scheduleToCloseTimeout: "10m",
   });
 
   const transaction = await activities.getTransaction(transactionId);
@@ -139,22 +158,62 @@ export async function ExecuteTransaction(args: TransactionArgs) {
   // three commands, same order), so a pre-upgrade history replays cleanly up to this point.
   // Everything below changed shape and must be inside the gate.
   return patched(PATCH_COMMAND_SEQUENCE_V2)
-    ? anchoredFlow(activities, broadcast, transaction, txHeight, transactionId)
+    ? anchoredFlow(activities, broadcast, outbox, transaction, txHeight, transactionId)
     : legacyFlow(activities, broadcast, transaction, txHeight, transactionId);
 }
 
 type BroadcastActivity = Pick<ProxiedActivities, 'executeTransaction'>
+type OutboxActivities = Pick<ProxiedActivities, 'claimUnbroadcastFailureWithEffects' | 'claimBroadcastFailureWithEffects'>
+
+/**
+ * Fails a pending row that was never anchored, from a terminal branch of `anchoredFlow`. Returns
+ * false when the outbox CAS was lost: the dispatcher's give-up (the only other writer of an
+ * unanchored row) already failed it and owns its effects, so this run stands down.
+ */
+async function failUnanchored(
+  activities: ProxiedActivities,
+  { claimUnbroadcastFailureWithEffects }: OutboxActivities,
+  transaction: TransactionRow,
+  userReason: string,
+  rowLog: string,
+): Promise<boolean> {
+  const { updateTransaction, notifyProviderOfFailedStakes, notifyUserOfFailedTransaction } = activities;
+  const transactionId = transaction.id;
+
+  if (patched(PATCH_FAILURE_OUTBOX)) {
+    if (!(await claimUnbroadcastFailureWithEffects(transactionId, rowLog))) {
+      log.info('ExecuteTransaction: row already failed by the dispatcher, standing down', { transactionId });
+      return false;
+    }
+    return true;
+  }
+
+  // Histories recorded before PATCH_FAILURE_OUTBOX. Effects BEFORE the status flip, per the
+  // invariant documented on claimTerminalTransition (lib/dal/transaction.ts): effects are
+  // idempotent and a partial run is re-swept, but a status flip first is unrecoverable — the
+  // re-entry guard above throws "Transaction is not pending", so a crash in between would strand
+  // the provider's addresses forever.
+  if (transaction.type === TransactionType.Stake) {
+    await notifyProviderOfFailedStakes(transaction.id);
+  }
+  await notifyUserOfFailedTransaction(transactionId, userReason);
+  await updateTransaction(transactionId, {
+    status: TransactionStatus.Failure,
+    log: rowLog,
+  });
+  return true;
+}
 
 /** Post-#339 flow. See the patch marker above for why the pre-#339 one is still in this file. */
 async function anchoredFlow(
   activities: ProxiedActivities,
   { executeTransaction }: BroadcastActivity,
+  outbox: OutboxActivities,
   transaction: TransactionRow,
   txHeight: number,
   transactionId: number,
 ) {
   const {
-    updateTransaction,
     persistBroadcastAnchor,
     claimBroadcastFailure,
     recordBroadcastDiagnostics,
@@ -165,19 +224,8 @@ async function anchoredFlow(
   // No hash and the broadcast window already expired → mark failed immediately.
   if (transaction.executionHeight && txHeight - transaction.executionHeight > TX_EXPIRATION_BLOCKS) {
     log.warn('ExecuteTransaction: expired before broadcast', { transactionId });
-    // Effects BEFORE the status flip, per the invariant documented on claimTerminalTransition
-    // (lib/dal/transaction.ts): effects are idempotent and a partial run is re-swept, but a
-    // status flip first is unrecoverable — the re-entry guard above throws "Transaction is not
-    // pending", so a crash in between would strand the provider's addresses forever.
-    if (transaction.type === TransactionType.Stake) {
-      await notifyProviderOfFailedStakes(transaction.id);
-    }
-    await notifyUserOfFailedTransaction(transactionId, 'TX expired before broadcast');
-    await updateTransaction(transactionId, {
-      status: TransactionStatus.Failure,
-      log: 'TX expired before broadcast',
-    });
-    return { ...transaction, status: TransactionStatus.Failure };
+    const failed = await failUnanchored(activities, outbox, transaction, 'TX expired before broadcast', 'TX expired before broadcast');
+    return failed ? { ...transaction, status: TransactionStatus.Failure } : { ...transaction };
   }
 
   // Anchor the tx BEFORE broadcasting: hash (derived locally from the signed bytes),
@@ -201,15 +249,14 @@ async function anchoredFlow(
   // land. Deterministic, and terminal — the alternative is a row the dispatcher retries forever.
   if (!hash) {
     log.error('ExecuteTransaction: signed payload is not broadcastable', { transactionId });
-    if (transaction.type === TransactionType.Stake) {
-      await notifyProviderOfFailedStakes(transaction.id);
-    }
-    await notifyUserOfFailedTransaction(transactionId, 'Signed transaction payload is missing or malformed');
-    await updateTransaction(transactionId, {
-      status: TransactionStatus.Failure,
-      log: 'signed payload is missing or not valid hex — nothing could be broadcast',
-    });
-    return { ...transaction, status: TransactionStatus.Failure };
+    const failed = await failUnanchored(
+      activities,
+      outbox,
+      transaction,
+      'Signed transaction payload is missing or malformed',
+      'signed payload is missing or not valid hex — nothing could be broadcast',
+    );
+    return failed ? { ...transaction, status: TransactionStatus.Failure } : { ...transaction };
   }
 
   // The activity only RETURNS an answer a re-send cannot improve on: success, a CheckTx
@@ -265,10 +312,19 @@ async function anchoredFlow(
     // provider's markStaked requires state=Delivered, so a release landing first turns the
     // verifier's success effect into a silent no-op and the key can be re-delivered to another
     // delegator. Nothing fires unless this call is the one that terminalized the row.
-    const claimed = await claimBroadcastFailure(transactionId, {
-      code: result.code,
-      log: result.message || 'broadcast rejected',
-    });
+    //
+    // With the outbox (PATCH_FAILURE_OUTBOX) the CAS also records the owed effects in the same
+    // UPDATE and TransactionFailureEffects runs them, so nothing fires here at all.
+    const fields = { code: result.code, log: result.message || 'broadcast rejected' };
+    if (patched(PATCH_FAILURE_OUTBOX)) {
+      if (!(await outbox.claimBroadcastFailureWithEffects(transactionId, fields))) {
+        log.info('ExecuteTransaction: verifier settled this row first, standing down', { transactionId });
+        return { ...transaction };
+      }
+      return { ...transaction, status: TransactionStatus.Failure, code: result.code };
+    }
+
+    const claimed = await claimBroadcastFailure(transactionId, fields);
     if (!claimed) {
       log.info('ExecuteTransaction: verifier settled this row first, standing down', { transactionId });
       return { ...transaction };

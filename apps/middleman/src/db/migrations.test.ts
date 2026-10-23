@@ -192,4 +192,79 @@ describeWithDb('middleman migrations', () => {
       })
     })
   })
+
+  it('a fresh database gets the failure-effects outbox columns and CHECKs (0022)', async () => {
+    await withCleanTestDatabase(async (pool) => {
+      await migrate(drizzle(pool), { migrationsFolder })
+
+      const { rows: cols } = await pool.query(
+        `select column_name, data_type, is_nullable, column_default from information_schema.columns
+         where table_name = 'transactions' and column_name in ('failureEffects', 'failureReleaseAddresses', 'failureNotifiedAt')
+         order by 1`,
+      )
+      expect(cols).toEqual([
+        { column_name: 'failureEffects', data_type: 'character varying', is_nullable: 'YES', column_default: null },
+        { column_name: 'failureNotifiedAt', data_type: 'timestamp with time zone', is_nullable: 'YES', column_default: null },
+        { column_name: 'failureReleaseAddresses', data_type: 'jsonb', is_nullable: 'YES', column_default: null },
+      ])
+      const { rows } = await pool.query(
+        `select conname, convalidated from pg_constraint where conname like 'transactions_failure_%' order by 1`,
+      )
+      expect(rows).toEqual([
+        { conname: 'transactions_failure_effects_value', convalidated: true },
+        { conname: 'transactions_failure_release_addresses_array', convalidated: true },
+      ])
+    })
+  })
+
+  it('two migrators applying 0022 at once both succeed, and existing rows owe nothing', async () => {
+    await withCleanTestDatabase(async (pool) => {
+      const upTo0021 = migrationsUpTo('0021_')
+      try {
+        await migrate(drizzle(pool), { migrationsFolder: upTo0021 })
+      } finally {
+        fs.rmSync(upTo0021, { recursive: true, force: true })
+      }
+      await pool.query(`insert into users (identity, role) values ('pokt1owner', 'user')`)
+      await insertTransaction(pool, 'abcd', '{"body":{}}', 'failure')
+
+      // Same forced race as the 0020 test above: both migrators park behind a ROW EXCLUSIVE holder
+      // and are released together. Unlike 0020 this passes even without 0022's LOCK TABLE (checked
+      // by deleting it): the first ADD COLUMN already takes ACCESS EXCLUSIVE, so the second migrator
+      // waits there and its IF NOT EXISTS checks then see the first one's commit. The lock stays so
+      // that reordering the statements cannot reopen the race.
+      const migratorA = new Pool({ connectionString: serverUrl })
+      const migratorB = new Pool({ connectionString: serverUrl })
+      const blocker = await pool.connect()
+      try {
+        await blocker.query('BEGIN')
+        await blocker.query('LOCK TABLE "transactions" IN ROW EXCLUSIVE MODE')
+        const running = Promise.allSettled([
+          migrate(drizzle(migratorA), { migrationsFolder }),
+          migrate(drizzle(migratorB), { migrationsFolder }),
+        ])
+        for (let i = 0; i < 100; i++) {
+          const { rows: waiting } = await pool.query(
+            `select count(*)::int as n from pg_locks where relation = '"transactions"'::regclass and not granted`,
+          )
+          if (waiting[0]?.n === 2) break
+          await new Promise((r) => setTimeout(r, 50))
+        }
+        await blocker.query('COMMIT')
+        const outcomes = await running
+        const outcome = (o: PromiseSettledResult<unknown>) =>
+          o.status === 'fulfilled' ? 'fulfilled' : String((o.reason as { cause?: Error })?.cause?.message ?? o.reason)
+        expect(outcomes.map(outcome)).toEqual(['fulfilled', 'fulfilled'])
+      } finally {
+        blocker.release()
+        await migratorA.end()
+        await migratorB.end()
+      }
+
+      const { rows: tx } = await pool.query(
+        `select "failureEffects", "failureReleaseAddresses", "failureNotifiedAt" from transactions`,
+      )
+      expect(tx).toEqual([{ failureEffects: null, failureReleaseAddresses: null, failureNotifiedAt: null }])
+    })
+  })
 })
