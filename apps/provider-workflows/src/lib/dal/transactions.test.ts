@@ -40,3 +40,50 @@ describe('Transactions DAL', () => {
     expect(params).toContain('pending')
   })
 })
+
+describe('Transactions DAL getTransactionStatus', () => {
+  function makeDal(rows: unknown[]) {
+    const captured: { fields?: unknown; table?: unknown; where?: SQL; limit?: number } = {}
+    const query = {
+      from: (table: unknown) => {
+        captured.table = table
+        return query
+      },
+      where: (condition: SQL) => {
+        captured.where = condition
+        return query
+      },
+      limit: async (n: number) => {
+        captured.limit = n
+        return rows
+      },
+    }
+    const dbClient = {
+      db: {
+        select: (fields: unknown) => {
+          captured.fields = fields
+          return query
+        },
+      },
+    }
+    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }
+    return { dal: new Transactions(dbClient as never, logger as never), captured }
+  }
+
+  it('selects only the status and hash columns for one transaction id', async () => {
+    const { dal, captured } = makeDal([{ status: 'pending', hash: 'ABC' }])
+
+    await expect(dal.getTransactionStatus(42)).resolves.toEqual({ status: 'pending', hash: 'ABC' })
+    expect(captured.fields).toEqual({ status: transactionsTable.status, hash: transactionsTable.hash })
+    expect(captured.table).toBe(transactionsTable)
+    expect(captured.limit).toBe(1)
+    const { sql, params } = new PgDialect().sqlToQuery(captured.where!)
+    expect(sql).toContain('"id" = ')
+    expect(params).toEqual([42])
+  })
+
+  it('returns undefined when no row matches', async () => {
+    const { dal } = makeDal([])
+    await expect(dal.getTransactionStatus(7)).resolves.toBeUndefined()
+  })
+})

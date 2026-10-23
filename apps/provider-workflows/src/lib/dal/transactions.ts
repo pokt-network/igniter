@@ -69,6 +69,19 @@ export default class Transactions {
   }
 
   /**
+   * Child workflow state check: only `status` and `hash`, projected at the DB
+   * boundary so the rest of the row (e.g. `params`) never enters workflow history.
+   */
+  async getTransactionStatus(transactionId: number): Promise<Pick<TransactionModel, 'status' | 'hash'> | undefined> {
+    const [row] = await this.dbClient.db
+      .select({ status: transactionsTable.status, hash: transactionsTable.hash })
+      .from(transactionsTable)
+      .where(eq(transactionsTable.id, transactionId))
+      .limit(1)
+    return row
+  }
+
+  /**
    * The verifier's queue: every transaction that has been broadcast (has a hash +
    * execution height) and is still pending verification, EXCLUDING those checked
    * too recently. The backoff grows with `unavailableChecks` (base 30s × the
