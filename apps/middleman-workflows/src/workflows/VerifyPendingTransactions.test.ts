@@ -28,8 +28,10 @@ const CHAIN_TIME_AT_FIRST_SWEEP = new Date('2026-09-28T16:48:31.536Z')
 const OPERATORS = ['pokt1u5tqp29397xm29zra4vjvxu6w8n2js8ulgqfq4', 'pokt1ymhtmzx0qgzyd2wr87e5k75ylcxylxwntsdu7w']
 
 let mockActivities: Record<string, (...args: any[]) => Promise<unknown>> = {}
+const mockPatched = jest.fn<boolean, [string]>(() => true)
 
 jest.mock('@temporalio/workflow', () => ({
+  patched: (id: string) => mockPatched(id),
   proxyActivities: () => new Proxy({}, { get: (_t, name: string) => (...args: unknown[]) => mockActivities[name]!(...args) }),
   log: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
   ApplicationFailure: class MockApplicationFailure extends Error {},
@@ -79,6 +81,7 @@ async function sweep(signedPayload: string, coveredBlockTime: Date | undefined, 
     verifySupplierEffect: async () => ({ status: 'absent', absentOperators: OPERATORS }),
     checkTxValidityEvidence: evidence === undefined ? real.checkTxValidityEvidence : async () => evidence,
     applyVerificationDecision: async (_id: number, d: VerificationDecision) => { decision = d },
+    applyVerificationDecisionWithEffects: async (_id: number, d: VerificationDecision) => { decision = d },
   }
   mockActivities = Object.fromEntries(Object.entries(stubs).map(([name, fn]) => [
     name,
@@ -146,4 +149,54 @@ describe('VerifyPendingTransactions — ordered txs keep the sequence bound', ()
     expect(isSequenceConsumed).toHaveBeenCalledWith(SIGNER, 0)
     expect(decision.tx).toBe('failure')
   })
+})
+
+describe('VerifyPendingTransactions — failure outbox marker (verify-pending-failure-outbox)', () => {
+  const OUTBOX_MARKER = 'verify-pending-failure-outbox'
+  const applied = { plain: [] as number[], withEffects: [] as number[] }
+
+  /** A sweep over two rows whose decisions are irrelevant here; records which apply ran per row. */
+  async function twoRowSweep(marker: boolean) {
+    mockPatched.mockReset()
+    mockPatched.mockImplementation((id: string) => (id === OUTBOX_MARKER ? marker : true))
+    applied.plain = []
+    applied.withEffects = []
+    mockActivities = {
+      listPendingWithHash: async () => [{ id: 1, executionHeight: EXECUTION_HEIGHT }, { id: 2, executionHeight: EXECUTION_HEIGHT }],
+      verifyTxHash: async () => ({ status: 'absent', coveredUpToHeight: EXECUTION_HEIGHT }),
+      verifySupplierEffect: async () => ({ status: 'absent', absentOperators: OPERATORS }),
+      checkTxValidityEvidence: async () => ({ txTimeoutHeight: null, sequence: null, txTimeoutTimestamp: null, chainTimeAtCoverage: null }),
+      applyVerificationDecision: async (id: number) => { applied.plain.push(id) },
+      applyVerificationDecisionWithEffects: async (id: number) => { applied.withEffects.push(id) },
+    }
+    await VerifyPendingTransactions()
+  }
+
+  afterEach(() => {
+    mockPatched.mockReset()
+    mockPatched.mockImplementation(() => true)
+  })
+
+  it('new sweeps evaluate the marker once and apply every row with effects', async () => {
+    await twoRowSweep(true)
+
+    expect(mockPatched.mock.calls).toEqual([[OUTBOX_MARKER]])
+    expect(applied).toEqual({ plain: [], withEffects: [1, 2] })
+  })
+
+  it('sweeps recorded before the marker keep applyVerificationDecision', async () => {
+    await twoRowSweep(false)
+
+    expect(mockPatched.mock.calls).toEqual([[OUTBOX_MARKER]])
+    expect(applied).toEqual({ plain: [1, 2], withEffects: [] })
+  })
+
+  it('an empty sweep evaluates no marker', async () => {
+    mockActivities = { listPendingWithHash: async () => [] }
+
+    await VerifyPendingTransactions()
+
+    expect(mockPatched).not.toHaveBeenCalled()
+  })
+
 })
