@@ -184,19 +184,30 @@ async function anchoredFlow(
   // executionHeight (sampled above, so it can never exceed the first possible inclusion height)
   // and the embedded timeoutHeight. Once written, a crash anywhere below re-enters at the
   // `transaction.hash` guard and hands the tx to the verifier instead of broadcasting twice.
-  const hash = await persistBroadcastAnchor(transactionId, txHeight);
+  let hash: string | null;
+  try {
+    hash = await persistBroadcastAnchor(transactionId, txHeight);
+  } catch (error) {
+    // The anchor is a CAS on "pending, no hash": losing it means the dispatcher already failed the
+    // row as never broadcast (or another run anchored it). Nothing to send and nothing to undo.
+    if (isActivityFailureOfType(error, 'transaction_not_pending')) {
+      log.info('ExecuteTransaction: row settled before it could be anchored, nothing to do', { transactionId });
+      return { ...transaction };
+    }
+    throw error;
+  }
 
-  // null = the signed payload cannot even be decoded, so it can never be broadcast or land.
-  // Deterministic, and terminal — the alternative is a row the dispatcher retries forever.
+  // null = the signed payload is missing or cannot be decoded, so it can never be broadcast or
+  // land. Deterministic, and terminal — the alternative is a row the dispatcher retries forever.
   if (!hash) {
     log.error('ExecuteTransaction: signed payload is not broadcastable', { transactionId });
     if (transaction.type === TransactionType.Stake) {
       await notifyProviderOfFailedStakes(transaction.id);
     }
-    await notifyUserOfFailedTransaction(transactionId, 'Signed transaction payload is malformed');
+    await notifyUserOfFailedTransaction(transactionId, 'Signed transaction payload is missing or malformed');
     await updateTransaction(transactionId, {
       status: TransactionStatus.Failure,
-      log: 'signed payload is not valid hex — nothing could be broadcast',
+      log: 'signed payload is missing or not valid hex — nothing could be broadcast',
     });
     return { ...transaction, status: TransactionStatus.Failure };
   }
@@ -413,6 +424,13 @@ async function legacyFlow(
  * the unknown class. Returns the detail carried, or null for any other error (which must
  * propagate: a deterministic activity failure has to fail the run loudly).
  */
+/** True for an activity that failed with an ApplicationFailure of this `type`. */
+function isActivityFailureOfType(error: unknown, type: string): boolean {
+  return error instanceof ActivityFailure
+    && error.cause instanceof ApplicationFailure
+    && error.cause.type === type;
+}
+
 function broadcastOutcomeUnknown(error: unknown): BroadcastOutcomeUnknownDetail | null {
   if (!(error instanceof ActivityFailure)) return null;
   const cause = error.cause;

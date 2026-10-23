@@ -514,25 +514,30 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     if (!transaction) {
       throw new Error('Transaction not found')
     }
-    if (!transaction.signedPayload) {
-      throw new Error('Transaction is not signed')
-    }
 
     let hash: string
     try {
+      // Also the path for a missing payload: deriveTxHash rejects '' and blanks like any other
+      // non-hex input. tx 519 (mainnet) looped because a separate "not signed" check THREW here
+      // instead of reaching this verdict.
       hash = deriveTxHash(transaction.signedPayload)
     } catch (error) {
       // An unhashable payload is deterministic proof the tx can never be broadcast, let alone
       // land. Returning null (rather than throwing) hands the workflow a terminal verdict —
       // throwing would retry the activity, fail the workflow, and let the 10s dispatcher relaunch
       // it forever on a row that can never succeed.
-      log.error('broadcast anchor: signed payload is not hashable', { transactionId, error })
+      log.error('broadcast anchor: signed payload is missing or not hashable', { transactionId, error })
       return null
     }
 
     const { timeoutHeight } = parseSignerAndSequence(transaction.signedPayload)
 
-    await dal.transaction.updateTransaction(transactionId, { hash, executionHeight, timeoutHeight })
+    // CAS, not a blind write: the dispatcher may have given up on this row (failed it as never
+    // broadcast) while this run was starting. Losing here means it is no longer ours to send.
+    const anchored = await dal.transaction.claimBroadcastAnchor(transactionId, { hash, executionHeight, timeoutHeight })
+    if (!anchored) {
+      throw ApplicationFailure.nonRetryable('Transaction is no longer pending and unanchored', 'transaction_not_pending')
+    }
     log.info('broadcast anchor persisted', { transactionId, hash, executionHeight, timeoutHeight })
 
     return hash

@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
@@ -75,6 +75,27 @@ export default class Transaction {
         eq(transactionsTable.id, transactionId),
         eq(transactionsTable.status, TransactionStatus.Pending),
         isNotNull(transactionsTable.hash),
+      ))
+      .returning();
+    return row;
+  }
+
+  /**
+   * Writes the broadcast anchor (hash + heights) only while the row is pending and unanchored, in
+   * one statement. Returns the row iff this call wrote it; undefined means another writer (the
+   * dispatcher giving up on the row, or a concurrent run) got there first.
+   */
+  async claimBroadcastAnchor(
+    transactionId: number,
+    fields: { hash: string; executionHeight: number; timeoutHeight: number | null },
+  ): Promise<TransactionModel | undefined> {
+    const [row] = await this.dbClient.db
+      .update(transactionsTable)
+      .set(fields)
+      .where(and(
+        eq(transactionsTable.id, transactionId),
+        eq(transactionsTable.status, TransactionStatus.Pending),
+        isNull(transactionsTable.hash),
       ))
       .returning();
     return row;
