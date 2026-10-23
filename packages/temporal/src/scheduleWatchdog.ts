@@ -178,11 +178,18 @@ export function evaluateLiveness(
   const latestTakenAt = takenTimes.length ? new Date(Math.max(...takenTimes)) : undefined
   if (latestTakenAt && latestTakenAt.getTime() > now.getTime()) return 'unknown' // skew guard (D5)
 
-  // reference = last AUTONOMOUS fire (excludes our compensating triggers, D3).
-  // If the only growth since baseline is our own trigger()s, treat as never-autonomously-fired.
+  // reference = latest takenAt, unless our compensating triggers may account for it (D3):
+  // if injected triggers are outstanding and the only growth since baseline is ours,
+  // treat as never-autonomously-fired. With no injected triggers outstanding, the
+  // latest takenAt is used even without growth since baseline — e.g. right after
+  // resetLadder re-baselined to the current count. Falling back to createdAt there
+  // reads stale until the next fire, so a schedule whose interval outlasts the tick
+  // re-entered the heal ladder after every reset. This trusts a takenAt that was not
+  // proven autonomous (a pre-baseline injected or operator-triggered run); the cost
+  // is at most one grace window of delayed stale detection.
   let reference: Date
   if (!latestTakenAt) reference = createdAt
-  else if (hasAutonomousFire(desc, state)) reference = latestTakenAt
+  else if (state.injectedTriggers === 0 || hasAutonomousFire(desc, state)) reference = latestTakenAt
   else reference = createdAt
 
   if (reference.getTime() > now.getTime()) return 'unknown'

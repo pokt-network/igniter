@@ -8,6 +8,15 @@ import {
 } from '@/lib/constants'
 import urlJoin from 'url-join'
 import type { Logger } from '@igniter/logger'
+import {
+  classifyReleaseError,
+  classifyReleaseResponse,
+  RELEASE_LOCAL_PRE_SEND,
+  type ReleaseOutcome,
+} from '@/lib/provider/releaseOutcome'
+
+/** Upper bound for a release POST, connect included. Hitting it is an ambiguous outcome. */
+export const RELEASE_TIMEOUT_MS = 20_000
 
 export class ProviderService {
 
@@ -176,6 +185,51 @@ export class ProviderService {
     } catch (error) {
       this.logger.error('An error occurred while marking the suppliers as staked.', { error })
       throw error
+    }
+  }
+
+  /**
+   * Same POST as `releaseSuppliers` (URL, body, signed headers), bounded by RELEASE_TIMEOUT_MS,
+   * returning what it ended in instead of throwing. Never throws. Anything that fails before `fetch`
+   * is invoked (reading the settings, signing the payload) provably sent nothing, so it is reported
+   * as `not-sent` with code `LOCAL_PRE_SEND`; once `fetch` is invoked the outcome is classified.
+   * @param addresses Supplier addresses to release
+   * @param provider The provider holding the reservations
+   */
+  async releaseSuppliersOutcome(addresses: string[], provider: Provider): Promise<ReleaseOutcome> {
+    let releaseUrl: string
+    let init: RequestInit
+    try {
+      const body = JSON.stringify({ addresses })
+      const { identity, signature } = await this.signPayload(body)
+      releaseUrl = `${provider.url}/api/suppliers/release`
+      init = {
+        method: 'POST',
+        body,
+        headers: {
+          'Content-Type': 'application/json',
+          [REQUEST_IDENTITY_HEADER]: identity,
+          [REQUEST_SIGNATURE_HEADER]: signature,
+        },
+        signal: AbortSignal.timeout(RELEASE_TIMEOUT_MS),
+      }
+    } catch {
+      return { kind: 'not-sent', code: RELEASE_LOCAL_PRE_SEND }
+    }
+
+    try {
+      const operationResponse = await fetch(releaseUrl, init)
+      // Only the status matters. Drop the body so undici frees the connection now instead of at GC;
+      // a failure cancelling it changes nothing about what the provider answered.
+      try {
+        await operationResponse.body?.cancel()
+      } catch {
+        // ignored on purpose, see above
+      }
+
+      return classifyReleaseResponse(operationResponse.status, operationResponse.statusText)
+    } catch (error) {
+      return classifyReleaseError(error)
     }
   }
 

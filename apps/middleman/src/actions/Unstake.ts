@@ -14,6 +14,7 @@ import { sumStakeAmountByAddresses } from '@/lib/dal/nodes'
 import { extractTransactionUnstakingSuppliers } from '@igniter/commons/transactions/extractSuppliers'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
+import { assertSignedTransaction } from '@igniter/ui/lib/signedTransaction'
 
 const log = getLogger(['middleman', 'unstake'])
 
@@ -93,6 +94,8 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
       ownerAddress: request.transaction.address,
       estimatedFee: request.transaction.estimatedFee,
     })
+
+    assertSignedTransaction(request.transaction)
 
     // MsgUnstakeSupplier carries no amount, so "Total POKT" cannot be recovered
     // from the payload later. Derive it now, while the suppliers are still

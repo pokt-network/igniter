@@ -43,11 +43,13 @@ function buildSignedPayloadHex({ sequence, timeoutHeight }: { sequence: number; 
 function makeActivities(transaction: Record<string, unknown> | null, sendResult?: SendTransactionResult) {
   const sendTransaction = jest.fn().mockResolvedValue(sendResult)
   const updateTransaction = jest.fn().mockResolvedValue(undefined)
+  const claimBroadcastAnchor = jest.fn().mockResolvedValue({ id: TX_ID })
   const recordPendingDiagnostics = jest.fn().mockResolvedValue(undefined)
   const dal = {
     transaction: {
       getTransaction: jest.fn().mockResolvedValue(transaction),
       updateTransaction,
+      claimBroadcastAnchor,
       recordPendingDiagnostics,
     },
   } as unknown as DAL
@@ -56,6 +58,7 @@ function makeActivities(transaction: Record<string, unknown> | null, sendResult?
     activities: delegatorActivities(dal, rpc, {} as ProviderService),
     sendTransaction,
     updateTransaction,
+    claimBroadcastAnchor,
     recordPendingDiagnostics,
   }
 }
@@ -180,43 +183,55 @@ describe('executeTransaction', () => {
 })
 
 describe('persistBroadcastAnchor', () => {
-  it('writes the locally derived hash, the pre-broadcast height and the embedded timeoutHeight', async () => {
+  it('writes the locally derived hash, the pre-broadcast height and the embedded timeoutHeight, through the CAS', async () => {
     const payload = buildSignedPayloadHex({ sequence: 7, timeoutHeight: 1030 })
-    const { activities, updateTransaction } = makeActivities({ ...pendingTx, signedPayload: payload })
+    const { activities, claimBroadcastAnchor, updateTransaction } = makeActivities({ ...pendingTx, signedPayload: payload })
 
     await expect(activities.persistBroadcastAnchor(TX_ID, 1000)).resolves.toBe(deriveTxHash(payload))
 
-    expect(updateTransaction).toHaveBeenCalledWith(TX_ID, {
+    expect(claimBroadcastAnchor).toHaveBeenCalledWith(TX_ID, {
       hash: deriveTxHash(payload),
       executionHeight: 1000,
       timeoutHeight: 1030,
     })
+    expect(updateTransaction).not.toHaveBeenCalled()
   })
 
   it('a tx signed without a timeoutHeight (the Soothe path) anchors with timeoutHeight null', async () => {
     // This is the row shape that made the retry above necessary: the verifier has no height
     // bound to fail it on, so the anchor must not invent one.
     const payload = buildSignedPayloadHex({ sequence: 3, timeoutHeight: 0 })
-    const { activities, updateTransaction } = makeActivities({ ...pendingTx, signedPayload: payload })
+    const { activities, claimBroadcastAnchor } = makeActivities({ ...pendingTx, signedPayload: payload })
 
     await activities.persistBroadcastAnchor(TX_ID, 1000)
 
-    expect(updateTransaction).toHaveBeenCalledWith(TX_ID, expect.objectContaining({ timeoutHeight: null }))
+    expect(claimBroadcastAnchor).toHaveBeenCalledWith(TX_ID, expect.objectContaining({ timeoutHeight: null }))
   })
 
-  it('returns null and writes nothing for a payload that cannot be hashed', async () => {
-    const { activities, updateTransaction } = makeActivities({ ...pendingTx, signedPayload: 'not-hex!!' })
+  it.each([['not hex', 'not-hex!!'], ['empty (tx 519)', ''], ['blank', '   '], ['null', null]])(
+    'returns null and writes nothing for a payload that is %s, so the workflow fails the row instead of looping',
+    async (_label, signedPayload) => {
+      const { activities, claimBroadcastAnchor } = makeActivities({ ...pendingTx, signedPayload })
 
-    await expect(activities.persistBroadcastAnchor(TX_ID, 1000)).resolves.toBeNull()
-    expect(updateTransaction).not.toHaveBeenCalled()
-  })
+      await expect(activities.persistBroadcastAnchor(TX_ID, 1000)).resolves.toBeNull()
+      expect(claimBroadcastAnchor).not.toHaveBeenCalled()
+    },
+  )
 
-  it('throws for a missing or unsigned row instead of anchoring garbage', async () => {
+  it('throws for a missing row instead of anchoring garbage', async () => {
     const missing = makeActivities(null)
     await expect(missing.activities.persistBroadcastAnchor(TX_ID, 1000)).rejects.toThrow('Transaction not found')
+  })
 
-    const unsigned = makeActivities({ ...pendingTx, signedPayload: null })
-    await expect(unsigned.activities.persistBroadcastAnchor(TX_ID, 1000)).rejects.toThrow('Transaction is not signed')
+  it('a lost CAS (row given up on or anchored elsewhere) is a non-retryable transaction_not_pending', async () => {
+    const payload = buildSignedPayloadHex({ sequence: 7, timeoutHeight: 1030 })
+    const { activities, claimBroadcastAnchor } = makeActivities({ ...pendingTx, signedPayload: payload })
+    claimBroadcastAnchor.mockResolvedValue(undefined)
+
+    await expect(activities.persistBroadcastAnchor(TX_ID, 1000)).rejects.toMatchObject({
+      type: 'transaction_not_pending',
+      nonRetryable: true,
+    })
   })
 })
 

@@ -7,6 +7,7 @@ import {
 } from '@temporalio/activity'
 import {
   AddressGroupsJson,
+  FailureEffectsState,
   InsertNode,
   Node,
   NodeService,
@@ -190,6 +191,15 @@ function warnTooManyDomainsOnce(providerIdentity: string, domains: number) {
  * Returns null when the tx has no supplier-state path (send / OperationalFunds), so the
  * verifier knows to skip the supplier verification path for it.
  */
+
+/**
+ * Upper bound on rows one dispatcher tick handles; the rest wait for the next tick. It does not
+ * guard against duplicates (the child's workflow id does). It bounds one dispatcher run: every
+ * listed row costs a startChild (and an attempt activity when it starts) in that run's history and
+ * a row in the list activity's result, so an unbounded backlog could push the run past Temporal's
+ * history or payload limits and kill dispatch for every row on every tick.
+ */
+const DISPATCH_BATCH_LIMIT = 100
 
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
   const activities = {
@@ -421,6 +431,42 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    *
    * @return {Promise<Array<{id: string, createdAt: Date}>>} A promise that resolves to an array of objects, each containing the transaction id and createdAt timestamp.
    */
+  /** Rows the dispatcher should launch or give up on; see DAL listDispatchable. */
+  async listDispatchableTransactions() {
+    return dal.transaction.listDispatchable(DISPATCH_BATCH_LIMIT)
+  },
+  /**
+   * Rows whose failure effects are owed or in flight, or whose notice never claimed its fence; the
+   * dispatcher starts one TransactionFailureEffects each.
+   */
+  async listFailureEffects() {
+    return dal.transaction.listFailureEffects()
+  },
+  /** Counts a dispatch attempt for this run id; returns the count, or null if not dispatchable. */
+  async recordDispatchAttempt(transactionId: number, runId: string): Promise<number | null> {
+    return (await dal.transaction.recordDispatchAttempt(transactionId, runId)) ?? null
+  },
+  /** CAS to Failure for a pending row that was never anchored; true iff this call made it. */
+  async claimUnbroadcastFailure(transactionId: number, reason: string): Promise<boolean> {
+    const row = await dal.transaction.claimUnbroadcastFailure(transactionId, reason)
+    if (!row) {
+      log.info('unbroadcast failure CAS lost — transaction already terminal or anchored', { transactionId })
+    }
+    return Boolean(row)
+  },
+  /**
+   * claimUnbroadcastFailure that also writes the failure-effects outbox in the same UPDATE, so the
+   * caller runs no release and no notify: TransactionFailureEffects does both for the row. A new
+   * name on purpose: a run recorded before the marker keeps calling claimUnbroadcastFailure and
+   * running its own inline effects, which must not happen twice. True iff this call made it.
+   */
+  async claimUnbroadcastFailureWithEffects(transactionId: number, reason: string): Promise<boolean> {
+    const row = await dal.transaction.claimUnbroadcastFailureWithEffects(transactionId, reason)
+    if (!row) {
+      log.info('unbroadcast failure CAS lost — transaction already terminal or anchored', { transactionId })
+    }
+    return Boolean(row)
+  },
   async listTransactions() {
     const txs = await dal.transaction.listByStatus(TransactionStatus.Pending)
     // @ts-ignore (todo: fix this)
@@ -514,25 +560,30 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     if (!transaction) {
       throw new Error('Transaction not found')
     }
-    if (!transaction.signedPayload) {
-      throw new Error('Transaction is not signed')
-    }
 
     let hash: string
     try {
+      // Also the path for a missing payload: deriveTxHash rejects '' and blanks like any other
+      // non-hex input. tx 519 (mainnet) looped because a separate "not signed" check THREW here
+      // instead of reaching this verdict.
       hash = deriveTxHash(transaction.signedPayload)
     } catch (error) {
       // An unhashable payload is deterministic proof the tx can never be broadcast, let alone
       // land. Returning null (rather than throwing) hands the workflow a terminal verdict —
       // throwing would retry the activity, fail the workflow, and let the 10s dispatcher relaunch
       // it forever on a row that can never succeed.
-      log.error('broadcast anchor: signed payload is not hashable', { transactionId, error })
+      log.error('broadcast anchor: signed payload is missing or not hashable', { transactionId, error })
       return null
     }
 
     const { timeoutHeight } = parseSignerAndSequence(transaction.signedPayload)
 
-    await dal.transaction.updateTransaction(transactionId, { hash, executionHeight, timeoutHeight })
+    // CAS, not a blind write: the dispatcher may have given up on this row (failed it as never
+    // broadcast) while this run was starting. Losing here means it is no longer ours to send.
+    const anchored = await dal.transaction.claimBroadcastAnchor(transactionId, { hash, executionHeight, timeoutHeight })
+    if (!anchored) {
+      throw ApplicationFailure.nonRetryable('Transaction is no longer pending and unanchored', 'transaction_not_pending')
+    }
     log.info('broadcast anchor persisted', { transactionId, hash, executionHeight, timeoutHeight })
 
     return hash
@@ -555,6 +606,18 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    */
   async claimBroadcastFailure(transactionId: number, fields: { code?: number; log?: string }): Promise<boolean> {
     const row = await dal.transaction.claimTerminalTransition(transactionId, TransactionStatus.Failure, fields)
+    if (!row) {
+      log.info('broadcast failure CAS lost — transaction already terminal', { transactionId })
+    }
+    return Boolean(row)
+  },
+  /**
+   * claimBroadcastFailure that also writes the failure-effects outbox in the same UPDATE; the caller
+   * runs no release and no notify (see claimUnbroadcastFailureWithEffects for why a new name).
+   * True iff THIS call performed the transition.
+   */
+  async claimBroadcastFailureWithEffects(transactionId: number, fields: { code?: number; log?: string }): Promise<boolean> {
+    const row = await dal.transaction.claimBroadcastFailureWithEffects(transactionId, fields)
     if (!row) {
       log.info('broadcast failure CAS lost — transaction already terminal', { transactionId })
     }
@@ -1473,6 +1536,178 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         })
       }
     }
+  },
+
+  /**
+   * applyVerificationDecision with the failure-effects outbox. ONLY an apply-failure verdict on a
+   * Stake changes: its failure CAS also writes the outbox with the failed operators (stored as
+   * given, `[]` stays `[]`; undefined is stored as `[]`), and it runs no pre-CAS release and no inline notify, since
+   * TransactionFailureEffects does both for the row. Every other verdict is handed to
+   * applyVerificationDecision unchanged. A new name because a verifier attempt can retry across
+   * versions: an old pod retrying after a new body committed the outbox would release again.
+   */
+  async applyVerificationDecisionWithEffects(transactionId: number, decision: VerificationDecision): Promise<void> {
+    if (decision.tx === 'pending' || decision.effects !== 'apply-failure') {
+      return activities.applyVerificationDecision(transactionId, decision)
+    }
+
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn) return
+    if (txn.type !== TransactionType.Stake) {
+      return activities.applyVerificationDecision(transactionId, decision)
+    }
+
+    // failedOperators is NOT always set on apply-failure: a Stake whose payload has no stake message
+    // makes verifyStakeGoalState return `absent` with no operators. Stored as `[]` (release nothing),
+    // never as NULL, which would mean every staking supplier; the row still fails and is notified.
+    let failedOperators = decision.failedOperators
+    if (!failedOperators) {
+      log.warn('apply-failure verdict without failedOperators; storing [] (nothing to release)', { transactionId })
+      failedOperators = []
+    }
+
+    const verificationHeight = await pocketRpcClient.getHeight().catch(() => undefined)
+    // Same fields and logs as applyVerificationDecision's apply-failure branch.
+    const fields: { code?: number; consumedFee?: number; verificationHeight?: number; log?: string } = {
+      verificationHeight,
+      log: decision.rawLog || 'verification negative (validity bound covered, no effect)',
+    }
+    if (decision.code !== undefined) fields.code = decision.code
+    if (decision.gasUsed !== undefined) fields.consumedFee = Number(decision.gasUsed)
+
+    log.warn('transaction verification failed', {
+      transactionId,
+      hash: txn.hash ?? undefined,
+      type: txn.type,
+      success: false,
+      ...(decision.code !== undefined ? { code: decision.code } : {}),
+      ...(decision.gasUsed !== undefined ? { gasUsed: decision.gasUsed } : {}),
+      reason: fields.log,
+    })
+
+    await dal.transaction.claimVerifierFailureWithEffects(transactionId, fields, failedOperators)
+  },
+
+  /**
+   * Release step of TransactionFailureEffects. Acts only on `failureEffects`, which only a winning
+   * failure CAS sets; never on `status`. Forks once:
+   * - No release owed (not a Stake, no provider, no addresses): (`pending` | `releasing`) → `done`
+   *   without a POST, since none could ever have been sent.
+   * - Owed: the entry table. `pending` → `releasing` and POST at most once; `releasing` (an earlier
+   *   attempt may have POSTed) → `manual`; `done` / `manual` / NULL → nothing. The POST outcome:
+   *   not-sent → back to `pending` and throw a retryable failure; 200 → `done`; anything else →
+   *   `manual` for a person.
+   * Every outcome CAS is honoured: if it matched no row (the row moved meanwhile, e.g. a person
+   * reset it), this logs what the row is now and returns `moved-meanwhile`, never `released`, and
+   * never throws. Addresses: `failureReleaseAddresses` when set, else every staking supplier.
+   */
+  async releaseFailedStake(transactionId: number): Promise<'released' | 'manual' | 'no-release-owed' | 'nothing' | 'moved-meanwhile'> {
+    const txn = await dal.transaction.getTransaction(transactionId)
+    if (!txn) {
+      log.error('releaseFailedStake: transaction not found', { transactionId })
+      return 'nothing'
+    }
+
+    let provider: Provider | undefined
+    let addresses: string[] = []
+    if (txn.type === TransactionType.Stake && txn.providerId) {
+      provider = await dal.provider.getProvider(txn.providerId)
+      addresses = txn.failureReleaseAddresses
+        ?? extractTransactionStakingSuppliers(txn).map(({ address }) => address)
+    }
+    const providerUrl = provider?.url
+
+    if (!provider || addresses.length === 0) {
+      if (await dal.transaction.noReleaseOwed(transactionId)) {
+        log.info('releaseFailedStake: no release owed', { transactionId, type: txn.type, providerUrl, addresses })
+        return 'no-release-owed'
+      }
+      // The CAS lost, so txn is stale: log the state the row is in now, not the one first read.
+      const now = await dal.transaction.getTransaction(transactionId)
+      log.info('releaseFailedStake: nothing to do', { transactionId, failureEffects: now?.failureEffects ?? null, providerUrl })
+      return 'nothing'
+    }
+
+    const entry = await dal.transaction.beginRelease(transactionId)
+    if (entry === 'nothing') {
+      // beginRelease matched no pending/releasing row, so txn may be stale: log the state read now.
+      const now = await dal.transaction.getTransaction(transactionId)
+      log.info('releaseFailedStake: nothing to do', { transactionId, failureEffects: now?.failureEffects ?? null, providerUrl })
+      return 'nothing'
+    }
+    if (entry === 'was-releasing') {
+      log.error('releaseFailedStake: an earlier attempt may have sent the release; moved to manual, check the keys on the provider', {
+        transactionId, providerUrl, addresses,
+      })
+      return 'manual'
+    }
+
+    const outcome = await providerService.releaseSuppliersOutcome(addresses, provider)
+
+    /** A lost outcome CAS: report what the row is now instead of what this attempt meant to set. */
+    const movedMeanwhile = async (meant: FailureEffectsState) => {
+      const now = await dal.transaction.getTransaction(transactionId)
+      log.warn('releaseFailedStake: row moved meanwhile; not changing it', {
+        transactionId, providerUrl, addresses, outcome, meant, failureEffects: now?.failureEffects ?? null,
+      })
+      return 'moved-meanwhile' as const
+    }
+
+    if (outcome.kind === 'ok') {
+      if (!await dal.transaction.releaseDone(transactionId)) return movedMeanwhile('done')
+      log.info('releaseFailedStake: released', { transactionId, providerUrl, addresses })
+      return 'released'
+    }
+
+    if (outcome.kind === 'not-sent') {
+      // Lost: the row is no longer `releasing`, so a retry would not POST again; do not throw.
+      if (!await dal.transaction.releaseNotSent(transactionId)) return movedMeanwhile('pending')
+      log.warn('releaseFailedStake: release not sent, will retry', { transactionId, providerUrl, addresses, code: outcome.code })
+      throw ApplicationFailure.retryable(`release not sent (${outcome.code})`, 'release_not_sent')
+    }
+
+    if (!await dal.transaction.releaseManual(transactionId)) return movedMeanwhile('manual')
+    log.error('releaseFailedStake: release outcome unknown; moved to manual, check the keys on the provider', {
+      transactionId, providerUrl, addresses, outcome,
+    })
+    return 'manual'
+  },
+
+  /**
+   * Moves a row whose release ran out of time ((`pending` | `releasing`) → `manual`). False, never
+   * a throw, when another attempt already moved it on.
+   */
+  async markFailureEffectsExhausted(transactionId: number): Promise<boolean> {
+    return dal.transaction.effectsExhausted(transactionId)
+  },
+
+  /**
+   * Notify step of TransactionFailureEffects: sets the notify fence and notifies the owner only if
+   * this call won it, so the owner hears at most once whatever restarts or resets happen. Reason is
+   * the row's `log` (what the UI shows). True iff a notice was sent.
+   */
+  async notifyFailedTransactionOwner(transactionId: number): Promise<boolean> {
+    const row = await dal.transaction.claimNotify(transactionId)
+    if (!row) {
+      log.info('notifyFailedTransactionOwner: fence already set or no effects owed, not notifying', { transactionId })
+      return false
+    }
+    if (!row.createdBy) return false
+    const eventType = txTypeToUserEventType(row.type)
+    if (!eventType) return false
+    await dispatchUserNotification(dal, log, {
+      type: eventType,
+      ownerIdentity: row.createdBy,
+      metadata: {
+        outcome: 'failure',
+        reason: row.log ?? undefined,
+        // The hash only for verifier rows (failureReleaseAddresses set): their tx is on chain. A B
+        // row (rejected on broadcast) also has a hash, but CheckTx rejected it so it never landed,
+        // and messageBuilder renders `Tx: <hash>` as if it had.
+        ...(Array.isArray(row.failureReleaseAddresses) && row.hash ? { hash: row.hash } : {}),
+      },
+    })
+    return true
   },
   }
 

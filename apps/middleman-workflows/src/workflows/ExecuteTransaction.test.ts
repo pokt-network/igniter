@@ -14,6 +14,8 @@ const activityMocks = {
   getBlockHeight: jest.fn(),
   notifyProviderOfFailedStakes: jest.fn(),
   notifyUserOfFailedTransaction: jest.fn(),
+  claimUnbroadcastFailureWithEffects: jest.fn(),
+  claimBroadcastFailureWithEffects: jest.fn(),
 }
 
 // There is no workflow test harness in this repo (@temporalio/testing is not a dependency —
@@ -22,7 +24,12 @@ const activityMocks = {
 // does NOT cover determinism/replay semantics, which only the real SDK runtime can check.
 // `patched()` decides which flow runs: true = post-#339 anchored flow (every new run),
 // false = the legacy flow kept for histories recorded before the upgrade.
-const mockPatched = jest.fn(() => true)
+// Mocked by marker id: the failure-outbox marker is evaluated separately from the v2 one, at
+// each terminal branch. `outboxMarker` is what it answers; the existing tests run the
+// pre-outbox branches, and the 'failure outbox' block below flips it.
+const OUTBOX_MARKER = 'execute-transaction-failure-outbox'
+let outboxMarker = false
+const mockPatched = jest.fn((id: string) => (id === OUTBOX_MARKER ? outboxMarker : true))
 // Captures the options each proxyActivities() call was given, so the retry policy — the actual
 // re-send mechanism — is asserted rather than silently discarded by the stub. The two proxies
 // are told apart by their options: only the broadcast one carries `initialInterval`, and only
@@ -31,17 +38,32 @@ const mockPatched = jest.fn(() => true)
 const wrongProxy = jest.fn(() => {
   throw new Error('executeTransaction must be scheduled through the broadcast proxy')
 })
+// The outbox proxy is the only one with a scheduleToCloseTimeout, and only it hands out the
+// *WithEffects claims, so scheduling them through another proxy throws the same way.
+const wrongOutboxProxy = jest.fn(() => {
+  throw new Error('the *WithEffects claims must be scheduled through the outbox proxy')
+})
 const mockProxyActivities = jest.fn((options: unknown) => {
   const isBroadcastProxy = typeof options === 'object' && options !== null
     && 'initialInterval' in ((options as { retry?: Record<string, unknown> }).retry ?? {})
-  return isBroadcastProxy
-    ? { executeTransaction: activityMocks.executeTransaction }
-    : { ...activityMocks, executeTransaction: wrongProxy }
+  if (isBroadcastProxy) return { executeTransaction: activityMocks.executeTransaction }
+  if ((options as { scheduleToCloseTimeout?: string }).scheduleToCloseTimeout) {
+    return {
+      claimUnbroadcastFailureWithEffects: activityMocks.claimUnbroadcastFailureWithEffects,
+      claimBroadcastFailureWithEffects: activityMocks.claimBroadcastFailureWithEffects,
+    }
+  }
+  return {
+    ...activityMocks,
+    executeTransaction: wrongProxy,
+    claimUnbroadcastFailureWithEffects: wrongOutboxProxy,
+    claimBroadcastFailureWithEffects: wrongOutboxProxy,
+  }
 })
 
 jest.mock('@temporalio/workflow', () => ({
   proxyActivities: (options: unknown) => mockProxyActivities(options),
-  patched: (...args: unknown[]) => mockPatched(...(args as [])),
+  patched: (id: string) => mockPatched(id),
   // Same shape the SDK gives the workflow: an ActivityFailure whose `cause` is the activity's
   // ApplicationFailure, carrying `type` and `details`. That is what `broadcastOutcomeUnknown`
   // matches on, so the mock must carry those fields, not just be an Error.
@@ -111,7 +133,8 @@ describe('ExecuteTransaction — broadcast outcome handling', () => {
     // clearAllMocks keeps implementations, so a test's mockRejectedValue on the broadcast would
     // leak into the next test; reset that one mock so every test states its own outcome.
     activityMocks.executeTransaction.mockReset()
-    mockPatched.mockReturnValue(true)
+    outboxMarker = false
+    mockPatched.mockImplementation((id: string) => (id === OUTBOX_MARKER ? outboxMarker : true))
     activityMocks.getTransaction.mockResolvedValue(pendingTx())
     activityMocks.getBlockHeight.mockResolvedValue(BROADCAST_HEIGHT)
     activityMocks.persistBroadcastAnchor.mockResolvedValue(LOCAL_HASH)
@@ -190,8 +213,10 @@ describe('ExecuteTransaction — broadcast outcome handling', () => {
     await ExecuteTransaction({ transactionId: TX_ID })
 
     const options = mockProxyActivities.mock.calls.map((c) => c[0] as { startToCloseTimeout: string; retry: Record<string, unknown> })
-    expect(options).toHaveLength(2)
+    expect(options).toHaveLength(3)
     expect(options).toContainEqual({ startToCloseTimeout: '30s', retry: { maximumAttempts: 3 } })
+    // The outbox claims: no maximumAttempts, bounded by schedule-to-close inside the 15m run timeout.
+    expect(options).toContainEqual({ startToCloseTimeout: '30s', scheduleToCloseTimeout: '10m' })
     expect(options).toContainEqual({
       startToCloseTimeout: '30s',
       retry: { initialInterval: '5s', backoffCoefficient: 2, maximumInterval: '30s', maximumAttempts: 5 },
@@ -260,6 +285,41 @@ describe('ExecuteTransaction — broadcast outcome handling', () => {
       status: TransactionStatus.Failure,
     }))
     expect(out.status).toBe(TransactionStatus.Failure)
+  })
+
+  it('unhashable or missing payload: one wording for both, effects before the status flip', async () => {
+    activityMocks.persistBroadcastAnchor.mockResolvedValue(null)
+
+    await ExecuteTransaction({ transactionId: TX_ID })
+
+    expect(activityMocks.notifyUserOfFailedTransaction).toHaveBeenCalledWith(TX_ID, 'Signed transaction payload is missing or malformed')
+    expect(activityMocks.updateTransaction).toHaveBeenCalledWith(TX_ID, expect.objectContaining({
+      status: TransactionStatus.Failure,
+      log: 'signed payload is missing or not valid hex — nothing could be broadcast',
+    }))
+    expect(activityMocks.notifyUserOfFailedTransaction.mock.invocationCallOrder[0])
+      .toBeLessThan(activityMocks.updateTransaction.mock.invocationCallOrder[0]!)
+  })
+
+  it('a lost anchor CAS (the dispatcher gave up on the row meanwhile) ends quietly: no broadcast, no writes, no effects', async () => {
+    const lost = new (ActivityFailure as unknown as new (m: string, c: unknown) => Error)(
+      'Activity task failed',
+      new (ApplicationFailure as unknown as new (m: string, t: string, n: boolean) => Error)('Transaction is no longer pending and unanchored', 'transaction_not_pending', true),
+    )
+    activityMocks.persistBroadcastAnchor.mockRejectedValue(lost)
+
+    await expect(ExecuteTransaction({ transactionId: TX_ID })).resolves.toMatchObject({ id: TX_ID })
+
+    expect(activityMocks.executeTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.updateTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.notifyUserOfFailedTransaction).not.toHaveBeenCalled()
+    expect(activityMocks.notifyProviderOfFailedStakes).not.toHaveBeenCalled()
+  })
+
+  it('any other anchor failure still fails the run', async () => {
+    activityMocks.persistBroadcastAnchor.mockRejectedValue(new Error('db down'))
+
+    await expect(ExecuteTransaction({ transactionId: TX_ID })).rejects.toThrow('db down')
   })
 
   it('terminal failure goes through the CAS, never a blind write', async () => {
@@ -491,5 +551,114 @@ describe('ExecuteTransaction — broadcast outcome handling', () => {
     expect(activityMocks.updateTransaction).toHaveBeenCalledWith(TX_ID, expect.objectContaining({
       status: TransactionStatus.Failure,
     }))
+  })
+
+  // Every run that reaches a terminal branch after this deploy: the failure CAS also writes the
+  // outbox, and TransactionFailureEffects runs the release and the notice. Nothing inline.
+  describe('failure outbox (execute-transaction-failure-outbox marker set)', () => {
+    const REJECTED = { transactionHash: LOCAL_HASH, success: false, rejected: true, attempt: 1, code: 11, message: 'out of gas' }
+
+    beforeEach(() => {
+      outboxMarker = true
+      activityMocks.claimUnbroadcastFailureWithEffects.mockResolvedValue(true)
+      activityMocks.claimBroadcastFailureWithEffects.mockResolvedValue(true)
+    })
+
+    function expectNoInlineEffects() {
+      expect(activityMocks.notifyProviderOfFailedStakes).not.toHaveBeenCalled()
+      expect(activityMocks.notifyUserOfFailedTransaction).not.toHaveBeenCalled()
+      expect(activityMocks.updateTransaction).not.toHaveBeenCalled()
+      expect(activityMocks.claimBroadcastFailure).not.toHaveBeenCalled()
+    }
+
+    it('expired before broadcast: claims with effects, runs no release or notify, nothing is broadcast', async () => {
+      activityMocks.getTransaction.mockResolvedValue(pendingTx({ executionHeight: 1 }))
+
+      const out = await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(mockPatched).toHaveBeenCalledWith(OUTBOX_MARKER)
+      expect(activityMocks.claimUnbroadcastFailureWithEffects).toHaveBeenCalledWith(TX_ID, 'TX expired before broadcast')
+      expectNoInlineEffects()
+      expect(activityMocks.executeTransaction).not.toHaveBeenCalled()
+      expect(out.status).toBe(TransactionStatus.Failure)
+    })
+
+    it('unbroadcastable payload: claims with effects using the row log it writes today', async () => {
+      activityMocks.persistBroadcastAnchor.mockResolvedValue(null)
+
+      const out = await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(activityMocks.claimUnbroadcastFailureWithEffects).toHaveBeenCalledWith(
+        TX_ID,
+        'signed payload is missing or not valid hex — nothing could be broadcast',
+      )
+      expectNoInlineEffects()
+      expect(activityMocks.executeTransaction).not.toHaveBeenCalled()
+      expect(out.status).toBe(TransactionStatus.Failure)
+    })
+
+    it('unanchored claim lost (the dispatcher gave up first): stands down, row returned unchanged', async () => {
+      activityMocks.getTransaction.mockResolvedValue(pendingTx({ executionHeight: 1 }))
+      activityMocks.claimUnbroadcastFailureWithEffects.mockResolvedValue(false)
+
+      const out = await ExecuteTransaction({ transactionId: TX_ID })
+
+      expectNoInlineEffects()
+      expect(out).toEqual(pendingTx({ executionHeight: 1 }))
+    })
+
+    it('rejected on the first attempt: claims with effects, runs no release or notify', async () => {
+      activityMocks.executeTransaction.mockResolvedValue(REJECTED)
+
+      const out = await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(activityMocks.claimBroadcastFailureWithEffects).toHaveBeenCalledWith(TX_ID, { code: 11, log: 'out of gas' })
+      expectNoInlineEffects()
+      expect(out).toEqual({ ...pendingTx(), status: TransactionStatus.Failure, code: 11 })
+    })
+
+    it('rejected, claim lost (verifier settled first): stands down, row returned unchanged', async () => {
+      activityMocks.executeTransaction.mockResolvedValue(REJECTED)
+      activityMocks.claimBroadcastFailureWithEffects.mockResolvedValue(false)
+
+      const out = await ExecuteTransaction({ transactionId: TX_ID })
+
+      expectNoInlineEffects()
+      expect(out).toEqual(pendingTx())
+    })
+
+    it('a run whose broadcast succeeded never evaluates the marker (no terminal branch reached)', async () => {
+      activityMocks.executeTransaction.mockResolvedValue({ transactionHash: LOCAL_HASH, success: true, rejected: false, attempt: 1 })
+
+      await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(mockPatched).not.toHaveBeenCalledWith(OUTBOX_MARKER)
+    })
+  })
+
+  // Histories recorded before the marker replay today's exact calls and order.
+  describe('pre-outbox histories (marker unset)', () => {
+    it('expired: release, notify, then the blind status write; no outbox claim', async () => {
+      activityMocks.getTransaction.mockResolvedValue(pendingTx({ executionHeight: 1 }))
+
+      await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(calledBefore(activityMocks.notifyProviderOfFailedStakes, activityMocks.notifyUserOfFailedTransaction)).toBe(true)
+      expect(calledBefore(activityMocks.notifyUserOfFailedTransaction, activityMocks.updateTransaction)).toBe(true)
+      expect(activityMocks.claimUnbroadcastFailureWithEffects).not.toHaveBeenCalled()
+    })
+
+    it('rejected: claimBroadcastFailure, then release, then notify; no outbox claim', async () => {
+      activityMocks.executeTransaction.mockResolvedValue({
+        transactionHash: LOCAL_HASH, success: false, rejected: true, attempt: 1, code: 11, message: 'out of gas',
+      })
+
+      await ExecuteTransaction({ transactionId: TX_ID })
+
+      expect(activityMocks.claimBroadcastFailure).toHaveBeenCalledWith(TX_ID, { code: 11, log: 'out of gas' })
+      expect(calledBefore(activityMocks.claimBroadcastFailure, activityMocks.notifyProviderOfFailedStakes)).toBe(true)
+      expect(calledBefore(activityMocks.notifyProviderOfFailedStakes, activityMocks.notifyUserOfFailedTransaction)).toBe(true)
+      expect(activityMocks.claimBroadcastFailureWithEffects).not.toHaveBeenCalled()
+    })
   })
 })

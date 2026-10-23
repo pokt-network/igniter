@@ -1,4 +1,4 @@
-import { Rubik, Overpass_Mono } from "next/font/google";
+import { rubik, overpass_mono } from "@/styles/fonts";
 import { SessionProvider } from "next-auth/react";
 import "@/app/globals.css";
 import { ThemeProvider } from "@/app/theme";
@@ -18,21 +18,6 @@ import NotificationBellFeed from "@/app/components/NotificationBellFeed";
 import QuickDetailProvider from "@/app/detail/QuickDetailProviderBridge";
 import { ThemeToggle } from "@igniter/ui/theme-toggle";
 
-const rubik = Rubik({
-  variable: "--font-rubik",
-  weight: ["300", "400", "500", "600", "700"],
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const overpass_mono = Overpass_Mono({
-  variable: "--font-overpass-mono",
-  weight: ["400", "600", "500", "700"],
-  style: ["normal"],
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export default function RootLayout({
   children,

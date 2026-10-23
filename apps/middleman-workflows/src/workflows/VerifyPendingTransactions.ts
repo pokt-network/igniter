@@ -1,4 +1,4 @@
-import { proxyActivities, log, ApplicationFailure } from '@temporalio/workflow'
+import { proxyActivities, log, ApplicationFailure, patched } from '@temporalio/workflow'
 import { delegatorActivities } from '@/activities'
 import { decideVerification, TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 
@@ -7,6 +7,15 @@ import { decideVerification, TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
 import pLimit from 'p-limit'
 
 const MAX_CONCURRENT = 10
+
+/**
+ * Gates applyVerificationDecisionWithEffects: an apply-failure verdict on a Stake writes the
+ * failure-effects outbox in its CAS and runs no release or notify (TransactionFailureEffects does
+ * both); every other verdict behaves as before. A sweep recorded before this marker keeps calling
+ * applyVerificationDecision. Evaluated once per sweep, before the fan-out, so every row of a sweep
+ * takes the same path. REMOVAL: one release after it ships (a sweep lasts seconds).
+ */
+const PATCH_FAILURE_OUTBOX = 'verify-pending-failure-outbox'
 
 /**
  * Sweeps broadcast-but-unverified transactions (status pending ∧ hash != null) and
@@ -21,6 +30,7 @@ export async function VerifyPendingTransactions() {
     verifySupplierEffect,
     checkTxValidityEvidence,
     applyVerificationDecision,
+    applyVerificationDecisionWithEffects,
   } = proxyActivities<ReturnType<typeof delegatorActivities>>({
     startToCloseTimeout: '120s',
     // The default 3 attempts at a 1s base exhaust in ~4s — shorter than a single
@@ -41,6 +51,9 @@ export async function VerifyPendingTransactions() {
     log.debug('VerifyPendingTransactions: no pending transactions')
     return
   }
+
+  const outbox = patched(PATCH_FAILURE_OUTBOX)
+  const applyDecision = outbox ? applyVerificationDecisionWithEffects : applyVerificationDecision
 
   const limit = pLimit(MAX_CONCURRENT)
   const results = await Promise.allSettled(
@@ -72,7 +85,7 @@ export async function VerifyPendingTransactions() {
           txTimeoutTimestamp: evidence.txTimeoutTimestamp ?? null,
           chainTimeAtCoverage: evidence.chainTimeAtCoverage ?? null,
         })
-        await applyVerificationDecision(t.id, decision)
+        await applyDecision(t.id, decision)
       }),
     ),
   )

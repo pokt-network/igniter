@@ -21,14 +21,17 @@ export type { DBClient }
  * blob verbatim. Two defenses:
  * 1. Table denylist: any query touching a secret-bearing table logs
  *    '[redacted]' instead of its params (values there are secrets by design).
+ *    `transactions` is on it because provider `transactions.params` is
+ *    plaintext JSON that carries the signer's private key for unstake and
+ *    return-funds intents (#357), short enough to escape the length cap.
  * 2. Length cap: long string params elsewhere are truncated — multi-KB
  *    blobs/hex payloads are a leak vector and add no debugging value.
  */
 const SENSITIVE_TABLES_RE =
-  /"(keys|notification_channels|smtp_configuration|sessions|accounts|verification_tokens?)"/i
+  /"(keys|transactions|notification_channels|smtp_configuration|sessions|accounts|verification_tokens?)"/i
 const PARAM_MAX_LEN = 256
 
-function safeQueryParams(query: string, params: unknown[]): unknown {
+export function safeQueryParams(query: string, params: unknown[]): unknown {
   if (SENSITIVE_TABLES_RE.test(query)) return '[redacted: sensitive table]'
   return params.map((p) =>
     typeof p === 'string' && p.length > PARAM_MAX_LEN

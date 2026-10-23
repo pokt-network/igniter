@@ -65,3 +65,39 @@ describe('Transaction DAL — recordPendingDiagnostics', () => {
     expect(sql.match(/"status" = /g)).toHaveLength(1)
   })
 })
+
+describe('Transaction DAL — claimBroadcastAnchor', () => {
+  function returningClient(rows: unknown[]) {
+    const captured: Captured = {}
+    const chain = {
+      set: (v: Record<string, unknown>) => {
+        captured.set = v
+        return chain
+      },
+      where: (c: SQL) => {
+        captured.where = c
+        return { returning: async () => rows }
+      },
+    }
+    const db = { update: () => chain }
+    return { captured, client: { db } as unknown as ConstructorParameters<typeof Transaction>[0] }
+  }
+
+  it('writes hash and heights only for a pending row that has no hash yet, in the same statement', async () => {
+    const { captured, client } = returningClient([{ id: 42 }])
+
+    await expect(new Transaction(client, logger).claimBroadcastAnchor(42, { hash: 'H', executionHeight: 7, timeoutHeight: null }))
+      .resolves.toEqual({ id: 42 })
+
+    expect(captured.set).toEqual({ hash: 'H', executionHeight: 7, timeoutHeight: null })
+    const { sql, params } = render(captured.where!)
+    expect(sql).toContain('"hash" is null')
+    expect(params).toEqual(expect.arrayContaining([42, 'pending']))
+  })
+
+  it('returns undefined when the row was settled or anchored first', async () => {
+    const { client } = returningClient([])
+    await expect(new Transaction(client, logger).claimBroadcastAnchor(42, { hash: 'H', executionHeight: 7, timeoutHeight: null }))
+      .resolves.toBeUndefined()
+  })
+})
