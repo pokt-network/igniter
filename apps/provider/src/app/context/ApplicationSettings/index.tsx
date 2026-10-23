@@ -9,6 +9,7 @@ import {
 } from "react";
 import { GetApplicationSettings } from "@/actions/ApplicationSettings";
 import type {ApplicationSettings} from "@igniter/db/provider/schema";
+import { ChainIdProvider } from "@igniter/ui/context/explorer";
 
 const ApplicationSettingsContext = createContext<ApplicationSettings | undefined>(undefined);
 
@@ -29,7 +30,9 @@ export const ApplicationSettingsProvider = ({
 
   return (
     <ApplicationSettingsContext.Provider value={applicationSettings}>
-      {children}
+      <ChainIdProvider chainId={applicationSettings?.chainId}>
+        {children}
+      </ChainIdProvider>
     </ApplicationSettingsContext.Provider>
   );
 };

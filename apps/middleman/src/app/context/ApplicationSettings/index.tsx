@@ -10,6 +10,7 @@ import {
 import { getApplicationSettings } from "@/actions/ApplicationSettings";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
 import {getLogger} from "@igniter/logger";
+import { ChainIdProvider } from "@igniter/ui/context/explorer";
 
 const log = getLogger(['middleman', 'application-settings-context'])
 
@@ -36,7 +37,9 @@ export const ApplicationSettingsProvider = ({
 
   return (
     <ApplicationSettingsContext.Provider value={applicationSettings}>
-      {children}
+      <ChainIdProvider chainId={applicationSettings?.chainId}>
+        {children}
+      </ChainIdProvider>
     </ApplicationSettingsContext.Provider>
   );
 };
