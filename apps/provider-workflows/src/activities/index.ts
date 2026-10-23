@@ -247,9 +247,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
   // Canonical lifecycle activities (Task 4)
   // ---------------------------------------------------------------------------
 
-  /** Read a single transaction row by id — used by child workflow to inspect state. */
+  /**
+   * Read a transaction's `status` and `hash` by id — used by child workflow to
+   * inspect state. Returns only those two fields because the result is recorded
+   * in workflow history. Name kept for replay of in-flight workflows.
+   */
   async getTransaction(transactionId: number) {
-    return dal.transactions.getTransaction(transactionId)
+    return dal.transactions.getTransactionStatus(transactionId)
   },
 
   /** Dispatcher queue: all pending rows (with or without hash). */
