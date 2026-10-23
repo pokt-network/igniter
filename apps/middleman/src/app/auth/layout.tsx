@@ -1,25 +1,10 @@
 
 import "@/app/globals.css";
 import {SessionProvider} from "next-auth/react";
-import {Rubik, Overpass_Mono} from "next/font/google";
+import { rubik, overpass_mono } from "@/styles/fonts";
 import WalletConnectionProvider from "@/app/context/WalletConnection/Provider";
 import { ThemeProvider } from "@/app/theme";
 
-const rubik = Rubik({
-  variable: "--font-rubik",
-  weight: ["300", "400", "500", "600", "700"],
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const overpass_mono = Overpass_Mono({
-  variable: "--font-overpass-mono",
-  weight: ["400", "600", "500", "700"],
-  style: ["normal"],
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export default function AuthLayout({
                                      children,
