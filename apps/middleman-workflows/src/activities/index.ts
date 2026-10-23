@@ -191,6 +191,9 @@ function warnTooManyDomainsOnce(providerIdentity: string, domains: number) {
  * verifier knows to skip the supplier verification path for it.
  */
 
+/** Upper bound on rows one dispatcher tick handles; the rest wait for the next tick. */
+const DISPATCH_BATCH_LIMIT = 500
+
 export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain, providerService: ProviderService) => {
   const activities = {
   /**
@@ -421,6 +424,22 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    *
    * @return {Promise<Array<{id: string, createdAt: Date}>>} A promise that resolves to an array of objects, each containing the transaction id and createdAt timestamp.
    */
+  /** Rows the dispatcher should launch or give up on; see DAL listDispatchable. */
+  async listDispatchableTransactions() {
+    return dal.transaction.listDispatchable(DISPATCH_BATCH_LIMIT)
+  },
+  /** Counts a dispatch attempt for this run id; returns the count, or null if not dispatchable. */
+  async recordDispatchAttempt(transactionId: number, runId: string): Promise<number | null> {
+    return (await dal.transaction.recordDispatchAttempt(transactionId, runId)) ?? null
+  },
+  /** CAS to Failure for a pending row that was never anchored; true iff this call made it. */
+  async claimUnbroadcastFailure(transactionId: number, reason: string): Promise<boolean> {
+    const row = await dal.transaction.claimUnbroadcastFailure(transactionId, reason)
+    if (!row) {
+      log.info('unbroadcast failure CAS lost — transaction already terminal or anchored', { transactionId })
+    }
+    return Boolean(row)
+  },
   async listTransactions() {
     const txs = await dal.transaction.listByStatus(TransactionStatus.Pending)
     // @ts-ignore (todo: fix this)

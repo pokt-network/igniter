@@ -35,6 +35,13 @@ export const transactionsTable = pgTable("transactions", {
   timeoutHeight: integer(),
   unavailableChecks: integer().notNull().default(0),
   lastVerificationAt: timestamp(),
+  // Dispatcher bookkeeping for a pending row that has no hash yet: how many ExecuteTransaction runs
+  // it has started for the row (counted only on ticks where the RPC answered, one per run id),
+  // since when, and the last run counted. The dispatcher gives up on the row after enough attempts
+  // over enough time; see ExecutePendingTransactions.
+  dispatchAttempts: integer().notNull().default(0),
+  firstDispatchAttemptAt: timestamp({ withTimezone: true }),
+  lastDispatchRunId: varchar({ length: 64 }),
 
   //Self-referencing foreign key workaround: https://orm.drizzle.team/docs/indexes-constraints#foreign-key
   dependsOn: integer().references((): AnyPgColumn => transactionsTable.id),

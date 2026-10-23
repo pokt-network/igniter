@@ -81,6 +81,71 @@ export default class Transaction {
   }
 
   /**
+   * The dispatcher's queue: pending rows with no hash. A hashed row was anchored, so the verifier
+   * owns it and ExecuteTransaction would only hand it back; listing it cost a child start per tick.
+   * Only the fields the dispatcher needs, never the payloads. `firstAttemptAgeMs` is measured by
+   * the database clock (null before the first counted attempt).
+   */
+  async listDispatchable(limit: number): Promise<Array<{
+    id: number
+    createdAt: Date | null
+    dispatchAttempts: number
+    firstAttemptAgeMs: number | null
+  }>> {
+    return this.dbClient.db
+      .select({
+        id: transactionsTable.id,
+        createdAt: transactionsTable.createdAt,
+        dispatchAttempts: transactionsTable.dispatchAttempts,
+        firstAttemptAgeMs: sql<number | null>`(extract(epoch from (now() - ${transactionsTable.firstDispatchAttemptAt})) * 1000)::float8`,
+      })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.status, TransactionStatus.Pending), isNull(transactionsTable.hash)))
+      .orderBy(transactionsTable.id)
+      .limit(limit);
+  }
+
+  /**
+   * Counts one dispatch attempt for a pending, unanchored row, at most once per ExecuteTransaction
+   * run: an activity retry or a second dispatcher reporting the same run id does not count twice.
+   * Returns the attempt count after the call, or undefined when the row is no longer dispatchable.
+   */
+  async recordDispatchAttempt(transactionId: number, runId: string): Promise<number | undefined> {
+    const [row] = await this.dbClient.db
+      .update(transactionsTable)
+      .set({
+        dispatchAttempts: sql`${transactionsTable.dispatchAttempts} + CASE WHEN ${transactionsTable.lastDispatchRunId} IS DISTINCT FROM ${runId} THEN 1 ELSE 0 END`,
+        firstDispatchAttemptAt: sql`COALESCE(${transactionsTable.firstDispatchAttemptAt}, now())`,
+        lastDispatchRunId: runId,
+      })
+      .where(and(
+        eq(transactionsTable.id, transactionId),
+        eq(transactionsTable.status, TransactionStatus.Pending),
+        isNull(transactionsTable.hash),
+      ))
+      .returning({ dispatchAttempts: transactionsTable.dispatchAttempts });
+    return row?.dispatchAttempts;
+  }
+
+  /**
+   * Fails a pending row that was never anchored. Since the anchor is written (by CAS) before any
+   * broadcast, `hash IS NULL` here proves no bytes were sent, and the anchor CAS guarantees none
+   * will be after this wins. Returns the row iff this call made the transition.
+   */
+  async claimUnbroadcastFailure(transactionId: number, log: string): Promise<TransactionModel | undefined> {
+    const [row] = await this.dbClient.db
+      .update(transactionsTable)
+      .set({ status: TransactionStatus.Failure, log })
+      .where(and(
+        eq(transactionsTable.id, transactionId),
+        eq(transactionsTable.status, TransactionStatus.Pending),
+        isNull(transactionsTable.hash),
+      ))
+      .returning();
+    return row;
+  }
+
+  /**
    * Writes the broadcast anchor (hash + heights) only while the row is pending and unanchored, in
    * one statement. Returns the row iff this call wrote it; undefined means another writer (the
    * dispatcher giving up on the row, or a concurrent run) got there first.

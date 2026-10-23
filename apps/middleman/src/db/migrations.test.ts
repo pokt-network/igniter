@@ -93,6 +93,17 @@ describeWithDb('middleman migrations', () => {
         `select bool_or(convalidated) as any_validated from pg_constraint where conname like 'transactions_%payload_not_empty'`,
       )
       expect(valid[0]?.any_validated).toBe(false)
+
+      const { rows: cols } = await pool.query(
+        `select column_name, data_type, is_nullable, column_default from information_schema.columns
+         where table_name = 'transactions' and column_name in ('dispatchAttempts', 'firstDispatchAttemptAt', 'lastDispatchRunId')
+         order by 1`,
+      )
+      expect(cols).toEqual([
+        { column_name: 'dispatchAttempts', data_type: 'integer', is_nullable: 'NO', column_default: '0' },
+        { column_name: 'firstDispatchAttemptAt', data_type: 'timestamp with time zone', is_nullable: 'YES', column_default: null },
+        { column_name: 'lastDispatchRunId', data_type: 'character varying', is_nullable: 'YES', column_default: null },
+      ])
     })
   })
 
