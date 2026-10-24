@@ -40,8 +40,8 @@ export function OwnerAddressSelectionStep({
   onOwnerAddressSelected,
   selectedOwnerAddress: selectedOwnerAddressFromProps
 }: OwnerAddressSelectionStepProps) {
-  const { connectedIdentity, connectedIdentities } = useWalletConnection();
-  const [selectedOwnerAddress, setSelectedOwnerAddress] = useState(selectedOwnerAddressFromProps || '');
+  const { connectedIdentity, connectedIdentities, activeAddress } = useWalletConnection();
+  const [selectedOwnerAddress, setSelectedOwnerAddress] = useState(selectedOwnerAddressFromProps || activeAddress || '');
   const { isOwnerBusy } = usePendingGuards();
 
   // Calculate node count and total staked amount per owner address
@@ -78,11 +78,12 @@ export function OwnerAddressSelectionStep({
     return Array.from(dataMap.values())
       .filter(data => data.nodeCount > 0) // Only show addresses with staked nodes
       .sort((a, b) => {
-        if (a.address === connectedIdentity) return -1;
-        if (b.address === connectedIdentity) return 1;
+        const primary = activeAddress ?? connectedIdentity;
+        if (a.address === primary) return -1;
+        if (b.address === primary) return 1;
         return b.nodeCount - a.nodeCount;
       });
-  }, [nodes, connectedIdentities, connectedIdentity, isOwnerBusy]);
+  }, [nodes, connectedIdentities, connectedIdentity, activeAddress, isOwnerBusy]);
 
   return (
     <div className="flex relative flex-col w-[480px] border-x border-b border-border-primary bg-bg-root p-[33px] rounded-b-[12px] gap-8">
@@ -125,7 +126,7 @@ export function OwnerAddressSelectionStep({
           {ownerAddressData.length > 0 && (
             <div className="flex flex-col gap-4 h-full overflow-y-auto">
               {ownerAddressData.map((data) => {
-                const isPrimaryAccount = data.address === connectedIdentity;
+                const isPrimaryAccount = data.address === (activeAddress ?? connectedIdentity);
                 return (
                   <div key={data.address}>
                     <div
