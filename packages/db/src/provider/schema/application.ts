@@ -26,6 +26,7 @@ import { chainIdEnum } from './enums'
  * - `pocketRpcUrl`: The Pocket RPC URL for direct node communication, optional.
  * - `indexerApiUrl`: The API URL for indexing services, optional.
  * - `rewardAddresses`: Optional array of reward addresses for the application, stored as a string array. Used by Delegators to fetch provider rewards.
+ * - `analyticsDayRetentionDays`: How many UTC days of analytics day data (the `analytics_*` tables) are kept, today included. Defaults to 90.
  * - `updatedAtHeight`: Optional field that tracks the blockchain height at the last update, stored as a string.
  * - `createdAt`: Timestamp indicating when the setting was created. Automatically set to the current time by default.
  * - `createdBy`: The identity of the user who created the application setting. It is required and references the `identity` field in the `users` table.
@@ -49,6 +50,7 @@ export const applicationSettingsTable = pgTable('application_settings', {
   pocketRpcUrl: varchar(),
   indexerApiUrl: varchar(),
   rewardAddresses: varchar().array(),
+  analyticsDayRetentionDays: integer('analytics_day_retention_days').notNull().default(90),
   updatedAtHeight: varchar(),
   createdAt: timestamp().defaultNow(),
   createdBy: varchar({ length: 255 }).references(() => usersTable.identity).notNull(),

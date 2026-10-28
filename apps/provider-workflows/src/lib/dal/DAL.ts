@@ -8,6 +8,7 @@ import Transactions from "@/lib/dal/transactions";
 import Delegators from "@/lib/dal/delegators";
 import NotificationChannels from "@/lib/dal/notificationChannels";
 import Watchdog from "@/lib/dal/watchdog";
+import Analytics from "@/lib/dal/analytics";
 
 export default class DAL {
   logger: Logger
@@ -21,6 +22,7 @@ export default class DAL {
   delegators: Delegators
   notificationChannels: NotificationChannels
   watchdog: Watchdog
+  analytics: Analytics
 
   constructor(dbClient: DBClient<typeof schema>, logger: Logger) {
     this.logger = logger
@@ -32,6 +34,7 @@ export default class DAL {
     this.delegators = new Delegators(dbClient, logger.getChild('Delegators'))
     this.notificationChannels = new NotificationChannels(dbClient, logger.getChild('NotificationChannels'))
     this.watchdog = new Watchdog(dbClient, logger.getChild('Watchdog'))
+    this.analytics = new Analytics(dbClient, logger.getChild('Analytics'))
   }
 
   // add any common queries below

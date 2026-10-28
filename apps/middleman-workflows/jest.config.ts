@@ -17,6 +17,7 @@ const config: Config = {
     '^@igniter/db/provider/enums$': '<rootDir>/../../packages/db/src/provider/schema/enums.ts',
     '^@igniter/db/(.*)$': '<rootDir>/../../packages/db/src/$1',
     '^@igniter/logger$': '<rootDir>/../../packages/logger/src/index.ts',
+    '^@igniter/graphql/(.*)$': '<rootDir>/../../packages/graphql/src/$1',
     '^@igniter/notifications$': '<rootDir>/../../packages/notifications/src/index.ts',
     '^@pocket/(.*)$': '<rootDir>/../../packages/pocket/src/$1',
   },

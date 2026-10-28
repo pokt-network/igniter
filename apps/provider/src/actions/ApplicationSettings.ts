@@ -34,6 +34,7 @@ const UpdateSettingsSchema = z.object({
   updatedAtHeight: z.string().optional(),
   rewardAddresses: z.array(z.string().refine(isPoktBech32Address, "Invalid pokt address")).optional(),
   returnSupplierFundsToOwner: z.boolean().optional(),
+  analyticsDayRetentionDays: z.number().int().min(1).max(365).optional(),
 })
 
 const CreateSettingsSchema = z.object({

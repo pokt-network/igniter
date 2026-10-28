@@ -57,6 +57,7 @@ const FormSchema = z.object({
   ownerIdentity: z.string().optional(),
   updatedAtHeight: z.string().optional(),
   returnSupplierFundsToOwner: z.boolean().optional(),
+  analyticsDayRetentionDays: z.coerce.number().int('Must be a whole number').min(1, 'Must be >= 1').max(365, 'Must be <= 365').optional(),
 })
 
 type FormValues = z.infer<typeof FormSchema>;
@@ -101,6 +102,7 @@ export default function SettingsForm() {
       ownerIdentity: settings?.ownerIdentity || '',
       updatedAtHeight: settings?.updatedAtHeight || '',
       returnSupplierFundsToOwner: settings?.returnSupplierFundsToOwner ?? false,
+      analyticsDayRetentionDays: settings?.analyticsDayRetentionDays ?? 90,
     },
     values: settings ? {
       name: settings.name || '',
@@ -118,6 +120,7 @@ export default function SettingsForm() {
       ownerIdentity: settings.ownerIdentity || '',
       updatedAtHeight: settings.updatedAtHeight || '',
       returnSupplierFundsToOwner: settings.returnSupplierFundsToOwner ?? false,
+      analyticsDayRetentionDays: settings.analyticsDayRetentionDays ?? 90,
     } : undefined,
   })
 
@@ -492,6 +495,18 @@ export default function SettingsForm() {
                 <p className="text-[11px] text-text-tertiary mt-1 px-1">GraphQL API URL of the Pocket Network indexer. Must match the same network as your node.</p>
                 <FormMessage className="mt-1" />
               </div>
+            </FormItem>
+          )} />
+
+          <FormField control={form.control} name="analyticsDayRetentionDays" render={({ field }) => (
+            <FormItem className="flex flex-row items-start gap-4">
+              <FormLabel className="text-sm shrink-0 w-28 mt-2.5">Analytics history</FormLabel>
+              <div className="flex-1">
+                <FormControl><Input {...field} type="number" min={1} max={365} className="h-9 text-sm" placeholder="90" /></FormControl>
+                <p className="text-[11px] text-text-tertiary mt-1 px-1">Days of session data kept for the Analytics page (1 to 365). Older days are deleted.</p>
+                <FormMessage className="mt-1" />
+              </div>
+              <span className="text-sm text-text-tertiary shrink-0 mt-2.5">days</span>
             </FormItem>
           )} />
         </div>

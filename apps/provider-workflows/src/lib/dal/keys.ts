@@ -1,6 +1,6 @@
 import type {DBClient} from '@igniter/db/connection'
 import {asc} from 'drizzle-orm/sql/expressions/select'
-import {lt, notInArray, sql} from 'drizzle-orm'
+import {inArray, lt, notInArray, sql} from 'drizzle-orm'
 import {
   and,
   eq,
@@ -205,6 +205,19 @@ export default class Keys {
       ))
       .returning({ id: keysTable.id })
     return rows.length > 0
+  }
+
+  /**
+   * The provider's verified suppliers for the analytics day sync: the keys in `states` (the ever-staked states). Holding
+   * a key's private key is the proof of control, so the set is decided here and nowhere else. Retired keys are
+   * included with their `retiredAt`, so their days up to the retirement keep syncing.
+   */
+  async listAnalyticsSuppliers(states: KeyState[]): Promise<Array<{ address: string; retiredAt: Date | null }>> {
+    return this.dbClient.db
+      .select({address: keysTable.address, retiredAt: keysTable.retiredAt})
+      .from(keysTable)
+      .where(inArray(keysTable.state, states))
+      .orderBy(asc(keysTable.address))
   }
 
   /**

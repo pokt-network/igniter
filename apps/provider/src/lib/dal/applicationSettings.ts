@@ -26,6 +26,7 @@ const defaultSettings: ApplicationSettings = {
   createdBy: '',
   updatedBy: '',
   updatedAtHeight: '',
+  analyticsDayRetentionDays: 90,
   createdAt: new Date(),
   updatedAt: new Date(),
 }
