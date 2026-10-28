@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "isolatedModules": false,
+    "noEmit": true,
+    "types": ["jest", "node"]
+  },
+  "files": [],
+  "include": ["src/client.ts", "src/analytics.ts", "src/**/*.test.ts"]
+}

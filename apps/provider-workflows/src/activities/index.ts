@@ -17,6 +17,7 @@ import { createSmtpTransport, dispatchToChannels } from '@igniter/notifications'
 import type { DispatchChannel, ChannelDeliveryResult } from '@igniter/notifications'
 import type { NotificationEvent } from '@/lib/types/notifications'
 import { buildRichMessage } from '@/lib/richMessageBuilder'
+import { analyticsActivities } from '@/activities/analytics'
 
 const errInfo = (e: unknown) => e instanceof Error ? { message: e.message, stack: e.stack } : e
 
@@ -187,6 +188,8 @@ async function doCreateReturnFundsIntent(dal: DAL, keyAddress: string, toAddress
 
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => {
   const activities = {
+  ...analyticsActivities(dal),
+
   async syncDelegatorsFromGovernance(): Promise<GovernanceSyncResult> {
     const settings = await dal.settings.loadSettings()
     if (!settings) {

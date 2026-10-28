@@ -19,6 +19,7 @@ export enum ScheduledWorkflowType {
   SupplierAddressGroupMigration = 'SupplierAddressGroupMigration',
   VerifyPendingTransactions = 'VerifyPendingTransactions',
   ExecutePendingTransactions = 'ExecutePendingTransactions',
+  AnalyticsSync = 'AnalyticsSync',
 }
 
 const ScheduledWorkflowConfig: Record<
@@ -72,6 +73,12 @@ const ScheduledWorkflowConfig: Record<
     interval: '10s',
     args: [],
     envVar: 'SCHEDULE_EXECUTE_PENDING_TX_INTERVAL',
+  },
+  [ScheduledWorkflowType.AnalyticsSync]: {
+    workflowType: 'AnalyticsSync',
+    interval: '10m',
+    args: [],
+    envVar: 'SCHEDULE_ANALYTICS_SYNC_INTERVAL',
   },
 }
 

@@ -30,6 +30,7 @@
     "@igniter/tx-verify": "workspace:*",
     "@igniter/logger": "workspace:*",
     "@igniter/db": "workspace:*",
+    "@igniter/graphql": "workspace:*",
     "@igniter/domain": "workspace:*",
     "@igniter/notifications": "workspace:*",
     "@igniter/temporal": "workspace:*",

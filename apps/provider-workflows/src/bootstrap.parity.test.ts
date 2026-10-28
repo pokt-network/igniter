@@ -22,6 +22,11 @@ describe('watchdog config parity (D9)', () => {
     }
   })
 
+  it('AnalyticsSync is scheduled every 10m by default', () => {
+    const analytics = buildWatchdogEntries(parseWatchdogConfig(logger)).find((e) => e.scheduleId === 'AnalyticsSync-scheduled')
+    expect(analytics).toMatchObject({ workflowType: 'AnalyticsSync', interval: '10m', intervalMs: 600_000, args: [] })
+  })
+
   it('the worker instantiates the shared watchdog', () => {
     const src = readFileSync(join(__dirname, 'worker.ts'), 'utf8')
     expect(src).toMatch(/new ScheduleWatchdog\(/)

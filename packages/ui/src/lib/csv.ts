@@ -48,14 +48,24 @@ export interface ClientExportOptions<T extends object> {
   useUtc: boolean
 }
 
+/** A UTF-8 byte order mark: spreadsheet apps then read the file as UTF-8, so "÷", "–" or "€" survive. */
+export const CSV_BOM = '\uFEFF'
+
+/** The whole CSV file: the BOM, the header line, then one line per row. */
+export const csvContent = <T extends object>(columns: Array<CsvColumnDef<T>>, rows: Array<T>): string => {
+  let rowsDataString = ''
+  rows.forEach(
+    (item: T) => (rowsDataString += convertRowToString<T>(columns,item))
+  )
+  return CSV_BOM + CSV.stringify(columns.filter(item => !!item.accessorKey && !!item.csvFormatterFn).map(item => item.csvHeader ?? item.header!)) + rowsDataString
+}
+
 export const exportToCsvFromClient = <T extends object>({
   columns,
   fileNameKey,
   rows: rowsProp,
   useUtc
 }: ClientExportOptions<T>) => {
-  let rowsDataString = ''
-
   let rows: Array<T>
 
   if (typeof rowsProp === 'function') {
@@ -64,11 +74,7 @@ export const exportToCsvFromClient = <T extends object>({
     rows = rowsProp
   }
 
-  rows.forEach(
-    (item: T) => (rowsDataString += convertRowToString<T>(columns,item))
-  )
-
-  const blob = new Blob([CSV.stringify(columns.filter(item => !!item.accessorKey && !!item.csvFormatterFn).map(item => item.csvHeader ?? item.header!)) + rowsDataString], {
+  const blob = new Blob([csvContent(columns, rows)], {
     type: 'text/csv;charset=utf-8;',
   })
   const url = URL.createObjectURL(blob)

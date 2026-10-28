@@ -14,6 +14,7 @@
   "dependencies": {
     "@igniter/logger": "workspace:*",
     "@igniter/db": "workspace:*",
+    "@igniter/graphql": "workspace:*",
     "@igniter/temporal": "workspace:*",
     "@igniter/commons": "workspace:*",
     "@igniter/pocket": "workspace:*",

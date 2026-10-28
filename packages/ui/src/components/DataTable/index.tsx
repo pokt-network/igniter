@@ -117,6 +117,11 @@ export interface DataTableProps<TData extends object, TValue> {
   getRowId?: (row: TData) => string
   /** Lock the header row so it stays visible while the table body scrolls. On by default. */
   stickyHeader?: boolean
+  /**
+   * Cap the table at the viewport height with its own vertical scroll (on by default), for a page that is the
+   * table. Off for a table inside a longer page: the page scrolls as one, and the table only scrolls sideways.
+   */
+  bounded?: boolean
   /** Called whenever the selection changes; receives the selected row originals. */
   onSelectionChange?: (selectedRows: TData[]) => void
 }
@@ -146,6 +151,7 @@ export default function DataTable<TData extends object, TValue>({
   getRowId,
   onSelectionChange,
   stickyHeader = true,
+  bounded = true,
 }: DataTableProps<TData, TValue>) {
   const isServerPaginated = !!manualPagination
   const defaultSort = sorts.flat().find((sort) => sort.isDefault);
@@ -366,7 +372,8 @@ export default function DataTable<TData extends object, TValue>({
           ) : null}
           {countLabel && !isLoading && (
             <span className="inline-flex items-center whitespace-nowrap h-9 px-4 rounded-lg text-sm font-medium bg-bg-elevated text-text-secondary border border-border-primary">
-              {table.getFilteredRowModel().rows.length} {countLabel}
+              {/* Server-paginated: the total across pages, not the rows of this page */}
+              {(isServerPaginated ? manualPagination!.total : table.getFilteredRowModel().rows.length).toLocaleString("en-US")} {countLabel}
             </span>
           )}
           {headerLeft}
@@ -410,7 +417,7 @@ export default function DataTable<TData extends object, TValue>({
       <Table
         containerClassName={
           clsx(
-            (sorts.length > 0 || filters.length > 0 || csvFilename) ? 'max-h-[calc(100dvh-310px)]' : 'max-h-[calc(100dvh-270px)]'
+            !bounded ? undefined : (sorts.length > 0 || filters.length > 0 || csvFilename) ? 'max-h-[calc(100dvh-310px)]' : 'max-h-[calc(100dvh-270px)]'
           )
         }
       >
