@@ -1,5 +1,5 @@
 import type { AddressGroupsJson } from '@igniter/db/middleman/schema'
-import { postGraphql } from '@/lib/graphql'
+import { postGraphql } from '@igniter/graphql/client'
 import { configuredServiceRewards } from './configuredServiceRewards'
 import { supplierRewardAmount } from './supplierRewardShare'
 import type { RewardBySupplier } from './index'

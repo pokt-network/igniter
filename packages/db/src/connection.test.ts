@@ -28,6 +28,16 @@ describe('safeQueryParams', () => {
     expect(String(logged[1])).toMatch(/^x{64}…\[truncated 300 chars\]$/)
   })
 
+  it('summarizes an array param longer than 50 items, and keeps a short one whole', () => {
+    const ids = Array.from({ length: 2385 }, (_, i) => `pokt1supplier${i}`)
+    const logged = safeQueryParams('select * from "analytics_supplier_day" where "supplier_id" = any($1) and "day" = $2', [ids, '2026-10-20']) as unknown[]
+    expect(logged[0]).toBe('[2385 items: pokt1supplier0, pokt1supplier1, pokt1supplier2 …]')
+    expect(logged[1]).toBe('2026-10-20')
+    const fifty = ids.slice(0, 50)
+    expect((safeQueryParams('select 1 where $1', [fifty]) as unknown[])[0]).toBe(fifty)
+    expect((safeQueryParams('select 1 where $1', [ids.slice(0, 51)]) as unknown[])[0]).toBe('[51 items: pokt1supplier0, pokt1supplier1, pokt1supplier2 …]')
+  })
+
   it('does not treat a table whose name only contains "transactions" as sensitive', () => {
     expect(safeQueryParams('select * from "transactions_archive" where "id" = $1', [1])).toEqual([1])
   })

@@ -26,18 +26,25 @@ export type { DBClient }
  *    return-funds intents (#357), short enough to escape the length cap.
  * 2. Length cap: long string params elsewhere are truncated — multi-KB
  *    blobs/hex payloads are a leak vector and add no debugging value.
+ * 3. Size cap: an array param longer than PARAM_MAX_ITEMS (a list of ids passed
+ *    as one `any($1)` param) is summarized as `[N items: first 3 …]`. Logged
+ *    whole, a 2,000-id list made every query record exceed the redaction
+ *    walk's property limit, which warned on each query.
  */
 const SENSITIVE_TABLES_RE =
   /"(keys|transactions|notification_channels|smtp_configuration|sessions|accounts|verification_tokens?)"/i
 const PARAM_MAX_LEN = 256
+const PARAM_MAX_ITEMS = 50
+
+const short = (v: unknown) => (typeof v === 'string' && v.length > 64 ? `${v.slice(0, 64)}…` : String(v))
 
 export function safeQueryParams(query: string, params: unknown[]): unknown {
   if (SENSITIVE_TABLES_RE.test(query)) return '[redacted: sensitive table]'
-  return params.map((p) =>
-    typeof p === 'string' && p.length > PARAM_MAX_LEN
-      ? `${p.slice(0, 64)}…[truncated ${p.length} chars]`
-      : p,
-  )
+  return params.map((p) => {
+    if (typeof p === 'string' && p.length > PARAM_MAX_LEN) return `${p.slice(0, 64)}…[truncated ${p.length} chars]`
+    if (Array.isArray(p) && p.length > PARAM_MAX_ITEMS) return `[${p.length} items: ${p.slice(0, 3).map(short).join(', ')} …]`
+    return p
+  })
 }
 
 export const setup = <TSchema extends Record<string, unknown>>(options: SetupOptions<TSchema>): DBClient<TSchema>  => {

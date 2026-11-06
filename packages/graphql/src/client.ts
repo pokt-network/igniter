@@ -4,12 +4,20 @@
  * Throws when the response is not 2xx, is not JSON, or carries `errors`: a query the schema
  * rejects comes back as HTTP 400 with `{errors}` and no `data`, which reading `.data?.` off
  * the body would otherwise turn into a silent null.
+ *
+ * `init.signal` aborts the request (e.g. `AbortSignal.timeout(ms)`); without it the request has no timeout.
  */
-export async function postGraphql<T>(url: string, query: string, variables?: Record<string, unknown>): Promise<T> {
+export async function postGraphql<T>(
+  url: string,
+  query: string,
+  variables?: Record<string, unknown>,
+  init?: { signal?: AbortSignal },
+): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),
+    signal: init?.signal,
   })
 
   const body = await response.json().catch(() => null) as { data?: T | null; errors?: Array<{ message: string }> } | null
