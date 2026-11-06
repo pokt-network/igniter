@@ -2,7 +2,10 @@
   "name": "@igniter/graphql",
   "version": "0.0.1",
   "scripts": {
-    "codegen": "graphql-codegen --config codegen.ts"
+    "clean": "rm -rf ./dist",
+    "codegen": "graphql-codegen --config codegen.ts",
+    "build": "tsc --project ./tsconfig.build.json",
+    "test": "jest"
   },
   "dependencies": {
     "graphql": "~16.11.0"
@@ -12,6 +15,16 @@
     "./rewards": "./src/rewards.ts",
     "./indexer": "./src/indexer.ts",
     "./generated": "./src/gql/ghaphql.ts",
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "require": "./dist/client.js",
+      "import": "./dist/client.js"
+    },
+    "./analytics": {
+      "types": "./dist/analytics.d.ts",
+      "require": "./dist/analytics.js",
+      "import": "./dist/analytics.js"
+    },
     ".": "./src/index.ts"
   },
   "devDependencies": {
@@ -21,6 +34,9 @@
     "@graphql-codegen/cli": "~5.0.7",
     "@graphql-codegen/schema-ast": "~4.1.0",
     "dotenv": "~17.2.0",
-    "@graphql-typed-document-node/core": "~3.2.0"
+    "@graphql-typed-document-node/core": "~3.2.0",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.4"
   }
 }

@@ -1,4 +1,4 @@
-import { postGraphql } from './graphql'
+import { postGraphql } from './client'
 
 const fetchMock = jest.fn()
 const realFetch = global.fetch
@@ -47,5 +47,24 @@ describe('postGraphql', () => {
       method: 'POST',
       body: JSON.stringify({ query: 'query q($a: Int) { x }', variables: { a: 1 } }),
     }))
+  })
+
+  it('sends no signal without init, so the request has no timeout', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { data: { x: 1 } }))
+
+    await postGraphql('https://indexer.test', 'query { x }')
+    expect(fetchMock.mock.calls[0][1].signal).toBeUndefined()
+  })
+
+  it('passes init.signal to fetch and rejects when it aborts', async () => {
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+    }))
+    const controller = new AbortController()
+
+    const pending = postGraphql('https://indexer.test', 'query { x }', undefined, { signal: controller.signal })
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+    controller.abort(new Error('timed out'))
+    await expect(pending).rejects.toThrow('timed out')
   })
 })

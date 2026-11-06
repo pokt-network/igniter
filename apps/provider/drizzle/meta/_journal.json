@@ -169,6 +169,20 @@
       "when": 1782947927783,
       "tag": "0023_spotty_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793040657290,
+      "tag": "0024_known_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793222445041,
+      "tag": "0025_selection_reference",
+      "breakpoints": true
     }
   ]
 }

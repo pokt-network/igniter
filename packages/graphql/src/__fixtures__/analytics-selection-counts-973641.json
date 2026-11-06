@@ -1,0 +1,17 @@
+{
+ "data": {
+  "s0": {
+   "totalCount": 3
+  },
+  "s1": {
+   "totalCount": 3
+  },
+  "c0": {
+   "nodes": [
+    {
+     "value": "50"
+    }
+   ]
+  }
+ }
+}

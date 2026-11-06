@@ -17,6 +17,7 @@ import AddressGroupsDark from "@/app/assets/icons/dark/address-groups.svg";
 import RegionsDark from "@/app/assets/icons/dark/regions.svg";
 import RelayMinersDark from "@/app/assets/icons/dark/relay-miners.svg";
 import DelegatorsDark from "@/app/assets/icons/dark/delegators.svg";
+import AnalyticsDark from "@/app/assets/icons/dark/analytics.svg";
 import AppSidebar from "@igniter/ui/components/AppSidebar";
 
 export interface AppSidebarRoute {
@@ -37,6 +38,12 @@ const mainRoutes = [
     title: "Keys",
     url: "/admin/keys",
     icon: NodesDark,
+  },
+  {
+    id: "analytics",
+    title: "Analytics",
+    url: "/admin/analytics",
+    icon: AnalyticsDark,
   },
   {
     id: "transactions",
