@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+overrides:
+  # next@15.5.x optionally pulls sharp ^0.34.3 || ^0.35.5; <0.35.5 is open to GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889)
+  sharp: ^0.35.5
