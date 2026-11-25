@@ -183,6 +183,13 @@
       "when": 1793222445041,
       "tag": "0025_selection_reference",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795564800000,
+      "tag": "0026_strip_tx_signer_keys",
+      "breakpoints": true
     }
   ]
 }

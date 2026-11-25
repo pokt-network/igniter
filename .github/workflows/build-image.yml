@@ -35,15 +35,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Release tags (X.Y.Z / vX.Y.Z) and `latest` are written only by
+      # deploy-production. A manual build must never overwrite what operators
+      # pull, so those tags are refused here. Pre-release and dev tags
+      # (0.7.0-rc1, dev-fix-auth) stay allowed. The tag is read through env so
+      # free text never reaches the shell as code.
+      - name: Validate tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid tag. Allowed: [A-Za-z0-9._-], max 128 chars, not starting with '.' or '-'."
+            exit 1
+          fi
+          if [[ "$TAG" == "latest" || "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'latest' and release versions (X.Y.Z) are reserved for deploy-production."
+            exit 1
+          fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           cache: pnpm
           node-version-file: .nvmrc
@@ -52,7 +70,7 @@ jobs:
 
       - name: Login to GHCR
         if: ${{ inputs.push }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,7 +80,7 @@ jobs:
         run: pnpm exec turbo prune @igniter/${{ inputs.app }} --out-dir ./out/${{ inputs.app }} --docker
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ./apps/${{ inputs.app }}/Dockerfile
@@ -71,5 +89,7 @@ jobs:
           build-args: |
             APP_VERSION=${{ inputs.tag }}
           no-cache: ${{ inputs.no-cache }}
-          cache-from: ${{ inputs.no-cache && ' ' || 'type=gha' }}
-          cache-to: type=gha,mode=max
+          # Own cache scope: a manual build must not write layers the
+          # staging/production deploys (scope=<app>) read back.
+          cache-from: ${{ inputs.no-cache && ' ' || format('type=gha,scope=manual-{0}', inputs.app) }}
+          cache-to: type=gha,scope=manual-${{ inputs.app }},mode=max

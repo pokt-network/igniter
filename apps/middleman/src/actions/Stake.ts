@@ -1,7 +1,7 @@
 'use server'
 
 import { getApplicationSettings } from '@/actions/ApplicationSettings'
-import { ListProviders } from '@/actions/Providers'
+import { getByIdentity as getProviderByIdentity, list as listProviders } from '@/lib/dal/providers'
 import {
   StakeDistributionItem,
   StakeDistributionOffer,
@@ -11,10 +11,7 @@ import {
   SignedMemoPayload,
   SignedTransaction,
 } from '@igniter/ui/models'
-import {
-  ApplicationSettings,
-  InsertTransaction,
-} from '@igniter/db/middleman/schema'
+import { InsertTransaction } from '@igniter/db/middleman/schema'
 import {
   ProviderFee,
   TransactionStatus,
@@ -22,6 +19,7 @@ import {
 } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
 import { requireAuth } from '@/lib/utils/actions'
+import { governance } from '@/lib/governance'
 import {
   getCompressedPublicKeyFromAppIdentity,
   signPayload,
@@ -30,6 +28,9 @@ import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
 import { freshSupplierStats } from '@/lib/utils/shareCalculations'
 import { assertSignedTransaction } from '@igniter/ui/lib/signedTransaction'
+import { deriveStakeUnsignedPayload } from '@/lib/transactions/stakePayload'
+import { getApplicationSettings as getServerSettings } from '@/lib/dal/applicationSettings'
+import { fetchChainAccount } from '@/lib/transactions/chainAccount'
 
 const log = getLogger(['middleman', 'stake'])
 
@@ -38,13 +39,10 @@ export interface CreateStakeTransactionRequest {
   transaction: SignedTransaction;
 }
 
-export interface CreateSignedMemoRequest {
-  settings: ApplicationSettings;
-}
-
 export async function CalculateStakeDistribution(stakeAmount: number, ownerAddress: string): Promise<StakeDistributionOffer[]> {
+  await requireAuth()
   const applicationSettings = await getApplicationSettings()
-  const providers = await ListProviders()
+  const providers = await listProviders()
 
   const availableNodeSizes = [applicationSettings.minimumStake]
 
@@ -127,23 +125,45 @@ export async function CreateStakeTransaction(request: CreateStakeTransactionRequ
 
     assertSignedTransaction(request.transaction)
 
+    // The provider identity comes from the client: only a provider in the governance source is accepted.
+    const governed = await governance.resolve(request.offer.identity)
+    if (!governed) {
+      throw new Error('The provider is not in the governance source')
+    }
+
+    // The fee is the provider's, as this middleman stores it; the offer the client echoes back is not.
+    const provider = await getProviderByIdentity(governed.identity)
+    if (!provider) {
+      throw new Error('The provider is not available')
+    }
+
+    // The stored messages come from the signed bytes, never from the client's unsigned copy: the
+    // workflows release and verify the operators those messages name. The signature is verified
+    // and the sender is the address of the signing key, not the address the client names.
+    const { chainId } = await getServerSettings()
+    const { unsignedPayload, fromAddress } = await deriveStakeUnsignedPayload(
+      request.transaction.signedPayload,
+      request.transaction.address,
+      { chainId, getAccountNumber: async (address) => (await fetchChainAccount(address)).accountNumber },
+    )
+
     const created = await insert({
       type: TransactionType.Stake,
       status: TransactionStatus.Pending,
       signedPayload: request.transaction.signedPayload,
-      fromAddress: request.transaction.address,
-      unsignedPayload: request.transaction.unsignedPayload,
-      providerFee: Number(request.offer.fee),
-      providerId: request.offer.identity,
+      fromAddress,
+      unsignedPayload,
+      providerFee: Number(provider.fee),
+      providerId: governed.identity,
       estimatedFee: request.transaction.estimatedFee,
       consumedFee: 0,
-      typeProviderFee: request.offer.feeType,
+      typeProviderFee: provider.feeType || ProviderFee.Fixed,
       createdBy: userIdentity,
     })
 
     log.info('stake transaction created', {
       transactionId: created.id,
-      ownerAddress: request.transaction.address,
+      ownerAddress: fromAddress,
       providerId: request.offer.identity,
     })
 
@@ -151,11 +171,16 @@ export async function CreateStakeTransaction(request: CreateStakeTransactionRequ
   })
 }
 
-export async function CreateSignedMemo(request: CreateSignedMemoRequest): Promise<SignedMemo> {
+// The memo carries the delegator rewards address and fee of THIS middleman, signed with its
+// key, so both come from the server's settings; the client is never asked for them.
+export async function CreateSignedMemo(): Promise<SignedMemo> {
+  await requireAuth()
+  const settings = await getApplicationSettings()
+
   const signedMemoPayload: SignedMemoPayload = {
     t: new Date().toISOString(),
-    a: request.settings.delegatorRewardsAddress!,
-    f: request.settings.fee?.toString() ?? '',
+    a: settings.delegatorRewardsAddress!,
+    f: settings.fee?.toString() ?? '',
   }
 
   const canonicalPayload = JSON.stringify(

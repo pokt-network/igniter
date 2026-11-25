@@ -16,6 +16,7 @@ import { env } from '@/config/env'
 import { revalidatePath } from 'next/cache'
 import {
   type ActionResult,
+  requireOwner,
   withRequireOwner,
 } from '@/lib/utils/actionUtils'
 import { isPoktBech32Address } from '@igniter/commons/crypto'
@@ -59,8 +60,28 @@ export async function GetAppName() {
   return appSettings?.name || 'Stake Igniter Provider'
 }
 
-// Public endpoint - no auth required (used during bootstrap)
+// Throws unless the session is the owner. For the actions below whose callers
+// expect a plain value rather than an ActionResult.
+async function assertOwner(): Promise<void> {
+  const result = await requireOwner()
+  if (!result.success) {
+    throw new Error(result.error.message)
+  }
+}
+
+export type PublicApplicationSettings = Pick<ApplicationSettings, 'chainId'>
+
+// Public endpoint - no auth required. Read by the landing page before sign-in
+// (wallet chain check), so it carries only the fields those readers use.
+export async function GetPublicApplicationSettings(): Promise<PublicApplicationSettings> {
+  const { chainId } = await getAppSettings()
+  return { chainId }
+}
+
+// Owner only: the full row carries the owner email, the internal node and
+// indexer URLs and the reward addresses.
 export async function GetApplicationSettings() {
+  await assertOwner()
   return await getAppSettings()
 }
 
@@ -119,6 +140,11 @@ export interface BlockchainSettingsResponse {
 }
 
 export async function RetrieveBlockchainSettings(url: string, updatedAtHeight: string | null): Promise<BlockchainSettingsResponse> {
+  const authResult = await requireOwner()
+  if (!authResult.success) {
+    return { success: false, errors: [authResult.error.message] }
+  }
+
   const errors: string[] = []
   const supplierParamsUrl = urlJoin(url, 'pokt-network/poktroll/supplier/params')
   const supplierParamsResponse = await fetch(supplierParamsUrl)
@@ -170,34 +196,9 @@ export async function RetrieveBlockchainSettings(url: string, updatedAtHeight: s
   }
 }
 
-export interface ValidateBlockchainRPCResponse {
-  success: boolean;
-  errors?: string[];
-}
-
-export async function ValidateBlockchainRPC(url: string): Promise<ValidateBlockchainRPCResponse> {
-  const currentSettings = await GetApplicationSettings()
-  const { success, network, errors } = await RetrieveBlockchainSettings(url, currentSettings.updatedAtHeight)
-  if (!success) {
-    return {
-      success: false,
-      errors,
-    }
-  }
-
-  if (network !== currentSettings.chainId) {
-    return {
-      success: false,
-      errors: ['Chain does not match the current configured chain'],
-    }
-  }
-
-  return {
-    success: true,
-  }
-}
-
 export async function RetrieveIndexerNetwork(url: string) {
+  await assertOwner()
+
   const client = getServerApolloClient(url)
 
   const { data } = await client.query({
@@ -208,6 +209,11 @@ export async function RetrieveIndexerNetwork(url: string) {
 }
 
 export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string; network?: string }> {
+  const authResult = await requireOwner()
+  if (!authResult.success) {
+    return { success: false, error: authResult.error.message }
+  }
+
   try {
     const statusUrl = `${url.replace(/\/$/, '')}/status`
     const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
@@ -225,6 +231,11 @@ export async function ValidateRpcEndpoint(url: string): Promise<{ success: boole
 }
 
 export async function ValidateIndexerUrl(url: string) {
+  const authResult = await requireOwner()
+  if (!authResult.success) {
+    return { success: false, errors: [authResult.error.message] }
+  }
+
   const [currentSettings, indexerNetwork] = await Promise.all([
     GetApplicationSettings(),
     RetrieveIndexerNetwork(url),

@@ -12,7 +12,7 @@ import {
 } from '@/lib/dal/applicationSettings'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { getCurrentUser } from '@/lib/utils/actions'
+import { getCurrentUser, requireAdmin } from '@/lib/utils/actions'
 import urlJoin from 'url-join'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { indexerStatusDocument } from '@igniter/graphql'
@@ -59,7 +59,33 @@ export async function GetAppName() {
   return appSettings?.name || 'Stake Igniter'
 }
 
-export async function getApplicationSettings() {
+// Fields the public read leaves out: the owner's email, the internal endpoints and the audit columns.
+const PRIVATE_SETTINGS_FIELDS = [
+  'ownerEmail',
+  'pocketApiUrl',
+  'pocketRpcUrl',
+  'indexerApiUrl',
+  'createdBy',
+  'updatedBy',
+] as const
+
+export type PublicApplicationSettings = Omit<ApplicationSettings, typeof PRIVATE_SETTINGS_FIELDS[number]>
+
+/**
+ * Public: the root layout reads it before login. Server code that needs the private fields reads
+ * `@/lib/dal/applicationSettings` directly; the admin pages use GetFullApplicationSettings.
+ */
+export async function getApplicationSettings(): Promise<PublicApplicationSettings> {
+  const settings: Partial<ApplicationSettings> = { ...(await getAppSettings()) }
+  for (const field of PRIVATE_SETTINGS_FIELDS) {
+    delete settings[field]
+  }
+  return settings as PublicApplicationSettings
+}
+
+/** The whole settings row, for the owner's settings and setup pages. */
+export async function GetFullApplicationSettings(): Promise<ApplicationSettings> {
+  await requireAdmin()
   return await getAppSettings()
 }
 
@@ -124,6 +150,7 @@ export interface BlockchainSettingsResponse {
 }
 
 export async function RetrieveBlockchainSettings(url: string, updatedAtHeight: string | null): Promise<BlockchainSettingsResponse> {
+  await requireAdmin()
   const errors: string[] = []
   const supplierParamsUrl = urlJoin(url, 'pokt-network/poktroll/supplier/params')
   const supplierParamsResponse = await fetch(supplierParamsUrl)
@@ -176,6 +203,7 @@ export async function RetrieveBlockchainSettings(url: string, updatedAtHeight: s
 }
 
 export async function RetrieveIndexerNetwork(url: string) {
+  await requireAdmin()
   const client = getServerApolloClient(url)
 
   const { data } = await client.query({
@@ -186,6 +214,7 @@ export async function RetrieveIndexerNetwork(url: string) {
 }
 
 export async function ValidateBlockchainRPC(url: string) {
+  await requireAdmin()
   const currentSettings = await getApplicationSettings()
   const { success, network, errors } = await RetrieveBlockchainSettings(url, currentSettings.updatedAtHeight)
   if (!success) {
@@ -208,6 +237,7 @@ export async function ValidateBlockchainRPC(url: string) {
 }
 
 export async function ValidateRpcEndpoint(url: string): Promise<{ success: boolean; error?: string; network?: string }> {
+  await requireAdmin()
   try {
     const statusUrl = `${url.replace(/\/$/, '')}/status`
     const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) })
@@ -225,6 +255,7 @@ export async function ValidateRpcEndpoint(url: string): Promise<{ success: boole
 }
 
 export async function ValidateIndexerUrl(url: string) {
+  await requireAdmin()
   const [currentSettings, indexerNetwork] = await Promise.all([
     getApplicationSettings(),
     RetrieveIndexerNetwork(url),

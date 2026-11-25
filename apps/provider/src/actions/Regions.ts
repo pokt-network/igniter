@@ -18,8 +18,10 @@ export async function DeleteRegion(id: number) {
 
 export async function CreateRegion(region: Omit<InsertRegion, 'createdBy' | 'updatedBy'>) {
   return withRequireOwnerOrAdmin(async (user) => {
+    // Explicit fields only: never id/createdBy/updatedBy (or any other column) from input.
     return insert({
-      ...region,
+      displayName: region.displayName,
+      urlValue: region.urlValue,
       createdBy: user.identity,
       updatedBy: user.identity,
     });
@@ -29,7 +31,8 @@ export async function CreateRegion(region: Omit<InsertRegion, 'createdBy' | 'upd
 export async function UpdateRegion(id: number, region: Pick<Region, 'displayName' | 'urlValue'>) {
   return withRequireOwnerOrAdmin(async (user) => {
     return update(id, {
-      ...region,
+      displayName: region.displayName,
+      urlValue: region.urlValue,
       updatedBy: user.identity,
     });
   });

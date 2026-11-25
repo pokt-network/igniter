@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { getApplicationSettings, GetAppName } from '@/actions/ApplicationSettings'
+import { GetAppName } from '@/actions/ApplicationSettings'
+import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { GetAllStakedSummary } from '@/actions/Nodes'
 import InitializeHeightContext from '@igniter/ui/context/Height/InitializeContext'
 import { Suspense } from 'react'

@@ -7,9 +7,20 @@ import {
   supplierChangesTable,
 } from '@igniter/db/middleman/schema'
 
-export async function getChangesByNodeId(nodeId: number, limit = 20) {
+// The ids of the nodes the user owns, to scope the node-keyed queries below to them.
+function nodesOwnedBy(userIdentity: string) {
+  return getDb()
+    .select({ id: nodesTable.id })
+    .from(nodesTable)
+    .where(eq(nodesTable.createdBy, userIdentity))
+}
+
+export async function getChangesByNodeId(nodeId: number, userIdentity: string, limit = 20) {
   return getDb().query.supplierChangesTable.findMany({
-    where: eq(supplierChangesTable.nodeId, nodeId),
+    where: and(
+      eq(supplierChangesTable.nodeId, nodeId),
+      inArray(supplierChangesTable.nodeId, nodesOwnedBy(userIdentity)),
+    ),
     orderBy: [desc(supplierChangesTable.createdAt)],
     limit,
   })
@@ -89,21 +100,27 @@ export async function getRecentChangesByUser(
   }
 }
 
-export async function acknowledgeChanges(changeIds: number[]) {
+export async function acknowledgeChanges(changeIds: number[], userIdentity: string) {
   if (changeIds.length === 0) return
   await getDb()
     .update(supplierChangesTable)
     .set({ acknowledgedAt: new Date() })
-    .where(inArray(supplierChangesTable.id, changeIds))
+    .where(
+      and(
+        inArray(supplierChangesTable.id, changeIds),
+        inArray(supplierChangesTable.nodeId, nodesOwnedBy(userIdentity)),
+      ),
+    )
 }
 
-export async function acknowledgeAllByNode(nodeId: number) {
+export async function acknowledgeAllByNode(nodeId: number, userIdentity: string) {
   await getDb()
     .update(supplierChangesTable)
     .set({ acknowledgedAt: new Date() })
     .where(
       and(
         eq(supplierChangesTable.nodeId, nodeId),
+        inArray(supplierChangesTable.nodeId, nodesOwnedBy(userIdentity)),
         isNull(supplierChangesTable.acknowledgedAt),
       ),
     )

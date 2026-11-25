@@ -79,7 +79,7 @@ const ProvidersForm: React.FC<ProvidersFormProps> = ({
         onSubmit={form.handleSubmit(async (values) => {
           setIsLoading(true);
           try {
-            await submitProviders(values, providers);
+            await submitProviders(values);
             goNext();
           } catch (error) {
             log.error("failed to submit providers", { error });

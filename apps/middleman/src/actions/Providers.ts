@@ -1,11 +1,12 @@
 "use server";
 
-import {countProviders, list, listAll, upsertProviders, applyGovernanceSync, getByIdentity, update} from "@/lib/dal/providers";
+import {countProviders, list, listAll, applyGovernanceSync, getByIdentity, update} from "@/lib/dal/providers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentUser, requireAuth } from '@/lib/utils/actions'
+import { getCurrentUser, requireAdmin, requireAuth } from '@/lib/utils/actions'
 import { describeDatabaseFailure } from '@igniter/db/errors'
 import {ProviderStatus, UserRole} from "@igniter/db/middleman/enums";
+import type { Provider as ProviderRow } from "@igniter/db/middleman/schema";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
@@ -44,8 +45,8 @@ function clientSafeMessage(error: unknown, fallback?: string): string {
 
 export async function TriggerGovernanceSync(): Promise<{ success: boolean, error?: string }> {
   return runWithRequestContext(async () => {
+    await requireAdmin()
     try {
-      await requireAuth()
       const { getTemporalClient } = await import('@/lib/temporal')
       const client = getTemporalClient()
       const handle = client.schedule.getHandle(GOVERNANCE_SYNC_SCHEDULE_ID)
@@ -121,9 +122,13 @@ export async function SyncProvidersFromGovernance(): Promise<{ success: boolean;
         }
       }
 
-      await applyGovernanceSync(toInsert, toUpdate, user.identity)
+      const toDisable = current
+        .filter((p) => !allCdnIdentities.has(p.identity) && (p.enabled || p.visible))
+        .map((p) => p.identity)
 
-      log.info('governance sync applied', { inserted: toInsert.length, updated: toUpdate.length })
+      await applyGovernanceSync(toInsert, toUpdate, toDisable, user.identity)
+
+      log.info('governance sync applied', { inserted: toInsert.length, updated: toUpdate.length, disabled: toDisable.length })
 
       const providers = await list(true)
       return { success: true, data: providers }
@@ -147,10 +152,13 @@ interface SubmitProvidersResult {
   errors?: Record<string, string[]>;
 }
 
+// Only toggles `enabled`/`visible` on provider rows that already exist (written by
+// the governance sync). The name, url and the set of identities never come from the
+// client: an identity that is not in the table is ignored.
 export async function submitProviders(
   values: SubmitProvidersValues,
-  providers: Provider[]
 ): Promise<SubmitProvidersResult | void> {
+  await requireAdmin()
   const userIdentity = await requireAuth()
 
   const validatedFields = updateProvidersSchema.safeParse(values);
@@ -159,32 +167,49 @@ export async function submitProviders(
     throw new Error("Invalid form data");
   }
 
-  const updatedProviders = providers.map(({ id, ...provider }) => ({
-    ...provider,
-    enabled: values.providers.includes(provider.identity),
-    visible: values.providers.includes(provider.identity),
-    createdBy: userIdentity,
-    updatedBy: userIdentity,
-  }));
+  const selected = new Set(validatedFields.data.providers);
+  const existingProviders = await listAll();
 
-  await upsertProviders(updatedProviders);
+  for (const provider of existingProviders) {
+    const isSelected = selected.has(provider.identity);
+    await update(provider.identity, {
+      enabled: isSelected,
+      visible: isSelected,
+      updatedBy: userIdentity,
+    });
+  }
 
   revalidatePath("/admin/setup");
 }
 
 export async function CountProviders() {
+  await requireAdmin()
   return countProviders()
 }
 
-export async function ListProviders(all?: boolean) {
-  return list(all);
+// What a delegator's provider picker reads (import suppliers); the full row is the owner's.
+export type ProviderListItem = Pick<ProviderRow, 'id' | 'identity' | 'name' | 'status' | 'enabled' | 'visible'>
+
+export async function ListProviders(): Promise<ProviderListItem[]>
+export async function ListProviders(all: true): Promise<ProviderRow[]>
+export async function ListProviders(all?: boolean): Promise<ProviderListItem[] | ProviderRow[]> {
+  await requireAuth()
+  // `all` includes the providers hidden by the owner, so only the owner gets it.
+  if (all) {
+    await requireAdmin()
+    return list(all);
+  }
+  const providers = await list();
+  return providers.map(({ id, identity, name, status, enabled, visible }) => ({ id, identity, name, status, enabled, visible }));
 }
 
 export async function GetProviderByIdentity(identity: string) {
+  await requireAdmin()
   return getByIdentity(identity);
 }
 
 export async function UpdateVisibility(identity: string, visible: boolean) {
+  await requireAdmin()
   try {
     const updates = visible
       ? { visible }
@@ -197,6 +222,7 @@ export async function UpdateVisibility(identity: string, visible: boolean) {
 }
 
 export async function UpdateEnabled(identity: string, enabled: boolean) {
+  await requireAdmin()
   try {
     await update(identity, { enabled });
   } catch (error) {
@@ -251,6 +277,7 @@ export interface ProviderWithPublicPlans {
 }
 
 export async function ListProvidersWithPublicPlans(connectedAccounts: string[] = []): Promise<ProviderWithPublicPlans[]> {
+  await requireAuth()
   const providers = await list();
   const normalizedConnectedAccounts = connectedAccounts.map(addr => addr.toLowerCase());
 

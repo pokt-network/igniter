@@ -42,12 +42,17 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
 
         const {data} = signatureValidationResponse;
 
-        if (!data || !data.addresses.length) {
+        if (!data || !Array.isArray(data.addresses) || !data.addresses.length) {
             return NextResponse.json({error: "Invalid request. Empty suppliers list."}, {status: 400});
         }
 
-        log.info('supplier release requested', { supplierAddresses: data.addresses, identity: truncateIdentity(delegatorIdentity) });
-        await releaseDeliveredSuppliers(data.addresses, delegatorIdentity);
+        // Keys are released only for the owner they were delivered to.
+        if (typeof data.ownerAddress !== 'string' || !data.ownerAddress) {
+            return NextResponse.json({error: "Invalid request. ownerAddress is required."}, {status: 400});
+        }
+
+        log.info('supplier release requested', { supplierAddresses: data.addresses, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity) });
+        await releaseDeliveredSuppliers(data.addresses, delegatorIdentity, data.ownerAddress);
         return NextResponse.json({ data: 'OK' }, { status: 200 });
     } catch (e) {
         log.error('supplier release request failed', { error: e });

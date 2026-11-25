@@ -1,6 +1,8 @@
 import { signPayload } from '@igniter/commons/crypto'
+import { assertNotRedirect, PROVIDER_FETCH_INIT, readProviderJson } from '@igniter/commons/providerFetch'
 import { Provider } from '@igniter/db/middleman/schema'
 import { ProviderStatus } from '@igniter/db/middleman/enums'
+import type { GovernanceRegistry } from '@igniter/commons/governance'
 import ApplicationSettings from '@/lib/dal/applicationSettings'
 import {
   REQUEST_IDENTITY_HEADER,
@@ -12,11 +14,62 @@ import {
   classifyReleaseError,
   classifyReleaseResponse,
   RELEASE_LOCAL_PRE_SEND,
+  RELEASE_NOT_IN_GOVERNANCE,
   type ReleaseOutcome,
 } from '@/lib/provider/releaseOutcome'
 
+/**
+ * Most addresses one stake/unstaking notify request may carry. Matches the provider-side cap
+ * (MAX_SUPPLIERS_PER_REQUEST in apps/provider/src/lib/models/supplier.ts), which rejects more.
+ */
+export const MAX_ADDRESSES_PER_NOTIFY = 1000
+
+/**
+ * Splits addresses into chunks of at most MAX_ADDRESSES_PER_NOTIFY. An empty list gives one empty
+ * chunk, so the request goes out (and the provider rejects it) exactly as before chunking.
+ */
+function chunkAddresses(addresses: string[]): string[][] {
+  if (addresses.length === 0) return [[]]
+  const chunks: string[][] = []
+  for (let i = 0; i < addresses.length; i += MAX_ADDRESSES_PER_NOTIFY) {
+    chunks.push(addresses.slice(i, i + MAX_ADDRESSES_PER_NOTIFY))
+  }
+  return chunks
+}
+
 /** Upper bound for a release POST, connect included. Hitting it is an ambiguous outcome. */
 export const RELEASE_TIMEOUT_MS = 20_000
+
+/**
+ * The fields of a provider row that the provider's `/api/status` reply may set: what apps/provider's
+ * status route reports about its own configuration. Anything else in the reply is ignored, so a
+ * provider can never write its url, identity, enabled, visible or id.
+ */
+export const PROVIDER_STATUS_FIELDS = [
+  'regions',
+  'allowedStakers',
+  'minimumStake',
+  'allowPublicStaking',
+  'fee',
+  'feeType',
+  'domains',
+  'addressGroups',
+  'rewardAddresses',
+  'returnSupplierFundsToOwner',
+] as const satisfies ReadonlyArray<keyof Provider>
+
+export type ProviderStatusUpdate =
+  Pick<Provider, 'id' | 'status'> & Partial<Pick<Provider, typeof PROVIDER_STATUS_FIELDS[number]>>
+
+function pickStatusFields(reply: Record<string, unknown>): Partial<Pick<Provider, typeof PROVIDER_STATUS_FIELDS[number]>> {
+  const picked: Record<string, unknown> = {}
+  for (const field of PROVIDER_STATUS_FIELDS) {
+    if (field in reply) picked[field] = reply[field]
+  }
+  return picked
+}
+
+type ImportStatusReply = { status: string; importedSupplierAddresses?: string[]; errorMessage?: string }
 
 export class ProviderService {
 
@@ -24,9 +77,34 @@ export class ProviderService {
 
   logger: Logger
 
-  constructor(appSettingsDal: ApplicationSettings, logger: Logger) {
+  governance: GovernanceRegistry
+
+  constructor(appSettingsDal: ApplicationSettings, logger: Logger, governance: GovernanceRegistry) {
     this.appSettingsDal = appSettingsDal
     this.logger = logger
+    this.governance = governance
+  }
+
+  /**
+   * The base url to call for a provider: the governance source's url for its current identity,
+   * never the url stored in its row. Null (and a warning) when the source does not list it; then
+   * no call may go out. Throws GovernanceUnavailableError when the source cannot be read.
+   */
+  async governanceUrl(provider: Provider): Promise<string | null> {
+    const entry = await this.governance.resolve(provider.identity)
+    if (!entry) {
+      this.logger.warn('Provider is not in the governance source; not calling it', { identity: provider.identity })
+      return null
+    }
+    return entry.url
+  }
+
+  private async requireGovernanceUrl(provider: Provider): Promise<string> {
+    const url = await this.governanceUrl(provider)
+    if (!url) {
+      throw new Error(`Provider ${provider.identity} is not in the governance source`)
+    }
+    return url
   }
 
   /**
@@ -34,12 +112,16 @@ export class ProviderService {
    * @param provider The provider to check status for
    * @param signature
    * @param identity
-   * @returns The provider status information
+   * @returns The provider status information, or null when the provider is not in the governance source
    */
-  async status(provider: Provider, signature: string, identity: string) {
+  async status(provider: Provider, signature: string, identity: string): Promise<ProviderStatusUpdate | null> {
+    const baseUrl = await this.governanceUrl(provider)
+    if (!baseUrl) return null
+
     try {
-      const STATUS_URL = urlJoin(provider.url, `/api/status`)
+      const STATUS_URL = urlJoin(baseUrl, `/api/status`)
       const status = await fetch(STATUS_URL, {
+        ...PROVIDER_FETCH_INIT,
         method: 'POST',
         body: JSON.stringify({}),
         headers: {
@@ -49,11 +131,11 @@ export class ProviderService {
         },
       })
 
-      const { healthy, ...statusProps } = await status.json()
+      const { healthy, ...statusProps } = await readProviderJson(status) as Record<string, unknown>
 
       if (healthy) {
         return {
-          ...statusProps,
+          ...pickStatusFields(statusProps),
           id: provider.id,
           status: ProviderStatus.Healthy,
         }
@@ -79,27 +161,40 @@ export class ProviderService {
    * @returns Result of the staking operation
    */
   async markOwnerStaked(addresses: string[], provider: Provider) {
-    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
+    const baseUrl = await this.requireGovernanceUrl(provider)
 
-    try {
-      const STAKE_URL = `${provider.url}/api/suppliers/stake`
-      const operationResponse = await fetch(STAKE_URL, {
-        method: 'POST',
-        body: JSON.stringify({ addresses }),
-        headers: {
-          'Content-Type': 'application/json',
-          [REQUEST_IDENTITY_HEADER]: identity,
-          [REQUEST_SIGNATURE_HEADER]: signature,
-        },
-      })
+    // One signed request per chunk (the signature covers the body). Every chunk is sent even when
+    // one fails, then the first error is thrown: the activity callers report a failure and do not
+    // retry, so stopping early would leave the later chunks never sent.
+    let firstError: unknown
+    for (const chunk of chunkAddresses(addresses)) {
+      const body = JSON.stringify({ addresses: chunk })
+      const { identity, signature } = await this.signPayload(body)
 
-      if (!operationResponse.ok) {
-        throw new Error(`Error marking the suppliers as staked: ${operationResponse.statusText}`)
+      try {
+        const STAKE_URL = `${baseUrl}/api/suppliers/stake`
+        const operationResponse = await fetch(STAKE_URL, {
+          ...PROVIDER_FETCH_INIT,
+          method: 'POST',
+          body,
+          headers: {
+            'Content-Type': 'application/json',
+            [REQUEST_IDENTITY_HEADER]: identity,
+            [REQUEST_SIGNATURE_HEADER]: signature,
+          },
+        })
+
+        assertNotRedirect(operationResponse)
+        if (!operationResponse.ok) {
+          throw new Error(`Error marking the suppliers as staked: ${operationResponse.statusText}`)
+        }
+      } catch (error) {
+        this.logger.error('An error occurred while marking the suppliers as staked.', { error })
+        firstError ??= error
       }
-    } catch (error) {
-      this.logger.error('An error occurred while marking the suppliers as staked.', { error })
-      throw error
     }
+
+    if (firstError !== undefined) throw firstError
   }
 
   /**
@@ -108,70 +203,56 @@ export class ProviderService {
    * @param provider
    */
   async markOwnerUnstaking(addresses: string[], provider: Provider) {
-    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
+    const baseUrl = await this.requireGovernanceUrl(provider)
 
-    try {
-      const UNSTAKING_URL = `${provider.url}/api/suppliers/unstaking`
-      const operationResponse = await fetch(UNSTAKING_URL, {
-        method: 'POST',
-        body: JSON.stringify({ addresses }),
-        headers: {
-          'Content-Type': 'application/json',
-          [REQUEST_IDENTITY_HEADER]: identity,
-          [REQUEST_SIGNATURE_HEADER]: signature,
-        },
-      })
+    // One signed request per chunk (the signature covers the body). Every chunk is sent even when
+    // one fails, then the first error is thrown: the activity callers report a failure and do not
+    // retry, so stopping early would leave the later chunks never sent.
+    let firstError: unknown
+    for (const chunk of chunkAddresses(addresses)) {
+      const body = JSON.stringify({ addresses: chunk })
+      const { identity, signature } = await this.signPayload(body)
 
-      if (!operationResponse.ok) {
-        throw new Error(`Error marking the suppliers as staked: ${operationResponse.statusText}`)
+      try {
+        const UNSTAKING_URL = `${baseUrl}/api/suppliers/unstaking`
+        const operationResponse = await fetch(UNSTAKING_URL, {
+          ...PROVIDER_FETCH_INIT,
+          method: 'POST',
+          body,
+          headers: {
+            'Content-Type': 'application/json',
+            [REQUEST_IDENTITY_HEADER]: identity,
+            [REQUEST_SIGNATURE_HEADER]: signature,
+          },
+        })
+
+        assertNotRedirect(operationResponse)
+        if (!operationResponse.ok) {
+          throw new Error(`Error marking the suppliers as staked: ${operationResponse.statusText}`)
+        }
+      } catch (error) {
+        this.logger.error('An error occurred while marking the suppliers as staked.', { error })
+        firstError ??= error
       }
-    } catch (error) {
-      this.logger.error('An error occurred while marking the suppliers as staked.', { error })
-      throw error
     }
+
+    if (firstError !== undefined) throw firstError
   }
 
   /**
-   * Fetches supplier address groups from a provider for the given list of addresses
-   * @param addresses List of staked node addresses
-   * @param provider The provider to query
-   * @returns Array of address groups with their IDs, names, and addresses
+   * Releases Delivered keys. `ownerAddress` is the failed transaction's owner (its signer): the
+   * provider releases only keys it delivered to that owner for this middleman.
    */
-  async fetchSupplierAddressGroups(addresses: string[], provider: Provider): Promise<Array<{ id: number; name: string; addresses: string[] }>> {
-    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
+  async releaseSuppliers(addresses: string[], provider: Provider, ownerAddress: string) {
+    const baseUrl = await this.requireGovernanceUrl(provider)
+    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses, ownerAddress }))
 
     try {
-      const URL = urlJoin(provider.url, '/api/suppliers/address-groups')
-      const response = await fetch(URL, {
-        method: 'POST',
-        body: JSON.stringify({ addresses }),
-        headers: {
-          'Content-Type': 'application/json',
-          [REQUEST_IDENTITY_HEADER]: identity,
-          [REQUEST_SIGNATURE_HEADER]: signature,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error fetching supplier address groups: ${response.statusText}`)
-      }
-
-      const { data } = await response.json()
-      return data.addressGroups
-    } catch (error) {
-      this.logger.error('An error occurred while fetching supplier address groups.', { provider: provider.name, error })
-      throw error
-    }
-  }
-
-  async releaseSuppliers(addresses: string[], provider: Provider) {
-    const { identity, signature } = await this.signPayload(JSON.stringify({ addresses }))
-
-    try {
-      const STAKE_URL = `${provider.url}/api/suppliers/release`
+      const STAKE_URL = `${baseUrl}/api/suppliers/release`
       const operationResponse = await fetch(STAKE_URL, {
+        ...PROVIDER_FETCH_INIT,
         method: 'POST',
-        body: JSON.stringify({ addresses }),
+        body: JSON.stringify({ addresses, ownerAddress }),
         headers: {
           'Content-Type': 'application/json',
           [REQUEST_IDENTITY_HEADER]: identity,
@@ -179,6 +260,7 @@ export class ProviderService {
         },
       })
 
+      assertNotRedirect(operationResponse)
       if (!operationResponse.ok) {
         throw new Error(operationResponse.statusText)
       }
@@ -196,14 +278,19 @@ export class ProviderService {
    * @param addresses Supplier addresses to release
    * @param provider The provider holding the reservations
    */
-  async releaseSuppliersOutcome(addresses: string[], provider: Provider): Promise<ReleaseOutcome> {
+  async releaseSuppliersOutcome(addresses: string[], provider: Provider, ownerAddress: string): Promise<ReleaseOutcome> {
     let releaseUrl: string
     let init: RequestInit
     try {
-      const body = JSON.stringify({ addresses })
+      const baseUrl = await this.governanceUrl(provider)
+      if (!baseUrl) {
+        return { kind: 'not-sent', code: RELEASE_NOT_IN_GOVERNANCE }
+      }
+      const body = JSON.stringify({ addresses, ownerAddress })
       const { identity, signature } = await this.signPayload(body)
-      releaseUrl = `${provider.url}/api/suppliers/release`
+      releaseUrl = `${baseUrl}/api/suppliers/release`
       init = {
+        ...PROVIDER_FETCH_INIT,
         method: 'POST',
         body,
         headers: {
@@ -219,8 +306,9 @@ export class ProviderService {
 
     try {
       const operationResponse = await fetch(releaseUrl, init)
-      // Only the status matters. Drop the body so undici frees the connection now instead of at GC;
-      // a failure cancelling it changes nothing about what the provider answered.
+      // Only the status matters; a 3xx is not followed and classifies as ambiguous. Drop the body so
+      // undici frees the connection now instead of at GC; a failure cancelling it changes nothing
+      // about what the provider answered.
       try {
         await operationResponse.body?.cancel()
       } catch {
@@ -247,10 +335,12 @@ export class ProviderService {
     payload: { ownerAddress: string; nonce?: string },
     signature: string,
     identity: string,
-  ): Promise<{ status: string; importedSupplierAddresses?: string[]; errorMessage?: string }> {
+  ): Promise<ImportStatusReply> {
+    const baseUrl = await this.requireGovernanceUrl(provider)
     try {
-      const STATUS_URL = urlJoin(provider.url, '/api/import-suppliers/status')
+      const STATUS_URL = urlJoin(baseUrl, '/api/import-suppliers/status')
       const response = await fetch(STATUS_URL, {
+        ...PROVIDER_FETCH_INIT,
         method: 'POST',
         body: JSON.stringify(payload),
         headers: {
@@ -260,12 +350,13 @@ export class ProviderService {
         },
       })
 
+      assertNotRedirect(response)
       if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}))
-        throw new Error(errorBody.error || `HTTP ${response.status}: ${response.statusText}`)
+        const errorBody = await readProviderJson(response).catch(() => ({})) as { error?: string } | null
+        throw new Error(errorBody?.error || `HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const { data } = await response.json()
+      const { data } = await readProviderJson(response) as { data: ImportStatusReply }
       return data
     } catch (error) {
       this.logger.error('Error checking import status with provider', {

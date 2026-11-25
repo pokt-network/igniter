@@ -5,7 +5,7 @@ import {getLogger} from "@igniter/logger";
 
 const log = getLogger(['middleman', 'provider-client'])
 
-export async function requestSuppliers(selectedAddressGroupId: number, stakeOffer: StakeDistributionOffer, settings: ApplicationSettings, ownerAddress: string, region: string = '', simulate = false): Promise<SupplierStake[]> {
+export async function requestSuppliers(selectedAddressGroupId: number, stakeOffer: StakeDistributionOffer, settings: Pick<ApplicationSettings, "delegatorRewardsAddress" | "fee">, ownerAddress: string, region: string = '', simulate = false): Promise<SupplierStake[]> {
     try {
         const response = await fetch("/api/provider-rpc", {
             method: "POST",
@@ -39,7 +39,8 @@ export async function requestSuppliers(selectedAddressGroupId: number, stakeOffe
     }
 }
 
-export async function releaseSuppliers(stakeOffer: StakeDistributionOffer, addresses: string[]) {
+// ownerAddress: the owner the keys were delivered to; the provider releases only those.
+export async function releaseSuppliers(stakeOffer: StakeDistributionOffer, addresses: string[], ownerAddress: string) {
     try {
         const response = await fetch("/api/provider-rpc", {
             method: "POST",
@@ -51,6 +52,7 @@ export async function releaseSuppliers(stakeOffer: StakeDistributionOffer, addre
                 path: "/api/suppliers/release",
                 data: {
                     addresses,
+                    ownerAddress,
                 },
             }),
         });

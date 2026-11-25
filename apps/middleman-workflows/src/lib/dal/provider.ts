@@ -1,4 +1,4 @@
-import { eq} from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Logger } from '@igniter/logger'
 import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/middleman/schema'
@@ -26,11 +26,7 @@ export default class Provider {
 
   async list() {
     return this.dbClient.db.query.providersTable.findMany({
-      // @ts-ignore (todo: fix this)
-      where: (provider, { eq }) => {
-        // @ts-ignore (todo: fix this)
-        return eq(provider.enabled, true) && eq(provider.visible, true);
-      },
+      where: and(eq(providersTable.enabled, true), eq(providersTable.visible, true)),
     });
   }
 
@@ -115,13 +111,6 @@ export default class Provider {
       .update(providersTable)
       .set(provider)
       .where(eq(providersTable.id, providerId));
-  }
-
-  async updateProviders(providers: ProviderModel[]) {
-    const updates = providers.map(({ id, ...rest }) => {
-      return this.updateProvider(id, rest);
-    });
-    await Promise.all(updates);
   }
 
   async getProvider(providerId: string) {

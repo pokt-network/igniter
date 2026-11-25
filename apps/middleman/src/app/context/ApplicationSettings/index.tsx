@@ -7,14 +7,13 @@ import {
   useEffect,
   useState,
 } from "react";
-import { getApplicationSettings } from "@/actions/ApplicationSettings";
-import {ApplicationSettings} from "@igniter/db/middleman/schema";
+import { getApplicationSettings, type PublicApplicationSettings } from "@/actions/ApplicationSettings";
 import {getLogger} from "@igniter/logger";
 import { ChainIdProvider } from "@igniter/ui/context/explorer";
 
 const log = getLogger(['middleman', 'application-settings-context'])
 
-const ApplicationSettingsContext = createContext<ApplicationSettings | undefined>(undefined);
+const ApplicationSettingsContext = createContext<PublicApplicationSettings | undefined>(undefined);
 
 export const ApplicationSettingsProvider = ({
   children,
@@ -22,7 +21,7 @@ export const ApplicationSettingsProvider = ({
   children: ReactNode;
 }) => {
   const [applicationSettings, setApplicationSettings] =
-    useState<ApplicationSettings | undefined>();
+    useState<PublicApplicationSettings | undefined>();
 
   useEffect(() => {
     (async () => {

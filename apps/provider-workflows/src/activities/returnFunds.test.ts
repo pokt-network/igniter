@@ -47,8 +47,15 @@ describe('resolveDrainDestination', () => {
       resolveDrainDestination({ stakeOwner: '', ownerAddress: 'pokt1deliv' }, { mode: 'owner' }, null),
     ).toBe('pokt1deliv'))
 
+  const CUSTOM = 'pokt1qvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrlpewsn'
+
   it('mode custom -> address', () =>
-    expect(resolveDrainDestination(key, { mode: 'custom', address: 'pokt1x' }, null)).toBe('pokt1x'))
+    expect(resolveDrainDestination(key, { mode: 'custom', address: CUSTOM }, null)).toBe(CUSTOM))
+
+  it('mode custom with an address that is not a pokt bech32 address -> null', () => {
+    expect(resolveDrainDestination(key, { mode: 'custom', address: 'pokt1x' }, null)).toBeNull()
+    expect(resolveDrainDestination(key, { mode: 'custom', address: 'cosmos1qyqszqgpqyqszqgpqyqszqgpqyqszqgpjnp7du' }, null)).toBeNull()
+  })
 
   it('no choice + flag off -> null', () =>
     expect(resolveDrainDestination(key, undefined, { returnSupplierFundsToOwner: false })).toBeNull())

@@ -19,6 +19,8 @@ import {
 import { buildWatchdogEntries } from '@/bootstrap'
 import DAL from '@/lib/dal/DAL'
 import { ProviderService } from '@/lib/provider'
+import { assertDnsAvailable, createGovernanceRegistry, governanceSourceUrl } from '@igniter/commons/governance'
+import { urlError } from '@/lib/governance/providersSync'
 
 const logger = getLogger()
 
@@ -110,7 +112,27 @@ export async function setupTemporalWorker() {
 
   const blockchainProvider = await PocketBlockchain.setup(rpcUrl, 'upokt', 0.001, apiUrl || undefined)
 
-  const providerService = new ProviderService(dal.appSettings, logger)
+  // Every outbound provider call resolves its url from the governance source (last-good cache,
+  // fail closed while it has never been read); see @igniter/commons/governance.
+  const governance = createGovernanceRegistry({
+    getSourceUrl: async () => {
+      const template = process.env.PROVIDERS_CDN_URL
+      if (!template) throw new Error('PROVIDERS_CDN_URL environment variable is not defined')
+      const current = await dal.appSettings.getFirst()
+      if (!current) throw new Error('Application settings not found')
+      return governanceSourceUrl(template, current.chainId)
+    },
+    // The providers sync's url rule: an entry whose url breaks it is left out (treated as not listed).
+    validateUrl: async (url) => {
+      // A resolver failure (not a missing name) is transient: it fails the refresh, the last-good copy stays.
+      if (URL.canParse(url)) await assertDnsAvailable(new URL(url).hostname)
+      const reason = await urlError(url)
+      if (reason) logger.warn('Governance provider url refused; the provider is left out', { url, reason })
+      return reason
+    },
+  })
+
+  const providerService = new ProviderService(dal.appSettings, logger, governance)
 
   const shutdownGraceTime = 2500
 

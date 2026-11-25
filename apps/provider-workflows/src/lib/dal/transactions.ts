@@ -5,6 +5,16 @@ import { transactionsTable, InsertTransaction, Transaction as TransactionModel }
 import { TransactionStatus } from '@igniter/db/provider/enums'
 import type { Logger } from '@igniter/logger'
 
+/**
+ * `params` of a row reaching a terminal status, with any `signerPrivateKey` removed
+ * (top level for legacy untagged stake intents, under `params` for tagged ones). New rows
+ * never store the key; this cleans legacy rows written by a pre-fix worker during a rollout.
+ * Only rows that contain the key string are re-encoded, so ordinary rows are left untouched.
+ */
+const paramsWithoutSignerKey = sql`CASE WHEN ${transactionsTable.params} LIKE '%signerPrivateKey%'
+  THEN ((${transactionsTable.params}::jsonb - 'signerPrivateKey') #- '{params,signerPrivateKey}')::text
+  ELSE ${transactionsTable.params} END`
+
 export default class Transactions {
   logger: Logger
   dbClient: DBClient<typeof schema>
@@ -115,7 +125,7 @@ export default class Transactions {
   ): Promise<TransactionModel | undefined> {
     const [row] = await this.dbClient.db
       .update(transactionsTable)
-      .set({ status, ...fields })
+      .set({ status, ...fields, params: paramsWithoutSignerKey })
       .where(and(
         eq(transactionsTable.id, transactionId),
         eq(transactionsTable.status, TransactionStatus.Pending),
@@ -136,7 +146,7 @@ export default class Transactions {
   ): Promise<void> {
     await this.dbClient.db
       .update(transactionsTable)
-      .set({ status: TransactionStatus.Failure, message: fields.message })
+      .set({ status: TransactionStatus.Failure, message: fields.message, params: paramsWithoutSignerKey })
       .where(and(
         eq(transactionsTable.id, transactionId),
         eq(transactionsTable.status, TransactionStatus.Pending),

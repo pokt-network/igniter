@@ -23,18 +23,30 @@ export interface RichMessageParts {
   now: Date
 }
 
+// HTML-escape a value interpolated into the Telegram/email HTML (text or attribute).
+// Sender labels come from operator-editable settings (provider/app name) and URLs
+// from env/config, so an unescaped `<`/`"` could inject markup or break the href.
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function buildTelegramHtml(p: RichMessageParts): string {
   const date = p.now.toUTCString().replace(' GMT', ' UTC')
-  const lines: string[] = [`${p.emoji} <b>${p.title}</b>`, '', ...p.telegramBodyLines]
+  const lines: string[] = [`${p.emoji} <b>${escapeHtml(p.title)}</b>`, '', ...p.telegramBodyLines]
   lines.push('')
   lines.push(`🕐 <i>${date}</i>`)
-  lines.push(`📡 <i>${p.senderLabel}</i>`)
+  lines.push(`📡 <i>${escapeHtml(p.senderLabel)}</i>`)
   if (p.url) {
-    lines.push(`🔗 <a href="${p.url}">View in Dashboard</a>`)
+    lines.push(`🔗 <a href="${escapeHtml(p.url)}">View in Dashboard</a>`)
   }
   if (p.uuid && !p.url) {
     lines.push('')
-    lines.push(`🔖 <code>${p.uuid}</code> <i>(tap to copy)</i>`)
+    lines.push(`🔖 <code>${escapeHtml(p.uuid)}</code> <i>(tap to copy)</i>`)
     lines.push('')
     lines.push(`<i>Search for this ID in the Notifications page to view details.</i>`)
   }
@@ -43,14 +55,17 @@ function buildTelegramHtml(p: RichMessageParts): string {
 
 function buildEmailHtml(p: RichMessageParts): string {
   const color = p.emailColor
-  const title = p.title
-  const typeLabel = title.toUpperCase()
+  const title = escapeHtml(p.title)
+  const typeLabel = escapeHtml(p.title.toUpperCase())
+  const senderLabel = escapeHtml(p.senderLabel)
+  const url = p.url ? escapeHtml(p.url) : undefined
+  const uuid = p.uuid ? escapeHtml(p.uuid) : p.uuid
   const date = p.now.toUTCString().replace(' GMT', ' UTC')
 
   const linkHtml = p.url
     ? `<table border="0" cellpadding="0" cellspacing="0" style="margin:16px 0 0">
         <tr><td style="background-color:${color};border-radius:6px">
-          <a href="${p.url}" style="display:inline-block;padding:10px 20px;font-size:13px;font-weight:600;color:#0a0b0f;text-decoration:none;letter-spacing:0.02em">View in Dashboard →</a>
+          <a href="${url}" style="display:inline-block;padding:10px 20px;font-size:13px;font-weight:600;color:#0a0b0f;text-decoration:none;letter-spacing:0.02em">View in Dashboard →</a>
         </td></tr>
       </table>`
     : ''
@@ -61,7 +76,7 @@ function buildEmailHtml(p: RichMessageParts): string {
 
   const uuidHtml = p.uuid && !p.url
     ? `<p style="margin:16px 0 4px;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Notification ID &mdash; click to select</p>
-       <p style="margin:0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#94a3b8;background-color:#0a0b10;border:1px solid #2a3045;border-radius:4px;padding:8px 12px;word-break:break-all;cursor:text;user-select:all;-webkit-user-select:all">${p.uuid}</p>
+       <p style="margin:0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#94a3b8;background-color:#0a0b10;border:1px solid #2a3045;border-radius:4px;padding:8px 12px;word-break:break-all;cursor:text;user-select:all;-webkit-user-select:all">${uuid}</p>
        ${noUrlNote}`
     : ''
 
@@ -105,7 +120,7 @@ function buildEmailHtml(p: RichMessageParts): string {
         <tr><td style="padding:20px 28px;background-color:#090a0d">
           ${uuidHtml}
           ${linkHtml}
-          <p style="margin:20px 0 0;font-size:11px;color:#334155">Sent by ${p.senderLabel} &bull; ${date}</p>
+          <p style="margin:20px 0 0;font-size:11px;color:#334155">Sent by ${senderLabel} &bull; ${date}</p>
         </td></tr>
 
       </table>

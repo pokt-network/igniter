@@ -36,6 +36,9 @@ export const RELEASE_NOT_SENT_CODES: ReadonlySet<string> = new Set([
  */
 export const RELEASE_LOCAL_PRE_SEND = 'LOCAL_PRE_SEND'
 
+/** `not-sent` code for a provider the governance source does not list: no call goes out to it. */
+export const RELEASE_NOT_IN_GOVERNANCE = 'NOT_IN_GOVERNANCE'
+
 const MAX_CAUSE_DEPTH = 10
 
 /**

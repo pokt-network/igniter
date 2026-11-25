@@ -1,4 +1,11 @@
+# DEV ONLY: the local Tilt/kind image (runs `turbo run dev` as root, with the
+# full source tree and dev dependencies). Never deploy it or push it to a shared
+# registry; production images are built from apps/<app>/Dockerfile. It keeps
+# root because Tilt live_update syncs files into it; that was not re-tested.
 FROM node:24.22.1-slim AS base
+
+LABEL org.opencontainers.image.description="Igniter local development image (DEV ONLY, runs as root). Do not deploy."
+LABEL network.pocket.igniter.dev-only="true"
 
 ENV HOSTNAME="0.0.0.0"
 ENV PNPM_HOME="/pnpm"

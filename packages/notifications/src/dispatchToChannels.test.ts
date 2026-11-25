@@ -131,6 +131,15 @@ describe('dispatchToChannels', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it('SSRF guard: never follows a discord webhook redirect, and reports it as a failure', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 302, text: async () => '' })
+    const results = await dispatchToChannels([discordChannel], message)
+    expect(mockFetch.mock.calls[0]![1]).toMatchObject({ redirect: 'manual' })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(results[0]).toMatchObject({ status: 'error', category: 'invalid_request', retriable: false })
+    expect(results[0]!.error).toContain('302')
+  })
+
   it('uses an injected email transporter without closing it (caller-owned)', async () => {
     const transporter = makeTransporter()
     const results = await dispatchToChannels([emailChannel], message, {

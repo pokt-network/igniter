@@ -1,3 +1,12 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Transitive dependencies with a published fix (security advisories).
+overrides:
+  axios@1: ^1.21.1
+  undici@<6.29.1: 6.29.1
+  protobufjs@6: ^6.11.6
+  protobufjs@7: ^7.6.6
+  pbkdf2: ^3.1.7
+  sha.js: ^2.4.12

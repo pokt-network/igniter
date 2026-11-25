@@ -53,6 +53,38 @@ describe('redactObject', () => {
     expect(out.url).toBe('https://public.example')
   })
 
+  it('redacts app identity, encryption iv, notification key and nonce signature (camelCase + snake_case)', () => {
+    const out = redactObject({
+      appIdentity: 'ai', app_identity: 'ai2',
+      encryptionIv: 'iv', encryption_iv: 'iv2',
+      notificationEncryptionKey: 'nk', notification_encryption_key: 'nk2',
+      nonceSignature: 'ns', nonce_signature: 'ns2',
+      identity: 'pokt1public', // a plain identity must survive
+    })
+    for (const k of [
+      'appIdentity', 'app_identity', 'encryptionIv', 'encryption_iv',
+      'notificationEncryptionKey', 'notification_encryption_key', 'nonceSignature', 'nonce_signature',
+    ]) {
+      expect((out as Record<string, unknown>)[k]).toBe(SECRET)
+    }
+    expect(out.identity).toBe('pokt1public')
+  })
+
+  it('masks the password of a DSN or URL with credentials, at any depth', () => {
+    const out = redactObject({
+      databaseUrl: 'postgres://u:hunter2@db.internal:5432/app',
+      nested: { list: ['redis://:redispw@cache:6379'] },
+      atInPassword: 'postgres://u:p@ss@host/db',
+      plain: 'https://host:8080/path?x=a@b',
+      noCreds: 'https://user@host/path',
+    })
+    expect(out.databaseUrl).toBe('postgres://u:***@db.internal:5432/app')
+    expect(out.nested.list[0]).toBe('redis://:***@cache:6379')
+    expect(out.atInPassword).toBe('postgres://u:***@host/db')
+    expect(out.plain).toBe('https://host:8080/path?x=a@b')
+    expect(out.noCreds).toBe('https://user@host/path')
+  })
+
   it('redacts smtp.pass and cookie/set-cookie', () => {
     const out = redactObject({ smtp: { host: 'h', pass: 'secret' }, cookie: 'c', 'set-cookie': 'sc' })
     expect(out.smtp.pass).toBe(SECRET)
@@ -251,6 +283,44 @@ describe('getRedactedConsoleSink', () => {
     expect(out).toContain('passport=ok') // non-secret look-alike must survive untouched
   })
 
+  it('removes app_identity, encryption_iv, notification_encryption_key and nonce_signature props', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) },
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).info('settings dump', {
+      app_identity: 'AI_SECRET',
+      appIdentity: 'AI2_SECRET',
+      encryption_iv: 'IV_SECRET',
+      notification_encryption_key: 'NK_SECRET',
+      nonce_signature: 'NS_SECRET',
+      keep: 'ok',
+    })
+    const out = captured.join('\n')
+    for (const secret of ['AI_SECRET', 'AI2_SECRET', 'IV_SECRET', 'NK_SECRET', 'NS_SECRET']) {
+      expect(out).not.toContain(secret)
+    }
+    expect(out).toContain('ok')
+  })
+
+  it('masks DSN credentials in free text, string props and error messages', async () => {
+    await configure({
+      reset: true,
+      sinks: { redacted: getRedactedConsoleSink(true) },
+      loggers: [{ category: [], sinks: ['redacted'], lowestLevel: 'debug' }],
+    })
+    getLogger(['t']).error('connect failed to postgres://u:dsnpw1@db:5432/app', {
+      url: 'postgres://u:dsnpw2@db:5432/app',
+      error: new Error('getaddrinfo ENOTFOUND postgres://u:dsnpw3@db:5432/app'),
+    })
+    const out = captured.join('\n')
+    for (const secret of ['dsnpw1', 'dsnpw2', 'dsnpw3']) {
+      expect(out).not.toContain(secret)
+    }
+    expect(out).toContain('postgres://u:***@db:5432/app')
+  })
+
   it('scrubs a lowercase "authorization: bearer <tok>" header dump (case-insensitive backstop)', async () => {
     await configure({
       reset: true,
@@ -298,6 +368,15 @@ describe('redactSinkByPattern', () => {
     expect(records[0]!.properties.note).toBe('password=[REDACTED]')
     expect((records[0]!.properties.nested as Record<string, unknown>).dump).toBe('Bearer [REDACTED]')
     expect(records[0]!.properties.n).toBe(42)
+  })
+
+  it('masks DSN credentials in message text and property values', () => {
+    const { records, sink } = collect()
+    redactSinkByPattern(sink, SECRET_VALUE_PATTERNS)(
+      fakeRecord(['db at postgres://u:pw9@h/db', undefined], { dsn: 'redis://:pw8@cache:6379' }),
+    )
+    expect(records[0]!.message[0]).toBe('db at postgres://u:***@h/db')
+    expect(records[0]!.properties.dsn).toBe('redis://:***@cache:6379')
   })
 
   it('leaves non-secret text and non-string values untouched', () => {

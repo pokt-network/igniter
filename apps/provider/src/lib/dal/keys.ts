@@ -63,7 +63,10 @@ export async function insertMany(keys: InsertKey[]): Promise<InsertKey[]> {
  * @param delegatorIdentity - The delegator identity who currently has the keys
  * @returns The number of keys that were updated
  */
-export async function markAvailable(addresses: string[], delegatorIdentity: string) {
+// Releases Delivered keys back to Available, only those delivered to this delegator AND to this
+// owner, so a middleman request naming another owner's keys releases nothing.
+export async function markAvailable(addresses: string[], delegatorIdentity: string, ownerAddress: string) {
+  if (!ownerAddress) throw new Error('ownerAddress is required when releasing keys')
   const dbClient = getDbClient()
   return dbClient.db.update(keysTable)
     .set({
@@ -76,6 +79,7 @@ export async function markAvailable(addresses: string[], delegatorIdentity: stri
       and(
         inArray(keysTable.address, addresses),
         eq(keysTable.deliveredTo, delegatorIdentity),
+        eq(keysTable.ownerAddress, ownerAddress),
         eq(keysTable.state, KeyState.Delivered),
       ),
     )
@@ -214,6 +218,27 @@ export async function markStaked(addresses: string[], delegatorIdentity: string)
       ),
     )
     .returning({ address: keysTable.address })
+}
+
+/**
+ * Of the given addresses, the ones whose key was delivered to this delegator.
+ * Signed delegator routes use it so a caller only acts on its own suppliers.
+ */
+export async function listAddressesDeliveredTo(addresses: string[], delegatorIdentity: string): Promise<string[]> {
+  if (addresses.length === 0) return []
+
+  const dbClient = getDbClient()
+  const rows = await dbClient.db
+    .select({ address: keysTable.address })
+    .from(keysTable)
+    .where(
+      and(
+        inArray(keysTable.address, addresses),
+        eq(keysTable.deliveredTo, delegatorIdentity),
+      ),
+    )
+
+  return rows.map((row) => row.address)
 }
 
 export async function markUnstaking(addresses: string[], delegatorIdentity: string) {

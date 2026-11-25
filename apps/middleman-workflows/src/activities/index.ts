@@ -23,6 +23,8 @@ import {
 import { createHash } from 'node:crypto'
 import { detectSupplierChanges, DetectedSupplierChange } from '@igniter/domain/middleman/utils/supplierChanges'
 import { extractTransactionStakingSuppliers, extractTransactionUnstakingSuppliers } from '@/workflows/utils'
+import { RELEASE_NOT_IN_GOVERNANCE } from '@/lib/provider/releaseOutcome'
+import { governanceSourceUrl } from '@igniter/commons/governance'
 import { ProviderService } from '@/lib/provider'
 import DAL from '@/lib/dal/DAL'
 import type { PocketBlockchain, SupplierServiceConfig, SupplierEndpoint, ServiceRevenueShare, VerifyOutcome, SupplierEffect } from '@igniter/pocket'
@@ -38,8 +40,10 @@ import { dispatchUserNotification } from '@/lib/notifications/dispatch'
 import { txTypeToUserEventType } from './txEventType'
 import { BROADCAST_OUTCOME_UNKNOWN, type BroadcastOutcomeUnknownDetail } from '@/lib/broadcastOutcome'
 import { buildSupplierChangeNotifications } from './supplierChangeNotifications'
-import { postGraphql } from '@igniter/graphql/client'
+import { postIndexerGraphql } from '@/lib/indexer'
+import { maxChangesPerRun, planChanges, sanitizeProviders } from '@/lib/governance/providersSync'
 import { supplierRewardShare } from './supplierRewardShare'
+import { parseTransactionUpdatePatch, type TransactionUpdatePatch } from './transactionUpdatePatch'
 import { fetchAddressGroupRewards } from './groupRewards'
 import { endpointDomain, hostDomain } from './endpointDomain'
 import { getEndpointInterpolatedUrl, getEndpointOverride } from '@igniter/domain/provider/utils'
@@ -123,30 +127,53 @@ export const governanceActivities = (dal: DAL) => ({
       throw ApplicationFailure.nonRetryable('PROVIDERS_CDN_URL environment variable is not defined', 'missing_env')
     }
 
-    const cdnUrl = cdnUrlTemplate.replace(
-      '{chainId}',
-      settings.chainId.replace('lego-testnet', 'beta'),
-    )
+    const cdnUrl = governanceSourceUrl(cdnUrlTemplate, settings.chainId)
 
     log.info('syncProvidersFromGovernance: Fetching from CDN', { cdnUrl })
 
-    const response = await fetch(cdnUrl)
+    const response = await fetch(cdnUrl, { signal: AbortSignal.timeout(15_000) })
     if (!response.ok) {
       throw ApplicationFailure.retryable(`Failed to fetch providers: ${response.statusText}`, 'fetch_failed')
     }
 
-    type CdnProvider = {
-      name: string;
-      identity: string;
-      identityHistory: string[];
-      url: string;
+    const payload: unknown = await response.json()
+    const current = await dal.provider.listAll()
+
+    // Validate every row (shape + https public url), keep known providers whose
+    // row is rejected, then cap how many providers one run may change.
+    let sanitized: Awaited<ReturnType<typeof sanitizeProviders>>
+    try {
+      sanitized = await sanitizeProviders(payload, current)
+    } catch (e) {
+      throw ApplicationFailure.nonRetryable(`Invalid governance payload: ${(e as Error).message}`, 'invalid_payload')
+    }
+    for (const r of sanitized.rejected) {
+      log.warn('syncProvidersFromGovernance: Rejected governance row', r)
+    }
+    log.info('syncProvidersFromGovernance: Fetched providers', {
+      count: Array.isArray(payload) ? payload.length : 0,
+      accepted: sanitized.providers.length,
+      rejected: sanitized.rejected.length,
+    })
+
+    const changes = planChanges(sanitized.providers, current)
+    const cap = maxChangesPerRun()
+    if (current.length > 0 && changes.length > cap) {
+      log.error('syncProvidersFromGovernance: Refusing governance sync, too many changes in one run', {
+        changes: changes.length,
+        cap,
+      })
+      throw ApplicationFailure.nonRetryable(
+        `Governance sync would change ${changes.length} providers (cap ${cap}); refusing. Raise GOVERNANCE_MAX_CHANGES_PER_RUN after review.`,
+        'change_cap_exceeded',
+      )
+    }
+    for (const change of changes) {
+      log.info(`syncProvidersFromGovernance: ${change.kind}`, change)
     }
 
-    const providersFromCdn = (await response.json()) as CdnProvider[]
-    log.info('syncProvidersFromGovernance: Fetched providers', { count: providersFromCdn.length })
-
     const result = await dal.provider.upsertFromGovernance(
-      providersFromCdn,
+      sanitized.providers,
       settings.ownerIdentity,
     )
 
@@ -481,41 +508,6 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     return dal.provider.list()
   },
   /**
-   * Fetches the status of the given list of providers by sending a signed payload containing identity information.
-   *
-   * @param {Provider[]} providers - An array of provider objects for which the status will be fetched.
-   * @return {Promise<Object[]>} A promise that resolves to an array of status results.
-   * Each result will either be the status of the provider if fulfilled,
-   * or an error object if the request was rejected.
-   */
-  async fetchProviderStatus(providers: Provider[]) {
-    const { signature, identity } = await providerService.signPayload(JSON.stringify({}))
-
-    const providerStatus = await Promise.allSettled(
-      providers.map(async (provider) =>
-        providerService.status(provider, signature, identity)),
-    )
-
-    return providerStatus.map((result) => {
-      if (result.status === 'fulfilled') {
-        return result.value
-      } else {
-        return {
-          ...result.reason,
-        }
-      }
-    })
-  },
-  /**
-   * Updates the list of providers in the data layer with the given provider information.
-   *
-   * @param {Provider[]} providers - An array of Provider objects to be updated in the data layer.
-   * @return {Promise<void>} A promise that resolves when the update operation is complete.
-   */
-  async updateProviders(providers: Provider[]) {
-    await dal.provider.updateProviders(providers)
-  },
-  /**
    * Reads the timeoutHeight embedded in the signed payload for a transaction.
    * Reuses parseSignerAndSequence's TxBody decode path. Returns null when the
    * payload is absent, unparseable, or has no embedded timeout (external-wallet txs).
@@ -528,22 +520,34 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
   },
 
   /**
-   * Updates a transaction with the given payload.
+   * Updates a PENDING transaction with a narrowed patch (see TransactionUpdatePatch):
+   * only status=failure, log, code, executionHeight, hash and timeoutHeight, each
+   * type-checked. Any other field is rejected non-retryably. A transaction that is no
+   * longer pending is left untouched (a terminal row is never rewritten from here).
    *
    * @param {number} transactionId - The unique identifier of the transaction to be updated.
-   * @param {Partial<Transaction>} payload - An object containing the partial fields of the transaction to be updated.
-   * @return {Promise<Transaction>} A promise that resolves to the updated transaction object.
+   * @param {TransactionUpdatePatch} payload - The allowed fields to update.
    * @throws {Error} If the transaction with the given ID is not found.
    */
   async updateTransaction(
     transactionId: number,
-    payload: Partial<Transaction>,
+    payload: TransactionUpdatePatch,
   ) {
+    let patch: TransactionUpdatePatch
+    try {
+      patch = parseTransactionUpdatePatch(payload)
+    } catch (e) {
+      throw ApplicationFailure.nonRetryable((e as Error).message, 'invalid_update')
+    }
     const transaction = await dal.transaction.getTransaction(transactionId)
     if (!transaction) {
       throw new Error('Transaction not found')
     }
-    return await dal.transaction.updateTransaction(transactionId, payload)
+    if (transaction.status !== TransactionStatus.Pending) {
+      log.warn('updateTransaction: transaction is not pending; update skipped', { transactionId, status: transaction.status })
+      return
+    }
+    return await dal.transaction.updateTransaction(transactionId, patch)
   },
   /**
    * Writes the broadcast anchor BEFORE any bytes are sent: the locally derived hash, the height
@@ -1051,54 +1055,6 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
    *   - `addresses` (Array<string>): (Optional) A list of released supplier addresses if the operation is successful.
    */
   /**
-   * Fetches supplier address groups from each provider for the supplier nodes staked with that provider.
-   *
-   * @param {Provider[]} providers - The list of providers to query.
-   * @return {Promise<Array>} A promise that resolves to an array of per-provider address group results.
-   */
-  async fetchSupplierAddressGroups(providers: Provider[]) {
-    const results = await Promise.all(
-      providers.map(async (provider) => {
-        const addresses = await dal.node.getStakedNodesByProvider(provider.identity)
-
-        if (addresses.length === 0) {
-          return null
-        }
-
-        const addressGroups = await providerService.fetchSupplierAddressGroups(addresses, provider)
-
-        const sentAddressSet = new Set(addresses.map((a) => a.toLowerCase()))
-        const validatedAddressGroups = addressGroups
-          .map((ag) => {
-            const validAddresses = ag.addresses.filter((addr) => {
-              return true;
-
-              const valid = sentAddressSet.has(addr.toLowerCase())
-              if (!valid) {
-                log.warn('Provider returned address not in sent set — dropping to prevent fraud', {
-                  provider: provider.identity,
-                  addressGroupId: ag.id,
-                  address: addr,
-                })
-              }
-              return valid
-            })
-            return { ...ag, addresses: validAddresses }
-          })
-          .filter((ag) => ag.addresses.length > 0)
-
-        return {
-          providerId: provider.id,
-          providerIdentity: provider.identity,
-          addressGroups: validatedAddressGroups,
-        }
-      })
-    )
-
-    return results.filter((result) => result !== null)
-  },
-
-  /**
    * Processes all status-related operations for a single provider:
    * fetches and updates provider status, supplier address groups, and address group rewards.
    *
@@ -1112,11 +1068,11 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
     }
 
     const { signature, identity } = await providerService.signPayload(JSON.stringify({}))
-    let statusResult: Provider
-    try {
-      statusResult = await providerService.status(provider, signature, identity)
-    } catch (e) {
-      statusResult = { ...(e as object) } as Provider
+    // Null: the governance source does not list the provider, so it is not called and its row
+    // is not written. A failure to read the source throws, and the activity retries.
+    const statusResult = await providerService.status(provider, signature, identity)
+    if (!statusResult) {
+      return null
     }
 
     // Preserve existing reward data in address groups so the status update doesn't wipe it
@@ -1137,7 +1093,9 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       })
     }
 
-    await dal.provider.updateProviders([statusResult])
+    // Only the whitelisted status fields (see PROVIDER_STATUS_FIELDS), keyed by the row's own id.
+    const { id: _replyId, ...statusFields } = statusResult
+    await dal.provider.updateProvider(provider.id, statusFields)
 
     const appSettings = await dal.appSettings.getFirst()
     const indexerApiUrl = appSettings?.indexerApiUrl
@@ -1168,9 +1126,9 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       }
     `
     const [latestBlockResult, paramResult] = await Promise.all([
-      postGraphql<{ blocks: { nodes: Array<{ id: string; timestamp: string }> } }>(indexerApiUrl, latestBlockQuery)
+      postIndexerGraphql<{ blocks: { nodes: Array<{ id: string; timestamp: string }> } }>(indexerApiUrl, latestBlockQuery)
         .catch((e) => { log.error('Failed to fetch latest block', { error: e }); return null }),
-      postGraphql<{ claimDistribution: { value: string } | null; mintRatio: { value: string } | null }>(indexerApiUrl, paramQuery),
+      postIndexerGraphql<{ claimDistribution: { value: string } | null; mintRatio: { value: string } | null }>(indexerApiUrl, paramQuery),
     ])
 
     const latestBlockTimestamp = latestBlockResult?.blocks?.nodes?.[0]?.timestamp
@@ -1215,7 +1173,7 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
 
     const [supplierStatsResult, rewardsByGroupId] = await Promise.all([
       allDomains.length > 0 && !tooManyDomains
-        ? postGraphql<{ fleet: Array<{ supplierCount: string; stakeUpokt: string } | null> | null }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
+        ? postIndexerGraphql<{ fleet: Array<{ supplierCount: string; stakeUpokt: string } | null> | null }>(indexerApiUrl, supplierStatsQuery, { domains: allDomains })
             // Stored as before (numbers): the providers pages read supplierStats
             .then(({ fleet }) => ({ data: supplierStatsFromFleet(fleet) }))
             .catch((e) => { log.error('Failed to fetch supplier stats', { error: e }); return null })
@@ -1302,7 +1260,8 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
         }
       }
 
-      await providerService.releaseSuppliers(addresses, provider)
+      // The provider releases only keys it delivered to this owner (the stake tx's signer).
+      await providerService.releaseSuppliers(addresses, provider, transaction.fromAddress)
 
       return {
         success: true,
@@ -1642,7 +1601,8 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       return 'manual'
     }
 
-    const outcome = await providerService.releaseSuppliersOutcome(addresses, provider)
+    // The provider releases only keys it delivered to this owner (the stake tx's signer).
+    const outcome = await providerService.releaseSuppliersOutcome(addresses, provider, txn.fromAddress)
 
     /** A lost outcome CAS: report what the row is now instead of what this attempt meant to set. */
     const movedMeanwhile = async (meant: FailureEffectsState) => {
@@ -1657,6 +1617,16 @@ export const delegatorActivities = (dal: DAL, pocketRpcClient: PocketBlockchain,
       if (!await dal.transaction.releaseDone(transactionId)) return movedMeanwhile('done')
       log.info('releaseFailedStake: released', { transactionId, providerUrl, addresses })
       return 'released'
+    }
+
+    if (outcome.kind === 'not-sent' && outcome.code === RELEASE_NOT_IN_GOVERNANCE) {
+      // Deterministic: the governance source does not list the provider, so no call will ever go out
+      // to it. Retrying would only wait out the 24h budget; hand it to a person now.
+      if (!await dal.transaction.releaseManual(transactionId)) return movedMeanwhile('manual')
+      log.error('releaseFailedStake: provider not in the governance source; moved to manual, release the keys on the provider by hand', {
+        transactionId, providerUrl, addresses,
+      })
+      return 'manual'
     }
 
     if (outcome.kind === 'not-sent') {

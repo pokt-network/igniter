@@ -36,6 +36,7 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 | Variable               | Required | Description                                          | Example / Default  |
 |------------------------|----------|------------------------------------------------------|--------------------|
 | `COMPOSE_PROJECT_NAME` | Optional | Docker Compose project name — scopes container names | `igniter-provider` |
+| `IGNITER_VERSION` | Required | Image version for `provider` and `provider-workflows`. Pin a release and bump it on every upgrade; never `latest`. Accepts `<version>@sha256:<digest>`. | `0.23.0` |
 
 ### Next.js
 
@@ -58,12 +59,12 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 | Variable       | Required | Description                                                                 | Example / Default                                                              |
 |----------------|----------|-----------------------------------------------------------------------------|--------------------------------------------------------------------------------|
 | `PGHOST`       | Required | PostgreSQL hostname (service name from dependencies compose)                | `postgresql`                                                                   |
-| `PGUSER`       | Required | PostgreSQL username — must match `POSTGRES_USER` in dependencies `.env`     | `igniter`                                                                      |
-| `PGPASSWORD`   | Required | PostgreSQL password — must match `POSTGRES_PASSWORD` in dependencies `.env` | *(no default — set this)*                                                      |
+| `PGUSER`       | Required | PostgreSQL role. Provider's own role (owner of database `provider` only), never the superuser | `provider` |
+| `PGPASSWORD`   | Required | PostgreSQL password — must match `PROVIDER_DB_PASSWORD` in dependencies `.env` | *(no default — set this)* |
 | `DB_NAME`      | Required | Database name for Provider                                                  | `provider`                                                                     |
 | `DATABASE_URL` | Required | Full connection string — interpolated from the four vars above              | `postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${DB_NAME}?sslmode=disable` |
 
-> **Note:** `PGPASSWORD` must exactly match `POSTGRES_PASSWORD` in `docker-compose/dependencies/.env`. If they don't match, migrations and the app will fail to connect.
+> **Note:** `PGPASSWORD` must exactly match `PROVIDER_DB_PASSWORD` in `docker-compose/dependencies/.env`. If they don't match, migrations and the app will fail to connect. Never give the app the superuser (`POSTGRES_USER`/`POSTGRES_PASSWORD`). Upgrading an install that predates these roles? Follow [Upgrading an existing install](../../docker-compose/README.md#upgrading-an-existing-install).
 
 ### Pocket Network
 
@@ -88,7 +89,7 @@ All variables below are sourced from `docker-compose/apps/provider/.env.sample`.
 |-------------------|----------|-------------------------------------------------------------------------------|-------------------------|
 | `APP_URL`         | Required | Public URL where Provider is accessible — used for redirect links and CORS    | `http://localhost:3001` |
 | `AUTH_URL`        | Required | URL used by NextAuth for auth callbacks — typically same as `APP_URL`         | `http://localhost:3001` |
-| `AUTH_TRUST_HOST` | Optional | Set `true` if running behind a reverse proxy (trusts `X-Forwarded-*` headers) | `false`                 |
+| `AUTH_TRUST_HOST` | — | **Not read.** `trustHost: true` is hardcoded in `src/auth.config.ts`, so the app always trusts `X-Forwarded-Host`/`X-Forwarded-Proto`. Your reverse proxy must set those headers itself, never pass a client's through, and be the only way to reach the app port. See [Hardening](../../docker-compose/README.md#the-reverse-proxy-and-forwarded-headers). | — |
 
 ### Security / Encryption
 

@@ -129,8 +129,8 @@ export async function getSupplierStakeConfigurations(
     return suppliers;
 }
 
-export async function releaseDeliveredSuppliers(addresses: string[], requestingDelegator: string) {
-  return markAvailable(addresses, requestingDelegator);
+export async function releaseDeliveredSuppliers(addresses: string[], requestingDelegator: string, ownerAddress: string) {
+  return markAvailable(addresses, requestingDelegator, ownerAddress);
 }
 
 export async function markDeliveredSupplierAsStaked(addresses: string[], requestingDelegator: string) {

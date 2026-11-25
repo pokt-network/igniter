@@ -2,7 +2,7 @@
 
 import { z } from 'zod'
 import { requireAuth } from '@/lib/utils/actions'
-import { NotificationChannelType } from '@igniter/db/middleman/enums'
+import { NOTIFICATION_EVENT_TYPES, NotificationChannelType } from '@igniter/db/middleman/enums'
 import type {
   NotificationChannel,
   NotificationChannelConfig,
@@ -54,6 +54,19 @@ const BaseChannelSchema = z.object({
   type: z.nativeEnum(NotificationChannelType),
   enabled: z.boolean().default(true),
 })
+
+// One optional boolean per event type and nothing else. A flag left out reads as its default
+// (dispatch merges DEFAULT_NOTIFICATION_FLAGS under the stored flags).
+const NotificationFlagsSchema = z.object(
+  Object.fromEntries(NOTIFICATION_EVENT_TYPES.map((type) => [type, z.boolean().optional()])) as Record<
+    (typeof NOTIFICATION_EVENT_TYPES)[number],
+    z.ZodOptional<z.ZodBoolean>
+  >,
+).strict()
+
+function parseNotificationFlags(flags: unknown): NotificationFlags {
+  return NotificationFlagsSchema.parse(flags) as NotificationFlags
+}
 
 // Middleman email channels carry their own SMTP (per-user, per D1), so the email
 // config is validated with recipients + SMTP — unlike the provider, which keeps
@@ -114,7 +127,7 @@ export async function CreateNotificationChannel(data: {
     return dal.insertChannel({
       ...base,
       config,
-      ...(data.notificationFlags !== undefined && { notificationFlags: data.notificationFlags }),
+      ...(data.notificationFlags !== undefined && { notificationFlags: parseNotificationFlags(data.notificationFlags) }),
       createdBy: userIdentity,
       updatedBy: userIdentity,
     })
@@ -137,17 +150,23 @@ export async function UpdateNotificationChannel(
     if (!existing) throw new Error('Notification channel not found')
 
     const type = data.type ?? existing.type
+    // A type change with no new config keeps the stored config, so that config must be valid for
+    // the new type too.
     const config =
       data.config !== undefined
         ? validateConfig(type, mergeChannelSecrets(type, data.config, existing.config))
-        : undefined
+        : type !== existing.type
+          ? validateConfig(type, existing.config)
+          : undefined
+    const notificationFlags =
+      data.notificationFlags !== undefined ? parseNotificationFlags(data.notificationFlags) : undefined
 
     return dal.updateChannel(id, userIdentity, {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.type !== undefined && { type: data.type }),
       ...(data.enabled !== undefined && { enabled: data.enabled }),
       ...(config !== undefined && { config }),
-      ...(data.notificationFlags !== undefined && { notificationFlags: data.notificationFlags }),
+      ...(notificationFlags !== undefined && { notificationFlags }),
       updatedBy: userIdentity,
     })
   })

@@ -5,7 +5,7 @@ import { Skeleton } from "@igniter/ui/components/skeleton";
 import { defineStepper } from "@stepperize/react";
 import React, {useEffect} from "react";
 import type { ApplicationSettings } from "@igniter/db/middleman/schema";
-import {completeSetup, getApplicationSettings} from "@/actions/ApplicationSettings";
+import {completeSetup, GetFullApplicationSettings} from "@/actions/ApplicationSettings";
 import ApplicationSettingsForm from "./settingsForm";
 import { Provider } from "@/actions/Providers";
 import ProvidersForm from "./providersForm";
@@ -99,7 +99,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
     setSettings(undefined);
     try {
       setIsLoadingSettings(true);
-      const dbSettings = await getApplicationSettings();
+      const dbSettings = await GetFullApplicationSettings();
       setSettings(dbSettings as ApplicationSettings);
     } catch (error) {
       log.error("failed to retrieve application settings", { error });

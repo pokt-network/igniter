@@ -90,7 +90,7 @@ describe('PocketBlockchain.getTransaction', () => {
     }
     mockGetTx.mockResolvedValue(rpcResult)
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash)
 
     expect(result).toEqual({
@@ -125,7 +125,7 @@ describe('PocketBlockchain.getTransaction', () => {
       }),
     })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash)
 
     expect(result).toEqual({
@@ -138,7 +138,7 @@ describe('PocketBlockchain.getTransaction', () => {
       code: 0,
     })
     expect(mockFetch).toHaveBeenCalledWith(
-      `http://api.example.com/cosmos/tx/v1beta1/txs/${txHash}`,
+      `https://api.example.com/cosmos/tx/v1beta1/txs/${txHash}`,
     )
     expect(mockBlock).not.toHaveBeenCalled()
   })
@@ -164,7 +164,7 @@ describe('PocketBlockchain.getTransaction', () => {
       ],
     })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash, startHeight)
 
     expect(result).toEqual({
@@ -186,7 +186,7 @@ describe('PocketBlockchain.getTransaction', () => {
     mockFetch.mockResolvedValue({ ok: false })
     mockBlock.mockResolvedValue({ block: { txs: [] } })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash, 100)
 
     expect(result).toBeNull()
@@ -221,7 +221,7 @@ describe('PocketBlockchain.getTransaction', () => {
       }),
     })
 
-    const bc = await createInstance('http://api.example.com/')
+    const bc = await createInstance('https://api.example.com/')
     const result = await bc.getTransaction('ABC123')
 
     expect(result).toEqual({
@@ -235,7 +235,7 @@ describe('PocketBlockchain.getTransaction', () => {
     })
     // Trailing slash should be stripped
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://api.example.com/cosmos/tx/v1beta1/txs/ABC123',
+      'https://api.example.com/cosmos/tx/v1beta1/txs/ABC123',
     )
   })
 
@@ -261,7 +261,7 @@ describe('PocketBlockchain.getTransaction', () => {
       ],
     })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(expectedHash, 42)
 
     expect(result).toEqual({
@@ -285,7 +285,7 @@ describe('PocketBlockchain.getTransaction', () => {
     // Head is only 2 blocks past the start: window must be 1000..1002 inclusive.
     mockGetHeight.mockResolvedValue(startHeight + 2)
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash, startHeight)
 
     expect(result).toBeNull()
@@ -305,7 +305,7 @@ describe('PocketBlockchain.getTransaction', () => {
     const startHeight = 5000
     mockGetHeight.mockResolvedValue(startHeight - 1) // head below tx height
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash, startHeight)
 
     expect(result).toBeNull()
@@ -320,7 +320,7 @@ describe('PocketBlockchain.getTransaction', () => {
     mockGetHeight.mockRejectedValue(new Error('rpc unreachable')) // head unknown
 
     const startHeight = 2000
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const result = await bc.getTransaction(txHash, startHeight)
 
     expect(result).toBeNull()

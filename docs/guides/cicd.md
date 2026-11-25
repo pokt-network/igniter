@@ -94,7 +94,7 @@ Feature Branch ──PR──> staging ──creates──> release ──PR─�
 
 ### 4. Deploy Production (`deploy-production.yml`)
 
-**Trigger:** PR merged to `main` with a `release:*` label, or manual `workflow_dispatch`.
+**Trigger:** PR merged to `main` with a `release:*` label, or manual `workflow_dispatch` **from `main` only** (a dispatch on any other branch skips the job).
 
 **What it does:**
 1. Reads version from the mainnet overlay (already set by prepare-release)
@@ -230,3 +230,12 @@ Ad-hoc image builds from any branch. Useful for:
 | `push` | Push to GHCR? | `true` / `false` |
 
 Select the branch in the GitHub Actions UI before running. The image is built from that branch's code.
+
+## Supply-chain guards
+
+- **Actions are pinned by commit SHA**, with the version in a trailing comment (`uses: actions/checkout@<sha> # v4.4.0`). `.github/dependabot.yml` opens weekly PRs against `staging` to bump them.
+- **Build Image** (`build-image.yml`, manual) refuses `latest` and release versions (`X.Y.Z`, `vX.Y.Z`), so it cannot overwrite an image that operators pull. Pre-release and dev tags such as `0.7.0-rc1` and `dev-fix-auth` are allowed.
+- **Build caches are scoped.** Deploys use `scope=<app>`, PR builds use `scope=pr-<app>`, and manual builds use `scope=manual-<app>`. A PR build therefore cannot seed layers into a release image.
+- **Untrusted strings** (`github.head_ref`, label names, dispatch inputs) reach `run:` steps only through `env:`, never through `${{ }}` inside the script.
+- **Operator samples pin the image version.** `IGNITER_VERSION` in `docker-compose/apps/*/.env.sample` is set by hand to the latest published release. Bump it in staging for every release, so the samples on `main` point at the version they ship with. Nothing updates it automatically yet. `prepare-release` already computes `NEW_VERSION` on the release PR, so it could commit that bump, but it does not today.
+

@@ -8,6 +8,7 @@ import { getTemporalLogger } from '@igniter/logger/temporal'
 import type { Logger } from '@igniter/logger'
 import { checkEnvVariables } from '@igniter/commons/utils'
 import { TemporalWorker } from '@/types'
+import { getApiKey, getTLSConfig } from '@/connectionOptions'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -92,7 +93,14 @@ export const getWorker = async (
   logger.info('Initializing Temporal worker...', { namespace, taskQueue, workflowsPath })
 
   if (!options.connection) {
-    options.connection = await NativeConnection.connect({ address })
+    // Same TLS + API key as the client (client.ts): without them the worker's
+    // poll/complete channel stayed plaintext and unauthenticated even when
+    // TEMPORAL_TLS_ENABLED=true.
+    options.connection = await NativeConnection.connect({
+      address,
+      tls: getTLSConfig(logger),
+      apiKey: getApiKey(),
+    })
   }
 
   const worker = await Worker.create({

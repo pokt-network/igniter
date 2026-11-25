@@ -15,7 +15,7 @@ import {
 import { Input } from '@igniter/ui/components/input'
 import { useQuery } from '@tanstack/react-query'
 import {
-  getApplicationSettings,
+  GetFullApplicationSettings,
   RetrieveBlockchainSettings,
   UpsertApplicationSettings,
   ValidateIndexerUrl,
@@ -84,7 +84,7 @@ export default function SettingsForm() {
     isError,
   } = useQuery({
     queryKey: ['settings'],
-    queryFn: getApplicationSettings,
+    queryFn: GetFullApplicationSettings,
     refetchInterval: 60000,
   })
 

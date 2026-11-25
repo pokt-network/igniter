@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import * as schema from '@igniter/db/provider/schema'
 import {
+  AddressGroup,
   ImportSupplierRequest,
   InsertImportSupplierRequest,
   Key,
@@ -123,12 +124,13 @@ export async function findLatestRequest(
  * Returns suppliers where deliveredTo is NULL and state is 'staked'.
  *
  * @param ownerAddress - The owner address to search for
- * @returns Array of matching keys (suppliers)
+ * @returns Array of matching keys (suppliers), each with its address group's
+ * visibility fields so callers can drop the groups not open to the owner.
  */
 export async function findSuppliersByOwner(
   ownerAddress: string,
   excludeAddresses: string[] = [],
-): Promise<Key[]> {
+): Promise<Array<Key & { addressGroup: Pick<AddressGroup, 'private' | 'linkedAddresses'> | null }>> {
   const dbClient = getDbClient()
 
   const conditions = [
@@ -142,6 +144,11 @@ export async function findSuppliersByOwner(
 
   return dbClient.db.query.keysTable.findMany({
     where: and(...conditions),
+    with: {
+      addressGroup: {
+        columns: { private: true, linkedAddresses: true },
+      },
+    },
   })
 }
 
