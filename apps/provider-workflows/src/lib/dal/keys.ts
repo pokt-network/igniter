@@ -221,6 +221,20 @@ export default class Keys {
   }
 
   /**
+   * The subset of `addresses` that are keys of this provider (an analytics batch
+   * from a workflow input may only name the provider's own suppliers).
+   */
+  async filterKnownAddresses(addresses: string[]): Promise<string[]> {
+    if (addresses.length === 0) return []
+    const rows = await this.dbClient.db
+      .select({address: keysTable.address})
+      .from(keysTable)
+      .where(inArray(keysTable.address, addresses))
+    const known = new Set(rows.map((r) => r.address))
+    return addresses.filter((a) => known.has(a))
+  }
+
+  /**
    * Sets `retiredAt` once for a key (set-once). The `isNull(retiredAt)` guard
    * makes this idempotent: a key whose retiredAt is already set is never
    * overwritten, so it is safe to call from both the unstake-tx success effect

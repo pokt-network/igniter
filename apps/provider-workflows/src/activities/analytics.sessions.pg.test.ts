@@ -99,7 +99,7 @@ describeWithDb('syncAnalyticsSessionsDay: a late write of an abandoned attempt o
   let db: NodePgDatabase<typeof schema>
   const run = async (q: SQL) => (await db.execute(q)).rows as Array<Record<string, unknown>>
   const activities = (analytics: Analytics) =>
-    analyticsActivities({ analytics, settings: { loadSettings: async () => ({ indexerApiUrl: 'http://indexer.test' }) } } as never)
+    analyticsActivities({ analytics, keys: { filterKnownAddresses: async (a: string[]) => a }, settings: { loadSettings: async () => ({ indexerApiUrl: 'http://indexer.test' }) } } as never)
 
   beforeAll(async () => {
     db = drizzle({ connection: serverUrl!, schema }) as NodePgDatabase<typeof schema>

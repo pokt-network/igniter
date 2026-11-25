@@ -3,6 +3,34 @@ import type { DBClient } from '@igniter/db/connection'
 import * as schema from '@igniter/db/provider/schema'
 import { delegatorsTable } from '@igniter/db/provider/schema'
 import { eq } from 'drizzle-orm'
+import { z } from 'zod'
+
+// Column limits of delegatorsTable (name varchar 255, identity varchar 66).
+const nameSchema = z.string().min(1).max(255)
+const identitySchema = z.string().min(1).max(66)
+
+/** The delegators governance (CDN) payload; the same shape as apps/provider/src/lib/dal/delegators.ts. */
+const cdnDelegatorsSchema = z.array(z.object({
+  name: nameSchema,
+  identity: identitySchema,
+  identityHistory: z.array(identitySchema),
+}))
+
+export type CdnDelegator = z.infer<typeof cdnDelegatorsSchema>[number]
+
+/**
+ * Validates the delegators governance (CDN) payload and returns only the known fields.
+ * Throws on an invalid payload, so a malformed one writes nothing (a partly accepted list would
+ * drive the disable pass below).
+ */
+export function parseCdnDelegators(payload: unknown): CdnDelegator[] {
+  const parsed = cdnDelegatorsSchema.safeParse(payload)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
+    throw new Error(`Invalid delegators payload: ${issue?.path.join('.') || 'root'}: ${issue?.message}`)
+  }
+  return parsed.data
+}
 
 export default class Delegators {
   logger: Logger
@@ -19,10 +47,19 @@ export default class Delegators {
       .from(delegatorsTable)
   }
 
+  /**
+   * Applies the governance (CDN) list to the delegators table:
+   * - the payload is validated first (parseCdnDelegators); an invalid one throws before any write;
+   * - new delegators are inserted DISABLED, until the owner enables them in the UI;
+   * - the identity of an ENABLED row is never rotated from the CDN; a warning is logged instead
+   *   (the owner disables the row, the next sync rotates it, the owner re-enables it);
+   * - rows no longer listed are disabled.
+   */
   async upsertFromGovernance(
-    delegators: Array<{ name: string; identity: string; identityHistory: string[] }>,
+    payload: unknown,
     updatedBy: string,
   ) {
+    const delegators = parseCdnDelegators(payload)
     const current = await this.listAll()
     const currentMap = new Map(current.map((d) => [d.identity, d]))
 
@@ -42,14 +79,24 @@ export default class Delegators {
         const matchingCurrent = possibleIds.map((id) => currentMap.get(id)).find(Boolean) ?? null
 
         if (matchingCurrent) {
-          const shouldUpdateIdentity = matchingCurrent.identity !== cdnDelegator.identity
+          const identityChanged = matchingCurrent.identity !== cdnDelegator.identity
+          const shouldUpdateIdentity = identityChanged && !matchingCurrent.enabled
           const shouldUpdateName = matchingCurrent.name !== cdnDelegator.name
+
+          if (identityChanged && matchingCurrent.enabled) {
+            this.logger.warn('Governance lists a new identity for an enabled delegator; not rotating it', {
+              delegatorId: matchingCurrent.id,
+              name: matchingCurrent.name,
+              currentIdentity: matchingCurrent.identity,
+              governanceIdentity: cdnDelegator.identity,
+            })
+          }
 
           if (shouldUpdateIdentity || shouldUpdateName) {
             await tx
               .update(delegatorsTable)
               .set({
-                identity: cdnDelegator.identity,
+                ...(shouldUpdateIdentity ? { identity: cdnDelegator.identity } : {}),
                 name: cdnDelegator.name,
                 updatedBy,
               })
@@ -62,7 +109,8 @@ export default class Delegators {
             identity: cdnDelegator.identity,
             createdBy: updatedBy,
             updatedBy,
-            enabled: true,
+            // Disabled until the owner approves it in the UI.
+            enabled: false,
           })
           inserted++
         }

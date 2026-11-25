@@ -31,7 +31,10 @@ const FOREIGN = 'pokt1zzz'
 function makeDal(settings: Record<string, unknown> | null = { indexerApiUrl: 'https://indexer.test', analyticsDayRetentionDays: 90 }) {
   return {
     settings: { loadSettings: jest.fn().mockResolvedValue(settings) },
-    keys: { listAnalyticsSuppliers: jest.fn().mockResolvedValue([]) },
+    keys: {
+      listAnalyticsSuppliers: jest.fn().mockResolvedValue([]),
+      filterKnownAddresses: jest.fn(async (addresses: string[]) => addresses.filter((a) => a !== FOREIGN)),
+    },
     analytics: {
       listDayStates: jest.fn().mockResolvedValue([]),
       replaceSupplierDays: jest.fn().mockResolvedValue(undefined),

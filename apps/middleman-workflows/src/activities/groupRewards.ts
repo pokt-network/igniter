@@ -1,5 +1,5 @@
 import type { AddressGroupsJson } from '@igniter/db/middleman/schema'
-import { postGraphql } from '@igniter/graphql/client'
+import { postIndexerGraphql } from '@/lib/indexer'
 import { configuredServiceRewards } from './configuredServiceRewards'
 import { supplierRewardAmount } from './supplierRewardShare'
 import type { RewardBySupplier } from './index'
@@ -34,7 +34,7 @@ export async function fetchAddressGroupRewards({
   endTs: Date
   supplierShare: number
 }): Promise<GroupRewards> {
-  const result = await postGraphql<{ data: { services: RewardBySupplier[] } }>(
+  const result = await postIndexerGraphql<{ data: { services: RewardBySupplier[] } }>(
     indexerApiUrl,
     GROUP_REWARDS_QUERY,
     { domains, startTs: startTs.toISOString(), endTs: endTs.toISOString() },

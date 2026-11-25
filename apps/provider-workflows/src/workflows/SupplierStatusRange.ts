@@ -5,7 +5,7 @@ import { LoadKeysInRangeResult, providerActivities } from '@/activities'
 // @ts-ignore
 import pLimit from 'p-limit'
 import { KeyState } from '@igniter/db/provider/enums'
-import { classifyStatusResults } from '@/workflows/supplierStatusUtils'
+import { classifyStatusResults, clampConcurrency } from '@/workflows/supplierStatusUtils'
 
 type SupplierStatusByRange = {
   height: number
@@ -33,7 +33,9 @@ export async function SupplierStatusByRange(input: SupplierStatusByRange): Promi
       },
     })
 
-  const limit = pLimit(input.concurrency ?? 50);
+  // Concurrency comes from the workflow input; clamp it so a caller cannot fan out
+  // an unbounded number of parallel activities (RPC/DB pressure).
+  const limit = pLimit(clampConcurrency(input.concurrency));
 
   const rows: LoadKeysInRangeResult = await loadKeysInRange(input);
 

@@ -107,3 +107,11 @@ export function buildStatusNotificationEvents(
 
   return events
 }
+/** Upper bound for per-range activity fan-out; the parents pass 10, the historical default was 50. */
+export const MAX_RANGE_CONCURRENCY = 50
+
+/** Clamps a workflow-input concurrency to an integer in [1, MAX_RANGE_CONCURRENCY]. */
+export function clampConcurrency(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return MAX_RANGE_CONCURRENCY
+  return Math.min(MAX_RANGE_CONCURRENCY, Math.max(1, Math.floor(value)))
+}

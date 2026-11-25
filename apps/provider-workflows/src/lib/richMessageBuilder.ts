@@ -48,6 +48,18 @@ const REASON_LABELS: Record<string, string> = {
   '1006': 'Address Group Migration',
 }
 
+// HTML-escape a value interpolated into the Telegram/email HTML (text or attribute).
+// Sender labels come from operator-editable settings (provider/app name) and URLs
+// from env/config, so an unescaped `<`/`"` could inject markup or break the href.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function n(count: number, noun: string) {
   return `${count} ${noun}${count !== 1 ? 's' : ''}`
 }
@@ -106,7 +118,7 @@ function buildTelegramHtml(
   senderLabel: string,
 ): string {
   const emoji = TELEGRAM_EMOJIS[event.type] ?? '🔔'
-  const title = EVENT_TITLES[event.type] ?? event.type
+  const title = escapeHtml(EVENT_TITLES[event.type] ?? event.type)
   const meta = event.metadata
   const date = now.toUTCString().replace(' GMT', ' UTC')
 
@@ -131,7 +143,7 @@ function buildTelegramHtml(
     lines.push('')
     for (const [reason, { succeeded, failed }] of Object.entries(meta.byReason)) {
       if (succeeded.length === 0 && failed.length === 0) continue
-      const label = REASON_LABELS[reason] ?? reason
+      const label = escapeHtml(REASON_LABELS[reason] ?? reason)
       const parts: string[] = []
       if (succeeded.length > 0) parts.push(`✓ ${succeeded.length}`)
       if (failed.length > 0) parts.push(`✗ ${failed.length}`)
@@ -146,15 +158,15 @@ function buildTelegramHtml(
 
   lines.push('')
   lines.push(`🕐 <i>${date}</i>`)
-  lines.push(`📡 <i>${senderLabel}</i>`)
+  lines.push(`📡 <i>${escapeHtml(senderLabel)}</i>`)
 
   if (url) {
-    lines.push(`🔗 <a href="${url}">View in Dashboard</a>`)
+    lines.push(`🔗 <a href="${escapeHtml(url)}">View in Dashboard</a>`)
   }
 
   if (uuid && !url) {
     lines.push('')
-    lines.push(`🔖 <code>${uuid}</code> <i>(tap to copy)</i>`)
+    lines.push(`🔖 <code>${escapeHtml(uuid)}</code> <i>(tap to copy)</i>`)
     lines.push('')
     lines.push(`<i>Search for this ID in the Notifications page of your provider dashboard to view details.</i>`)
   }
@@ -187,7 +199,7 @@ function buildEmailBodyRows(event: NotificationEvent): string {
     const reasonRows = Object.entries(meta.byReason)
       .filter(([, { succeeded, failed }]) => succeeded.length > 0 || failed.length > 0)
       .map(([reason, { succeeded, failed }]) => {
-        const label = REASON_LABELS[reason] ?? reason
+        const label = escapeHtml(REASON_LABELS[reason] ?? reason)
         return `<tr>
           <td style="padding:6px 0;border-bottom:1px solid #1e2332">
             <table width="100%" border="0" cellpadding="0" cellspacing="0"><tr>
@@ -244,8 +256,12 @@ function buildEmailHtml(
   senderLabel: string,
 ): string {
   const color = EMAIL_COLORS[event.type] ?? '#64748b'
-  const title = EVENT_TITLES[event.type] ?? event.type
-  const typeLabel = title.toUpperCase()
+  const rawTitle = EVENT_TITLES[event.type] ?? event.type
+  const title = escapeHtml(rawTitle)
+  const typeLabel = escapeHtml(rawTitle.toUpperCase())
+  const safeUrl = url ? escapeHtml(url) : undefined
+  const safeUuid = uuid ? escapeHtml(uuid) : uuid
+  const safeSender = escapeHtml(senderLabel)
   const date = now.toUTCString().replace(' GMT', ' UTC')
 
   const bodyRows = buildEmailBodyRows(event)
@@ -253,7 +269,7 @@ function buildEmailHtml(
   const linkHtml = url
     ? `<table border="0" cellpadding="0" cellspacing="0" style="margin:16px 0 0">
         <tr><td style="background-color:${color};border-radius:6px">
-          <a href="${url}" style="display:inline-block;padding:10px 20px;font-size:13px;font-weight:600;color:#0a0b0f;text-decoration:none;letter-spacing:0.02em">View in Dashboard →</a>
+          <a href="${safeUrl}" style="display:inline-block;padding:10px 20px;font-size:13px;font-weight:600;color:#0a0b0f;text-decoration:none;letter-spacing:0.02em">View in Dashboard →</a>
         </td></tr>
       </table>`
     : ''
@@ -264,7 +280,7 @@ function buildEmailHtml(
 
   const uuidHtml = uuid && !url
     ? `<p style="margin:16px 0 4px;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Notification ID &mdash; click to select</p>
-       <p style="margin:0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#94a3b8;background-color:#0a0b10;border:1px solid #2a3045;border-radius:4px;padding:8px 12px;word-break:break-all;cursor:text;user-select:all;-webkit-user-select:all">${uuid}</p>
+       <p style="margin:0;font-family:'Courier New',Courier,monospace;font-size:12px;color:#94a3b8;background-color:#0a0b10;border:1px solid #2a3045;border-radius:4px;padding:8px 12px;word-break:break-all;cursor:text;user-select:all;-webkit-user-select:all">${safeUuid}</p>
        ${noUrlNote}`
     : ''
 
@@ -308,7 +324,7 @@ function buildEmailHtml(
         <tr><td style="padding:20px 28px;background-color:#090a0d">
           ${uuidHtml}
           ${linkHtml}
-          <p style="margin:20px 0 0;font-size:11px;color:#334155">Sent by ${senderLabel} &bull; ${date}</p>
+          <p style="margin:20px 0 0;font-size:11px;color:#334155">Sent by ${safeSender} &bull; ${date}</p>
         </td></tr>
 
       </table>
