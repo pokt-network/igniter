@@ -1,7 +1,7 @@
 import "server-only";
 import { getDb } from "@/db";
 import { Provider, providersTable } from "@igniter/db/middleman/schema";
-import {and, count, eq, sql} from "drizzle-orm";
+import {and, count, eq, inArray, sql} from "drizzle-orm";
 
 export type ProviderToInsert = { name: string; identity: string; url: string }
 export type ProviderToUpdate = { id: number; name: string; identity: string; url: string }
@@ -10,9 +10,12 @@ export async function listAll(): Promise<Provider[]> {
   return getDb().select().from(providersTable)
 }
 
+// Same rule as the workflow's governance sync: updates change only identity, name and url (the
+// owner's enabled/visible choice is kept), and rows that left the source are disabled and hidden.
 export async function applyGovernanceSync(
   toInsert: ProviderToInsert[],
   toUpdate: ProviderToUpdate[],
+  toDisable: string[],
   updatedBy: string,
 ): Promise<void> {
   await getDb().transaction(async (tx) => {
@@ -31,8 +34,15 @@ export async function applyGovernanceSync(
     for (const p of toUpdate) {
       await tx
         .update(providersTable)
-        .set({ identity: p.identity, name: p.name, url: p.url, updatedBy, enabled: true, visible: true, })
+        .set({ identity: p.identity, name: p.name, url: p.url, updatedBy })
         .where(eq(providersTable.id, p.id))
+    }
+
+    if (toDisable.length > 0) {
+      await tx
+        .update(providersTable)
+        .set({ enabled: false, visible: false, updatedAt: new Date(), updatedBy })
+        .where(inArray(providersTable.identity, toDisable))
     }
   })
 }
@@ -40,21 +50,6 @@ export async function applyGovernanceSync(
 export async function countProviders(): Promise<number> {
   const [{ value }] = await getDb().select({ value: count() }).from(providersTable)
   return value
-}
-
-export async function upsertProviders(
-  providers: Pick<Provider, "name" | "identity" | "url" | "enabled" | "visible" | "createdBy" | "updatedBy">[],
-) {
-  return getDb()
-    .insert(providersTable)
-    .values(providers)
-    .onConflictDoUpdate({
-      target: providersTable.identity,
-      set: {
-        enabled: sql`excluded.enabled`,
-      },
-    })
-    .returning();
 }
 
 export async function list(all?: boolean) : Promise<Provider[]> {

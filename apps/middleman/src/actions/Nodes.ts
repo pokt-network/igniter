@@ -4,7 +4,6 @@ import { NodeStatus } from '@igniter/db/middleman/enums'
 import { countAllNodes, getAllNodes, getNode, getStakedNodesSummary, getNodesByUser, getOwnerAddressesByUser, getProviderCountByUser, getStakedNodesAddress, getUserStakedNodesSummary } from '@/lib/dal/nodes'
 import { requireAuth, requireAdmin, assertOwnership } from "@/lib/utils/actions";
 import { getApplicationSettings } from '@/lib/dal/applicationSettings'
-import { normalizeIdentityToAddress } from '@igniter/commons/crypto'
 import { rewardsWindowsDocument } from '@igniter/graphql'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getLatestBlock } from '@igniter/ui/api/blocks'
@@ -29,17 +28,9 @@ export async function GetUserNodes() {
 }
 
 export async function GetStakedNodesAddress() {
-  const [userIdentity, applicationSettings] = await Promise.all([
-    requireAuth(),
-    getApplicationSettings()
-  ])
-
-  const normalizedOwnerIdentity = normalizeIdentityToAddress(applicationSettings.ownerIdentity)
-
-  if (userIdentity !== normalizedOwnerIdentity) {
-    throw new Error("Unauthorized")
-  }
-
+  // The owner is the current OWNER_IDENTITY (the session role is derived from it on every read),
+  // not the ownerIdentity stored in the settings row at setup time.
+  await requireAdmin()
   return await getStakedNodesAddress()
 }
 

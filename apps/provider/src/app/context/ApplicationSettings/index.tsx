@@ -7,11 +7,10 @@ import {
   useEffect,
   useState,
 } from "react";
-import { GetApplicationSettings } from "@/actions/ApplicationSettings";
-import type {ApplicationSettings} from "@igniter/db/provider/schema";
+import { GetPublicApplicationSettings, type PublicApplicationSettings } from "@/actions/ApplicationSettings";
 import { ChainIdProvider } from "@igniter/ui/context/explorer";
 
-const ApplicationSettingsContext = createContext<ApplicationSettings | undefined>(undefined);
+const ApplicationSettingsContext = createContext<PublicApplicationSettings | undefined>(undefined);
 
 export const ApplicationSettingsProvider = ({
   children,
@@ -19,11 +18,11 @@ export const ApplicationSettingsProvider = ({
   children: ReactNode;
 }) => {
   const [applicationSettings, setApplicationSettings] =
-    useState<ApplicationSettings | undefined>();
+    useState<PublicApplicationSettings | undefined>();
 
   useEffect(() => {
     (async () => {
-      const settings = await GetApplicationSettings();
+      const settings = await GetPublicApplicationSettings();
       setApplicationSettings(settings);
     })();
   }, []);

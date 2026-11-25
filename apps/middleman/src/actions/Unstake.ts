@@ -1,6 +1,6 @@
 'use server'
 
-import { getApplicationSettings } from '@/actions/ApplicationSettings'
+import { getApplicationSettings } from '@/lib/dal/applicationSettings'
 import { unstakeTimeAvgDocument } from '@igniter/graphql'
 import { getServerApolloClient } from '@igniter/ui/graphql/server'
 import { getStartAndEndDateBasedOnTime, Time } from '@igniter/ui/lib/dates'
@@ -10,8 +10,9 @@ import { requireAuth } from '@/lib/utils/actions'
 import { InsertTransaction } from '@igniter/db/middleman/schema'
 import { TransactionStatus, TransactionType } from '@igniter/db/middleman/enums'
 import { insert } from '@/lib/dal/transaction'
-import { sumStakeAmountByAddresses } from '@/lib/dal/nodes'
-import { extractTransactionUnstakingSuppliers } from '@igniter/commons/transactions/extractSuppliers'
+import { getNodeOwnership, sumStakeAmountByAddresses } from '@/lib/dal/nodes'
+import { deriveUnstakeUnsignedPayload } from '@/lib/transactions/stakePayload'
+import { fetchChainAccount } from '@/lib/transactions/chainAccount'
 import { getLogger } from '@igniter/logger'
 import { runWithRequestContext } from '@/lib/logging/withLogging'
 import { assertSignedTransaction } from '@igniter/ui/lib/signedTransaction'
@@ -30,6 +31,7 @@ export interface UnstakeDurationData {
  * Formula: num_blocks_per_session * supplier_unbonding_period_sessions * (timeToBlock / 1000)
  */
 export async function GetUnstakeDuration(): Promise<UnstakeDurationData | null> {
+  await requireAuth()
   const applicationSettings = await getApplicationSettings()
 
   if (!applicationSettings?.indexerApiUrl) {
@@ -97,14 +99,35 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
 
     assertSignedTransaction(request.transaction)
 
+    // The messages come from the signed bytes, never from the client's unsigned copy. The
+    // signature is verified and the signer is the address of the signing key, which must also be
+    // the address the client names.
+    const { chainId } = await getApplicationSettings()
+    const { unsignedPayload, operatorAddresses, fromAddress: signer } = await deriveUnstakeUnsignedPayload(
+      request.transaction.signedPayload,
+      request.transaction.address,
+      { chainId, getAccountNumber: async (address) => (await fetchChainAccount(address)).accountNumber },
+    )
+
+    // Mirror the chain: only a supplier's owner can unstake it. Every supplier must be one of this
+    // user's nodes, owned by the signer.
+    const ownership = new Map((await getNodeOwnership(operatorAddresses)).map((node) => [node.address, node]))
+    for (const address of operatorAddresses) {
+      const node = ownership.get(address)
+      if (!node || node.createdBy !== userIdentity) {
+        throw new Error('The unstake includes a supplier that is not yours')
+      }
+      if (node.ownerAddress !== signer) {
+        throw new Error('The unstake is not signed by the owner of every supplier')
+      }
+    }
+
     // MsgUnstakeSupplier carries no amount, so "Total POKT" cannot be recovered
     // from the payload later. Derive it now, while the suppliers are still
     // Staked and their stakeAmount is intact. Derived server-side rather than
     // taken from the client: the payload is authoritative about which suppliers
     // are being unstaked, and their stake is already in our own database.
-    const unstakingSuppliers = extractTransactionUnstakingSuppliers({
-      unsignedPayload: request.transaction.unsignedPayload,
-    })
+    const unstakingSuppliers = operatorAddresses.map((operatorAddress) => ({ operatorAddress }))
 
     // Isolated so a display-only field can never abort the unstake. The user has
     // already signed by this point and the dialog is past its cancellable phase,
@@ -126,8 +149,8 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
       type: TransactionType.Unstake,
       status: TransactionStatus.Pending,
       signedPayload: request.transaction.signedPayload,
-      fromAddress: request.transaction.address,
-      unsignedPayload: request.transaction.unsignedPayload,
+      fromAddress: signer,
+      unsignedPayload,
       estimatedFee: request.transaction.estimatedFee,
       consumedFee: 0,
       amount,
@@ -136,7 +159,7 @@ export async function CreateUnstakeTransaction(request: CreateUnstakeTransaction
 
     log.info('unstake transaction created', {
       transactionId: created.id,
-      ownerAddress: request.transaction.address,
+      ownerAddress: signer,
       supplierCount: unstakingSuppliers.length,
       amount,
     })

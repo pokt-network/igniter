@@ -107,6 +107,27 @@ export const analyticsActivities = (dal: DAL) => {
     })
   }
 
+  /**
+   * An analytics batch arrives as workflow input, so it is checked before any indexer
+   * call or write: a real `YYYY-MM-DD` day, at most ANALYTICS_MAX_SUPPLIERS ids, and only
+   * ids that are keys of this provider (unknown ids are dropped with a warning).
+   */
+  async function verifiedBatch<T extends AnalyticsDayParams>(p: T): Promise<T> {
+    if (typeof p?.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.day) || Number.isNaN(Date.parse(`${p.day}T00:00:00Z`))) {
+      throw ApplicationFailure.nonRetryable('analytics batch: invalid day', 'invalid_input')
+    }
+    const ids = Array.isArray(p.supplierIds) ? p.supplierIds.filter((s): s is string => typeof s === 'string') : []
+    if (ids.length > ANALYTICS_MAX_SUPPLIERS) {
+      throw ApplicationFailure.nonRetryable(`analytics batch: ${ids.length} supplier ids (max ${ANALYTICS_MAX_SUPPLIERS})`, 'invalid_input')
+    }
+    const unique = [...new Set(ids)]
+    const supplierIds = await analyticsDb(() => dal.keys.filterKnownAddresses(unique))
+    if (supplierIds.length !== unique.length) {
+      log.warn('analytics batch: dropped supplier ids that are not keys of this provider', { day: p.day, given: unique.length, kept: supplierIds.length })
+    }
+    return { ...p, supplierIds }
+  }
+
   return {
     /**
      * The days the run has work for, oldest first (a sync run capped by capSyncDays). Empty (with a warning) when
@@ -132,7 +153,8 @@ export const analyticsActivities = (dal: DAL) => {
     },
 
     /** Fetches the day's funnel of the batch and writes it (supplier rows + network_sessions per service). */
-    async syncAnalyticsFunnelDay(p: AnalyticsDayParams): Promise<AnalyticsFunnelDayResult> {
+    async syncAnalyticsFunnelDay(input: AnalyticsDayParams): Promise<AnalyticsFunnelDayResult> {
+      const p = await verifiedBatch(input)
       const url = await indexerUrl()
       const answer = await fetchSupplierSessionFunnel(url, { suppliers: p.supplierIds, ...funnelRange(p.day) })
       const batch = new Set(p.supplierIds)
@@ -203,7 +225,8 @@ export const analyticsActivities = (dal: DAL) => {
      * session totals, and member rows for the batch's own suppliers only. Then deletes the batch's rows of that
      * day the answer no longer has.
      */
-    async syncAnalyticsSessionsDay(p: AnalyticsDayParams): Promise<AnalyticsSessionsDayResult> {
+    async syncAnalyticsSessionsDay(input: AnalyticsDayParams): Promise<AnalyticsSessionsDayResult> {
+      const p = await verifiedBatch(input)
       const url = await indexerUrl()
       const batch = new Set(p.supplierIds)
       const range = { rangeStart: `${p.day}T00:00:00Z`, rangeEnd: `${addDays(p.day, 1)}T00:00:00Z` }
@@ -283,6 +306,7 @@ export const analyticsActivities = (dal: DAL) => {
     async closeAnalyticsDay(
       p: AnalyticsDayParams & { coveredFrom: string | null; coveredTo: string | null; gaps: number; dropped: number },
     ): Promise<AnalyticsCloseDayResult> {
+      p = await verifiedBatch(p)
       const inputs = await analyticsDb(() => dal.analytics.closeInputs(p.day, p.supplierIds))
       const fetchedAt = new Date()
       const coveredTo = p.coveredTo === null ? null : new Date(p.coveredTo)

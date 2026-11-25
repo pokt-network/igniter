@@ -18,7 +18,10 @@ import {
 
 export async function ListTransactions(limit = 50, offset = 0): Promise<ActionResult<Transaction[]>> {
   return withRequireOwner(async () => {
-    return listTransactions(limit, offset)
+    // `params` holds the frozen sign inputs (and, on rows older than migration 0026, the
+    // signer private key). The UI never renders it, so it never leaves the server.
+    const txs = await listTransactions(limit, offset)
+    return txs.map((t) => ({ ...t, params: null }))
   })
 }
 
@@ -56,7 +59,8 @@ export async function ListTransactionsByKey(keyAddress: string): Promise<ActionR
     const txs = await listTransactionsByKey(keyAddress)
     // Drop the signed TxRaw bytes — the detail drawer never renders them, and they add
     // ~1-4 KB per row to the client payload for no benefit.
-    return txs.map((t) => ({ ...t, signedPayload: null }))
+    // `params` (frozen sign inputs) never leaves the server either.
+    return txs.map((t) => ({ ...t, signedPayload: null, params: null }))
   })
 }
 

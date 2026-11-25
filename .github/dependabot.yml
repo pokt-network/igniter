@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Actions are pinned by commit SHA (with a `# vX.Y.Z` comment); Dependabot
+  # keeps those pins current. PRs target staging, because the CI branch-gate
+  # only accepts PRs into main from the `release` branch.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"

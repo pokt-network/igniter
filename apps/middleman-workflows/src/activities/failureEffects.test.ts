@@ -48,6 +48,7 @@ const stakeTx = {
   hash: 'ABC',
   log: 'out of funds',
   createdBy: 'pokt1owner',
+  fromAddress: 'pokt1signer',
   providerId: PROVIDER.identity,
   unsignedPayload: stakePayload(['pokt1x', 'pokt1y']),
   failureEffects: 'pending',
@@ -260,7 +261,7 @@ describe('releaseFailedStake', () => {
     expect(h.tx.noReleaseOwed).not.toHaveBeenCalled()
     expect(h.tx.beginRelease).toHaveBeenCalledWith(TX_ID)
     expect(h.providerService.releaseSuppliersOutcome).toHaveBeenCalledTimes(1)
-    expect(h.providerService.releaseSuppliersOutcome).toHaveBeenCalledWith(['pokt1x', 'pokt1y'], PROVIDER)
+    expect(h.providerService.releaseSuppliersOutcome).toHaveBeenCalledWith(['pokt1x', 'pokt1y'], PROVIDER, 'pokt1signer')
     expect(h.tx.releaseDone).toHaveBeenCalledWith(TX_ID)
     expect(h.tx.releaseManual).not.toHaveBeenCalled()
     expect(logMock.info).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ transactionId: TX_ID, providerUrl: PROVIDER.url }))
@@ -271,7 +272,7 @@ describe('releaseFailedStake', () => {
 
     await h.activities.releaseFailedStake(TX_ID)
 
-    expect(h.providerService.releaseSuppliersOutcome).toHaveBeenCalledWith(['pokt1y'], PROVIDER)
+    expect(h.providerService.releaseSuppliersOutcome).toHaveBeenCalledWith(['pokt1y'], PROVIDER, 'pokt1signer')
   })
 
   it('[] failureReleaseAddresses: release nothing → noReleaseOwed, no POST, no entry CAS', async () => {
@@ -378,6 +379,19 @@ describe('releaseFailedStake', () => {
     expect(h.tx.releaseDone).not.toHaveBeenCalled()
     expect(h.tx.releaseManual).not.toHaveBeenCalled()
     expect(logMock.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ transactionId: TX_ID, providerUrl: PROVIDER.url, code }))
+  })
+
+  it('not-sent because the provider is not in the governance source: manual at once, never retried', async () => {
+    const h = makeHarness(stakeTx, { outcome: { kind: 'not-sent', code: 'NOT_IN_GOVERNANCE' } })
+
+    await expect(h.activities.releaseFailedStake(TX_ID)).resolves.toBe('manual')
+
+    expect(h.tx.releaseManual).toHaveBeenCalledWith(TX_ID)
+    expect(h.tx.releaseNotSent).not.toHaveBeenCalled()
+    expect(h.tx.releaseDone).not.toHaveBeenCalled()
+    expect(logMock.error).toHaveBeenCalledWith(expect.any(String), {
+      transactionId: TX_ID, providerUrl: PROVIDER.url, addresses: ['pokt1x', 'pokt1y'],
+    })
   })
 
   it.each<[string, ReleaseOutcome]>([

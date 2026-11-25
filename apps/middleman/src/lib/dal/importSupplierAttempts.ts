@@ -79,15 +79,17 @@ export async function findPendingByOwnerAndProvider(
 }
 
 /**
- * Cancels pending import attempts for the given owner and provider.
+ * Cancels pending import attempts for the given owner and provider, created by the given user.
  *
  * @param ownerAddress - The owner address
  * @param providerIdentity - The provider identity
+ * @param userIdentity - The user who created the attempts
  * @returns The number of attempts cancelled
  */
 export async function cancelPending(
   ownerAddress: string,
   providerIdentity: string,
+  userIdentity: string,
 ): Promise<number> {
   const result = await getDb()
     .update(importSupplierAttemptsTable)
@@ -98,6 +100,7 @@ export async function cancelPending(
       and(
         eq(importSupplierAttemptsTable.ownerAddress, ownerAddress),
         eq(importSupplierAttemptsTable.providerIdentity, providerIdentity),
+        eq(importSupplierAttemptsTable.userIdentity, userIdentity),
         inArray(importSupplierAttemptsTable.status, [
           ImportAttemptStatus.Initiated,
           ImportAttemptStatus.Signed,

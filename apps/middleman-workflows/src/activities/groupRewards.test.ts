@@ -44,6 +44,6 @@ describe('fetchAddressGroupRewards', () => {
   it('fails the group when the request fails', async () => {
     fetchMock.mockResolvedValue(json({ data: null, errors: [{ message: 'boom', path: ['data'] }] }))
 
-    await expect(call()).rejects.toThrow('Indexer GraphQL request failed with HTTP 200: boom')
+    await expect(call()).rejects.toThrow('Indexer GraphQL request failed with HTTP 200 (1 error, messages redacted)')
   })
 })

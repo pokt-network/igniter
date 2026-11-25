@@ -427,8 +427,28 @@ function EnsureExpectedChainStep({
     )
 }
 
+export interface LoginNonce {
+  nonce: string;
+  issuedAt: string;
+  expirationTime: string;
+}
+
+/**
+ * The sign-in nonce issued by the app's `/api/login-nonce` route (also set as its cookie), with the
+ * message times taken from the server clock.
+ */
+export async function fetchLoginNonce(): Promise<LoginNonce> {
+  const response = await fetch('/api/login-nonce', { cache: 'no-store', credentials: 'same-origin' })
+  if (!response.ok) throw new Error(`Could not get a sign-in nonce (HTTP ${response.status})`)
+  const { nonce, issuedAt, expirationTime } = await response.json()
+  if (typeof nonce !== 'string' || !nonce || typeof issuedAt !== 'string' || typeof expirationTime !== 'string') {
+    throw new Error('Could not get a sign-in nonce')
+  }
+  return { nonce, issuedAt, expirationTime }
+}
+
 interface SignInStepProps {
-  getCsrfToken: () => Promise<string>;
+  getLoginNonce: () => Promise<LoginNonce>;
   onSignIn: (
     message: SiwpMessage,
     signature: string,
@@ -438,7 +458,7 @@ interface SignInStepProps {
 
 function SignInStep({
   onSignIn,
-  getCsrfToken
+  getLoginNonce
 }: SignInStepProps) {
     const [status, setStatus] = useState<'waiting' | 'signing-message' | 'error' | 'rejected' | 'successful' | 'auth-error'>('waiting')
     const [errorDetails, setErrorDetails] = useState<string | null>(null)
@@ -469,6 +489,9 @@ function SignInStep({
         setErrorDetails(null)
         setErrorExpanded(false)
 
+        // The server checks the nonce it issued, the chain id, and that the message was issued
+        // less than 5 minutes ago and expires within 10; it also supplies those times.
+        const { nonce, issuedAt, expirationTime } = await getLoginNonce();
         const message = new SiwpMessage({
           domain: window.location.host,
           address: connectedIdentity,
@@ -476,7 +499,9 @@ function SignInStep({
           uri: window.location.origin,
           version: "1",
           chainId: expectedChainId,
-          nonce: await getCsrfToken(),
+          nonce,
+          issuedAt,
+          expirationTime,
         });
 
         const signature = await signMessage(message.prepareMessage(), connectedIdentity);
@@ -651,10 +676,10 @@ export interface WalletPickerProps {
       signature: string,
       publicKey: string,
     ) => Promise<void>;
-    getCsrfToken: () => Promise<string>;
+    getLoginNonce: () => Promise<LoginNonce>;
 }
 
-export function WalletPicker({ onSignIn, getCsrfToken }: Readonly<WalletPickerProps>) {
+export function WalletPicker({ onSignIn, getLoginNonce }: Readonly<WalletPickerProps>) {
     const [open, setOpen] = useState(false);
     const {
         connectedIdentities,
@@ -717,7 +742,7 @@ export function WalletPicker({ onSignIn, getCsrfToken }: Readonly<WalletPickerPr
             content = (
               <SignInStep
                 onSignIn={onSignIn}
-                getCsrfToken={getCsrfToken}
+                getLoginNonce={getLoginNonce}
               />
             )
             break;

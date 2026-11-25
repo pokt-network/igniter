@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ensureApplicationIsBootstrapped, validateRequestSignature, truncateIdentity } from '@/lib/utils/routes'
-import { SupplierMarkStakedRequest } from '@/lib/models/supplier'
+import { MAX_SUPPLIERS_PER_REQUEST, SupplierMarkStakedRequest } from '@/lib/models/supplier'
+import { listAddressesDeliveredTo } from '@/lib/dal/keys'
 import { APIResponse } from '@/lib/models/response'
 import { REQUEST_IDENTITY_HEADER } from '@igniter/commons/constants'
 import { getTemporalClient, getTemporalConfig } from '@/lib/temporal'
@@ -41,10 +42,21 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
       return signatureValidationResponse
     }
 
-    const { data } = signatureValidationResponse
+    const { data, delegator } = signatureValidationResponse
 
-    if (!data || !data.addresses.length) {
+    if (!data || !Array.isArray(data.addresses) || !data.addresses.length) {
       return NextResponse.json({ error: 'Invalid request. Empty suppliers list.' }, { status: 400 })
+    }
+
+    if (data.addresses.length > MAX_SUPPLIERS_PER_REQUEST) {
+      return NextResponse.json({ error: `Invalid request. At most ${MAX_SUPPLIERS_PER_REQUEST} suppliers per request.` }, { status: 400 })
+    }
+
+    // Only the suppliers delivered to the calling delegator.
+    const addresses = await listAddressesDeliveredTo(data.addresses, delegator!.identity)
+
+    if (addresses.length === 0) {
+      return NextResponse.json({ error: 'Invalid request. None of the suppliers belong to this delegator.' }, { status: 400 })
     }
 
     const { taskQueue } = getTemporalConfig()
@@ -54,11 +66,11 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
     // This replaces the blind markStaked DB update — upsertSupplierStatus will confirm
     // the on-chain stake and detect the Delivered → Staked transition naturally.
     const workflowId = `SSA-${randomUUID()}`
-    log.info('supplier stake verification requested', { supplierAddresses: data.addresses, identity: truncateIdentity(delegatorIdentity), workflowId })
+    log.info('supplier stake verification requested', { supplierAddresses: addresses, identity: truncateIdentity(delegatorIdentity), workflowId })
     await client.workflow.start('SupplierStatusForAddresses', {
       taskQueue,
       workflowId,
-      args: [{ addresses: data.addresses }],
+      args: [{ addresses }],
     })
 
     return NextResponse.json({ data: 'OK' }, { status: 200 })

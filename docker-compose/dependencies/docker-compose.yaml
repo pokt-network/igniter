@@ -1,3 +1,7 @@
+# EXAMPLE CONFIGURATION ONLY, provided "as is" without warranty.
+# You are solely responsible for securing your own deployment.
+# A real deployment runs either a provider or a middleman, not both.
+# See docker-compose/README.md#security--usage-notice before using it with real keys or funds.
 services:
   postgresql:
     image: postgres:${POSTGRESQL_VERSION}
@@ -9,17 +13,32 @@ services:
       timeout: 3s
       retries: 3
     environment:
+      # Bootstrap superuser. Only this container and the role script use it;
+      # no application and no Temporal server gets it.
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in dependencies/.env}
+      # One login role per database, created by postgresql/init-roles.sh.
+      MIDDLEMAN_DB_PASSWORD: ${MIDDLEMAN_DB_PASSWORD:?set MIDDLEMAN_DB_PASSWORD in dependencies/.env}
+      PROVIDER_DB_PASSWORD: ${PROVIDER_DB_PASSWORD:?set PROVIDER_DB_PASSWORD in dependencies/.env}
+      TEMPORAL_DB_PASSWORD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD in dependencies/.env}
     networks:
-      - igniter
+      - middleman
+      - provider
+      - host-access
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgresql:/var/lib/postgresql/data
-      - ./postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgresql/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      # Runs once, on a fresh (empty) volume. On an existing install, run it by
+      # hand; see "Upgrading an existing install" in docker-compose/README.md.
+      - ./postgresql/init-roles.sh:/docker-entrypoint-initdb.d/init-roles.sh:ro
 
+  # ONE Temporal server is shared by both stacks (namespaces `middleman` and
+  # `provider`). Temporal has no authorization here: any client that reaches
+  # gRPC :7233 can use either namespace. The split networks below keep each app
+  # stack from reaching the OTHER stack's containers, not the other namespace.
+  # Run the two apps on separate hosts if that matters to you.
   temporal:
     image: temporalio/auto-setup:${TEMPORAL_VERSION}
     container_name: temporal
@@ -34,18 +53,36 @@ services:
     environment:
       - DB=postgres12_pgx
       - DB_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PWD=${POSTGRES_PASSWORD}
+      # Own role; the databases are pre-created and owned by it (init-roles.sh).
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD in dependencies/.env}
+      - SKIP_DB_CREATE=true
+      - DBNAME=temporal
+      - VISIBILITY_DBNAME=temporal_visibility
       - POSTGRES_SEEDS=postgresql
       - TEMPORAL_ADDRESS=temporal:7233
+      # Listen on every interface: this container sits on two networks, and the
+      # image default binds only to the first IP `getent hosts $(hostname)` returns.
+      - BIND_ON_IP=0.0.0.0
+      # Disable the frontend HTTP API (default :7243). It is unauthenticated and
+      # nothing in Igniter uses it; the apps and workers talk gRPC on :7233.
+      # Temporal skips the HTTP server when the port is 0 (httpEnabled() in
+      # service/frontend/fx.go).
+      - FRONTEND_HTTP_PORT=0
     networks:
-      - igniter
+      - middleman
+      - provider
+      - debug
+      - host-access
     ports:
       - "127.0.0.1:7233:7233"
 
+  # Debug tooling. Off by default; start with:
+  #   docker compose --profile debug up -d
   temporal-admin-tools:
     image: temporalio/admin-tools:${TEMPORAL_TOOLS_VERSION}
     container_name: temporal-admin-tools
+    profiles: [ debug ]
     depends_on:
       temporal:
         condition: service_healthy
@@ -53,17 +90,19 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CLI_ADDRESS=temporal:7233
     networks:
-      - igniter
+      - debug
     stdin_open: true
     tty: true
 
   # IMPORTANT:
-  # This service runs WITHOUT authentication by default.
-  # If exposed publicly, anyone could view and control workflows.
-  # Follow: https://docs.temporal.io/references/web-ui-configuration#auth
+  # This service runs WITHOUT authentication. Anyone who reaches it can view
+  # and control every workflow, so it is off by default (profile `debug`) and
+  # bound to 127.0.0.1. Never expose it. To enable auth, follow:
+  # https://docs.temporal.io/references/web-ui-configuration#auth
   temporal-ui:
     image: temporalio/ui:${TEMPORAL_UI_VERSION}
     container_name: temporal-ui
+    profiles: [ debug ]
     depends_on:
       temporal:
         condition: service_healthy
@@ -72,7 +111,8 @@ services:
       - TEMPORAL_CORS_ORIGINS=http://localhost:8080
       - TEMPORAL_UI_PORT=8080
     networks:
-      - igniter
+      - debug
+      - host-access
     ports:
       - "127.0.0.1:8080:8080"
 
@@ -82,9 +122,9 @@ services:
     restart: "no"
     entrypoint: [ "/home/temporal/initialize.sh" ]
     networks:
-      - igniter
+      - debug
     volumes:
-      - ./temporal/initialize.sh:/home/temporal/initialize.sh
+      - ./temporal/initialize.sh:/home/temporal/initialize.sh:ro
     depends_on:
       temporal:
         condition: service_healthy
@@ -97,6 +137,25 @@ volumes:
     name: postgresql
 
 networks:
-  igniter:
-    driver: bridge
-    name: igniter
+  # One network per app stack. `internal: true`: no route out of the host
+  # through these networks. The app stacks join exactly one of them (as an
+  # external network), plus their own egress network. No network is shared
+  # between the middleman and provider stacks.
+  middleman:
+    name: igniter-middleman
+    internal: true
+  provider:
+    name: igniter-provider
+    internal: true
+  # Temporal tooling (wf-setup, and the debug profile). No app joins it.
+  debug:
+    name: igniter-debug
+    internal: true
+  # Plain bridge that only carries the 127.0.0.1 port publishes for the
+  # operator's own host-side tools (psql, temporal CLI, migrations by hand).
+  # Docker does not publish ports from a container attached only to internal
+  # networks. No app container joins this network. Side effect, measured:
+  # PostgreSQL, Temporal and temporal-ui get outbound internet through it. If you
+  # do not need host-side access, remove this network and the `ports:` entries.
+  host-access:
+    name: igniter-host-access

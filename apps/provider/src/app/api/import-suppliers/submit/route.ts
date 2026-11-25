@@ -14,6 +14,7 @@ import {
   markRequestExpired,
   markRequestFailed,
 } from '@/lib/dal/importSupplierRequests'
+import { isAddressGroupOpenTo } from '@/lib/utils/addressGroups'
 import { getLogger } from '@igniter/logger'
 import { withLogging } from '@/lib/logging/withLogging'
 
@@ -179,8 +180,11 @@ export const POST = withLogging(async (
       )
     }
 
-    // Get the matching suppliers again to ensure they're still unassigned
-    const matchingSuppliers = await findSuppliersByOwner(data.ownerAddress)
+    // Get the matching suppliers again to ensure they're still unassigned.
+    // Suppliers in a private group, or in a group linked to other owners, are
+    // not handed to a delegator (same rule as /api/suppliers).
+    const matchingSuppliers = (await findSuppliersByOwner(data.ownerAddress))
+      .filter((s) => !s.addressGroup || isAddressGroupOpenTo(s.addressGroup, data.ownerAddress))
 
     if (matchingSuppliers.length === 0) {
       log.info('import suppliers submit rejected', { attemptId, ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), reason: 'no unassigned suppliers' })

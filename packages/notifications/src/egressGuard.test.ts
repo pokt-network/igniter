@@ -1,4 +1,4 @@
-import { assertSafeHost, assertSafeUrl, parseEgressAllowlist } from '@igniter/notifications'
+import { assertSafeHost, assertSafeUrl, isOperatorTrustedHost, parseEgressAllowlist } from '@igniter/notifications'
 import { lookup } from 'node:dns/promises'
 
 jest.mock('node:dns/promises', () => ({ lookup: jest.fn() }))
@@ -192,5 +192,30 @@ describe('operator egress allowlist', () => {
     const allow = parseEgressAllowlist('fd00::/')
     resolvesTo('::1')
     await expect(assertSafeHost('evil.example', allow)).rejects.toThrow(/not allowed/i)
+  })
+})
+
+describe('isOperatorTrustedHost', () => {
+  const allow = parseEgressAllowlist('10.0.0.0/8, mailpit')
+
+  it('trusts an allowlisted host literal without resolving', async () => {
+    await expect(isOperatorTrustedHost('mailpit', allow)).resolves.toBe(true)
+    expect(mockLookup).not.toHaveBeenCalled()
+  })
+
+  it('trusts a host whose every address is in an allowlisted CIDR', async () => {
+    resolvesTo('10.1.2.3')
+    await expect(isOperatorTrustedHost('provider.default.svc', allow)).resolves.toBe(true)
+  })
+
+  it('does not trust a public host, or a mix of allowlisted and public addresses', async () => {
+    resolvesTo('1.1.1.1')
+    await expect(isOperatorTrustedHost('example.com', allow)).resolves.toBe(false)
+    resolvesTo('10.1.2.3', '1.1.1.1')
+    await expect(isOperatorTrustedHost('mixed.example', allow)).resolves.toBe(false)
+  })
+
+  it('trusts nothing with an empty allowlist', async () => {
+    await expect(isOperatorTrustedHost('10.0.0.1', parseEgressAllowlist(''))).resolves.toBe(false)
   })
 })

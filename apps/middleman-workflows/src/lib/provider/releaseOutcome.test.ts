@@ -130,7 +130,9 @@ describe('classifyReleaseResponse', () => {
 })
 
 describe('ProviderService.releaseSuppliersOutcome', () => {
-  const provider = { id: 7, name: 'P', url: 'http://provider.test' } as Provider
+  const provider = { id: 7, name: 'P', identity: 'pokt1p', url: 'http://provider.test' } as Provider
+  // The governance source lists the provider at the same url (the gate itself is covered in governanceGate.test.ts).
+  const governance = { resolve: async () => ({ identity: 'pokt1p', url: 'http://provider.test' }) }
   const addresses = ['pokt1x', 'pokt1y']
   const logger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() } as unknown as Logger
   const realFetch = global.fetch
@@ -140,7 +142,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   beforeEach(() => {
     fetchMock = jest.fn()
     global.fetch = fetchMock as unknown as typeof fetch
-    service = new ProviderService({} as ApplicationSettings, logger)
+    service = new ProviderService({} as ApplicationSettings, logger, governance)
     jest.spyOn(service, 'signPayload').mockResolvedValue({ identity: 'mw-id', signature: 'sig' })
   })
 
@@ -152,15 +154,15 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('POSTs like releaseSuppliers, with a timeout signal, and returns ok on 200', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({ kind: 'ok' })
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({ kind: 'ok' })
 
-    expect(service.signPayload).toHaveBeenCalledWith(JSON.stringify({ addresses }))
+    expect(service.signPayload).toHaveBeenCalledWith(JSON.stringify({ addresses, ownerAddress: 'pokt1owner' }))
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('http://provider.test/api/suppliers/release')
     expect(init).toMatchObject({
       method: 'POST',
-      body: JSON.stringify({ addresses }),
+      body: JSON.stringify({ addresses, ownerAddress: 'pokt1owner' }),
       headers: {
         'Content-Type': 'application/json',
         [REQUEST_IDENTITY_HEADER]: 'mw-id',
@@ -176,7 +178,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
     const cancel = jest.spyOn(response.body!, 'cancel')
     fetchMock.mockResolvedValue(response)
 
-    const outcome = await service.releaseSuppliersOutcome(addresses, provider)
+    const outcome = await service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')
 
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(outcome.kind).toBe(status === 200 ? 'ok' : 'ambiguous')
@@ -187,13 +189,13 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
     jest.spyOn(response.body!, 'cancel').mockRejectedValue(new Error('already locked'))
     fetchMock.mockResolvedValue(response)
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({ kind: 'ok' })
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({ kind: 'ok' })
   })
 
   it('500 → ambiguous with status', async () => {
     fetchMock.mockResolvedValue(new Response('oops', { status: 500, statusText: 'Internal Server Error' }))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'ambiguous',
       status: 500,
       message: 'HTTP 500 Internal Server Error',
@@ -203,7 +205,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('thrown ECONNREFUSED cause → not-sent', async () => {
     fetchMock.mockRejectedValue(fetchFailed('ECONNREFUSED'))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'not-sent',
       code: 'ECONNREFUSED',
     })
@@ -212,7 +214,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('abort by the timeout signal → ambiguous', async () => {
     fetchMock.mockRejectedValue(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'ambiguous',
       message: 'TimeoutError: The operation was aborted due to timeout',
     })
@@ -221,7 +223,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('signing failure → not-sent LOCAL_PRE_SEND, no POST, no throw', async () => {
     jest.spyOn(service, 'signPayload').mockRejectedValue(new Error('Unable to sign the payload.'))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'not-sent',
       code: RELEASE_LOCAL_PRE_SEND,
     })
@@ -233,9 +235,9 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('settings read failure (real signPayload) → not-sent LOCAL_PRE_SEND, no POST', async () => {
     jest.restoreAllMocks()
     const settingsDal = { getFirst: jest.fn().mockRejectedValue(new Error('db down')) }
-    service = new ProviderService(settingsDal as unknown as ApplicationSettings, logger)
+    service = new ProviderService(settingsDal as unknown as ApplicationSettings, logger, governance)
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'not-sent',
       code: RELEASE_LOCAL_PRE_SEND,
     })
@@ -246,7 +248,7 @@ describe('ProviderService.releaseSuppliersOutcome', () => {
   it('an error once fetch was invoked is still classified, never LOCAL_PRE_SEND', async () => {
     fetchMock.mockRejectedValue(new Error('socket hang up'))
 
-    await expect(service.releaseSuppliersOutcome(addresses, provider)).resolves.toEqual({
+    await expect(service.releaseSuppliersOutcome(addresses, provider, 'pokt1owner')).resolves.toEqual({
       kind: 'ambiguous',
       message: 'Error: socket hang up',
     })

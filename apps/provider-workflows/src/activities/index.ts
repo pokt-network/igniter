@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import type {PocketBlockchain, StakeSupplierParams, UnstakeSupplierParams, SendFundsParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
+import type {PocketBlockchain, StakeSupplierParams, SendFundsParams, Supplier, VerifyOutcome, SupplierEffect} from '@igniter/pocket'
 import type {ApplicationSettings, InsertKey, Key, KeyWithGroup, Service, Transaction} from '@igniter/db/provider/schema'
 import { DEFAULT_NOTIFICATION_FLAGS } from '@igniter/db/provider/schema'
 import type {VerificationDecision} from '@igniter/tx-verify'
@@ -18,6 +18,14 @@ import type { DispatchChannel, ChannelDeliveryResult } from '@igniter/notificati
 import type { NotificationEvent } from '@/lib/types/notifications'
 import { buildRichMessage } from '@/lib/richMessageBuilder'
 import { analyticsActivities } from '@/activities/analytics'
+import { isValidPoktAddress } from '@igniter/pocket/utils'
+import { parseCdnDelegators, type CdnDelegator } from '@/lib/dal/delegators'
+import {
+  MAX_GOVERNANCE_BODY_BYTES,
+  MAX_GOVERNANCE_ROWS,
+  maxChangesPerRun,
+  planDelegatorChanges,
+} from '@/lib/governance/delegatorsSync'
 
 const errInfo = (e: unknown) => e instanceof Error ? { message: e.message, stack: e.stack } : e
 
@@ -33,7 +41,8 @@ export type LoadKeysInRangeResult = Array<{ id: number; address: string, state: 
 
 export type ProcessSupplierParams = {
   address: string;
-  height: number;
+  /** Ignored: the activity reads the height from chain. Kept so existing callers/history stay valid. */
+  height?: number;
 }
 
 export type UpsertSupplierStatusResult = {
@@ -81,10 +90,76 @@ export type ReturnFundsChoice =
   | { mode: 'owner' }
   | { mode: 'custom'; address: string }
 
+/**
+ * The only return-funds modes a workflow/activity INPUT may carry. Workflow and activity
+ * inputs are not trusted to choose a fund destination, so an address never comes from there.
+ * A `custom` destination is only honoured when the provider app wrote it into the
+ * transaction intent row itself (owner-gated UnstakeKeys action); signSupplierTx re-reads
+ * it from the DB by transaction id.
+ */
+export type ReturnFundsInputChoice = Extract<ReturnFundsChoice, { mode: 'none' | 'owner' }>
+
+export function parseReturnFundsInputChoice(choice: unknown): ReturnFundsInputChoice {
+  const mode = (choice as { mode?: unknown } | null | undefined)?.mode
+  if (mode === 'none' || mode === 'owner') return { mode }
+  throw ApplicationFailure.nonRetryable(
+    'returnFunds must be { mode: "owner" } or { mode: "none" }; a custom destination is accepted only from the provider app',
+    'invalid_return_funds',
+  )
+}
+
+/**
+ * Sign inputs frozen into `transactions.params`. They NEVER hold the signer private key:
+ * signSupplierTx loads and decrypts the key from the keys table at sign time.
+ */
+export type StoredStakeParams = {
+  signer: string;
+  ownerAddress: string;
+  operatorAddress: string;
+  services?: StakeSupplierParams['services'];
+  stake?: StakeSupplierParams['stake'];
+}
+export type StoredUnstakeParams = { signer: string; operatorAddress: string }
+export type StoredSendFundsParams = { fromAddress: string; toAddress: string; amount: SendFundsParams['amount'] }
+
 export type TxIntentParams =
-  | { kind: 'stake'; params: StakeSupplierParams }
-  | { kind: 'unstake'; params: UnstakeSupplierParams; returnFunds: ReturnFundsChoice }
-  | { kind: 'return_funds'; params: SendFundsParams }
+  | { kind: 'stake'; params: StoredStakeParams }
+  | { kind: 'unstake'; params: StoredUnstakeParams; returnFunds: ReturnFundsChoice }
+  | { kind: 'return_funds'; params: StoredSendFundsParams }
+
+/** The reasons remediateSupplier can act on; anything else in a workflow input is dropped. */
+const REMEDIABLE_REASONS: ReadonlySet<RemediationHistoryEntryReason> = new Set([
+  RemediationHistoryEntryReason.OwnerInitialStake,
+  RemediationHistoryEntryReason.ServiceMismatch,
+  RemediationHistoryEntryReason.AddressGroupMigration,
+])
+
+export function sanitizeRemediationReasons(reasons: unknown): RemediationHistoryEntryReason[] {
+  if (!Array.isArray(reasons)) return []
+  return [...new Set(reasons.filter((r): r is RemediationHistoryEntryReason => REMEDIABLE_REASONS.has(r)))]
+}
+
+const KNOWN_KEY_STATES: ReadonlySet<string> = new Set(Object.values(KeyState))
+
+/** Keeps only real KeyState values (a workflow input picks which keys a sweep loads). */
+export function sanitizeKeyStates(states: unknown): KeyState[] {
+  if (!Array.isArray(states)) return []
+  return [...new Set(states.filter((st): st is KeyState => typeof st === 'string' && KNOWN_KEY_STATES.has(st)))]
+}
+
+/** Removes a `signerPrivateKey` a legacy row may still carry, so it is never used or re-stored. */
+function withoutSignerKey<T extends object>(params: T): Omit<T, 'signerPrivateKey'> {
+  const { signerPrivateKey: _dropped, ...rest } = params as T & { signerPrivateKey?: unknown }
+  return rest
+}
+
+/**
+ * The owner a drain may go to: the stake owner recorded from chain (set once, never
+ * overwritten by a later RPC read), else the owner the key was delivered to.
+ */
+export function recordedOwnerOf(key: { stakeOwner?: string | null; ownerAddress?: string | null }): string | null {
+  return key.stakeOwner || key.ownerAddress || null
+}
 
 /** Per-sweep hash-scan window, matching the on-chain mempool expiration window. */
 // TX_EXPIRATION_BLOCKS imported from @igniter/tx-verify above
@@ -145,12 +220,13 @@ export function resolveDrainDestination(
 ): string | null {
   if (choice) {
     if (choice.mode === 'none') return null
-    if (choice.mode === 'owner') return key.stakeOwner || key.ownerAddress || null
-    return choice.address || null
+    if (choice.mode === 'owner') return recordedOwnerOf(key)
+    if (choice.mode === 'custom') return isValidPoktAddress(choice.address) ? choice.address : null
+    return null
   }
   // No explicit choice (middleman/automatic path): obey the provider setting.
   if (!settings?.returnSupplierFundsToOwner) return null
-  return key.stakeOwner || key.ownerAddress || null
+  return recordedOwnerOf(key)
 }
 
 /**
@@ -166,8 +242,10 @@ export function resolveDrainDestination(
 async function doCreateReturnFundsIntent(dal: DAL, keyAddress: string, toAddress: string): Promise<number | null> {
   const key = await dal.keys.loadKey(keyAddress)
   if (!key) throw ApplicationFailure.nonRetryable(`createReturnFundsIntent: key not found for ${keyAddress}`, 'not_found')
-  const params: SendFundsParams = {
-    signerPrivateKey: key.privateKey,
+  if (!isValidPoktAddress(toAddress)) {
+    throw ApplicationFailure.nonRetryable(`createReturnFundsIntent: invalid destination for ${keyAddress}`, 'invalid_address')
+  }
+  const params: StoredSendFundsParams = {
     fromAddress: key.address,
     toAddress,
     amount: [], // amount computed at sign time from live spendable balance
@@ -187,6 +265,22 @@ async function doCreateReturnFundsIntent(dal: DAL, keyAddress: string, toAddress
 
 
 export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) => {
+  // The block height the status/remediation activities act on is read from chain
+  // here, never taken from the workflow input. Cached for a few seconds so a sweep of N
+  // keys costs one getHeight, not N.
+  const HEIGHT_CACHE_MS = 5_000
+  let heightCache: { value: Promise<number>; at: number } | null = null
+  const currentHeight = (): Promise<number> => {
+    const now = Date.now()
+    if (!heightCache || now - heightCache.at >= HEIGHT_CACHE_MS) {
+      const value = pocketRpcClient.getHeight()
+      const entry = { value, at: now }
+      heightCache = entry
+      value.catch(() => { if (heightCache === entry) heightCache = null })
+    }
+    return heightCache.value
+  }
+
   const activities = {
   ...analyticsActivities(dal),
 
@@ -208,19 +302,45 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
 
     log.info('syncDelegatorsFromGovernance: Fetching from CDN', { cdnUrl })
 
-    const response = await fetch(cdnUrl)
+    const response = await fetch(cdnUrl, { signal: AbortSignal.timeout(15_000) })
     if (!response.ok) {
       throw ApplicationFailure.retryable(`Failed to fetch delegators: ${response.statusText}`, 'fetch_failed')
     }
 
-    type CdnDelegator = {
-      name: string;
-      identity: string;
-      identityHistory: string[];
+    // Bound the body, validate the shape, then preview + cap + log every change
+    // before the DAL writes anything.
+    const declaredLength = Number(response.headers.get('content-length') ?? 0)
+    if (declaredLength > MAX_GOVERNANCE_BODY_BYTES) {
+      throw ApplicationFailure.nonRetryable('Delegators payload too large', 'invalid_payload')
     }
-
-    const delegatorsFromCdn = (await response.json()) as CdnDelegator[]
+    const body = await response.text()
+    if (body.length > MAX_GOVERNANCE_BODY_BYTES) {
+      throw ApplicationFailure.nonRetryable('Delegators payload too large', 'invalid_payload')
+    }
+    let delegatorsFromCdn: CdnDelegator[]
+    try {
+      delegatorsFromCdn = parseCdnDelegators(JSON.parse(body))
+    } catch (e) {
+      throw ApplicationFailure.nonRetryable(`Invalid delegators payload: ${(e as Error).message}`, 'invalid_payload')
+    }
+    if (delegatorsFromCdn.length > MAX_GOVERNANCE_ROWS) {
+      throw ApplicationFailure.nonRetryable(`Delegators payload has ${delegatorsFromCdn.length} rows (max ${MAX_GOVERNANCE_ROWS})`, 'invalid_payload')
+    }
     log.info('syncDelegatorsFromGovernance: Fetched delegators', { count: delegatorsFromCdn.length })
+
+    const current = await dal.delegators.listAll()
+    const changes = planDelegatorChanges(current, delegatorsFromCdn)
+    const cap = maxChangesPerRun()
+    if (current.length > 0 && changes.length > cap) {
+      log.error('syncDelegatorsFromGovernance: change cap exceeded; nothing applied', { changes: changes.length, cap })
+      throw ApplicationFailure.nonRetryable(
+        `Governance sync would apply ${changes.length} changes (cap ${cap}); raise GOVERNANCE_MAX_CHANGES_PER_RUN to accept`,
+        'change_cap_exceeded',
+      )
+    }
+    for (const change of changes) {
+      log.info('syncDelegatorsFromGovernance: change', change)
+    }
 
     const result = await dal.delegators.upsertFromGovernance(
       delegatorsFromCdn,
@@ -264,62 +384,41 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     return dal.transactions.listPending()
   },
 
-  /**
-   * Parent activity: build frozen params + create the INTENT row.
-   * Returns the new tx id, or null if a pending row already exists for this key
-   * (the (key_id) WHERE pending unique index enforces mutual exclusion).
-   */
-  async createIntentTx(p: { keyAddress: string; reasons: RemediationHistoryEntryReason[]; params: StakeSupplierParams }): Promise<number | null> {
-    const key = await dal.keys.loadKey(p.keyAddress)
-    if (!key) throw ApplicationFailure.nonRetryable(`createIntentTx: key not found for ${p.keyAddress}`, 'not_found')
-    return dal.transactions.createIntent({
-      keyId: key.id,
-      keyAddress: key.address,
-      type: TransactionType.Stake,
-      reason: p.reasons[0] ?? null,
-      trigger: TransactionTrigger.Automatic,
-      executionHeight: null,
-      params: JSON.stringify({ kind: 'stake', params: p.params } satisfies TxIntentParams),
-      reasons: JSON.stringify(p.reasons),
-    })
-  },
+  // createIntentTx / createReturnFundsIntent are deliberately NOT registered activities:
+  // no workflow schedules them, and as activities they took a full StakeSupplierParams /
+  // a destination address straight from the (unauthenticated) task input. They are the
+  // closure helpers createStakeIntent / doCreateReturnFundsIntent below.
 
   /**
    * Creates an unstake intent for the given key.
    * Returns the new tx id, or null if:
    *   - a pending row already exists for this key (UNIQUE WHERE pending index)
    *   - the key is already retired (retiredAt set) — never re-unstake
+   *
+   * `returnFunds` is validated at runtime to `owner` | `none` (see ReturnFundsInputChoice):
+   * a custom drain destination is never accepted from a workflow/activity input. The
+   * `trigger` input is ignored; a workflow-started unstake is always Manual.
    */
-  async createUnstakeIntent(p: { keyAddress: string; returnFunds: ReturnFundsChoice; trigger?: TransactionTrigger }): Promise<number | null> {
+  async createUnstakeIntent(p: { keyAddress: string; returnFunds: ReturnFundsInputChoice }): Promise<number | null> {
+    const returnFunds = parseReturnFundsInputChoice(p?.returnFunds)
     const key = await dal.keys.loadKey(p.keyAddress)
     if (!key) throw ApplicationFailure.nonRetryable(`createUnstakeIntent: key not found for ${p.keyAddress}`, 'not_found')
     if (key.retiredAt) return null // already retired — never re-unstake
-    const params: UnstakeSupplierParams = {
-      signerPrivateKey: key.privateKey,
+    const params: StoredUnstakeParams = {
       signer: key.address,
       operatorAddress: key.address,
     }
-    const intent: TxIntentParams = { kind: 'unstake', params, returnFunds: p.returnFunds }
+    const intent: TxIntentParams = { kind: 'unstake', params, returnFunds }
     return dal.transactions.createIntent({
       keyId: key.id,
       keyAddress: key.address,
       type: TransactionType.Unstake,
       reason: RemediationHistoryEntryReason.ManualUnstake,
-      trigger: p.trigger ?? TransactionTrigger.Manual,
+      trigger: TransactionTrigger.Manual,
       executionHeight: null,
       params: JSON.stringify(intent),
       reasons: JSON.stringify([]),
     })
-  },
-
-  /**
-   * Creates a return-funds (MsgSend drain) intent for the given key.
-   * The send amount is computed at sign time from the live spendable balance;
-   * `params.amount` is stored empty as a placeholder.
-   * Returns the new tx id, or null if a pending row already exists for this key.
-   */
-  async createReturnFundsIntent(p: { keyAddress: string; toAddress: string }): Promise<number | null> {
-    return doCreateReturnFundsIntent(dal, p.keyAddress, p.toAddress)
   },
 
   /**
@@ -341,23 +440,53 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     const raw = JSON.parse(txn.params)
     const intent: TxIntentParams = ('kind' in raw && raw.kind)
       ? raw as TxIntentParams
-      : { kind: 'stake', params: raw as StakeSupplierParams }
+      : { kind: 'stake', params: raw as StoredStakeParams }
+
+    // The signer key is loaded (and decrypted) from the keys table NOW, never read
+    // from params. A legacy row may still carry a signerPrivateKey; it is dropped unused.
+    const key = await dal.keys.loadKey(txn.keyAddress)
+    if (!key || (txn.keyId != null && key.id !== txn.keyId)) {
+      await dal.transactions.abandonIntent(transactionId, { message: 'sign failed: signing key not found' })
+      return
+    }
+    const signerPrivateKey = key.privateKey
+    const p = withoutSignerKey(intent.params as object) as Record<string, unknown>
+    // Every address that authorizes the tx must be this row's key: params can never make
+    // the worker sign on behalf of another key.
+    const signerFields = intent.kind === 'return_funds' ? ['fromAddress'] : ['signer', 'operatorAddress']
+    if (signerFields.some((f) => p[f] !== key.address)) {
+      log.error('signSupplierTx: intent signer does not match the row key; abandoning', { transactionId, keyAddress: key.address })
+      await dal.transactions.abandonIntent(transactionId, { message: 'sign failed: intent signer does not match the transaction key' })
+      return
+    }
 
     const head = await pocketRpcClient.getHeight()
     let signed: { signedPayload: string; transactionHash: string; timeoutTimestamp: Date }
     try {
       if (intent.kind === 'stake') {
-        signed = await pocketRpcClient.signSupplierTx(intent.params)
+        const stakeParams: StakeSupplierParams = { ...(p as StoredStakeParams), signerPrivateKey }
+        // Never sign a stake naming an owner other than the one recorded for the key.
+        if (key.stakeOwner && stakeParams.ownerAddress && stakeParams.ownerAddress !== key.stakeOwner) {
+          log.error('signSupplierTx: stake owner differs from the recorded stake owner; abandoning', { transactionId, keyAddress: key.address })
+          await dal.transactions.abandonIntent(transactionId, { message: 'sign failed: stake owner differs from the recorded stake owner' })
+          return
+        }
+        signed = await pocketRpcClient.signSupplierTx(stakeParams)
       } else if (intent.kind === 'unstake') {
         // Provider-initiated unstake: combine unstake + optional drain into ONE operator-signed
         // tx (2 messages), mirroring the middleman stake+funds pattern. The drain amount is
         // computed now from the live spendable balance so the operator account lands at 0.
-        const key = await dal.keys.loadKey(txn.keyAddress)
-        const dest = key ? resolveDrainDestination(key, intent.returnFunds, null) : null
+        // `owner` resolves to the recorded owner; `custom` is honoured only because this row
+        // was written by the provider app (activities never store a custom destination).
+        const dest = resolveDrainDestination(key, intent.returnFunds, null)
+        if (intent.returnFunds?.mode === 'custom' && !dest) {
+          await dal.transactions.abandonIntent(transactionId, { message: 'sign failed: invalid return-funds destination' })
+          return
+        }
         let drainTo: string | undefined
         let drainAmount: string | undefined
         if (dest) {
-          const spendable = await pocketRpcClient.getSpendableBalance(intent.params.operatorAddress)
+          const spendable = await pocketRpcClient.getSpendableBalance(key.address)
           const amt = spendable - RETURN_FUNDS_FEE_UPOKT
           if (amt > 0) {
             drainTo = dest
@@ -366,15 +495,24 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           // else: nothing meaningful to drain — unstake only.
         }
         signed = await pocketRpcClient.signUnstakeAndDrainTx({
-          signerPrivateKey: intent.params.signerPrivateKey,
-          operatorAddress: intent.params.operatorAddress,
+          signerPrivateKey,
+          operatorAddress: key.address,
           drainTo,
           drainAmount,
           feeUpoktOverride: drainTo ? RETURN_FUNDS_FEE_UPOKT : undefined,
         })
       } else {
-        // return_funds: compute exact drain amount NOW from live spendable balance.
-        const spendable = await pocketRpcClient.getSpendableBalance(intent.params.fromAddress)
+        // return_funds: the destination must still be the key's recorded owner (the only
+        // destination doCreateReturnFundsIntent writes).
+        const sendParams = p as StoredSendFundsParams
+        const owner = recordedOwnerOf(key)
+        if (!owner || sendParams.toAddress !== owner || !isValidPoktAddress(sendParams.toAddress)) {
+          log.error('signSupplierTx: return-funds destination is not the recorded owner; abandoning', { transactionId, keyAddress: key.address })
+          await dal.transactions.abandonIntent(transactionId, { message: 'return-funds skipped: destination is not the recorded owner' })
+          return
+        }
+        // compute exact drain amount NOW from live spendable balance.
+        const spendable = await pocketRpcClient.getSpendableBalance(key.address)
         const feeUpokt = RETURN_FUNDS_FEE_UPOKT
         const sendAmount = spendable - feeUpokt
         if (sendAmount <= 0) {
@@ -385,7 +523,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
           return
         }
         signed = await pocketRpcClient.signSendTx(
-          { ...intent.params, amount: [{ denom: 'upokt', amount: String(sendAmount) }] },
+          { ...sendParams, signerPrivateKey, amount: [{ denom: 'upokt', amount: String(sendAmount) }] },
           feeUpokt,
         )
       }
@@ -466,7 +604,7 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    * @return {Promise<LoadKeysInRangeResult>} A promise that resolves to the result of the loaded keys within the given range.
    */
   async loadKeysInRange(params: LoadKeysInRangeParams): Promise<LoadKeysInRangeResult> {
-    return dal.keys.loadKeysInRange(params.minId, params.maxId, params.states)
+    return dal.keys.loadKeysInRange(params.minId, params.maxId, sanitizeKeyStates(params.states))
   },
 
   /**
@@ -475,11 +613,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    */
   async upsertSupplierStatus(params: ProcessSupplierParams): Promise<UpsertSupplierStatusResult> {
     log.info('upsertSupplierStatus: Querying for keys, settings, balance and supplier', {params})
-    const [key, settings, balance, supplier]: [KeyWithGroup, ApplicationSettings, number, Supplier] = await Promise.all([
+    const [key, settings, balance, supplier, height]: [KeyWithGroup, ApplicationSettings, number, Supplier, number] = await Promise.all([
       dal.keys.loadKey(params.address),
       dal.settings.loadSettings(),
       pocketRpcClient.getBalance(params.address),
       pocketRpcClient.getSupplier(params.address),
+      currentHeight(),
     ])
 
     if (!key) {
@@ -493,8 +632,10 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       key: key.address,
     }
 
+    let ownerMismatch = false
+
     const update: Partial<InsertKey> = {
-      lastUpdatedHeight: params.height, // always set the last updated height.
+      lastUpdatedHeight: height, // always set the last updated height (chain-read).
       balanceUpokt: BigInt(balance), // always set the balance.
     }
 
@@ -536,14 +677,28 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       // Supplier is present, determine state based on unstakeSessionEndHeight
       if (unstakeSessionEndHeight === 0) {
         update.state = KeyState.Staked;
-      } else if (params.height >= unstakeSessionEndHeight) {
+      } else if (height >= unstakeSessionEndHeight) {
         update.state = KeyState.Unstaked;
       } else {
         update.state = KeyState.Unstaking;
       }
 
+      // The stake owner is recorded once (first time it is seen) and never overwritten
+      // by a later RPC read: it is the destination of every drain, so an owner change first
+      // seen on the RPC (or a lying RPC) must not redirect funds. A mismatch is surfaced
+      // (AttentionNeeded for a staked key) and blocks the automatic drain below until an
+      // operator confirms the new owner.
+      ownerMismatch = !!key.stakeOwner && !!ownerAddress && ownerAddress !== key.stakeOwner
+      if (ownerMismatch) {
+        log.error('upsertSupplierStatus: on-chain owner differs from the recorded stake owner; not updating it, drain blocked', {
+          ...loggerContext,
+          recordedStakeOwner: key.stakeOwner,
+          chainOwner: ownerAddress,
+        })
+      }
+
       if (update.state === KeyState.Unstaking || update.state === KeyState.Staked) {
-        update.stakeOwner = ownerAddress
+        if (!ownerMismatch) update.stakeOwner = ownerAddress
         update.stakeAmountUpokt = BigInt(stake ? stake.amount : '0')
         update.services = services || []
 
@@ -700,10 +855,14 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       ) {
         update.state = KeyState.AttentionNeeded
       }
+
+      if (ownerMismatch && update.state === KeyState.Staked) {
+        update.state = KeyState.AttentionNeeded
+      }
     }
 
     log.debug('Updating supplier', { params, update })
-    await dal.keys.updateKey(params.address, update, params.height)
+    await dal.keys.updateKey(params.address, update, height)
     log.debug('Update Supplier done!', {params})
 
     // Drain trigger (D6): unbonding entered (Unstaking OR Unstaked) and not yet retired.
@@ -715,7 +874,15 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       (update.state === KeyState.Unstaking || update.state === KeyState.Unstaked) &&
       !key.retiredAt
     ) {
-      await maybeCreateReturnFundsIntent(key.address) // no explicit choice -> obey settings flag
+      if (ownerMismatch) {
+        log.error('upsertSupplierStatus: automatic drain skipped, on-chain owner differs from the recorded stake owner; funds stay on the operator account', {
+          key: key.address,
+        })
+      } else {
+        // Destination decided from the PRE-update key snapshot (the owner recorded before
+        // this sweep), never from an owner this same sweep just read from the RPC.
+        await maybeCreateReturnFundsIntent(key) // no explicit choice -> obey settings flag
+      }
       // Retire-on-unbonding (set-once, isNull guard): retire the key the moment it enters
       // unbonding — NOT only at the terminal Unstaked state. This closes the no-double-drain
       // gap on this automatic path: the pending-unique index only blocks a CONCURRENT pending
@@ -800,11 +967,12 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
    */
   async remediateSupplier(params: RemediateSupplierParams) {
     log.debug('remediateSupplier: Execution started', {params})
-    const [key, supportedServices, balance, supplier]: [KeyWithGroup, Service[], number, Supplier] = await Promise.all([
+    const [key, supportedServices, balance, supplier, height]: [KeyWithGroup, Service[], number, Supplier, number] = await Promise.all([
       dal.keys.loadKey(params.address),
       dal.services.loadServices(),
       pocketRpcClient.getBalance(params.address),
       pocketRpcClient.getSupplier(params.address),
+      currentHeight(),
     ])
 
     if (!key) {
@@ -867,6 +1035,10 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     })
 
     // --- Determine what we can actually remediate ---
+    // `reasons` comes from the workflow input. Only the remediable reasons are
+    // honoured, and each one still needs a matching entry in the key's own (server-written)
+    // remediation history below, so the input can only narrow what runs, never widen it.
+    params = { ...params, reasons: sanitizeRemediationReasons(params.reasons) }
     const remediationHistory = key.remediationHistory ?? [];
     const hasOwnerInitialStakeReason = params.reasons.includes(RemediationHistoryEntryReason.OwnerInitialStake);
 
@@ -912,14 +1084,14 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
         })
 
         const update: Partial<InsertKey> = {
-          lastUpdatedHeight: params.height,
+          lastUpdatedHeight: height,
           balanceUpokt: BigInt(balance),
           // remove only OwnerInitialStake entry; keep other entries if any
           remediationHistory: remediationHistory.filter((rh) => rh.reason !== RemediationHistoryEntryReason.OwnerInitialStake),
         }
 
         try {
-          await dal.keys.updateKey(params.address, update, params.height)
+          await dal.keys.updateKey(params.address, update, height)
         } catch (e) {
           log.warn('remediateSupplier: Update Supplier failed while clearing OwnerInitialStake!', {
             params,
@@ -940,8 +1112,20 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
       }
     }
 
-    const stakeParams: StakeSupplierParams = {
-      signerPrivateKey: key.privateKey,
+    // The owner comes from chain here; never act on an owner other than the one
+    // recorded for this key (an owner change first seen on the RPC needs confirmation).
+    if (key.stakeOwner && supplier.ownerAddress !== key.stakeOwner) {
+      log.warn('remediateSupplier: on-chain owner differs from the recorded stake owner; refusing to stake', {
+        address: params.address,
+      })
+      return {
+        success: true,
+        remediated: false,
+        message: 'On-chain owner differs from the recorded stake owner; remediation needs operator confirmation.',
+      }
+    }
+
+    const stakeParams: StoredStakeParams = {
       signer: key.address,
       ownerAddress: supplier.ownerAddress,
       operatorAddress: key.address,
@@ -976,13 +1160,13 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
     }
 
     log.debug('remediateSupplier: Building stake intent', {
-      stakeParams: redactStakeSupplierParams(stakeParams),
+      stakeParams: redactStakeSupplierParams({ ...stakeParams, services: stakeParams.services ?? [] }),
       servicesToStakeCount: stakeParams.services.length,
     })
 
     const reasons = [ownerInitialStakeEntry, serviceMismatchEntry, addressGroupMigrationEntry]
       .filter(Boolean).map((e) => e!.reason)
-    const created = await activities.createIntentTx({ keyAddress: key.address, reasons, params: stakeParams })
+    const created = await createStakeIntent({ keyAddress: key.address, reasons, params: stakeParams })
     if (created === null) {
       log.info('remediateSupplier: pending tx already exists for key, skipping', { address: params.address })
       return
@@ -1285,6 +1469,27 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
   }
 
   /**
+   * Builds the frozen stake params + creates the INTENT row (formerly the createIntentTx
+   * activity; now internal, so it is never scheduled with caller-chosen params).
+   * Returns the new tx id, or null if a pending row already exists for this key
+   * (the (key_id) WHERE pending unique index enforces mutual exclusion).
+   */
+  async function createStakeIntent(p: { keyAddress: string; reasons: RemediationHistoryEntryReason[]; params: StoredStakeParams }): Promise<number | null> {
+    const key = await dal.keys.loadKey(p.keyAddress)
+    if (!key) throw ApplicationFailure.nonRetryable(`createIntentTx: key not found for ${p.keyAddress}`, 'not_found')
+    return dal.transactions.createIntent({
+      keyId: key.id,
+      keyAddress: key.address,
+      type: TransactionType.Stake,
+      reason: p.reasons[0] ?? null,
+      trigger: TransactionTrigger.Automatic,
+      executionHeight: null,
+      params: JSON.stringify({ kind: 'stake', params: withoutSignerKey(p.params) } satisfies TxIntentParams),
+      reasons: JSON.stringify(p.reasons),
+    })
+  }
+
+  /**
    * Provider terminal effect: flips the key state per the verified tx TYPE.
    * Keyed off goal-state effects (not raw tx outcome) so a tx that failed on-chain
    * while a sibling achieved the goal still reaches its goal state.
@@ -1341,42 +1546,37 @@ export const providerActivities = (dal: DAL, pocketRpcClient: PocketBlockchain) 
   }
 
   /**
-   * Single decision point for the drain (return-funds) intent, shared by:
-   *  - the provider-UI path (applyVerificationDecision, explicit per-op `choice`), and
-   *  - the middleman/automatic path (upsertSupplierStatus, no choice → settings flag).
+   * Drain (return-funds) intent for the middleman/automatic path (upsertSupplierStatus, no
+   * explicit choice → settings flag). Provider-UI unstakes carry their drain inside the
+   * unstake tx itself (signUnstakeAndDrainTx), so they never come through here.
    *
-   * No-double-drain / idempotency is structural and holds across BOTH callers:
+   * No-double-drain / idempotency is structural:
    *  - pending-unique index: doCreateReturnFundsIntent → createIntent uses onConflictDoNothing
    *    on the partial UNIQUE(key_id) WHERE pending index, so a key that already has a pending
-   *    tx (including a pending drain) can never get a SECOND pending drain — this is the hard
-   *    no-double-drain guarantee and applies to every caller.
-   *  - retire guard (automatic path ONLY): a key with `retiredAt` set never re-drains from the
-   *    repeated chain-detection sweeps. The guard is intentionally NOT applied to the explicit
-   *    `choice` path: that path is the unstake-success transition, which (a) just set retiredAt
-   *    itself via flipKeyForTx and (b) is CAS-gated to fire exactly once — so applying the
-   *    retire guard there would wrongly suppress the single intended provider-UI drain.
+   *    tx (including a pending drain) can never get a SECOND pending drain.
+   *  - retire guard: a key with `retiredAt` set never re-drains from the repeated
+   *    chain-detection sweeps.
    *
    * resolveDrainDestination is the pure decision; this wrapper only does the DAL I/O.
    */
   async function maybeCreateReturnFundsIntent(
-    keyAddress: string,
-    choice?: ReturnFundsChoice,
+    key: { address: string; stakeOwner?: string | null; ownerAddress?: string | null; retiredAt?: Date | null },
   ): Promise<void> {
-    const key = await dal.keys.loadKey(keyAddress)
-    if (!key) return
+    // Automatic path only (no explicit choice): obey the retire guard so the repeated
+    // chain-detection sweeps never re-drain, then obey the settings flag. `key` is the
+    // snapshot loaded BEFORE this sweep's update (recorded owner only).
+    if (key.retiredAt) return
+    const settings = await dal.settings.loadSettings()
 
-    let settings: { returnSupplierFundsToOwner?: boolean | null } | null = null
-    if (!choice) {
-      // No explicit choice (middleman/automatic path): obey the retire guard so the
-      // repeated chain-detection sweeps never re-drain, then obey the settings flag.
-      if (key.retiredAt) return
-      settings = await dal.settings.loadSettings()
+    const toAddress = resolveDrainDestination(key, undefined, settings)
+    if (!toAddress) return
+    if (!isValidPoktAddress(toAddress)) {
+      // Never fail the status sweep over it (that would also skip setRetiredAt): log and skip.
+      log.error('maybeCreateReturnFundsIntent: recorded owner is not a valid pokt address; automatic drain skipped', { key: key.address })
+      return
     }
 
-    const toAddress = resolveDrainDestination(key, choice, settings)
-    if (!toAddress) return
-
-    await doCreateReturnFundsIntent(dal, keyAddress, toAddress)
+    await doCreateReturnFundsIntent(dal, key.address, toAddress)
   }
 
   /**

@@ -181,15 +181,24 @@ export async function GetAnalyticsBreakdown(
   })
 }
 
+const MAX_SESSION_PAGE_INDEX = 1_000_000
+
 export async function ListAnalyticsSessions(
   filters: AnalyticsFilters,
   page: { pageIndex: number; pageSize: number; phase: AnalyticsSessionPhase },
 ): Promise<ActionResult<{ total: number; rows: AnalyticsSessionRow[] }>> {
   return withRequireOwner(async () => {
     if (!ANALYTICS_SESSION_PHASES.includes(page.phase)) throw new Error(`Unknown phase ${page.phase}`)
+    // Integers only: a NaN/fractional/string value used to reach the query as NaN.
+    if (!Number.isSafeInteger(page.pageSize) || page.pageSize < 1 || page.pageSize > 200) {
+      throw new Error('pageSize must be an integer between 1 and 200')
+    }
+    if (!Number.isSafeInteger(page.pageIndex) || page.pageIndex < 0 || page.pageIndex > MAX_SESSION_PAGE_INDEX) {
+      throw new Error(`pageIndex must be an integer between 0 and ${MAX_SESSION_PAGE_INDEX}`)
+    }
     const { filter } = await resolve(filters)
-    const limit = Math.min(Math.max(1, Math.floor(page.pageSize)), 200)
-    return listAnalyticsSessions(filter, { offset: Math.max(0, Math.floor(page.pageIndex)) * limit, limit, phase: page.phase })
+    const limit = page.pageSize
+    return listAnalyticsSessions(filter, { offset: page.pageIndex * limit, limit, phase: page.phase })
   })
 }
 

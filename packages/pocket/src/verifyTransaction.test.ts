@@ -86,7 +86,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
       code: 0,
     })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r.status).toBe('confirmed')
@@ -112,7 +112,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
     mockBlock.mockResolvedValue({ block: { txs: [] } }) // tx never present
     mockGetHeight.mockResolvedValue(1005) // head caps the window at 1005
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r).toEqual({ status: 'absent', coveredUpToHeight: 1005 })
@@ -124,7 +124,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
     mockFetch.mockResolvedValue({ ok: false })
     mockGetHeight.mockRejectedValue(new Error('rpc unreachable'))
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r.status).toBe('unavailable')
@@ -137,7 +137,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
     mockGetHeight.mockResolvedValue(1005)
     mockBlock.mockRejectedValue(new Error('block fetch failed'))
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r.status).toBe('unavailable')
@@ -161,7 +161,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
       results: [{ code: 0, gasUsed: BigInt(50000), gasWanted: BigInt(100000) }],
     })
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r.status).toBe('confirmed')
@@ -187,7 +187,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
       new Error('{"code":-32603,"message":"Internal error","data":"could not find results for height #1000"}'),
     )
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r.status).toBe('unavailable')
@@ -201,7 +201,7 @@ describe('PocketBlockchain.verifyTransaction', () => {
     // head is startHeight - 1 (node has not produced any new blocks yet)
     mockGetHeight.mockResolvedValue(999) // startHeight=1000, so head < startHeight
 
-    const bc = await createInstance('http://api.example.com')
+    const bc = await createInstance('https://api.example.com')
     const r = await bc.verifyTransaction(txHash, 1000, 30)
 
     expect(r).toEqual({ status: 'absent', coveredUpToHeight: 999 })

@@ -9,7 +9,9 @@ import {MsgStakeSupplier, MsgUnstakeSupplier} from "@igniter/pocket/proto/pocket
 import {MsgSend} from "@igniter/pocket/proto/cosmos/bank/v1beta1/tx";
 import {Coin} from "@igniter/pocket/proto/cosmos/base/v1beta1/coin";
 import { TxRaw } from '@igniter/pocket/proto/cosmos/tx/v1beta1/tx'
-import { getApplicationSettings } from '@/actions/ApplicationSettings'
+import { getApplicationSettings } from '@/lib/dal/applicationSettings'
+import { requireAuth } from '@/lib/utils/actions'
+import { fetchChainAccount } from '@/lib/transactions/chainAccount'
 
 function buildEncodeObjectFromMessage(message: TransactionMessage): EncodeObject {
   const { typeUrl, body } = message;
@@ -53,27 +55,8 @@ export async function GetAccountSequence(address: string): Promise<{
   accountNumber: number,
   sequence: number,
 }> {
-  const applicationSettings = await getApplicationSettings();
-
-  const apiUrl = applicationSettings.pocketApiUrl;
-
-  if (!apiUrl) {
-    throw new Error('API URL not found');
-  }
-
-  const res = await fetch(`${apiUrl}/cosmos/auth/v1beta1/accounts/${address}`);
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Fetch account sequence failed (${res.status}): ${text || 'no body'}`);
-  }
-
-  const data = await res.json();
-
-  return {
-    accountNumber: Number(data.account.account_number),
-    sequence: Number(data.account.sequence)
-  }
+  await requireAuth()
+  return fetchChainAccount(address)
 }
 
 let registry: Registry | undefined = undefined
@@ -122,6 +105,7 @@ export async function SimulateFee({
   signerPubKey,
   memo,
 }: Tx): Promise<{gas: number, fee: number}> {
+  await requireAuth()
   const pubKeyIsBase64 = isBase64(signerPubKey)
 
   const signer = pubKeyIsBase64 ? pubkeyToAddress(Buffer.from(signerPubKey, 'base64').toString('hex')) : pubkeyToAddress(signerPubKey)
@@ -210,6 +194,7 @@ export type SupplierParams = {
 }
 
 export async function GetSupplierStakingFee() {
+  await requireAuth()
   const applicationSettings = await getApplicationSettings();
 
   const apiUrl = applicationSettings.pocketApiUrl;

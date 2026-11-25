@@ -1,12 +1,45 @@
 import NextAuth, { type NextAuthResult } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { SiwpMessage } from "@poktscan/vault-siwp";
+import {
+  cookieFromRequest,
+  loginNonceCookieName,
+  SiwpLoginError,
+  verifySiwpLogin,
+} from "@igniter/ui/lib/siwpLogin";
 import {createUser, getUser} from "./lib/dal/users";
-import authConfig from "./auth.config";
+import {getApplicationSettings} from "./lib/dal/applicationSettings";
+import authConfig, { SESSION_MAX_AGE_SECONDS, useSecureCookies } from "./auth.config";
 import type {User} from "@igniter/db/provider/schema";
+import {UserRole} from "@igniter/db/provider/enums";
+import {normalizeIdentityToAddress} from "@igniter/commons/crypto";
+import {env} from "@/config/env";
 import { getLogger } from "@igniter/logger";
 
 const log = getLogger(["provider", "auth"]);
+
+/**
+ * Re-reads the session's user on every session read. Only the current OWNER_IDENTITY may hold a
+ * session on the provider, so a rotated-out owner loses it at once; the session also ends when the
+ * user row is gone or 30 minutes after login.
+ */
+export async function refreshSessionToken<T extends Record<string, unknown>>(token: T): Promise<T | null> {
+  const loginAt = typeof token.loginAt === "number" ? token.loginAt : 0;
+  if (!loginAt || Date.now() - loginAt > SESSION_MAX_AGE_SECONDS * 1000) {
+    return null;
+  }
+
+  const identity = (token.user as { identity?: unknown } | undefined)?.identity;
+  if (typeof identity !== "string" || identity !== normalizeIdentityToAddress(env.OWNER_IDENTITY)) {
+    return null;
+  }
+
+  const user = await getUser(identity);
+  if (!user) {
+    return null;
+  }
+
+  return { ...token, user: { ...user, role: UserRole.Owner } };
+}
 
 const authConfigResult = NextAuth({
   ...authConfig,
@@ -35,45 +68,26 @@ const authConfigResult = NextAuth({
       // @ts-ignore
       authorize: async (credentials, req): Promise<User | null> => {
         try {
-          const siwp = new SiwpMessage(
-            JSON.parse((credentials?.message || "{}") as string)
-          );
+          const address = await verifySiwpLogin(credentials, {
+            domain: new URL(process.env.AUTH_URL ?? "").host,
+            chainId: (await getApplicationSettings()).chainId,
+            secret: process.env.AUTH_SECRET ?? "",
+            nonceCookie: cookieFromRequest(req as Request, loginNonceCookieName("provider", useSecureCookies)),
+          });
 
-          const nextAuthUrl = new URL(process.env.AUTH_URL ?? "");
+          let user = await getUser(address);
 
-          const results = await Promise.allSettled([
-            siwp.verifyERC4361({
-              signature: (credentials?.signature as string) || '',
-              domain: nextAuthUrl.host,
-              publicKey: (credentials?.publicKey as string) || '',
-            }),
-            siwp.verifyAdr36({
-              signature: (credentials?.signature as string) || '',
-              domain: nextAuthUrl.host,
-              publicKey: (credentials?.publicKey as string) || '',
-            }),
-          ])
-
-          if (results.every((result) => result.status === 'rejected')) {
-            throw (results.at(0) as  PromiseRejectedResult).reason
+          if (!user) {
+            user = await createUser(address);
           }
 
-          const result = results.find(result => result.status === 'fulfilled')!.value
-
-          let user;
-
-          if (result.success) {
-            user = await getUser(siwp.address);
-
-            if (!user) {
-              user = await createUser(siwp.address);
-            }
-
-            return user ?? null;
-          }
-          return null;
+          return user ?? null;
         } catch (error) {
-          log.error('authorization failed', { error });
+          if (error instanceof SiwpLoginError) {
+            log.warn('authorization rejected', { reason: error.reason });
+          } else {
+            log.error('authorization failed', { error });
+          }
           return null;
         }
       },
@@ -89,8 +103,10 @@ const authConfigResult = NextAuth({
         // @TODO: Remove ts-ignore. Once we learn how to update the User type next-auth expects.
         // @ts-ignore
         token.user = user;
+        token.loginAt = Date.now();
+        return token;
       }
-      return token;
+      return refreshSessionToken(token);
     },
   },
 });

@@ -65,6 +65,13 @@ export const SECRET_FIELD_PATTERNS: (string | RegExp)[] = [
   /^bot[_]?token$/i,
   /^webhook[_]?url$/i,
   /^encryption[_]?key$/i,
+  /^notification[_]?encryption[_]?key$/i,
+  /^encryption[_]?iv$/i,
+  // `APP_IDENTITY` (env) is the app's signing PRIVATE key. The settings column of the
+  // same name holds the public key, which this also hides: accepted, it is not needed
+  // in logs. `nonce_signature` is the login nonce signature.
+  /^app[_]?identity$/i,
+  /^nonce[_]?signature$/i,
 ]
 
 /**
@@ -95,6 +102,24 @@ const BEARER_TOKEN_PATTERN: RedactionPattern = {
 }
 
 /**
+ * Masks the password of a URL or DSN that carries credentials
+ * (`postgres://user:pass@host` becomes `postgres://user:***@host`). The user part
+ * may be empty (`redis://:pass@host`). The password stops at whitespace, a quote,
+ * `/`, `?` or `#`, so `https://host:8080/path?x=a@b` (a port, then an `@` in the
+ * query) is left alone. The match runs to the LAST `@` before the next delimiter,
+ * so an unencoded `@` inside the password does not leak its tail.
+ */
+const URL_CREDENTIALS_PATTERN: RedactionPattern = {
+  pattern: /([a-z][a-z0-9+.-]*:\/\/[^\s:/?#@"']*:)[^\s/?#"']*@/gi,
+  replacement: '$1***@',
+}
+
+/** Masks URL/DSN credentials in a single string (see URL_CREDENTIALS_PATTERN). */
+function maskUrlCredentials(text: string): string {
+  return text.replace(URL_CREDENTIALS_PATTERN.pattern, URL_CREDENTIALS_PATTERN.replacement as string)
+}
+
+/**
  * Value-shaped secrets scrubbed from rendered output as a backstop.
  *
  * NOTE (verified against installed @logtape/redaction@2.2.1, deviates from the
@@ -107,6 +132,7 @@ export const SECRET_VALUE_PATTERNS: RedactionPatterns = [
   JWT_PATTERN,
   PASSWORD_VALUE_PATTERN,
   BEARER_TOKEN_PATTERN,
+  URL_CREDENTIALS_PATTERN,
 ]
 
 /**
@@ -201,6 +227,8 @@ function redactCredentials(
  * structures.
  */
 export function redactObject<T>(obj: T, depth = 0, seen: WeakSet<object> = new WeakSet()): T {
+  // String leaves only get the URL/DSN credential mask; secret KEYS are handled below.
+  if (typeof obj === 'string') return maskUrlCredentials(obj) as unknown as T
   if (depth > 20 || obj == null || typeof obj !== 'object') return obj
   if (seen.has(obj as object)) return '[circular]' as unknown as T
   seen.add(obj as object)

@@ -29,6 +29,12 @@ if APP_IDENTITY == '':
    fail('Missing PROVIDER_APP_IDENTITY env variable')
 
 # read from kustomize build
+def required_dev_secret(name):
+  value = os.getenv(name, '')
+  if value == '':
+    fail('Missing ' + name + ': the root Tiltfile generates it into .local/tilt-dev-secrets.env (k8s/tools/dev-secrets.sh)')
+  return value
+
 objects = decode_yaml_stream(kustomize("./overlays/dev"))
 
 for o in objects:
@@ -40,6 +46,9 @@ for o in objects:
 for o in objects:
   if o['metadata']['name'] == 'provider-secrets':
     o['stringData']['APP_IDENTITY'] = APP_IDENTITY
+    o['stringData']['AUTH_SECRET'] = required_dev_secret('IGNITER_DEV_PROVIDER_AUTH_SECRET')
+    o['stringData']['ENCRYPTION_KEY'] = required_dev_secret('IGNITER_DEV_PROVIDER_ENCRYPTION_KEY')
+    o['stringData']['ENCRYPTION_IV'] = required_dev_secret('IGNITER_DEV_PROVIDER_ENCRYPTION_IV')
     break
 
 # Auto-bootstrap: if PROVIDER_BOOTSTRAP_CONFIG_PATH points to a local JSON file,

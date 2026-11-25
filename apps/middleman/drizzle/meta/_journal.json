@@ -162,6 +162,13 @@
       "when": 1792728954399,
       "tag": "0022_failure_effects_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795641429058,
+      "tag": "0023_supplier_deliveries",
+      "breakpoints": true
     }
   ]
 }

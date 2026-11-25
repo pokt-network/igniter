@@ -22,6 +22,15 @@ export async function sumStakeAmountByAddresses(
   return createNodeQueries(getDb()).sumStakeAmountByAddresses(addresses, options)
 }
 
+/** Who owns and who created each of these suppliers (rows for unknown addresses are absent). */
+export async function getNodeOwnership(addresses: string[]) {
+  if (addresses.length === 0) return []
+  return getDb()
+    .select({ address: nodesTable.address, ownerAddress: nodesTable.ownerAddress, createdBy: nodesTable.createdBy })
+    .from(nodesTable)
+    .where(inArray(nodesTable.address, addresses))
+}
+
 export async function getNodesByUser(userIdentity: string) {
   return getDb().query.nodesTable.findMany({
     where: eq(nodesTable.createdBy, userIdentity),
