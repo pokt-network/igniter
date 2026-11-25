@@ -28,11 +28,19 @@ export class DiscordChannel implements NotificationChannel {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10_000),
+        // Never follow a redirect: the egress guard checked only this URL, so a
+        // 3xx could steer the request at an internal host. A redirect is a failure.
+        redirect: 'manual',
       })
     } catch (err) {
       // Don't reflect the transport error (host/port/connect detail) to callers.
       logger.error('Discord webhook request failed', { err })
       throw new ChannelDeliveryError('discord', 'transient')
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      logger.error('Discord webhook redirected, not followed', { status: response.status })
+      throw new ChannelDeliveryError('discord', 'invalid_request', { statusCode: response.status })
     }
 
     if (!response.ok) {

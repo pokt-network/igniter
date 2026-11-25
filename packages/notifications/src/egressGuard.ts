@@ -13,6 +13,7 @@ import net from 'node:net'
 // IP into the socket would fully close that gap; for this feature the resolve
 // check + the fact that channels only ever talk to well-known public hosts
 // (discord.com, api.telegram.org, real mail providers) is the accepted mitigation.
+// SMTP is the exception: email.ts pins the socket to resolveSafeAddress()'s IP.
 
 function ipv4Blocked(ip: string): boolean {
   const parts = ip.split('.')
@@ -193,6 +194,61 @@ export async function assertSafeHost(host: string, allow: EgressAllowlist = defa
       throw new Error('Destination address is not allowed')
     }
   }
+}
+
+/**
+ * True iff `host` is an operator-allowlisted host literal (NOTIFICATION_EGRESS_ALLOWLIST).
+ * Used to relax non-address policy (e.g. the SMTP port allowlist) only for
+ * destinations the operator named explicitly, such as a localnet `mailpit`.
+ */
+export function isAllowlistedHost(host: string, allow: EgressAllowlist = defaultAllowlist()): boolean {
+  return allow.hosts.has(host.replace(/^\[|\]$/g, '').toLowerCase())
+}
+
+/**
+ * Like assertSafeHost, but returns ONE vetted address to connect to, so the caller
+ * can pin the socket to it. Connecting by hostname after a separate check leaves a
+ * DNS-rebinding window (the second resolution may return an internal address);
+ * connecting to the returned IP closes it. Operator-allowlisted host literals are
+ * resolved without the block check (they are trusted by name).
+ */
+export async function resolveSafeAddress(host: string, allow: EgressAllowlist = defaultAllowlist()): Promise<string> {
+  const cleaned = host.replace(/^\[|\]$/g, '')
+  let addresses: Array<{ address: string }>
+  try {
+    addresses = await lookup(cleaned, { all: true })
+  } catch {
+    throw new Error('Destination host could not be resolved')
+  }
+  if (addresses.length === 0) throw new Error('Destination host could not be resolved')
+  if (!allow.hosts.has(cleaned.toLowerCase())) {
+    for (const { address } of addresses) {
+      if (ipBlocked(address) && !ipAllowed(address, allow)) {
+        throw new Error('Destination address is not allowed')
+      }
+    }
+  }
+  return addresses[0]!.address
+}
+
+/**
+ * True iff the operator trusts `host` explicitly: it is an allowlisted host literal,
+ * or EVERY address it resolves to falls inside an allowlisted IP/CIDR. Lets callers
+ * accept plaintext http only for operator-owned internal targets (e.g. a localnet
+ * in-cluster service) while public destinations must use https. False when the host
+ * does not resolve.
+ */
+export async function isOperatorTrustedHost(host: string, allow: EgressAllowlist = defaultAllowlist()): Promise<boolean> {
+  const cleaned = host.replace(/^\[|\]$/g, '')
+  if (allow.hosts.has(cleaned.toLowerCase())) return true
+  if (allow.cidrs.length === 0) return false
+  let addresses: Array<{ address: string }>
+  try {
+    addresses = await lookup(cleaned, { all: true })
+  } catch {
+    return false
+  }
+  return addresses.length > 0 && addresses.every(({ address }) => ipAllowed(address, allow))
 }
 
 // Validates an outbound URL: http(s) only, and its host must pass assertSafeHost.

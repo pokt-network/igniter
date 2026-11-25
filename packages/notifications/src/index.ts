@@ -12,7 +12,7 @@ export type {
   EmailConfig,
   EmailSmtpConfig,
 } from './types'
-export { assertSafeUrl, assertSafeHost, parseEgressAllowlist } from './egressGuard'
+export { assertSafeUrl, assertSafeHost, parseEgressAllowlist, isOperatorTrustedHost } from './egressGuard'
 export type { EgressAllowlist } from './egressGuard'
 export { ChannelDeliveryError, categorizeHttpStatus } from './channelError'
 export type { ChannelErrorCategory } from './channelError'

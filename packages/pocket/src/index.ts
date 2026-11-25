@@ -37,7 +37,7 @@ import { Supplier } from '@pocket/proto/generated/pocket/shared/supplier'
 import {StakeSupplierParams, UnstakeSupplierParams, SendFundsParams} from "@pocket/types";
 import {MsgStakeSupplier, MsgUnstakeSupplier} from "@pocket/proto/generated/pocket/supplier/tx";
 import {MsgSend} from "@pocket/proto/generated/cosmos/bank/v1beta1/tx";
-import {isValidPrivateKey} from "@pocket/utils";
+import {assertSecureRpcUrl, isValidPrivateKey} from "@pocket/utils";
 import {getLogger, Logger} from '@igniter/logger'
 import type { VerifyOutcome, SupplierEffect } from '@igniter/tx-verify'
 import { TX_EXPIRATION_BLOCKS } from '@igniter/tx-verify'
@@ -46,6 +46,7 @@ export * from './types'
 export * from './constants';
 export * from '@igniter/tx-verify';
 export { rPCTypeFromJSON } from './proto/generated/pocket/shared/service';
+export { isValidPoktAddress, assertSecureRpcUrl } from './utils';
 
 /**
  * Parses the expected sequence number from a Cosmos SDK account sequence mismatch error.
@@ -313,6 +314,8 @@ export class PocketBlockchain {
    * @return {Promise<Blockchain>} A promise that resolves to an instance of the Blockchain class.
    */
   static async setup(rpcUrl: string, denom: string = 'upokt', gasPrice = 0.001, apiUrl?: string) {
+    assertSecureRpcUrl(rpcUrl, 'RPC')
+    if (apiUrl) assertSecureRpcUrl(apiUrl, 'API')
     const blockchain = new PocketBlockchain(rpcUrl, denom, gasPrice, apiUrl)
     await blockchain.connect()
     return blockchain

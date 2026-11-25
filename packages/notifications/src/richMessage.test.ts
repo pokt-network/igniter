@@ -74,3 +74,30 @@ describe('composeRichMessage', () => {
     expect(m.body).toBe('Your stake transaction succeeded.')
   })
 })
+
+describe('composeRichMessage HTML escaping', () => {
+  const markup = parts({
+    title: 'T<script>x</script>',
+    senderLabel: 'Acme <img src=x onerror=alert(1)>',
+    url: 'https://x.example/a?b="><script>',
+    uuid: null,
+  })
+
+  it('escapes title, senderLabel and url in the telegram HTML', () => {
+    const html = composeRichMessage(markup).telegram!.html
+    expect(html).not.toContain('<script>')
+    expect(html).not.toContain('<img')
+    expect(html).toContain('T&lt;script&gt;x&lt;/script&gt;')
+    expect(html).toContain('Acme &lt;img src=x onerror=alert(1)&gt;')
+    expect(html).toContain('href="https://x.example/a?b=&quot;&gt;&lt;script&gt;"')
+  })
+
+  it('escapes title, senderLabel and url in the email HTML', () => {
+    const html = composeRichMessage(markup).email!.html
+    expect(html).not.toContain('<script>')
+    expect(html).not.toContain('<img')
+    expect(html).toContain('<title>T&lt;script&gt;x&lt;/script&gt;</title>')
+    expect(html).toContain('Sent by Acme &lt;img src=x onerror=alert(1)&gt;')
+    expect(html).toContain('href="https://x.example/a?b=&quot;&gt;&lt;script&gt;"')
+  })
+})
