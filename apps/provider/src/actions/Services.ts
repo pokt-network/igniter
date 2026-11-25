@@ -13,8 +13,14 @@ export async function CreateService(service: Omit<InsertService, 'createdBy' | '
       }
     }
 
+    // Explicit fields only: never id/createdBy/updatedBy (or any other column) from input.
     return insert({
-      ...service,
+      serviceId: service.serviceId,
+      name: service.name,
+      ownerAddress: service.ownerAddress,
+      computeUnits: service.computeUnits,
+      revSharePercentage: service.revSharePercentage,
+      endpoints: service.endpoints.map((e) => ({ url: e.url, rpcType: e.rpcType })),
       createdBy: user.identity,
       updatedBy: user.identity,
     });
@@ -30,7 +36,8 @@ export async function UpdateService(id: string, service: Pick<Service, 'revShare
     }
 
     return update(id, {
-      ...service,
+      revSharePercentage: service.revSharePercentage,
+      endpoints: service.endpoints.map((e) => ({ url: e.url, rpcType: e.rpcType })),
       updatedBy: user.identity,
     });
   });

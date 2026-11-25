@@ -18,8 +18,12 @@ export async function DeleteRelayMiner(id: number) {
 
 export async function CreateRelayMiner(relayMiner: Omit<InsertRelayMiner, 'createdBy' | 'updatedBy'>) {
   return withRequireOwnerOrAdmin(async (user) => {
+    // Explicit fields only: never id/createdBy/updatedBy (or any other column) from input.
     return insert({
-      ...relayMiner,
+      name: relayMiner.name,
+      identity: relayMiner.identity,
+      regionId: relayMiner.regionId,
+      domain: relayMiner.domain,
       createdBy: user.identity,
       updatedBy: user.identity,
     });
@@ -29,7 +33,10 @@ export async function CreateRelayMiner(relayMiner: Omit<InsertRelayMiner, 'creat
 export async function UpdateRelayMiner(id: number, relayMiner: Pick<RelayMiner, 'name' | 'identity' | 'regionId' | 'domain'>) {
   return withRequireOwnerOrAdmin(async (user) => {
     return update(id, {
-      ...relayMiner,
+      name: relayMiner.name,
+      identity: relayMiner.identity,
+      regionId: relayMiner.regionId,
+      domain: relayMiner.domain,
       updatedBy: user.identity,
     });
   });

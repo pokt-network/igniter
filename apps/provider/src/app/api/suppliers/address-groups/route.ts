@@ -3,7 +3,7 @@ import {ensureApplicationIsBootstrapped, validateRequestSignature} from "@/lib/u
 import {APIResponse} from "@/lib/models/response";
 import * as schema from "@igniter/db/provider/schema";
 import {getDbClient} from "@/db";
-import {inArray, eq} from "drizzle-orm";
+import {and, inArray, eq} from "drizzle-orm";
 import { getLogger } from "@igniter/logger";
 import { withLogging } from "@/lib/logging/withLogging";
 
@@ -49,7 +49,7 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
             return signatureValidationResponse;
         }
 
-        const {data} = signatureValidationResponse;
+        const {data, delegator} = signatureValidationResponse;
 
         if (!data || !data.addresses || data.addresses.length === 0) {
             return NextResponse.json({error: "Invalid request. Empty addresses list."}, {status: 400});
@@ -65,7 +65,11 @@ export const POST = withLogging(async (request: Request): Promise<NextResponse<A
             })
             .from(keysTable)
             .innerJoin(addressGroupTable, eq(keysTable.addressGroupId, addressGroupTable.id))
-            .where(inArray(keysTable.address, data.addresses));
+            // Only the suppliers delivered to the calling delegator.
+            .where(and(
+                inArray(keysTable.address, data.addresses),
+                eq(keysTable.deliveredTo, delegator!.identity),
+            ));
 
         const groupsMap = new Map<number, AddressGroup>();
 

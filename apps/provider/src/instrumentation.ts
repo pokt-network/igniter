@@ -1,4 +1,4 @@
-import { configureLogging } from '@igniter/logger'
+import { configureLogging, getLogger } from '@igniter/logger'
 
 /**
  * Next.js 15 App Router auto-detects `instrumentation.ts` at the `src/` root
@@ -11,4 +11,17 @@ import { configureLogging } from '@igniter/logger'
  */
 export async function register() {
   await configureLogging({ serviceName: 'provider' })
+
+  // Refuse to serve with a missing, placeholder or short secret (runs at server start only,
+  // never during `next build`). Only the problem is logged, never the value.
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { secretProblems } = await import('@igniter/commons/secrets')
+    const problems = secretProblems(process.env, { encryptionKey: true })
+    if (problems.length > 0) {
+      getLogger(['provider', 'startup']).fatal('refusing to start: insecure secrets', { problems })
+      // Exit rather than throw: Next.js logs a failed instrumentation hook but keeps the process
+      // up, answering every request with 500, which an orchestrator does not see as a crash.
+      process.exit(1)
+    }
+  }
 }

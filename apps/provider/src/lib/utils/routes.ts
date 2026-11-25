@@ -5,6 +5,8 @@ import { verifySignature } from "@igniter/commons/crypto";
 import {REQUEST_IDENTITY_HEADER, REQUEST_SIGNATURE_HEADER} from "@igniter/commons/constants";
 import {APIResponse} from "@/lib/models/response";
 import { getLogger } from "@igniter/logger";
+import { GovernanceUnavailableError } from "@igniter/commons/governance";
+import { delegatorsGovernance } from "@/lib/governance";
 
 const log = getLogger(["provider", "routes"]);
 
@@ -43,8 +45,10 @@ export async function ensureApplicationIsBootstrapped(): Promise<void | NextResp
  * Validates the incoming request according to the common selection rules:
  * - Application is bootstrapped
  * - Request contains a valid X-Middleman-Identity header
- * - The delegator is allowed
+ * - The delegator is allowed (enabled in the database)
  * - The request JSON payload can be parsed and its signature is valid
+ * - The delegator's identity is listed NOW in the middleman governance file (DELEGATORS_CDN_URL);
+ *   a database row alone is not enough. Fails closed (503) when the file cannot be read.
  *
  * If something is wrong, this function returns an error response;
  * otherwise it returns the allowed delegator and the parsed JSON data.
@@ -93,6 +97,29 @@ export async function validateRequestSignature<TData>(request: Request): Promise
     return NextResponse.json(
       { error: `Invalid request. Signature could not be verified with public key: ${delegator.identity}` },
       { status: 400 }
+    );
+  }
+
+  let governanceEntry;
+
+  try {
+    governanceEntry = await delegatorsGovernance.resolve(delegator.identity);
+  } catch (err) {
+    if (!(err instanceof GovernanceUnavailableError)) {
+      throw err;
+    }
+    log.error('delegators governance unavailable', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity), error: err });
+    return NextResponse.json(
+      { error: "Service unavailable. The delegators governance could not be read." },
+      { status: 503 }
+    );
+  }
+
+  if (!governanceEntry) {
+    log.warn('request rejected: delegator not listed in governance', { delegator: delegator.name, identity: truncateIdentity(delegatorIdentity) });
+    return NextResponse.json(
+      { error: "Forbidden. The client is not allowed." },
+      { status: 403 }
     );
   }
 

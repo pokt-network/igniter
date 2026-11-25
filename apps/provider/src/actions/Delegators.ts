@@ -7,6 +7,7 @@ import {
   list,
   listAll,
   applyGovernanceSync,
+  parseCdnDelegators,
   update,
 } from '@/lib/dal/delegators'
 import type { Delegator } from '@igniter/db/provider/schema'
@@ -25,8 +26,10 @@ export async function ListDelegators() {
 
 export async function UpdateDelegator(identity: string, updateValues: Pick<Delegator, 'enabled'>) {
   return withRequireOwnerOrAdmin(async (user) => {
+    // Only `enabled` is writable from here; never name/identity/createdBy from input.
+    if (typeof updateValues?.enabled !== 'boolean') throw new Error('enabled must be a boolean')
     return update(identity, {
-      ...updateValues,
+      enabled: updateValues.enabled,
       updatedBy: user.identity,
     })
   })
@@ -43,7 +46,6 @@ export async function TriggerGovernanceSync() {
   })
 }
 
-type CdnDelegator = { name: string; identity: string; identityHistory: string[] }
 
 // This is here because when doing the setup, the provider workflows can not start running because the app is not bootstrapped
 // so we cannot call TriggerGovernanceSync at setup time
@@ -62,7 +64,7 @@ export async function SyncDelegatorsFromGovernance() {
       throw new Error(`Failed to fetch delegators from CDN: ${response.statusText}`)
     }
 
-    const cdnDelegators = (await response.json()) as CdnDelegator[]
+    const cdnDelegators = parseCdnDelegators(await response.json())
     const current = await listAll()
     const currentMap = new Map(current.map((d: Delegator) => [d.identity, d]))
 
@@ -96,7 +98,8 @@ export async function SyncDelegatorsFromGovernance() {
       }
     }
 
-    await applyGovernanceSync(toInsert, toUpdate, toDisable, user.identity)
+    // Run by the owner during setup: the delegators it adds start enabled.
+    await applyGovernanceSync(toInsert, toUpdate, toDisable, user.identity, { enableNew: true })
   })
 }
 

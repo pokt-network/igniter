@@ -8,6 +8,7 @@ import {
   createImportRequest,
   findSuppliersByOwner,
 } from '@/lib/dal/importSupplierRequests'
+import { isAddressGroupOpenTo } from '@/lib/utils/addressGroups'
 import { getLogger } from '@igniter/logger'
 import { withLogging } from '@/lib/logging/withLogging'
 
@@ -87,10 +88,11 @@ export const POST = withLogging(async (
     )
 
     // Find unassigned staked suppliers for this owner, excluding already-imported addresses
-    const matchingSuppliers = await findSuppliersByOwner(
+    // Same group rule as submit, so the count offered here is what submit imports.
+    const matchingSuppliers = (await findSuppliersByOwner(
       data.ownerAddress,
       data.excludeAddresses,
-    )
+    )).filter((s) => !s.addressGroup || isAddressGroupOpenTo(s.addressGroup, data.ownerAddress))
 
     if (matchingSuppliers.length === 0) {
       log.info('import suppliers request rejected', { ownerAddress: data.ownerAddress, identity: truncateIdentity(delegatorIdentity), cancelledCount, reason: 'no staked suppliers found' })

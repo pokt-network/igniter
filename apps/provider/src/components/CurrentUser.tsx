@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
-import {getCsrfToken, signIn, useSession, signOut} from "next-auth/react";
+import {signIn, useSession, signOut} from "next-auth/react";
 
 import { usePathname } from "next/navigation";
 import type {SiwpMessage} from "@poktscan/vault-siwp";
 import UserMenu from "@igniter/ui/components/UserMenu";
-import {WalletPicker} from "@igniter/ui/components/WalletPicker/index";
+import {fetchLoginNonce, WalletPicker} from "@igniter/ui/components/WalletPicker/index";
 import {useWalletConnection} from "@igniter/ui/context/WalletConnection/index";
 import { toast } from "@igniter/ui/components/sonner";
 import {useApplicationSettings} from "@/app/context/ApplicationSettings";
@@ -118,7 +118,7 @@ export default function CurrentUser() {
   return (
     <WalletPicker
       onSignIn={authenticateUser}
-      getCsrfToken={getCsrfToken}
+      getLoginNonce={fetchLoginNonce}
     />
   );
 }

@@ -17,8 +17,9 @@ const middleware: any = auth(async (req: NextRequest) => {
   const forwardedHeaders = new Headers(req.headers);
   forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
 
+  // A session object alone is not a login: require the user Auth.js decoded from the token.
   //@ts-ignore
-  const isLoggedIn = !!req.auth;
+  const isLoggedIn = !!req.auth?.user;
 
   if (!isLoggedIn) {
     log.debug("unauthenticated request redirected", { pathname: req.nextUrl.pathname });

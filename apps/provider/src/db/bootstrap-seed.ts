@@ -8,6 +8,7 @@ import * as path from 'path'
 import { DirectSecp256k1Wallet } from '@cosmjs/proto-signing'
 import { setup } from '@igniter/db/connection'
 import { configureLogging, getLogger } from '@igniter/logger'
+import { parseCdnDelegators } from '../lib/delegatorsCdn'
 
 const {
   usersTable,
@@ -79,12 +80,6 @@ interface BootstrapConfig {
     }>
   }>
   channels?: BootstrapChannelEntry[]
-}
-
-interface CdnDelegator {
-  name: string
-  identity: string
-  identityHistory?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +332,9 @@ async function main() {
         if (!response.ok) {
           logger.warn('failed to fetch delegators, skipping', { status: response.status })
         } else {
-          const cdnDelegators: CdnDelegator[] = await response.json()
+          // Validated first: a malformed payload inserts nothing. Seeding is the operator's setup,
+          // so these delegators start enabled (the periodic sync inserts new ones disabled).
+          const cdnDelegators = parseCdnDelegators(await response.json())
           for (const del of cdnDelegators) {
             await db
               .insert(delegatorsTable)

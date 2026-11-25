@@ -23,6 +23,7 @@ const getAnalyticsSession = jest.fn()
 jest.mock('@/lib/dal/analytics', () => ({
   analyticsOldestDay: async () => '2026-10-20',
   ANALYTICS_BREAKDOWN_DIMENSIONS: ['service'],
+  ANALYTICS_SESSION_PHASES: ['all', 'settled', 'in_progress', 'money_missing'],
   listAnalyticsKeys: () => listAnalyticsKeys(),
   analyticsDayCoverage: (...a: unknown[]) => analyticsDayCoverage(...a),
   listAnalyticsServices: (...a: unknown[]) => listAnalyticsServices(...a),
@@ -30,7 +31,7 @@ jest.mock('@/lib/dal/analytics', () => ({
   getAnalyticsSession: (...a: unknown[]) => getAnalyticsSession(...a),
 }))
 
-import { GetAnalyticsBackfillStatus, GetAnalyticsHeader, GetAnalyticsSession, StartAnalyticsBackfill } from './Analytics'
+import { GetAnalyticsBackfillStatus, GetAnalyticsHeader, GetAnalyticsSession, ListAnalyticsSessions, StartAnalyticsBackfill } from './Analytics'
 
 function alreadyStarted() {
   const e = new Error('Workflow execution already started')
@@ -159,5 +160,27 @@ describe('GetAnalyticsSession', () => {
     analyticsHasOtherSuppliers.mockResolvedValue(false)
     await GetAnalyticsSession({ days: 7, services: null }, 's1')
     expect(getAnalyticsSession.mock.calls[1]![0]).toMatchObject({ wholeSessions: true })
+  })
+})
+
+describe('ListAnalyticsSessions paging validation', () => {
+  beforeEach(() => {
+    auth.mockReset()
+    auth.mockResolvedValue({ user: { role: UserRole.Owner } })
+    getApplicationSettings.mockReset()
+  })
+
+  it.each([
+    ['a NaN pageSize', { pageIndex: 0, pageSize: Number.NaN }],
+    ['a fractional pageSize', { pageIndex: 0, pageSize: 2.5 }],
+    ['a pageSize above 200', { pageIndex: 0, pageSize: 201 }],
+    ['a string pageIndex', { pageIndex: '1' as unknown as number, pageSize: 25 }],
+    ['a negative pageIndex', { pageIndex: -1, pageSize: 25 }],
+    ['an unbounded pageIndex', { pageIndex: 1e12, pageSize: 25 }],
+  ])('rejects %s before any query', async (_label, page) => {
+    const res = await ListAnalyticsSessions({} as never, { ...page, phase: 'all' as never })
+    expect(res.success).toBe(false)
+    expect(res.success === false && res.error.message).toMatch(/pageSize|pageIndex/)
+    expect(getApplicationSettings).not.toHaveBeenCalled()
   })
 })
