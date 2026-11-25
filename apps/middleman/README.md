@@ -43,6 +43,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | Variable | Required | Description | Example / Default |
 |----------|----------|-------------|-------------------|
 | `COMPOSE_PROJECT_NAME` | Optional | Docker Compose project name — scopes container names | `igniter-middleman` |
+| `IGNITER_VERSION` | Required | Image version for `middleman` and `middleman-workflows`. Pin a release and bump it on every upgrade; never `latest`. Accepts `<version>@sha256:<digest>`. | `0.23.0` |
 
 ### Next.js
 
@@ -65,12 +66,12 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 | Variable | Required | Description | Example / Default |
 |----------|----------|-------------|-------------------|
 | `PGHOST` | Required | PostgreSQL hostname (service name from dependencies compose) | `postgresql` |
-| `PGUSER` | Required | PostgreSQL username — must match `POSTGRES_USER` in dependencies `.env` | `igniter` |
-| `PGPASSWORD` | Required | PostgreSQL password — must match `POSTGRES_PASSWORD` in dependencies `.env` | *(no default — set this)* |
+| `PGUSER` | Required | PostgreSQL role. Middleman's own role (owner of database `middleman` only), never the superuser | `middleman` |
+| `PGPASSWORD` | Required | PostgreSQL password — must match `MIDDLEMAN_DB_PASSWORD` in dependencies `.env` | *(no default — set this)* |
 | `DB_NAME` | Required | Database name for Middleman | `middleman` |
 | `DATABASE_URL` | Required | Full connection string — interpolated from the four vars above | `postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${DB_NAME}?sslmode=disable` |
 
-> **Note:** `PGPASSWORD` must exactly match `POSTGRES_PASSWORD` in `docker-compose/dependencies/.env`. If they don't match, migrations and the app will fail to connect.
+> **Note:** `PGPASSWORD` must exactly match `MIDDLEMAN_DB_PASSWORD` in `docker-compose/dependencies/.env`. If they don't match, migrations and the app will fail to connect. Never give the app the superuser (`POSTGRES_USER`/`POSTGRES_PASSWORD`).
 
 ### Pocket Network
 
@@ -97,7 +98,7 @@ All vars below are sourced from `docker-compose/apps/middleman/.env.sample` and 
 |----------|----------|-------------|-------------------|
 | `APP_URL` | Required | Public URL where Middleman is accessible — used for redirect links and CORS | `http://localhost:3000` |
 | `AUTH_URL` | Required | URL used by NextAuth for auth callbacks — typically same as `APP_URL` | `http://localhost:3000` |
-| `AUTH_TRUST_HOST` | Optional | Set to `true` if running behind a reverse proxy (trusts `X-Forwarded-*` headers) | `false` |
+| `AUTH_TRUST_HOST` | — | **Not read.** `trustHost: true` is hardcoded in `src/auth.config.ts`, so the app always trusts `X-Forwarded-Host`/`X-Forwarded-Proto`. Your reverse proxy must set those headers itself, never pass a client's through, and be the only way to reach the app port. See [Hardening](../../docker-compose/README.md#the-reverse-proxy-and-forwarded-headers). | — |
 
 > **Note:** Middleman runs on port `3000` by default. If running both Provider and Middleman on the same host, one of them must use a different port (Provider defaults to `3001`).
 
@@ -138,13 +139,16 @@ cd docker-compose/dependencies
 cp .env.sample .env
 ```
 
-Open `.env` and change the default passwords:
+Open `.env` and set every password (`openssl rand -hex 32` each):
 
 ```
-POSTGRES_PASSWORD=your-secure-password
+POSTGRES_PASSWORD=...        # bootstrap superuser, for you only
+MIDDLEMAN_DB_PASSWORD=...    # goes into the Middleman .env as PGPASSWORD
+PROVIDER_DB_PASSWORD=...
+TEMPORAL_DB_PASSWORD=...
 ```
 
-> **Note:** The default `POSTGRES_PASSWORD=igniter` is not suitable for production. Change it now — you will reference this same password in the Middleman `.env`.
+> **Note:** Compose refuses to start while any of them is empty. Only `MIDDLEMAN_DB_PASSWORD` goes into the Middleman `.env`. Upgrading an install that predates these roles? Follow [Upgrading an existing install](../../docker-compose/README.md#upgrading-an-existing-install) first.
 
 Then start the dependencies:
 
@@ -152,7 +156,7 @@ Then start the dependencies:
 docker compose up -d
 ```
 
-Wait for all services to become healthy (`docker compose ps`). The `igniter` Docker network is created at this step — the Middleman services connect to it as an external network.
+Wait for all services to become healthy (`docker compose ps`). The `igniter-middleman` Docker network is created at this step — the Middleman services connect to it as an external network. It is internal and Middleman-only: the Provider stack uses `igniter-provider`.
 
 ### Step 3: Configure Middleman
 
@@ -163,7 +167,8 @@ cp .env.sample .env
 
 Fill in the required values in `.env`. At minimum, you must set:
 
-- `PGPASSWORD` — must match `POSTGRES_PASSWORD` from the dependencies `.env`
+- `IGNITER_VERSION` — the release to run (e.g. `0.23.0`)
+- `PGUSER="middleman"` and `PGPASSWORD` — must match `MIDDLEMAN_DB_PASSWORD` from the dependencies `.env`
 - `OWNER_IDENTITY` — your `pokt1...` wallet address
 - `APP_IDENTITY` — your hex private key for governance signing
 - `POKT_RPC_URL` — CometBFT RPC endpoint (seeded into DB on first boot)
@@ -183,11 +188,11 @@ Docker Compose starts three services in dependency order:
 
 | Service | Image | What it does |
 |---------|-------|--------------|
-| `middleman-migration` | `ghcr.io/pokt-network/middleman:latest` | Runs Drizzle ORM migrations to create or update the Middleman database schema. Runs once and exits — must complete successfully before the other services start. |
-| `middleman-web` | `ghcr.io/pokt-network/middleman:latest` | The Next.js web application, exposed on port `3000`. Handles the delegator UI, SIWP authentication, and API routes. Starts only after migrations complete. |
-| `middleman-workflows` | `ghcr.io/pokt-network/middleman-workflows:latest` | The Temporal workflow worker. Processes background jobs for staking and unstaking transactions. Connects to the same Temporal server as the web app. Starts only after migrations complete. |
+| `middleman-migration` | `ghcr.io/pokt-network/middleman:${IGNITER_VERSION}` | Runs Drizzle ORM migrations to create or update the Middleman database schema. Runs once and exits — must complete successfully before the other services start. |
+| `middleman-web` | `ghcr.io/pokt-network/middleman:${IGNITER_VERSION}` | The Next.js web application, published on `127.0.0.1:3000` for your reverse proxy (see [what to expose](../../docker-compose/README.md#middleman-what-to-expose)). Handles the delegator UI, SIWP authentication, and API routes. Starts only after migrations complete. |
+| `middleman-workflows` | `ghcr.io/pokt-network/middleman-workflows:${IGNITER_VERSION}` | The Temporal workflow worker. Processes background jobs for staking and unstaking transactions. Connects to the same Temporal server as the web app. Starts only after migrations complete. |
 
-All three services connect to the shared `igniter` Docker network created by the dependencies compose.
+All three services connect to the `igniter-middleman` network created by the dependencies compose (PostgreSQL and Temporal only). `middleman-web` and `middleman-workflows` also join this stack's own `igniter-middleman-egress` network for outbound traffic. Before exposing anything, read [Hardening a deployment](../../docker-compose/README.md#hardening-a-deployment).
 
 ### Step 5: Verify
 

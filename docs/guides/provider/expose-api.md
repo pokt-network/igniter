@@ -70,6 +70,8 @@ proxy_set_header Host              $host;
 proxy_set_header X-Real-IP         $remote_addr;
 proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
+# The app trusts this header (trustHost is hardcoded), so always overwrite it.
+proxy_set_header X-Forwarded-Host  $host;
 
 # The public API authenticates by signature, never by session. No cookie should
 # cross this boundary in either direction.
@@ -140,7 +142,7 @@ Notes:
 
 - **Leave `merge_slashes` at its default (`on`).** Some Middleman call sites join the registry URL and the path by concatenation, so a registry `url` recorded with a trailing slash produces `//api/suppliers/stake`. nginx normalizes that back to a single slash before matching locations; with `merge_slashes off` those requests would fall through to the deny block. Registering your `url` without a trailing slash avoids relying on this.
 - **Bind the app to loopback.** The bundled compose file already publishes the port as `127.0.0.1:3001:3001`, so the proxy is the only way in. If you deploy differently, make sure port `3001` is not reachable from outside the host.
-- **`APP_URL`, `AUTH_URL`, and `AUTH_TRUST_HOST` are app-level, not per-vhost.** None of the paths above use NextAuth, so this public hostname is irrelevant to them — point `APP_URL`/`AUTH_URL` at the *portal* entrance you actually sign in through (see below), and set `AUTH_TRUST_HOST=true` because the app sits behind a proxy either way.
+- **`APP_URL`, `AUTH_URL`, and `AUTH_TRUST_HOST` are app-level, not per-vhost.** None of the paths above use NextAuth, so this public hostname is irrelevant to them — point `APP_URL`/`AUTH_URL` at the *portal* entrance you actually sign in through (see below). `AUTH_TRUST_HOST` itself is not read: the app hardcodes `trustHost: true`, so it always trusts `X-Forwarded-Host`/`X-Forwarded-Proto`. Each vhost must therefore set those headers itself (`proxy_set_header X-Forwarded-Host $host;`) and never pass a client's value through.
 - **`http2 on;` requires nginx 1.25.1 or newer.** On older builds (Debian 12 ships 1.22, Ubuntu 22.04 ships 1.18) write `listen 443 ssl http2;` and drop the separate directive.
 - **`limit_req` is evaluated before `limit_except`.** A rate-limited request with the wrong method answers `503`, not `403`. That is cosmetic, but worth knowing when reading logs.
 
@@ -169,7 +171,7 @@ server {
 }
 ```
 
-Set `APP_URL` and `AUTH_URL` to this internal hostname (`https://provider-admin.internal`) and `AUTH_TRUST_HOST=true`, so sign-in callbacks resolve against the entrance you actually use. They must match the portal entrance, not the public API hostname, or SIWP will redirect you somewhere unreachable.
+Set `APP_URL` and `AUTH_URL` to this internal hostname (`https://provider-admin.internal`), so sign-in callbacks resolve against the entrance you actually use (`AUTH_TRUST_HOST` is not needed; see above). They must match the portal entrance, not the public API hostname, or SIWP will redirect you somewhere unreachable.
 
 The simplest alternative needs no second vhost at all: leave the app bound to `127.0.0.1:3001` and reach the portal over an SSH tunnel — `ssh -L 3001:127.0.0.1:3001 you@provider-host`, then open `http://localhost:3001`. In that setup `APP_URL` and `AUTH_URL` are `http://localhost:3001`.
 

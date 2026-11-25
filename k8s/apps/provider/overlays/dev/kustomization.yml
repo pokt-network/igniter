@@ -6,8 +6,3 @@ patches:
       kind: ConfigMap
       name: provider-config
     path: ./patch-config.yml
-  - target:
-      version: v1
-      kind: Secret
-      name: provider-secrets
-    path: ./patch-secrets.yml

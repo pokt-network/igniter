@@ -21,7 +21,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'release:major')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
@@ -55,13 +55,15 @@ jobs:
       - name: Update PR title and body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Label names are free text; pass through env, never ${{ }} in run.
+          LABEL_NAME: ${{ github.event.label.name }}
         run: |
           gh pr edit ${{ github.event.pull_request.number }} \
             --title "chore(release): v${NEW_VERSION}" \
             --body "$(cat <<EOF
           ## Release v${NEW_VERSION}
 
-          **Version bump:** \`${{ github.event.label.name }}\`
+          **Version bump:** \`${LABEL_NAME}\`
           **Previous version:** $(git tag -l 'v*.*.*' --sort=-v:refname | head -1)
 
           ### What happens on merge

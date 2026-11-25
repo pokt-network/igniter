@@ -1,19 +1,25 @@
+# EXAMPLE CONFIGURATION ONLY, provided "as is" without warranty.
+# You are solely responsible for securing your own deployment.
+# A real deployment runs either a provider or a middleman, not both.
+# See docker-compose/README.md#security--usage-notice before using it with real keys or funds.
 services:
   middleman-migration:
-    image: "ghcr.io/pokt-network/middleman:latest"
+    image: "ghcr.io/pokt-network/middleman:${IGNITER_VERSION:?set IGNITER_VERSION in .env}"
     container_name: middleman-migration
     restart: on-failure
     command: [ "pnpm", "middleman:migration:migrate" ]
+    # Database only; no egress.
     networks:
-      - igniter
+      - backend
     env_file:
       - .env
 
   middleman-web:
-    image: "ghcr.io/pokt-network/middleman:latest"
+    image: "ghcr.io/pokt-network/middleman:${IGNITER_VERSION:?set IGNITER_VERSION in .env}"
     container_name: middleman-web
     networks:
-      - igniter
+      - backend
+      - egress
     env_file:
       - .env
     depends_on:
@@ -23,10 +29,11 @@ services:
       - "127.0.0.1:3000:3000"
 
   middleman-workflows:
-    image: "ghcr.io/pokt-network/middleman-workflows:latest"
+    image: "ghcr.io/pokt-network/middleman-workflows:${IGNITER_VERSION:?set IGNITER_VERSION in .env}"
     container_name: middleman-workflows
     networks:
-      - igniter
+      - backend
+      - egress
     env_file:
       - .env
     depends_on:
@@ -34,8 +41,18 @@ services:
         condition: service_completed_successfully
 
 networks:
-  # IMPORTANT:
-  # Please make sure you start first docker-compose.yaml at the 'dependencies' folder.
-  igniter:
-    name: igniter
+  # PostgreSQL and Temporal, reachable only through this middleman-only network
+  # (created by the dependencies stack; internal, no route out). The other app
+  # stack is on a different network and cannot reach these containers.
+  # IMPORTANT: start docker-compose.yaml in the 'dependencies' folder first.
+  backend:
+    name: igniter-middleman
     external: true
+  # This stack's own network for outbound traffic (chain RPC, governance CDN,
+  # notifications) and for the published port. Nothing else joins it.
+  egress:
+    name: igniter-middleman-egress
+    driver_opts:
+      # Fixed host bridge name, so host firewall rules can target this stack's
+      # outbound traffic (see "Hardening" in docker-compose/README.md).
+      com.docker.network.bridge.name: ign-mm-egress

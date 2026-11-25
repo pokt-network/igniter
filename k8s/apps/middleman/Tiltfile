@@ -29,6 +29,12 @@ if APP_IDENTITY == '':
    fail('Missing MIDDLEMAN_APP_IDENTITY env variable')
 
 # read from kustomize build
+def required_dev_secret(name):
+  value = os.getenv(name, '')
+  if value == '':
+    fail('Missing ' + name + ': the root Tiltfile generates it into .local/tilt-dev-secrets.env (k8s/tools/dev-secrets.sh)')
+  return value
+
 objects = decode_yaml_stream(kustomize("./overlays/dev"))
 
 for o in objects:
@@ -40,6 +46,10 @@ for o in objects:
 for o in objects:
   if o['metadata']['name'] == 'middleman-secrets':
     o['stringData']['APP_IDENTITY'] = APP_IDENTITY
+    o['stringData']['AUTH_SECRET'] = required_dev_secret('IGNITER_DEV_MIDDLEMAN_AUTH_SECRET')
+    o['stringData']['NOTIFICATION_ENCRYPTION_KEY'] = required_dev_secret('IGNITER_DEV_MIDDLEMAN_NOTIFICATION_ENCRYPTION_KEY')
+    # Optional; set COIN_MARKET_CAP_API_KEY in the root .env to use your own key.
+    o['stringData']['COIN_MARKET_CAP_API_KEY'] = os.getenv('COIN_MARKET_CAP_API_KEY', '')
     break
 
 # Auto-bootstrap: if MIDDLEMAN_BOOTSTRAP_CONFIG_PATH points to a local JSON file,
