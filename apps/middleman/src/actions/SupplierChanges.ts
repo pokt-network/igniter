@@ -14,16 +14,16 @@ export async function GetRecentChanges(page = 1, pageSize = 10) {
 }
 
 export async function GetSupplierChanges(nodeId: number) {
-  await requireAuth()
-  return getChangesByNodeId(nodeId)
+  const userIdentity = await requireAuth()
+  return getChangesByNodeId(nodeId, userIdentity)
 }
 
 export async function AcknowledgeChanges(changeIds: number[]) {
-  await requireAuth()
-  return dalAcknowledgeChanges(changeIds)
+  const userIdentity = await requireAuth()
+  return dalAcknowledgeChanges(changeIds, userIdentity)
 }
 
 export async function AcknowledgeAllByNode(nodeId: number) {
-  await requireAuth()
-  return dalAcknowledgeAllByNode(nodeId)
+  const userIdentity = await requireAuth()
+  return dalAcknowledgeAllByNode(nodeId, userIdentity)
 }

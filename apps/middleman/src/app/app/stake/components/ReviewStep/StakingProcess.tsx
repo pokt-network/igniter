@@ -122,7 +122,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
       }
 
       try {
-        const signedMemo = await CreateSignedMemo({ settings: settings! });
+        const signedMemo = await CreateSignedMemo();
         const signedTx = await signTransaction(transactionMessages, ownerAddress, signedMemo);
 
         setSignedTransaction(signedTx);

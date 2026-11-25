@@ -10,7 +10,8 @@ const log = getLogger(['middleman', 'actions'])
 export async function getCurrentUser() {
   const session = await auth()
 
-  if (!session) {
+  // A session object without a user identity is not a login.
+  if (!session?.user?.identity) {
     throw new Error('Not logged in')
   }
 

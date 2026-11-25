@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getLogger, newRequestId, REQUEST_ID_HEADER } from "@igniter/logger";
+import { UserRole } from "@igniter/db/middleman/enums";
 import authConfig from "./auth.config";
 
 const { auth } = NextAuth(authConfig);
@@ -17,11 +18,24 @@ const middleware: any = auth(async (req: NextRequest) => {
   const forwardedHeaders = new Headers(req.headers);
   forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
 
+  // A session object alone is not a login: require the user Auth.js decoded from the token.
   //@ts-ignore
-  const isLoggedIn = !!req.auth;
+  const isLoggedIn = !!req.auth?.user;
 
   if (!isLoggedIn) {
     log.debug("unauthenticated request redirected", { pathname: req.nextUrl.pathname });
+    const response = NextResponse.redirect(new URL("/", req.nextUrl));
+    response.headers.set(REQUEST_ID_HEADER, requestId);
+    return response;
+  }
+
+  // Defence in depth: the /admin pages and the admin actions check the role
+  // themselves. The role is the one stored in the session token at login.
+  //@ts-ignore
+  const isOwner = req.auth?.user?.role === UserRole.Owner;
+
+  if (req.nextUrl.pathname.startsWith("/admin") && !isOwner) {
+    log.debug("non-owner admin request redirected", { pathname: req.nextUrl.pathname });
     const response = NextResponse.redirect(new URL("/", req.nextUrl));
     response.headers.set(REQUEST_ID_HEADER, requestId);
     return response;

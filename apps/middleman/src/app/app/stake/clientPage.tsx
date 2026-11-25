@@ -110,7 +110,7 @@ export default function ClientStakePage() {
       try {
         if (supplierProspects.length > 0) {
           const addresses = supplierProspects.map((s) => s.operatorAddress);
-          await releaseSuppliers(selectedOffer!, addresses);
+          await releaseSuppliers(selectedOffer!, addresses, ownerAddress);
         }
         setIsAborting(false);
         await router.push('/app');
