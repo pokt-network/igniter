@@ -28,6 +28,21 @@
       "require": "./dist/src/pocket.js",
       "types": "./dist/src/pocket.d.ts"
     },
+    "./governance": {
+      "import": "./dist/src/governance.js",
+      "require": "./dist/src/governance.js",
+      "types": "./dist/src/governance.d.ts"
+    },
+    "./providerFetch": {
+      "import": "./dist/src/providerFetch.js",
+      "require": "./dist/src/providerFetch.js",
+      "types": "./dist/src/providerFetch.d.ts"
+    },
+    "./secrets": {
+      "import": "./dist/src/secrets.js",
+      "require": "./dist/src/secrets.js",
+      "types": "./dist/src/secrets.d.ts"
+    },
     "./transactions/extractSuppliers": {
       "import": "./dist/src/transactions/extractSuppliers.js",
       "require": "./dist/src/transactions/extractSuppliers.js",
