@@ -13,6 +13,7 @@ import {
 import { notify } from '@igniter/ui/lib/sessionMessages'
 import { EVENT_LABELS, describeEvent, eventSeverity } from '@/lib/notificationEvents'
 import { NOTIFICATION_EVENT_TYPES } from '@igniter/db/middleman/enums'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 // Event-type dropdown options for the history filter.
 const EVENT_TYPE_OPTIONS = NOTIFICATION_EVENT_TYPES.map((t) => ({
@@ -40,6 +41,7 @@ export function NotificationHistorySection() {
         invalidateViewed()
       })
       .catch((err) => {
+        if (handleSessionExpired(err)) return
         // Same rule as the bell's ✕: a mark-read that did not persist has to say
         // so, or the row comes back unread and the click looks broken.
         notify.error('Could not mark this notification as read.', {

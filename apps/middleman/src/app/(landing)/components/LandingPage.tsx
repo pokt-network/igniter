@@ -9,6 +9,12 @@ export default function LandingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const { resolvedTheme } = useTheme();
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Read after mount: useSearchParams would need a Suspense boundary around the page.
+  useEffect(() => {
+    setSessionExpired(new URLSearchParams(window.location.search).get("session") === "expired");
+  }, []);
 
   // Particle system
   const initParticles = useCallback(() => {
@@ -162,6 +168,12 @@ export default function LandingPage() {
             Stake across multiple providers without giving up custody of your
             tokens. Igniter handles the infrastructure so you keep full control.
           </p>
+
+          {sessionExpired && (
+            <p className="hero-notice" role="status">
+              Your session expired. Sign in again.
+            </p>
+          )}
 
           <div className="hero-actions">
             <button

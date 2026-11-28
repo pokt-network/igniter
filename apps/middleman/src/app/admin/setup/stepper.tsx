@@ -11,6 +11,7 @@ import { Provider } from "@/actions/Providers";
 import ProvidersForm from "./providersForm";
 import BlockchainFormComponent from '@/app/admin/setup/blockchainFrom'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'setup-stepper'])
 
@@ -102,6 +103,7 @@ export const Stepper: React.FC<StepperProps> = ({ providers }) => {
       const dbSettings = await GetFullApplicationSettings();
       setSettings(dbSettings as ApplicationSettings);
     } catch (error) {
+      if (handleSessionExpired(error)) return;
       log.error("failed to retrieve application settings", { error });
       setHasError(true);
     } finally {

@@ -19,6 +19,7 @@ import {
 import { ImportedSupplier } from '@/lib/services/importSuppliers'
 import { CancelPendingImportAttempts } from '@/actions/ImportSuppliers'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'import-suppliers-page'])
 
@@ -124,6 +125,7 @@ export default function ClientImportSuppliersPage() {
           setIsAborting(false)
           await router.push('/app')
         } catch (error) {
+          if (handleSessionExpired(error)) return
           log.error('failed to abort import', { error })
           notify.error('Failed to abort the import.', {
             id: `abort-import-error`,

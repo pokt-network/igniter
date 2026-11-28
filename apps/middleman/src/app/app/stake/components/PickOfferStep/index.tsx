@@ -12,6 +12,7 @@ import {ActivityContentLoading} from "@/app/app/stake/components/ActivityContent
 import {getApplicationSettings} from "@/actions/ApplicationSettings";
 import {ProviderStatus} from "@igniter/db/middleman/enums";
 import {getLogger} from "@igniter/logger";
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'pick-offer-step'])
 
@@ -142,6 +143,7 @@ export function PickOfferStep({onOfferSelected, amount, ownerAddress, onBack, de
                     }
                 }
             } catch (error) {
+                if (handleSessionExpired(error)) return;
                 log.error('failed to calculate stake distribution', { error });
             } finally {
                 setIsLoadingOffers(false);

@@ -23,6 +23,7 @@ import {
 import { ApplicationSettings } from "@igniter/db/middleman/schema";
 import { ChainId } from "@igniter/db/middleman/enums";
 import { getLogger } from "@igniter/logger";
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'blockchain-form'])
 
@@ -59,6 +60,7 @@ export const FormSchema = z.object({
     }
 
   } catch (error) {
+    if (handleSessionExpired(error)) return false;
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Failed to validate Indexer API URL",
@@ -137,7 +139,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
         } else if (result.network && chainId && result.network !== chainId) {
           form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but API detected "${chainId}". Both must point to the same chain.` });
         }
-      } catch {
+      } catch (error) {
+        if (handleSessionExpired(error)) return;
         form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' });
       } finally {
         setIsValidatingRpc(false);
@@ -184,7 +187,8 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
         form.setValue("minimumStake", response.minStake);
         form.setValue("updatedAtHeight", response.height);
       }
-    } catch {
+    } catch (error) {
+      if (handleSessionExpired(error)) return;
       form.setError('pocketApiUrl', {
         type: 'manual',
         message: 'Could not reach the API endpoint. Check the URL and ensure the node is accessible.',
@@ -200,6 +204,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext }) => {
       await UpsertApplicationSettings(values, isUpdate);
       goNext();
     } catch (error) {
+      if (handleSessionExpired(error)) return;
       log.error("failed to update application settings", { error });
     } finally {
       setIsLoading(false);

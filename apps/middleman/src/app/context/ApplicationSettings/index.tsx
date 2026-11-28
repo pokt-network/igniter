@@ -10,6 +10,7 @@ import {
 import { getApplicationSettings, type PublicApplicationSettings } from "@/actions/ApplicationSettings";
 import {getLogger} from "@igniter/logger";
 import { ChainIdProvider } from "@igniter/ui/context/explorer";
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'application-settings-context'])
 
@@ -29,6 +30,7 @@ export const ApplicationSettingsProvider = ({
         const settings = await getApplicationSettings();
         setApplicationSettings(settings);
       } catch (error) {
+        if (handleSessionExpired(error)) return;
         log.error("failed to load application settings", { error });
       }
     })();

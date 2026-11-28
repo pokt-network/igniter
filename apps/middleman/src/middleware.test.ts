@@ -10,8 +10,9 @@ import { NextRequest } from 'next/server'
 import middleware from './middleware'
 import { UserRole } from '@igniter/db/middleman/enums'
 
-function run(pathname: string, session: unknown) {
-  const req = new NextRequest(`http://middleman.test${pathname}`) as NextRequest & { auth?: unknown }
+function run(pathname: string, session: unknown, headers?: Record<string, string>) {
+  const init = headers ? { method: 'POST', headers } : undefined
+  const req = new NextRequest(`http://middleman.test${pathname}`, init) as NextRequest & { auth?: unknown }
   req.auth = session
   return middleware(req)
 }
@@ -43,5 +44,40 @@ describe('middleware', () => {
   it('lets a role user session through to /app', async () => {
     const response = await run('/app/overview', userSession)
     expect(response.headers.get('location')).toBeNull()
+  })
+
+  describe('server actions', () => {
+    const action = { 'next-action': 'abc', 'x-request-id': 'req-1' }
+
+    it.each([
+      ['a request without a session', '/app/overview', null],
+      ['a session object that carries no user', '/app/overview', { expires: '2099-01-01T00:00:00.000Z' }],
+      ['an /admin action without a session', '/admin/overview', null],
+    ])('answers %s with a text/plain 401 instead of a redirect', async (_label, path, session) => {
+      const response = await run(path, session, action)
+      expect(response.status).toBe(401)
+      expect(response.headers.get('content-type')).toBe('text/plain')
+      expect(response.headers.get('location')).toBeNull()
+      expect(response.headers.get('x-request-id')).toBe('req-1')
+      expect(await response.text()).toBe('Session expired')
+    })
+
+    it('answers a role user action on /admin with a text/plain 403', async () => {
+      const response = await run('/admin/overview', userSession, action)
+      expect(response.status).toBe(403)
+      expect(response.headers.get('content-type')).toBe('text/plain')
+      expect(response.headers.get('location')).toBeNull()
+      expect(response.headers.get('x-request-id')).toBe('req-1')
+      expect(await response.text()).toBe('Forbidden')
+    })
+
+    it.each([
+      ['the owner on /admin', '/admin/overview', ownerSession],
+      ['a role user on /app', '/app/overview', userSession],
+    ])('lets an action from %s through', async (_label, path, session) => {
+      const response = await run(path, session, action)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('location')).toBeNull()
+    })
   })
 })

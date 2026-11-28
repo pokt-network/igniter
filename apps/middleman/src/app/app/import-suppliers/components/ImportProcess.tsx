@@ -36,6 +36,7 @@ import AvatarByString from '@igniter/ui/components/AvatarByString'
 import { getShortAddress } from '@igniter/ui/lib/utils'
 import { fromBase64, toHex } from '@cosmjs/encoding'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'import-process'])
 
@@ -141,6 +142,7 @@ export function ImportProcess({
 
         setCurrentStep(ImportProcessStep.SignNonce)
       } catch (err) {
+        if (handleSessionExpired(err)) return
         const { message } = err as Error
         log.error('failed to request import', { provider: provider.identity, ownerAddress, error: message })
 
@@ -199,6 +201,7 @@ export function ImportProcess({
         setIsCancellable(false)
         setCurrentStep(ImportProcessStep.SubmitImport)
       } catch (err) {
+        if (handleSessionExpired(err)) return
         const { message } = err as Error
         log.error('failed to sign nonce', { ownerAddress, error: message })
 
@@ -261,6 +264,7 @@ export function ImportProcess({
 
         setCurrentStep(ImportProcessStep.Completed)
       } catch (err) {
+        if (handleSessionExpired(err)) return
         const { message } = err as Error
         log.error('failed to submit import', { attemptId, provider: provider.identity, error: message })
 
