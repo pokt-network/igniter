@@ -6,6 +6,7 @@ import { TriggerGovernanceSync } from '@/actions/Providers'
 import { Button } from '@igniter/ui/components/button'
 import { LoaderIcon } from '@igniter/ui/assets'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'refresh-providers'])
 
@@ -22,6 +23,7 @@ export default function RefreshProviders() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } catch (error) {
+      if (handleSessionExpired(error)) return;
       log.error("failed to update providers from source", { error });
     } finally {
       setIsUpdatingProviders(false);

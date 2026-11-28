@@ -23,6 +23,7 @@ import {stageFailed, stageSucceeded} from "@/app/app/stake/utils";
 import { notify } from "@igniter/ui/lib/sessionMessages";
 import {useQueryClient} from "@tanstack/react-query";
 import {getLogger} from "@igniter/logger";
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'staking-process'])
 
@@ -136,6 +137,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
 
         setCurrentStep(StakingProcessStep.SchedulingTransaction);
       } catch (err) {
+        if (handleSessionExpired(err)) return;
         const { message } = err as Error;
         log.error('failed to collect signature', { ownerAddress, error: message });
         handleFailedStage('transactionSignatureStatus', 'An unknown error occurred while collecting your signature for the transaction. If it was intentionally rejected, this is required in order to proceed. If not, please make sure you have a supported wallet extension enabled. You have incurred no fees. You can try again. If the problem persists, please contact support.');
@@ -167,6 +169,7 @@ export function StakingProcess({offer, onStakeCompleted, ownerAddress, region, o
 
         setCurrentStep(StakingProcessStep.Completed);
       } catch (err) {
+        if (handleSessionExpired(err)) return;
         const { message } = err as Error;
         log.error('failed to schedule signed transaction', { ownerAddress, error: message });
         handleFailedStage('schedulingTransactionStatus', 'An unknown error occurred while scheduling the signed transactions.');

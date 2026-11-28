@@ -12,7 +12,8 @@ import CurrentUser from "@/app/components/CurrentUser";
 import { CurrencyContextProvider } from "@igniter/ui/context/currency";
 import Sidebar from "@/app/components/Sidebar";
 import { Toaster } from "@igniter/ui/components/sonner";
-import QueryClientProvider from '@igniter/ui/context/QueryClientProvider';
+import QueryClientProvider from '@/app/context/QueryClientProvider';
+import SessionExpiryWatcher from '@/app/context/SessionExpiryWatcher';
 import RegisterPlugins from '@igniter/ui/components/RegisterChartjsPlugins';
 import NotificationBellFeed from "@/app/components/NotificationBellFeed";
 import QuickDetailProvider from "@/app/detail/QuickDetailProviderBridge";
@@ -33,6 +34,7 @@ export default function RootLayout({
       <body>
         <QueryClientProvider>
           <SessionProvider>
+            <SessionExpiryWatcher />
             <ThemeProvider
               attribute="data-theme"
               defaultTheme="dark"

@@ -46,6 +46,12 @@ const authConfig: NextAuthConfig = {
       // TODO: Remove ts-ignore when we figure out how to set the expected user type across next-auth
       // @ts-ignore
       session.user = token.user;
+      // `session.expires` slides with every read; this is the time left until the absolute end,
+      // for the client to sign out on time. A duration, not an epoch: the browser clock may
+      // disagree with this one. auth.ts keeps this callback, so node sets it too.
+      if (typeof token.loginAt === 'number') {
+        session.sessionRemainingMs = Math.max(0, token.loginAt + SESSION_MAX_AGE_SECONDS * 1000 - Date.now());
+      }
       return session;
     },
   },

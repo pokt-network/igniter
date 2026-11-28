@@ -8,6 +8,7 @@ import { ListProviders } from '@/actions/Providers'
 import { ProviderOption } from '@/app/app/import-suppliers/types'
 import { ProviderStatus } from '@igniter/db/middleman/enums'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'select-provider-step'])
 
@@ -55,6 +56,7 @@ export function SelectProviderStep({
         setProviders(enabledProviders)
         setError(null)
       } catch (err) {
+        if (handleSessionExpired(err)) return
         log.error('failed to fetch providers', { error: err })
         setError('Failed to load providers. Please try again.')
       } finally {

@@ -63,7 +63,10 @@ export async function withRequireOwner<T>(
   } catch (err) {
     // `cause` carries the driver's own error — the SQLSTATE and its detail line —
     // which the wrapper's message does not include.
-    log.error('server action failed', { error: err, cause: (err as Error)?.cause })
+    // A missing login is expected (a tab outliving its session), not a failure, so
+    // it is logged at warn. 'Unauthorized' (a non-owner) stays an error.
+    const level = err instanceof Error && err.message === 'Not logged in' ? 'warn' : 'error'
+    log[level]('server action failed', { error: err, cause: (err as Error)?.cause })
 
     if (err instanceof Error) {
       if (err.message === 'Unauthorized' || err.message === 'Not logged in') {
