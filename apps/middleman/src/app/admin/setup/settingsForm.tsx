@@ -19,6 +19,7 @@ import { UpsertApplicationSettings } from "@/actions/ApplicationSettings";
 import {ApplicationSettings} from "@igniter/db/middleman/schema";
 import { notify } from "@igniter/ui/lib/sessionMessages";
 import {getLogger} from "@igniter/logger";
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'settings-form'])
 
@@ -72,6 +73,7 @@ const FormComponent: React.FC<FormProps> = ({ defaultValues, goNext, goBack }) =
               await UpsertApplicationSettings(values, isUpdate);
               goNext();
             } catch (error) {
+              if (handleSessionExpired(error)) return;
               log.error("failed to save settings", { isUpdate, error });
               notify.error('Failed to save settings.', {
                 id: `settings-form-submit-error`,

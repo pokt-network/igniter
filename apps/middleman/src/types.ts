@@ -13,5 +13,7 @@ declare module "next-auth" {
   interface Session {
     user: User;
     isAppBootstrapped: boolean;
+    /** Ms left until the absolute end (login + SESSION_MAX_AGE_SECONDS), by the server clock when read. */
+    sessionRemainingMs?: number;
   }
 }

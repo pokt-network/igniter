@@ -20,6 +20,7 @@ import { notify } from "@igniter/ui/lib/sessionMessages";
 import { useQueryClient } from "@tanstack/react-query";
 import { CreateUnstakeTransaction } from '@/actions/Unstake'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut';
 
 const log = getLogger(['middleman', 'unstaking-process'])
 
@@ -120,6 +121,7 @@ export function UnstakingProcess({
 
         setCurrentStep(UnstakingProcessStep.Completed);
       } catch (err) {
+        if (handleSessionExpired(err)) return;
         const { message } = err as Error;
         log.error('failed to schedule signed transaction', { ownerAddress, selectedNodeAddresses, error: message });
         handleFailedStage(

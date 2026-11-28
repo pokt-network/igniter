@@ -42,7 +42,10 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
     // statement plus its bound parameters, must not be what comes back. Same
     // mapping the shared wrapper applies in `lib/utils/actions.ts`; this file
     // predates it and kept its own result shape, which is how it was missed.
-    log.error('notification channel action failed', { error: e, cause: (e as Error)?.cause })
+    // A missing login is expected (a tab outliving its session), not a failure, so
+    // it is logged at warn. 'Unauthorized' stays an error.
+    const level = e instanceof Error && e.message === 'Not logged in' ? 'warn' : 'error'
+    log[level]('notification channel action failed', { error: e, cause: (e as Error)?.cause })
     const dbFailure = describeDatabaseFailure(e)
     if (dbFailure) return { success: false, error: { message: dbFailure.message } }
     return { success: false, error: { message: e instanceof Error ? e.message : String(e) } }

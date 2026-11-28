@@ -24,6 +24,7 @@ import {
 import { LoaderIcon } from '@igniter/ui/assets'
 import { ChainId } from '@igniter/db/middleman/enums'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'internal-settings-form'])
 
@@ -158,7 +159,8 @@ export default function SettingsForm() {
 
       if (response.minStake) form.setValue('minimumStake', response.minStake, { shouldDirty: true })
       if (response.height) form.setValue('updatedAtHeight', response.height, { shouldDirty: true })
-    } catch {
+    } catch (error) {
+      if (handleSessionExpired(error)) return
       form.setError('pocketApiUrl', { type: 'manual', message: 'Could not reach the API endpoint. Check the URL and ensure the node is accessible.' })
     } finally {
       setIsValidatingRpc(false)
@@ -176,7 +178,8 @@ export default function SettingsForm() {
       if (!response.success && response.errors && response.errors.length > 0) {
         form.setError('indexerApiUrl', { type: 'manual', message: response.errors[0] })
       }
-    } catch {
+    } catch (error) {
+      if (handleSessionExpired(error)) return
       form.setError('indexerApiUrl', { type: 'manual', message: 'Failed to validate Indexer API URL' })
     } finally {
       setIsValidatingIndexer(false)
@@ -203,7 +206,8 @@ export default function SettingsForm() {
       } else if (result.network && settings?.chainId && result.network !== settings.chainId) {
         form.setError('pocketRpcUrl', { type: 'manual', message: `RPC is on network "${result.network}" but this app is configured for "${settings.chainId}". Both must point to the same chain.` })
       }
-    } catch {
+    } catch (error) {
+      if (handleSessionExpired(error)) return
       form.setError('pocketRpcUrl', { type: 'manual', message: 'Could not reach the RPC endpoint.' })
     } finally {
       setIsValidatingRpcEndpoint(false)
@@ -238,6 +242,7 @@ export default function SettingsForm() {
       await refetchSettings()
       form.reset(values)
     } catch (error) {
+      if (handleSessionExpired(error)) return
       log.error('failed to update settings', { error })
       setSubmitError('Failed to save settings. Please try again.')
     } finally {

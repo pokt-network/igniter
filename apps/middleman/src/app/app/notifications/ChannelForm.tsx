@@ -30,6 +30,7 @@ import {
   UpdateNotificationChannel,
   TestNotificationChannelConfig,
 } from '@/actions/NotificationChannels'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const EVENT_LABELS: Array<{ type: NotificationEventType; label: string; description: string }> = [
   { type: 'service_change', label: 'Service changed', description: 'A service is added or removed on one of your suppliers.' },
@@ -141,6 +142,7 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
       if (!res.success) throw new Error(res.error.message)
       setTestState('sent')
     } catch (e) {
+      if (handleSessionExpired(e)) return
       setTestState('error')
       setTestError(e instanceof Error ? e.message : 'Test failed.')
     }
@@ -168,6 +170,7 @@ export function ChannelForm({ channel, onClose }: ChannelFormProps) {
       toast.success(isEdit ? 'Channel updated.' : 'Channel created.', { id: 'channel-saved' })
       onClose(true)
     } catch (e) {
+      if (handleSessionExpired(e)) return
       setFormError(e instanceof Error ? e.message : 'Failed to save channel.')
     } finally {
       setSaving(false)

@@ -167,6 +167,18 @@ html:has([data-landing]) .landing-wrapper {
   animation: landingFadeInUp 0.6s ease-out 0.2s both;
 }
 
+.hero-notice {
+  display: inline-block;
+  padding: 8px 16px;
+  margin: 0 auto 20px;
+  border-radius: var(--radius-full);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .hero-actions {
   display: flex;
   align-items: center;

@@ -14,6 +14,7 @@ import {
 import { notify, sessionMessages, useSessionMessages } from '@igniter/ui/lib/sessionMessages'
 import { bellCardContent } from '@/lib/notificationEvents'
 import { getLogger } from '@igniter/logger'
+import { handleSessionExpired } from '@/app/context/sessionExpiredSignOut'
 
 const log = getLogger(['middleman', 'NotificationBellFeed'])
 
@@ -101,6 +102,7 @@ export default function NotificationBellFeed() {
               const res = await MarkNotificationEventsViewed([event.id])
               if (!res.success) throw new Error(res.error.message)
             } catch (err) {
+              if (handleSessionExpired(err)) return
               log.error('failed to mark notification event viewed', { eventId: event.id, error: err })
               // Refetch so the card comes back rather than silently disappearing
               // for the rest of the session, and rethrow so the bell re-expands it.
@@ -147,6 +149,7 @@ export default function NotificationBellFeed() {
           // then report that nothing was marked.
           sessionMessages.dismissAll()
         } catch (err) {
+          if (handleSessionExpired(err)) return
           log.error('failed to mark all notification events viewed', { error: err })
           notify.error('Could not mark notifications as read.', {
             id: 'mark-all-read-error',
